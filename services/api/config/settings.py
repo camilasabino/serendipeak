@@ -1,0 +1,62 @@
+import os
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+from django.core.exceptions import ImproperlyConfigured
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+APP_ENV = os.environ.get("APP_ENV", "production")
+DEBUG = APP_ENV == "development"
+
+SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
+ALLOWED_HOSTS = [host for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host]
+
+
+def database_from_url(url):
+    parts = urlsplit(url)
+    if parts.scheme not in ("postgres", "postgresql"):
+        raise ImproperlyConfigured("DATABASE_URL must use the postgres scheme")
+    return {
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": unquote(parts.path.lstrip("/")),
+        "USER": unquote(parts.username or ""),
+        "PASSWORD": unquote(parts.password or ""),
+        "HOST": parts.hostname or "",
+        "PORT": str(parts.port or ""),
+        "OPTIONS": {"connect_timeout": 2},
+    }
+
+
+DATABASES = {"default": database_from_url(os.environ["DATABASE_URL"])}
+
+if os.environ.get("GDAL_LIBRARY_PATH"):
+    GDAL_LIBRARY_PATH = os.environ["GDAL_LIBRARY_PATH"]
+if os.environ.get("GEOS_LIBRARY_PATH"):
+    GEOS_LIBRARY_PATH = os.environ["GEOS_LIBRARY_PATH"]
+
+INSTALLED_APPS = [
+    "django.contrib.gis",
+    "corsheaders",
+    "rest_framework",
+]
+
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
+
+APPEND_SLASH = False
+
+CORS_ALLOWED_ORIGIN = os.environ["CORS_ALLOWED_ORIGIN"]
+if not CORS_ALLOWED_ORIGIN or "*" in CORS_ALLOWED_ORIGIN or "," in CORS_ALLOWED_ORIGIN:
+    raise ImproperlyConfigured("CORS_ALLOWED_ORIGIN must be exactly one explicit origin")
+CORS_ALLOWED_ORIGINS = [CORS_ALLOWED_ORIGIN]
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+USE_TZ = True
+TIME_ZONE = "UTC"

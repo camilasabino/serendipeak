@@ -1,0 +1,23 @@
+name: serendipeak-v2
+
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-serendipeak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-serendipeak}
+      POSTGRES_DB: ${POSTGRES_DB:-serendipeak}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  db-data:
