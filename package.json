@@ -1,0 +1,21 @@
+{
+	"name": "serendipeak-tooling",
+	"private": true,
+	"version": "0.0.0",
+	"description": "Repository tooling for SerendiPeak: commit message validation and frozen contract integrity.",
+	"type": "module",
+	"engines": {
+		"node": ">=24.0.0"
+	},
+	"scripts": {
+		"prepare": "husky",
+		"commitlint": "commitlint",
+		"contracts:verify": "node scripts/contracts-verify.mjs",
+		"contracts:sync": "node scripts/contracts-sync.mjs"
+	},
+	"devDependencies": {
+		"@commitlint/cli": "^21.2.3",
+		"@commitlint/config-conventional": "^21.2.3",
+		"husky": "^9.1.7"
+	}
+}
