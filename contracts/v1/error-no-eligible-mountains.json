@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "NO_ELIGIBLE_MOUNTAINS",
+    "message": "No mountains are available for discovery"
+  }
+}

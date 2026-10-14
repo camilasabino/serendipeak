@@ -1,0 +1,47 @@
+{
+	"source": {
+		"repository": "camilasabino/serendipeak-legacy",
+		"tag": "v1-behavioral-freeze",
+		"commit": "f9a66deb2c0591a9c574fb4751b938b5863e6a1e",
+		"tagObject": "9caf9e58fdb038bea616abacc85a1da4053c7f42"
+	},
+	"syncedAt": "2026-10-13",
+	"files": {
+		"contracts/v1/catalog.json": {
+			"sha256": "c03d49278aa7839d4771d819d8cb42be60586c968135b7d14b2916e54bf27eb4",
+			"bytes": 41055
+		},
+		"contracts/v1/daily-mountain.json": {
+			"sha256": "a9e7cfcfc8dbd955767beecf173e2407556168cf552a31163be668a64827ecc2",
+			"bytes": 1619
+		},
+		"contracts/v1/error-internal.json": {
+			"sha256": "6d7ab5d68ff1d8035f4c2d070991676bf6f815323ccda33aa2754d2bd19ff389",
+			"bytes": 90
+		},
+		"contracts/v1/error-mountain-not-found.json": {
+			"sha256": "99e8f4b8939989a8bf5770ad02f6aefca6a027231ef25cbbd597ab44645a6bfc",
+			"bytes": 91
+		},
+		"contracts/v1/error-no-eligible-mountains.json": {
+			"sha256": "695649e4bafaebd3ea735be9c288444820c9c1455bc410eed39a3827812be5ae",
+			"bytes": 116
+		},
+		"contracts/v1/mountain-complete.json": {
+			"sha256": "3d993a3a052420dead370702d29efb0f8421be205af3c9a27371827994cc7682",
+			"bytes": 1495
+		},
+		"contracts/v1/mountain-minimal.json": {
+			"sha256": "0a6bbbe54d34152d6afbe1cf180ed97ccdf58df9b7752b5c9cf76a849b7cf399",
+			"bytes": 207
+		},
+		"contracts/v1/mountain-sparse.json": {
+			"sha256": "ffe68afeeef99d1fe2eec3f374aa7893962ef27b6fe2a22f7f55809795d71ff3",
+			"bytes": 1383
+		},
+		"contracts/v1/verify-api.mjs": {
+			"sha256": "68496501c10615f83fb585362c8b0403f2da769f7fdca37c8c32efb540d6bebe",
+			"bytes": 7849
+		}
+	}
+}

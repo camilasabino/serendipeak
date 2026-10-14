@@ -1,0 +1,40 @@
+{
+  "id": "b5cd2c7b-16b2-47b6-9438-bac14c921540",
+  "slug": "mount-olympus",
+  "name": "Mount Olympus",
+  "coordinates": {
+    "latitude": 40.086239,
+    "longitude": 22.358553
+  },
+  "elevationMeters": 2918,
+  "rangeName": "Mount Olympus",
+  "countries": [
+    "Greece"
+  ],
+  "summary": "Mytikas, the highest peak of the Olympus massif and of Greece.",
+  "camera": {
+    "headingDegrees": 221.64,
+    "pitchDegrees": -16.22,
+    "rangeMeters": 18351,
+    "framing": {
+      "x": -0.0038,
+      "y": 0.2007
+    }
+  },
+  "primaryImage": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Mytikas_peak_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Mytikas_peak_02.jpg/1280px-Mytikas_peak_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "width": 5746,
+    "height": 3912,
+    "creator": "Stolbovsky",
+    "attribution": "Stolbovsky",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+    "sourcePageUrl": "https://commons.wikimedia.org/wiki/File:Mytikas_peak_02.jpg",
+    "sourceIdentifier": "File:Mytikas peak 02.jpg"
+  },
+  "sources": {
+    "osm": "https://www.openstreetmap.org/node/354099249",
+    "wikidata": "https://www.wikidata.org/wiki/Q545768"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-12",
+  "mountain": {
+    "id": "5fc406a6-46cd-4dba-952a-e356481e2ad6",
+    "slug": "aconcagua",
+    "name": "Aconcagua",
+    "coordinates": {
+      "latitude": -32.6531487,
+      "longitude": -70.0119607
+    },
+    "elevationMeters": 6961,
+    "prominenceMeters": 6962,
+    "rangeName": "Principal Cordillera",
+    "countries": [
+      "Argentina"
+    ],
+    "summary": "Highest mountain outside Asia, in the Andes of Argentina.",
+    "camera": {
+      "headingDegrees": 66.87,
+      "pitchDegrees": -19.85,
+      "rangeMeters": 17132,
+      "framing": {
+        "x": -0.0587,
+        "y": 0.3857
+      }
+    },
+    "primaryImage": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Aconcagua2016.jpg/1280px-Aconcagua2016.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "width": 4994,
+      "height": 2758,
+      "creator": "Bjørn Christian Tørrissen",
+      "attribution": "Bjørn Christian Tørrissen",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+      "sourcePageUrl": "https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
+      "sourceIdentifier": "File:Aconcagua2016.jpg"
+    },
+    "sources": {
+      "osm": "https://www.openstreetmap.org/node/1504741757",
+      "wikidata": "https://www.wikidata.org/wiki/Q39739",
+      "wikipedia": "https://en.wikipedia.org/wiki/Aconcagua"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "b86e2544-fff1-4d44-9244-fa72113e04c3",
+  "slug": "bare-peak",
+  "name": "Bare Peak",
+  "coordinates": {
+    "latitude": 45,
+    "longitude": 10
+  },
+  "elevationMeters": 2000,
+  "countries": []
+}
