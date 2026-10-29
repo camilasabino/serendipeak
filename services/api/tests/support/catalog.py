@@ -10,13 +10,13 @@ from serendipeak.catalog.bootstrap.frozen_catalog import (
     FrozenMountain,
     parse_frozen_catalog,
 )
-from serendipeak.catalog.bootstrap.seed import (
+from serendipeak.catalog.bootstrap.ports import (
     CatalogDiscovery,
     CatalogMountain,
     CatalogSeed,
     ImageProvenance,
-    parse_catalog_seed,
 )
+from serendipeak.catalog.bootstrap.seed import parse_catalog_seed
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
@@ -141,3 +141,28 @@ def frozen_mountain(entry):
 
 def with_mountain(entry, **overrides):
     return replace(entry, mountain=replace(entry.mountain, **overrides))
+
+
+def committed_mountain(slug):
+    return next(
+        entry.mountain for entry in committed_seed().mountains if entry.mountain.slug == slug
+    )
+
+
+def bare_mountain(status=MountainStatus.INACTIVE):
+    return mountain(
+        "bare-peak",
+        id=uuid.UUID("b86e2544-fff1-4d44-9244-fa72113e04c3"),
+        status=status,
+        coordinates=Coordinates(latitude=45.0, longitude=10.0),
+        elevation_meters=2000,
+        prominence_meters=None,
+        range_name=None,
+        countries=(),
+        summary=None,
+        camera=None,
+        primary_image=None,
+        osm=None,
+        wikidata_id=None,
+        wikipedia_url=None,
+    )

@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from serendipeak.catalog.bootstrap.seed import ImageProvenance
+from serendipeak.catalog.bootstrap.ports import CatalogSnapshot, ImageProvenance
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
@@ -10,7 +10,6 @@ from serendipeak.catalog.entities import (
     MountainStatus,
 )
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
-from serendipeak.catalog.ports import CatalogSnapshot
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.support.catalog import (
     catalog_discovery,

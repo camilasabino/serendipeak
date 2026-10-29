@@ -119,6 +119,33 @@ jobs:
       - name: Check catalog
         run: uv run python manage.py check_catalog
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify the live API against the frozen contract
+        env:
+          APP_ENV: production
+          API_BASE_URL: http://127.0.0.1:8000
+        run: |
+          uv run python manage.py runserver 127.0.0.1:8000 --noreload > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl --silent --fail "$API_BASE_URL/healthz" > /dev/null && break
+            sleep 1
+          done
+          set +e
+          node ../../contracts/v1/verify-api.mjs "$API_BASE_URL" 2> "$RUNNER_TEMP/verify-api.err"
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/verify-api.err"
+          # The random endpoint is not served yet: exactly its two checks may fail, nothing else.
+          printf '%s\n' \
+            "2 contract difference(s) against $API_BASE_URL:" \
+            "- GET /api/v1/mountains/random: status 404, want 200" \
+            "- GET /api/v1/mountains/random: Cache-Control is not no-store" \
+            | diff - "$RUNNER_TEMP/verify-api.err"
+          test "$status" -eq 1
+
       - name: Test
         run: uv run pytest
 

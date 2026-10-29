@@ -4,9 +4,9 @@ from dataclasses import replace
 import pytest
 
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
+from serendipeak.catalog.bootstrap.ports import CatalogSnapshot
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.errors import CatalogAlreadyPopulated, CatalogMismatch
-from serendipeak.catalog.ports import CatalogSnapshot
 from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,

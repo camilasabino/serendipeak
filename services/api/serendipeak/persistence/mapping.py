@@ -1,6 +1,6 @@
 from django.contrib.gis.geos import Point
 
-from serendipeak.catalog.bootstrap.seed import CatalogDiscovery, CatalogMountain, ImageProvenance
+from serendipeak.catalog.bootstrap.ports import CatalogDiscovery, CatalogMountain, ImageProvenance
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,

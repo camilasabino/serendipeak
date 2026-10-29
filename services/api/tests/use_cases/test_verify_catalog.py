@@ -1,7 +1,7 @@
 import datetime
 from dataclasses import replace
 
-from serendipeak.catalog.bootstrap.seed import ImageProvenance
+from serendipeak.catalog.bootstrap.ports import ImageProvenance
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from tests.support.catalog import (
     catalog_discovery,

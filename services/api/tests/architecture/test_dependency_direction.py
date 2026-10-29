@@ -135,6 +135,7 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/catalog/bootstrap/seed.py" in files
     assert "serendipeak/persistence/models.py" in files
     assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
+    assert "serendipeak/httpapi/views.py" in files
     assert "config/health.py" in files
 
 
@@ -237,6 +238,21 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak/persistence/catalog_store.py",
             "import urllib3",
             "serendipeak.persistence.catalog_store imports urllib3",
+        ),
+        (
+            "serendipeak/httpapi/views.py",
+            "from serendipeak.persistence.mountain_repository import DjangoMountainRepository",
+            "serendipeak.httpapi.views imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/httpapi/urls.py",
+            "from config.composition import build_get_mountain_by_slug",
+            "serendipeak.httpapi.urls imports config",
+        ),
+        (
+            "serendipeak/catalog/get_mountain_by_slug.py",
+            "from rest_framework.exceptions import NotFound",
+            "serendipeak.catalog.get_mountain_by_slug imports rest_framework.exceptions",
         ),
     ],
 )

@@ -1,21 +1,11 @@
-from dataclasses import dataclass
 from typing import Protocol
 
-from serendipeak.catalog.bootstrap.seed import CatalogDiscovery, CatalogMountain, CatalogSeed
+from serendipeak.catalog.entities import Mountain
 
 
-@dataclass(frozen=True, slots=True)
-class CatalogSnapshot:
-    mountains: tuple[CatalogMountain, ...]
-    discoveries: tuple[CatalogDiscovery, ...]
+class MountainRepository(Protocol):
+    def find_public_by_slug(self, slug: str) -> Mountain | None:
+        """Return the active or inactive mountain whose slug equals slug exactly, with its image.
 
-
-class CatalogStore(Protocol):
-    def load(self, seed: CatalogSeed) -> None:
-        """Load the seed atomically into a store without mountains.
-
-        Raises CatalogAlreadyPopulated and changes nothing when the store holds a mountain,
-        including one stored by a concurrent load.
+        Returns None for an unknown slug and for a draft mountain.
         """
-
-    def snapshot(self) -> CatalogSnapshot: ...

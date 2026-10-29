@@ -18,3 +18,9 @@ class CatalogMismatch(ApplicationError):
     def __init__(self, mismatches: tuple[str, ...]):
         super().__init__("; ".join(mismatches))
         self.mismatches = mismatches
+
+
+class MountainNotFound(ApplicationError):
+    def __init__(self, slug: str):
+        super().__init__(f"no public mountain has the slug {slug!r}")
+        self.slug = slug

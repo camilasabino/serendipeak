@@ -69,6 +69,17 @@ uv run --env-file ../../.env python manage.py runserver
 curl -i http://127.0.0.1:8000/healthz
 ```
 
+### Mountain endpoint
+
+`GET /api/v1/mountains/{slug}` returns an `active` or `inactive` mountain as JSON (`application/json; charset=utf-8`), in the shape of `contracts/v1/mountain-*.json`: camelCase members, members without a value omitted (never `null`), `countries` always present. The lookup is exact and case-sensitive. A `draft` mountain, an unknown slug and a slug that breaks the slug rule answer `404 {"error":{"code":"MOUNTAIN_NOT_FOUND","message":"Mountain not found"}}`; any other failure answers `500` with code `INTERNAL_ERROR` and never its cause, which is logged with its traceback. The endpoint sends no `Cache-Control` header and answers JSON whatever the `Accept` header asks for. `today` and `random` are reserved words, never routed to this endpoint.
+
+```sh
+curl -i http://127.0.0.1:8000/api/v1/mountains/aconcagua
+node contracts/v1/verify-api.mjs http://127.0.0.1:8000
+```
+
+Logs go to stderr: readable lines with `APP_ENV=development`, one JSON object per line otherwise. Django's warnings for `4xx` answers are not logged.
+
 ### Tests, formatting and lint
 
 Tests run against the real PostGIS database from `docker compose`.

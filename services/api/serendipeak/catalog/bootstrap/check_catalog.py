@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
+from serendipeak.catalog.bootstrap.ports import CatalogStore
 from serendipeak.catalog.entities import MountainStatus
-from serendipeak.catalog.ports import CatalogStore
 from serendipeak.catalog.publication import PublicationViolation, publication_violations
 
 

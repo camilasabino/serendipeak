@@ -2,10 +2,15 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from uuid import UUID
 
+from serendipeak.catalog.bootstrap.ports import (
+    CatalogDiscovery,
+    CatalogMountain,
+    CatalogSeed,
+    ImageProvenance,
+)
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import (
     CameraFraming,
@@ -76,34 +81,6 @@ _IMAGE_KEYS = {
     "approved_on",
 }
 _DISCOVERY_KEYS = {"date", "mountain_id", "created_at"}
-
-
-@dataclass(frozen=True, slots=True)
-class ImageProvenance:
-    license_reported: str | None
-    license_election_basis_url: str | None
-    approved_on: date | None
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogMountain:
-    mountain: Mountain
-    image_provenance: ImageProvenance | None
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogDiscovery:
-    date: date
-    mountain_id: UUID
-    created_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class CatalogSeed:
-    mountains: tuple[CatalogMountain, ...]
-    discoveries: tuple[CatalogDiscovery, ...]
 
 
 def _canonical_json(value: object) -> str:

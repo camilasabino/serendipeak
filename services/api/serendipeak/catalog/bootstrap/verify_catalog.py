@@ -6,9 +6,13 @@ from serendipeak.catalog.bootstrap.frozen_catalog import (
     FrozenMountain,
     compare_with_frozen_catalog,
 )
-from serendipeak.catalog.bootstrap.seed import CatalogDiscovery, CatalogMountain, CatalogSeed
+from serendipeak.catalog.bootstrap.ports import (
+    CatalogDiscovery,
+    CatalogMountain,
+    CatalogSeed,
+    CatalogStore,
+)
 from serendipeak.catalog.entities import Mountain
-from serendipeak.catalog.ports import CatalogStore
 
 
 @dataclass(frozen=True, slots=True)

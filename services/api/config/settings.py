@@ -65,3 +65,35 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 USE_TZ = True
 TIME_ZONE = "UTC"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_THROTTLE_CLASSES": [],
+    "UNAUTHENTICATED_USER": None,
+    "DEFAULT_RENDERER_CLASSES": ["serendipeak.httpapi.renderers.ContractJSONRenderer"],
+    "DEFAULT_PARSER_CLASSES": [],
+    "DEFAULT_CONTENT_NEGOTIATION_CLASS": "serendipeak.httpapi.negotiation.JsonOnlyNegotiation",
+    "EXCEPTION_HANDLER": "serendipeak.httpapi.errors.api_exception_handler",
+}
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "readable": {"format": "{asctime} {levelname} {name} {message}", "style": "{"},
+        "json_line": {"()": "config.logging.JsonLineFormatter"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "readable" if DEBUG else "json_line",
+        },
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django": {"level": "INFO"},
+        # Django logs every 4xx as a warning; an unknown slug is an expected answer, not a fault.
+        "django.request": {"level": "ERROR"},
+    },
+}

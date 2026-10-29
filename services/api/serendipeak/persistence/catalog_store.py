@@ -1,9 +1,8 @@
 from django.db import connection, transaction
 from django.db.models.functions import Collate
 
-from serendipeak.catalog.bootstrap.seed import CatalogSeed
+from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
-from serendipeak.catalog.ports import CatalogSnapshot
 from serendipeak.persistence.errors import translate_database_errors
 from serendipeak.persistence.mapping import (
     discovery_record,

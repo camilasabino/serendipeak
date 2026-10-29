@@ -4,10 +4,9 @@ from serendipeak.catalog.bootstrap.frozen_catalog import (
     FrozenMountain,
     compare_with_frozen_catalog,
 )
-from serendipeak.catalog.bootstrap.seed import CatalogSeed
+from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogStore
 from serendipeak.catalog.bootstrap.verify_catalog import VerificationReport, VerifyCatalog
 from serendipeak.catalog.errors import CatalogMismatch
-from serendipeak.catalog.ports import CatalogStore
 
 
 class BootstrapCatalog:
