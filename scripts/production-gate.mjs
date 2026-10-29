@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// Starting set carried over from the v1 gate. M4b.2 replaces it with the final D-18 diagnostic identifiers.
+// Starting set carried over from the v1 production gate.
 const forbiddenIdentifiers = [
 	'__serendipeak',
 	'exploreTo',

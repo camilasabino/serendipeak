@@ -1,6 +1,6 @@
 # SerendiPeak
 
-SerendiPeak shows one mountain per day with a 3D globe and editorial content. This repository is the new implementation: a Django, Django REST Framework and GeoDjango API backed by PostgreSQL/PostGIS, with a Next.js (Pages Router) and React frontend that arrives in a later milestone.
+SerendiPeak shows one mountain per day with a 3D globe and editorial content. This repository is the new implementation: a Django, Django REST Framework and GeoDjango API backed by PostgreSQL/PostGIS, with a Next.js (Pages Router) and React frontend in `apps/web`.
 
 ## Migration reference
 
@@ -96,7 +96,6 @@ npm run dev
 | `npm test` | Vitest unit tests (`src/**/*.spec.ts`) |
 | `npm run build` | Next production build |
 | `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build` |
-| `npm run test:e2e` | Playwright harness: `@nogl` and `@webgl` projects, no scenarios yet |
 
 `e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 
