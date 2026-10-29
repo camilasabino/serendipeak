@@ -86,17 +86,37 @@ Use `uv run ruff format .` and `uv run ruff check --fix .` to apply fixes.
 
 `services/api/seed/legacy-catalog-v1.json` is the seed input for the catalog bootstrap: every legacy mountain, its primary image and the daily discovery history. It is never a source of truth; the database is the canonical catalog.
 
-`services/api/tools/export_legacy_catalog.py` produces it. The tool is standalone and never imported by the application. It reads the legacy database inside one `REPEATABLE READ, READ ONLY` transaction with SELECT statements only, and reads `data/media.yaml` from the legacy repository at the frozen commit (after checking that `v1-behavioral-freeze` points to it), never from the working tree. It stops without writing when the legacy schema is not at version 9, when a legacy column is neither exported nor deliberately dropped, or when the media manifest disagrees with a stored image.
+`services/api/tools/export_legacy_catalog.py` produces it. The application never imports the tool. The tool imports the seed format and the content hash from the application seed parser, so the export and the bootstrap share one definition of both, and it runs as a module from `services/api`. It reads the legacy database inside one `REPEATABLE READ, READ ONLY` transaction with SELECT statements only, and reads `data/media.yaml` from the legacy repository at the frozen commit (after checking that `v1-behavioral-freeze` points to it), never from the working tree. It stops without writing when the legacy schema is not at version 9, when a legacy column is neither exported nor deliberately dropped, or when the media manifest disagrees with a stored image.
 
 ```sh
 cd services/api
 LEGACY_DATABASE_URL=postgres://serendipeak:serendipeak@localhost:5433/serendipeak \
-  uv run python tools/export_legacy_catalog.py --legacy-repo ../../../serendipeak-legacy
+  uv run python -m tools.export_legacy_catalog --legacy-repo ../../../serendipeak-legacy
 ```
 
 The output is deterministic for a given `--exported-on` date (default: today in UTC). The artifact records the format and version, the export date, the legacy tag, commit and schema version, the sha256 of the media manifest, row counts and `content_sha256`. `content_sha256` is the SHA-256 of `content` serialized as UTF-8 JSON with sorted keys, `(",", ":")` separators, non-ASCII characters unescaped and no NaN, so it does not depend on the file layout or the export date.
 
 The image rows drop the legacy `id`, `type`, `source`, `title`, `is_primary` and `created_at` columns: every image is the primary `wikimedia_commons` image and its title is the file name without the `File:` prefix and the extension, both checked during the export. `license_reported`, `license_election_basis_url` and `approved_on` come from the media manifest and are `null` for images without a manifest entry. Mountain `status` keeps the legacy values.
+
+### Catalog bootstrap
+
+The PostgreSQL/PostGIS database is the canonical catalog. `bootstrap_catalog` loads the seed artifact into an empty database once; `check_catalog` checks the publication invariants.
+
+```sh
+cd services/api
+uv run --env-file ../../.env python manage.py migrate
+uv run --env-file ../../.env python manage.py bootstrap_catalog
+uv run --env-file ../../.env python manage.py check_catalog
+```
+
+- `bootstrap_catalog` validates the seed (format, legacy tag and commit, `content_sha256`, counts, field types, coordinate range) and compares it with the frozen `contracts/v1/catalog.json` before writing. It then loads mountains, images and daily discoveries in one transaction, keeping the legacy ids and timestamps, and verifies the stored catalog against the seed and the frozen catalog. Coordinates are compared within 1e-7 degrees and camera values within 1e-9; every other value exactly. Legacy `pending_media` becomes `draft`, which is never publicly visible.
+- It refuses when the catalog already holds mountains. The emptiness check and the load run in one transaction that first locks the `mountain` table against concurrent writes (`SHARE ROW EXCLUSIVE`; reads are not blocked), so a concurrent second run waits for the first, then refuses and loads nothing. The load is all or nothing; foreign keys are deferred, so a reference to a missing mountain fails when the transaction commits and nothing is kept.
+- The verification runs after the load has committed. When it reports mismatches, the loaded rows stay; recreate the database, run `migrate` and `bootstrap_catalog` again.
+- `bootstrap_catalog --verify-only` runs only the verification, writes nothing and can be repeated. It verifies a freshly bootstrapped catalog, not a catalog in use: later daily discoveries and catalog edits are legitimate differences from the seed, and it reports them as mismatches.
+- `check_catalog` is the routine check. It does not compare the catalog with the seed and can run at any time.
+- `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, OpenStreetMap and Wikidata references, and a primary image with URL, attribution, source page, source identifier, license name, dimensions and a license URL (a public-domain image needs a creator instead).
+
+`--seed` and `--frozen-catalog` replace the input files. On failure each command lists the mismatches or violations on stderr and exits with status 1.
 
 ## Web
 

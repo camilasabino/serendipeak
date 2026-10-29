@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "serendipeak.persistence",
+    "serendipeak.cli",
 ]
 
 MIDDLEWARE = [

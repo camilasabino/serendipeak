@@ -113,6 +113,12 @@ jobs:
       - name: Apply migrations
         run: uv run python manage.py migrate --noinput
 
+      - name: Bootstrap catalog
+        run: uv run python manage.py bootstrap_catalog
+
+      - name: Check catalog
+        run: uv run python manage.py check_catalog
+
       - name: Test
         run: uv run pytest
 

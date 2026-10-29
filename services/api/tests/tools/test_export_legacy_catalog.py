@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 
+from serendipeak.catalog.bootstrap.seed import content_sha256, parse_catalog_seed
 from tools.export_legacy_catalog import (
     EXPECTED_LEGACY_COLUMNS,
     LEGACY_SCHEMA_VERSION,
@@ -12,7 +13,6 @@ from tools.export_legacy_catalog import (
     build_artifact,
     build_content,
     check_legacy_schema,
-    content_sha256,
     parse_media_manifest,
     read_only_snapshot,
     render_artifact,
@@ -178,10 +178,6 @@ def test_parse_media_manifest_rejects_unsupported_entries(manifest, message):
         parse_media_manifest(manifest)
 
 
-def test_content_hash_ignores_key_order():
-    assert content_sha256({"a": 1, "b": [1.5, "é"]}) == content_sha256({"b": [1.5, "é"], "a": 1})
-
-
 def test_rendered_artifact_is_reproducible(denali, approvals):
     content = build_content(
         [denali], [image_row(denali, "MG 4070 (7205909856).jpg")], [], approvals
@@ -201,6 +197,18 @@ def test_rendered_artifact_is_reproducible(denali, approvals):
         "media_approvals": 1,
         "daily_discoveries": 0,
     }
+
+
+def test_rendered_artifact_is_accepted_by_the_seed_parser(denali, approvals):
+    content = build_content(
+        [denali], [image_row(denali, "MG 4070 (7205909856).jpg")], [], approvals
+    )
+    rendered = render_artifact(build_artifact(content, MANIFEST, datetime.date(2026, 10, 29)))
+
+    seed = parse_catalog_seed(json.loads(rendered))
+
+    assert [entry.mountain.slug for entry in seed.mountains] == ["denali"]
+    assert seed.mountains[0].image_provenance.approved_on == datetime.date(2026, 10, 6)
 
 
 def test_snapshot_rejects_writes():

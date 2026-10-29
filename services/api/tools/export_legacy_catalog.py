@@ -12,12 +12,16 @@ import psycopg
 import yaml
 from psycopg.rows import dict_row
 
-LEGACY_TAG = "v1-behavioral-freeze"
-LEGACY_COMMIT = "f9a66deb2c0591a9c574fb4751b938b5863e6a1e"
+from serendipeak.catalog.bootstrap.seed import (
+    LEGACY_COMMIT,
+    LEGACY_TAG,
+    SEED_FORMAT,
+    SEED_FORMAT_VERSION,
+    content_sha256,
+)
+
 LEGACY_SCHEMA_VERSION = 9
 MEDIA_MANIFEST_PATH = "data/media.yaml"
-ARTIFACT_FORMAT = "serendipeak.legacy-catalog"
-ARTIFACT_FORMAT_VERSION = 1
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "seed" / "legacy-catalog-v1.json"
 
 IMAGE_TYPE = "image"
@@ -299,21 +303,11 @@ def build_content(mountain_rows, image_rows, discovery_rows, approvals):
     return {"mountains": mountains, "daily_discoveries": discoveries}
 
 
-def canonical_json(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    )
-
-
-def content_sha256(content):
-    return hashlib.sha256(canonical_json(content).encode("utf-8")).hexdigest()
-
-
 def build_artifact(content, manifest_raw, exported_on):
     mountains = content["mountains"]
     return {
-        "format": ARTIFACT_FORMAT,
-        "format_version": ARTIFACT_FORMAT_VERSION,
+        "format": SEED_FORMAT,
+        "format_version": SEED_FORMAT_VERSION,
         "exported_on": exported_on.isoformat(),
         "source": {
             "tag": LEGACY_TAG,

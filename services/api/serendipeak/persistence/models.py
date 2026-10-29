@@ -15,17 +15,14 @@ from django.db.models import (
 from django.db.models.functions import Now
 from django.db.models.lookups import Range
 
-from serendipeak.catalog import camera
+from serendipeak.catalog import camera, coordinates
+from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
 from serendipeak.catalog.slug import RESERVED_SLUGS, SLUG_PATTERN
 
-MOUNTAIN_STATUSES = ("draft", "active", "inactive")
-ACTIVE_STATUS = "active"
-OSM_TYPES = ("node", "way", "relation")
-WIKIDATA_ID_PATTERN = r"^Q[1-9][0-9]*$"
-LONGITUDE_MIN_DEGREES = -180.0
-LONGITUDE_MAX_DEGREES = 180.0
-LATITUDE_MIN_DEGREES = -90.0
-LATITUDE_MAX_DEGREES = 90.0
+# Plain strings keep the deconstructed constraints equal to the migration.
+MOUNTAIN_STATUSES = tuple(status.value for status in MountainStatus)
+ACTIVE_STATUS = MountainStatus.ACTIVE.value
+OSM_TYPES = tuple(osm_type.value for osm_type in OsmType)
 
 
 def _has_text(field):
@@ -99,13 +96,13 @@ class MountainRecord(models.Model):
             ),
             CheckConstraint(
                 condition=_location_coordinate_between(
-                    "ST_X", LONGITUDE_MIN_DEGREES, LONGITUDE_MAX_DEGREES
+                    "ST_X", coordinates.LONGITUDE_MIN_DEGREES, coordinates.LONGITUDE_MAX_DEGREES
                 ),
                 name="mountain_longitude_valid",
             ),
             CheckConstraint(
                 condition=_location_coordinate_between(
-                    "ST_Y", LATITUDE_MIN_DEGREES, LATITUDE_MAX_DEGREES
+                    "ST_Y", coordinates.LATITUDE_MIN_DEGREES, coordinates.LATITUDE_MAX_DEGREES
                 ),
                 name="mountain_latitude_valid",
             ),
