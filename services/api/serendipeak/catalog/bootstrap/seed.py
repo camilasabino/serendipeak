@@ -108,7 +108,11 @@ class CatalogSeed:
 
 def _canonical_json(value: object) -> str:
     return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
     )
 
 
@@ -120,17 +124,21 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
     seed = _object(document, {*_SEED_KEYS, "content"}, "seed")
     if seed["format"] != SEED_FORMAT or seed["format_version"] != SEED_FORMAT_VERSION:
         raise InvalidCatalogSeed(f"seed is not {SEED_FORMAT} version {SEED_FORMAT_VERSION}")
+
     _date(seed["exported_on"], "exported_on")
+
     source = _object(seed["source"], _SOURCE_KEYS, "source")
     if source["tag"] != LEGACY_TAG or source["commit"] != LEGACY_COMMIT:
         raise InvalidCatalogSeed(f"seed was not exported from {LEGACY_TAG} at {LEGACY_COMMIT}")
     content = _object(seed["content"], _CONTENT_KEYS, "content")
+
     try:
         digest = content_sha256(content)
     except (TypeError, ValueError) as error:
         raise InvalidCatalogSeed(f"content is not canonical JSON: {error}") from error
     if digest != seed["content_sha256"]:
         raise InvalidCatalogSeed(f"content_sha256 does not match the content ({digest})")
+
     mountains = tuple(
         _mountain(raw, f"content.mountains[{index}]")
         for index, raw in enumerate(_list(content["mountains"], "content.mountains"))
@@ -141,8 +149,10 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
             _list(content["daily_discoveries"], "content.daily_discoveries")
         )
     )
+
     _check_counts(_object(seed["counts"], _COUNT_KEYS, "counts"), mountains, discoveries)
     _check_references(mountains, discoveries)
+
     return CatalogSeed(mountains=mountains, discoveries=discoveries)
 
 
@@ -154,18 +164,21 @@ def _check_counts(counts, mountains, discoveries):
         "media_approvals": sum(entry.image_provenance.approved_on is not None for entry in images),
         "daily_discoveries": len(discoveries),
     }
+
     if dict(counts) != actual:
         raise InvalidCatalogSeed(f"counts {dict(counts)} do not match the content {actual}")
 
 
 def _check_references(mountains, discoveries):
     ids = {entry.mountain.id for entry in mountains}
+
     if len(ids) != len(mountains):
         raise InvalidCatalogSeed("mountain ids are not unique")
     if len({entry.mountain.slug for entry in mountains}) != len(mountains):
         raise InvalidCatalogSeed("mountain slugs are not unique")
     if len({discovery.date for discovery in discoveries}) != len(discoveries):
         raise InvalidCatalogSeed("daily discovery dates are not unique")
+
     for discovery in discoveries:
         if discovery.mountain_id not in ids:
             raise InvalidCatalogSeed(
@@ -178,13 +191,16 @@ def _mountain(raw, label):
     fields = _object(raw, _MOUNTAIN_KEYS, label)
     slug = _text(fields["slug"], f"{label} slug")
     label = f"mountain {slug!r}"
+
     latitude = _number(fields["latitude"], f"{label} latitude")
     longitude = _number(fields["longitude"], f"{label} longitude")
     if not coordinates_in_range(latitude, longitude):
         raise InvalidCatalogSeed(f"{label}: coordinates ({latitude}, {longitude}) out of range")
+
     status = _LEGACY_STATUSES.get(_text(fields["status"], f"{label} status"))
     if status is None:
         raise InvalidCatalogSeed(f"{label}: unknown status {fields['status']!r}")
+
     image, provenance = (None, None) if fields["image"] is None else _image(fields["image"], label)
     mountain = Mountain(
         id=_uuid(fields["id"], f"{label} id"),
@@ -206,6 +222,7 @@ def _mountain(raw, label):
         wikidata_id=_optional(_text, fields["wikidata_id"], f"{label} wikidata_id"),
         wikipedia_url=_optional(_text, fields["wikipedia_url"], f"{label} wikipedia_url"),
     )
+
     return CatalogMountain(
         mountain=mountain,
         image_provenance=provenance,
@@ -219,11 +236,15 @@ def _camera(fields, label):
         fields[f"camera_{name}"] for name in ("heading_degrees", "pitch_degrees", "range_meters")
     ]
     framing = [fields["camera_framing_x"], fields["camera_framing_y"]]
+
     if all(value is None for value in [*pose, *framing]):
         return None
+
     if any(value is None for value in pose) or (None in framing and framing != [None, None]):
         raise InvalidCatalogSeed(f"{label}: incomplete camera")
+
     heading, pitch, range_ = (_number(value, f"{label} camera") for value in pose)
+
     return CanonicalCamera(
         heading_degrees=heading,
         pitch_degrees=pitch,
@@ -241,17 +262,21 @@ def _osm(fields, label):
     osm_type, osm_id = fields["osm_type"], fields["osm_id"]
     if osm_type is None and osm_id is None:
         return None
+
     if osm_type not in tuple(OsmType):
         raise InvalidCatalogSeed(f"{label}: invalid OpenStreetMap reference")
+
     return OsmReference(type=OsmType(osm_type), id=_integer(osm_id, f"{label} osm_id"))
 
 
 def _image(raw, label):
     label = f"{label} image"
     fields = _object(raw, _IMAGE_KEYS, label)
+
     width, height = fields["width"], fields["height"]
     if (width is None) != (height is None):
         raise InvalidCatalogSeed(f"{label}: incomplete dimensions")
+
     image = PrimaryImage(
         url=_text(fields["url"], f"{label} url"),
         thumbnail_url=_optional(_text, fields["thumbnail_url"], f"{label} thumbnail_url"),
@@ -274,6 +299,7 @@ def _image(raw, label):
         ),
         approved_on=_optional(_date, fields["approved_on"], f"{label} approved_on"),
     )
+
     return image, provenance
 
 
@@ -289,11 +315,13 @@ def _discovery(raw, label):
 def _object(value, keys, label):
     if not isinstance(value, Mapping):
         raise InvalidCatalogSeed(f"{label} must be an object")
+
     if set(value) != keys:
         raise InvalidCatalogSeed(
             f"{label}: unexpected keys {sorted(set(value) - keys)},"
             f" missing keys {sorted(keys - set(value))}"
         )
+
     return value
 
 
@@ -346,4 +374,5 @@ def _timestamp(value, label):
         raise InvalidCatalogSeed(f"{label} is not an ISO timestamp") from error
     if parsed.tzinfo is None:
         raise InvalidCatalogSeed(f"{label} has no UTC offset")
+
     return parsed.astimezone(UTC)

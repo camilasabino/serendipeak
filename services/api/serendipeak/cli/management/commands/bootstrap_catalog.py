@@ -22,7 +22,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--seed", type=Path, help="seed artifact (default: the committed one)")
         parser.add_argument(
-            "--frozen-catalog", type=Path, help="frozen catalog (default: contracts/v1)"
+            "--frozen-catalog",
+            type=Path,
+            help="frozen catalog (default: contracts/v1)",
         )
         parser.add_argument(
             "--verify-only",
@@ -39,6 +41,7 @@ class Command(BaseCommand):
 
         seed_document = read_json(options["seed"] or composition.SEED_PATH)
         frozen_document = read_json(options["frozen_catalog"] or composition.FROZEN_CATALOG_PATH)
+
         try:
             seed = parse_catalog_seed(seed_document)
             frozen = parse_frozen_catalog(frozen_document)
@@ -53,7 +56,9 @@ class Command(BaseCommand):
             ) from error
         except (ApplicationError, InfrastructureError) as error:
             raise command_error(error) from error
+
         self.write_report(report)
+
         if not report.is_consistent:
             self.write_mismatches(report.mismatches)
             raise CommandError("the catalog does not match the seed or the frozen catalog")

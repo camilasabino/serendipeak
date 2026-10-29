@@ -24,12 +24,14 @@ class DjangoCatalogStore:
         mountains = [mountain_record(entry) for entry in seed.mountains]
         images = [record for entry in seed.mountains if (record := image_record(entry))]
         discoveries = [discovery_record(discovery) for discovery in seed.discoveries]
+
         # Foreign keys are deferred, so their violations surface when atomic() commits:
         # the translation has to enclose the whole block, not sit inside it.
         with translate_database_errors(), transaction.atomic():
             _lock_the_mountain_table()
             if MountainRecord.objects.exists():
                 raise CatalogAlreadyPopulated()
+
             MountainRecord.objects.bulk_create(mountains)
             MountainImageRecord.objects.bulk_create(images)
             DailyDiscoveryRecord.objects.bulk_create(discoveries)
@@ -41,6 +43,7 @@ class DjangoCatalogStore:
                 Collate("slug", "C")
             )
             discoveries = DailyDiscoveryRecord.objects.order_by("date")
+
             return CatalogSnapshot(
                 mountains=tuple(to_catalog_mountain(record) for record in mountains),
                 discoveries=tuple(to_catalog_discovery(record) for record in discoveries),

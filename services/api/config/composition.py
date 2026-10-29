@@ -12,6 +12,7 @@ FROZEN_CATALOG_PATH = SERVICE_ROOT.parents[1] / "contracts" / "v1" / "catalog.js
 
 def build_bootstrap_catalog() -> BootstrapCatalog:
     store = DjangoCatalogStore()
+
     return BootstrapCatalog(store, VerifyCatalog(store))
 
 

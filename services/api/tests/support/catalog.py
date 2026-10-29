@@ -62,6 +62,7 @@ def primary_image(**overrides):
         "source_identifier": "File:Aconcagua2016.jpg",
     }
     fields.update(overrides)
+
     return PrimaryImage(**fields)
 
 
@@ -89,11 +90,13 @@ def mountain(slug="aconcagua", **overrides):
         "wikipedia_url": "https://en.wikipedia.org/wiki/Aconcagua",
     }
     fields.update(overrides)
+
     return Mountain(**fields)
 
 
 def catalog_mountain(slug="aconcagua", provenance=None, **overrides):
     entry = mountain(slug, **overrides)
+
     return CatalogMountain(
         mountain=entry,
         image_provenance=None
@@ -119,6 +122,7 @@ def catalog_seed(*mountains, discoveries=()):
 def frozen_mountain(entry):
     source = entry.mountain
     image = source.primary_image
+
     return FrozenMountain(
         slug=source.slug,
         name=source.name,

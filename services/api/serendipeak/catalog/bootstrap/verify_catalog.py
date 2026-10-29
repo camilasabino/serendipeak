@@ -32,8 +32,13 @@ class VerifyCatalog:
     def __init__(self, store: CatalogStore):
         self._store = store
 
-    def execute(self, seed: CatalogSeed, frozen: Sequence[FrozenMountain]) -> VerificationReport:
+    def execute(
+        self,
+        seed: CatalogSeed,
+        frozen: Sequence[FrozenMountain],
+    ) -> VerificationReport:
         snapshot = self._store.snapshot()
+
         return VerificationReport(
             mountains=len(snapshot.mountains),
             images=sum(entry.mountain.primary_image is not None for entry in snapshot.mountains),
@@ -53,6 +58,7 @@ def _mountain_mismatches(
 ) -> list[str]:
     stored = {entry.mountain.id: entry for entry in actual}
     mismatches = []
+
     for entry in expected:
         found = stored.pop(entry.mountain.id, None)
         label = f"mountain {entry.mountain.slug} ({entry.mountain.id})"
@@ -60,10 +66,12 @@ def _mountain_mismatches(
             mismatches.append(f"{label} is missing")
         elif found != entry:
             mismatches.append(f"{label} differs in {', '.join(_differing_fields(entry, found))}")
+
     mismatches.extend(
         f"mountain {entry.mountain.slug} ({entry.mountain.id}) is not in the seed"
         for entry in stored.values()
     )
+
     return mismatches
 
 
@@ -78,6 +86,7 @@ def _differing_fields(expected: CatalogMountain, actual: CatalogMountain) -> lis
         for name in ("image_provenance", "created_at", "updated_at")
         if getattr(expected, name) != getattr(actual, name)
     ]
+
     return [*mountain_fields, *entry_fields]
 
 
@@ -86,13 +95,16 @@ def _discovery_mismatches(
 ) -> list[str]:
     stored = {discovery.date: discovery for discovery in actual}
     mismatches = []
+
     for discovery in expected:
         found = stored.pop(discovery.date, None)
         if found is None:
             mismatches.append(f"daily discovery {discovery.date} is missing")
         elif found != discovery:
             mismatches.append(f"daily discovery {discovery.date} differs from the seed")
+
     mismatches.extend(
         f"daily discovery {discovery.date} is not in the seed" for discovery in stored.values()
     )
+
     return mismatches

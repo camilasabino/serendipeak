@@ -31,25 +31,32 @@ class PublicationViolation(StrEnum):
 
 def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ...]:
     violations = []
+
     if not is_valid_slug(mountain.slug):
         violations.append(PublicationViolation.SLUG_INVALID)
     if not coordinates_in_range(mountain.coordinates.latitude, mountain.coordinates.longitude):
         violations.append(PublicationViolation.COORDINATES_OUT_OF_RANGE)
     if mountain.elevation_meters <= 0:
         violations.append(PublicationViolation.ELEVATION_NOT_POSITIVE)
+
     violations.extend(_camera_violations(mountain.camera))
+
     if mountain.osm is None:
         violations.append(PublicationViolation.OSM_REFERENCE_MISSING)
     if _is_blank(mountain.wikidata_id):
         violations.append(PublicationViolation.WIKIDATA_ID_MISSING)
+
     violations.extend(_image_violations(mountain.primary_image))
+
     return tuple(violations)
 
 
 def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolation]:
     if camera is None:
         return [PublicationViolation.CAMERA_MISSING]
+
     violations = []
+
     if not (
         camera_bounds.HEADING_MIN_DEGREES
         <= camera.heading_degrees
@@ -60,6 +67,7 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
         and camera_bounds.RANGE_MIN_METERS <= camera.range_meters <= camera_bounds.RANGE_MAX_METERS
     ):
         violations.append(PublicationViolation.CAMERA_OUT_OF_BOUNDS)
+
     if camera.framing is None:
         violations.append(PublicationViolation.CAMERA_FRAMING_MISSING)
     elif not (
@@ -67,6 +75,7 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
         and camera_bounds.FRAMING_MIN <= camera.framing.y <= camera_bounds.FRAMING_MAX
     ):
         violations.append(PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS)
+
     return violations
 
 
@@ -81,13 +90,16 @@ def _image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
         (image.license_name, PublicationViolation.IMAGE_LICENSE_NAME_MISSING),
     )
     violations = [violation for value, violation in required if _is_blank(value)]
+
     if not _is_blank(image.license_name) and _is_blank(image.license_url):
         if image.license_name.casefold() != _PUBLIC_DOMAIN_LICENSE_NAME.casefold():
             violations.append(PublicationViolation.IMAGE_LICENSE_URL_MISSING)
         elif _is_blank(image.creator):
             violations.append(PublicationViolation.IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING)
+
     if image.dimensions is None:
         violations.append(PublicationViolation.IMAGE_DIMENSIONS_MISSING)
+
     return violations
 
 

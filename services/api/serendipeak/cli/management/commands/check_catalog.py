@@ -17,11 +17,14 @@ class Command(BaseCommand):
             report = composition.build_check_catalog().execute()
         except InfrastructureError as error:
             raise command_error(error) from error
+
         for violation in report.violations:
             self.stderr.write(f"{violation.slug}: {violation.violation}")
+
         if report.violations:
             raise CommandError(
                 f"{len(report.violations)} publication violations"
                 f" in {report.checked} active mountains"
             )
+
         self.stdout.write(f"{report.checked} active mountains satisfy the publication invariants.")

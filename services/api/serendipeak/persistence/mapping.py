@@ -21,6 +21,7 @@ from serendipeak.persistence.models import (
 
 def to_mountain(record: MountainRecord) -> Mountain:
     image = _image_of(record)
+
     return Mountain(
         id=record.id,
         slug=record.slug,
@@ -44,6 +45,7 @@ def to_mountain(record: MountainRecord) -> Mountain:
 
 def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:
     image = _image_of(record)
+
     return CatalogMountain(
         mountain=to_mountain(record),
         image_provenance=None
@@ -60,7 +62,9 @@ def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:
 
 def to_catalog_discovery(record: DailyDiscoveryRecord) -> CatalogDiscovery:
     return CatalogDiscovery(
-        date=record.date, mountain_id=record.mountain_id, created_at=record.created_at
+        date=record.date,
+        mountain_id=record.mountain_id,
+        created_at=record.created_at,
     )
 
 
@@ -68,6 +72,7 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
     mountain = entry.mountain
     camera = mountain.camera
     framing = None if camera is None else camera.framing
+
     return MountainRecord(
         id=mountain.id,
         slug=mountain.slug,
@@ -99,6 +104,7 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
         return None
     provenance = entry.image_provenance or ImageProvenance(None, None, None)
     dimensions = image.dimensions
+
     return MountainImageRecord(
         mountain_id=entry.mountain.id,
         url=image.url,
@@ -119,7 +125,9 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
 
 def discovery_record(discovery: CatalogDiscovery) -> DailyDiscoveryRecord:
     return DailyDiscoveryRecord(
-        date=discovery.date, mountain_id=discovery.mountain_id, created_at=discovery.created_at
+        date=discovery.date,
+        mountain_id=discovery.mountain_id,
+        created_at=discovery.created_at,
     )
 
 
@@ -133,6 +141,7 @@ def _image_of(record: MountainRecord) -> MountainImageRecord | None:
 def _camera(record: MountainRecord) -> CanonicalCamera | None:
     if record.camera_heading_degrees is None:
         return None
+
     return CanonicalCamera(
         heading_degrees=record.camera_heading_degrees,
         pitch_degrees=record.camera_pitch_degrees,

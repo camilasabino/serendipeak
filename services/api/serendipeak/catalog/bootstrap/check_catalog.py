@@ -30,6 +30,7 @@ class CheckCatalog:
             ),
             key=lambda mountain: mountain.slug,
         )
+
         return CatalogCheckReport(
             checked=len(active),
             violations=tuple(

@@ -59,11 +59,13 @@ def parse_frozen_catalog(document: object) -> tuple[FrozenMountain, ...]:
 
 
 def compare_with_frozen_catalog(
-    frozen: Sequence[FrozenMountain], mountains: Iterable[Mountain]
+    frozen: Sequence[FrozenMountain],
+    mountains: Iterable[Mountain],
 ) -> FrozenComparison:
     by_slug = {mountain.slug: mountain for mountain in mountains}
     mismatches = []
     matched = 0
+
     for expected in frozen:
         actual = by_slug.get(expected.slug)
         differences = (
@@ -73,17 +75,20 @@ def compare_with_frozen_catalog(
             mismatches.append(f"{expected.slug}: {', '.join(differences)}")
         else:
             matched += 1
+
     frozen_slugs = {expected.slug for expected in frozen}
     mismatches.extend(
         f"{slug}: public mountain not in the frozen catalog"
         for slug, mountain in sorted(by_slug.items())
         if slug not in frozen_slugs and mountain.status in PUBLIC_STATUSES
     )
+
     return FrozenComparison(total=len(frozen), matched=matched, mismatches=tuple(mismatches))
 
 
 def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
     differences = []
+
     if actual.status not in PUBLIC_STATUSES:
         differences.append(f"status {actual.status} is not public")
     if actual.name != expected.name:
@@ -98,6 +103,7 @@ def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
         differences.append("OpenStreetMap reference differs")
     if actual.wikidata_id != expected.wikidata_id:
         differences.append("Wikidata id differs")
+
     image = actual.primary_image
     if image is None or expected.image != FrozenImageIdentity(
         source_identifier=image.source_identifier,
@@ -105,6 +111,7 @@ def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
         dimensions=image.dimensions,
     ):
         differences.append("primary image identity differs")
+
     return differences
 
 
@@ -117,6 +124,7 @@ def _coordinates_match(expected: Coordinates, actual: Coordinates) -> bool:
 def _camera_matches(expected: CanonicalCamera, actual: CanonicalCamera) -> bool:
     if actual.framing is None or expected.framing is None:
         return actual.framing == expected.framing
+
     pairs = (
         (expected.heading_degrees, actual.heading_degrees),
         (expected.pitch_degrees, actual.pitch_degrees),
@@ -124,6 +132,7 @@ def _camera_matches(expected: CanonicalCamera, actual: CanonicalCamera) -> bool:
         (expected.framing.x, actual.framing.x),
         (expected.framing.y, actual.framing.y),
     )
+
     return all(_close(want, got, CAMERA_TOLERANCE) for want, got in pairs)
 
 
@@ -137,8 +146,10 @@ def _frozen_mountain(raw) -> FrozenMountain:
     wikidata = _WIKIDATA_URL.fullmatch(raw["sources"]["wikidata"])
     if osm is None or wikidata is None:
         raise InvalidFrozenCatalog(f"{slug}: unexpected source URLs")
+
     pose = raw["camera"]
     image = raw["primaryImage"]
+
     return FrozenMountain(
         slug=slug,
         name=raw["name"],

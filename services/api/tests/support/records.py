@@ -21,6 +21,7 @@ def mountain_record(**overrides):
         "status": "active",
     }
     fields.update(overrides)
+
     return MountainRecord(**fields)
 
 
@@ -33,6 +34,7 @@ def image_record(mountain, **overrides):
         "source_identifier": "File:Aconcagua2016.jpg",
     }
     fields.update(overrides)
+
     return MountainImageRecord(**fields)
 
 

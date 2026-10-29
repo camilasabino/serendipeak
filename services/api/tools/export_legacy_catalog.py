@@ -101,6 +101,7 @@ class LegacyRepository:
         tagged = self._git("rev-parse", "--verify", f"refs/tags/{LEGACY_TAG}^{{commit}}")
         if tagged.decode().strip() != LEGACY_COMMIT:
             raise ExportError(f"tag {LEGACY_TAG} does not point to {LEGACY_COMMIT}")
+
         return self._git("show", f"{LEGACY_COMMIT}:{MEDIA_MANIFEST_PATH}")
 
     def _git(self, *arguments):
@@ -112,6 +113,7 @@ class LegacyRepository:
             )
         except (OSError, subprocess.CalledProcessError) as error:
             raise ExportError(f"cannot read the legacy repository: {error}") from error
+
         return completed.stdout
 
 
@@ -179,7 +181,9 @@ def parse_media_manifest(raw):
     document = yaml.safe_load(raw)
     if not isinstance(document, dict) or set(document) != {"media"}:
         raise ExportError("the media manifest must contain only the 'media' list")
+
     approvals = {}
+
     for entry in document["media"]:
         slug = entry.get("slug")
         unknown = set(entry) - MANIFEST_ENTRY_KEYS
@@ -189,18 +193,23 @@ def parse_media_manifest(raw):
                 f"media entry {slug!r}: unsupported keys {sorted(unknown)},"
                 f" missing keys {sorted(missing)}"
             )
+
         license_ = entry["license"]
         unknown_license = set(license_) - MANIFEST_LICENSE_KEYS
         if "reported" not in license_ or unknown_license:
             raise ExportError(f"media entry {slug!r}: unsupported license {sorted(license_)}")
+
         election = ELECTION_KEYS & set(license_)
         if election and election != ELECTION_KEYS:
             raise ExportError(f"media entry {slug!r}: incomplete license election")
+
         if not isinstance(entry["approvedOn"], date) or isinstance(entry["approvedOn"], datetime):
             raise ExportError(f"media entry {slug!r}: approvedOn is not a date")
+
         if slug in approvals:
             raise ExportError(f"media entry {slug!r} appears twice")
         approvals[slug] = entry
+
     return approvals
 
 
@@ -215,6 +224,7 @@ def timestamp(value):
 def check_legacy_schema(database):
     if database.schema_migration() != [(LEGACY_SCHEMA_VERSION, False)]:
         raise ExportError(f"legacy schema is not at clean version {LEGACY_SCHEMA_VERSION}")
+
     for table, expected in EXPECTED_LEGACY_COLUMNS.items():
         actual = database.column_names(table)
         if actual != expected:
@@ -226,6 +236,7 @@ def check_legacy_schema(database):
 
 def images_by_mountain(rows):
     images = {}
+
     for row in rows:
         mountain_id = row["mountain_id"]
         if row["type"] != IMAGE_TYPE or row["source"] != IMAGE_SOURCE or not row["is_primary"]:
@@ -234,7 +245,9 @@ def images_by_mountain(rows):
             raise ExportError(f"mountain {mountain_id}: media title is not derived from the file")
         if mountain_id in images:
             raise ExportError(f"mountain {mountain_id} has more than one media row")
+
         images[mountain_id] = row
+
     return images
 
 
@@ -243,6 +256,7 @@ def approval_fields(slug, image, approval):
         return {"license_reported": None, "license_election_basis_url": None, "approved_on": None}
     if image is None:
         raise ExportError(f"media entry {slug!r} has no stored image")
+
     license_ = approval["license"]
     expected = {
         "source_identifier": COMMONS_FILE_PREFIX + approval["commonsFile"],
@@ -254,11 +268,13 @@ def approval_fields(slug, image, approval):
         expected["creator"] = approval["creator"]
     if "credit" in approval:
         expected["attribution"] = approval["credit"]
+
     for column, value in expected.items():
         if image[column] != value:
             raise ExportError(
                 f"media entry {slug!r}: {column} {image[column]!r} differs from {value!r}"
             )
+
     return {
         "license_reported": license_["reported"],
         "license_election_basis_url": license_.get("electionBasisUrl"),
@@ -272,22 +288,27 @@ def exported_mountain(row, image, approval):
     mountain["countries"] = list(row["countries"])
     mountain["created_at"] = timestamp(row["created_at"])
     mountain["updated_at"] = timestamp(row["updated_at"])
+
     fields = approval_fields(row["slug"], image, approval)
     mountain["image"] = (
         None if image is None else {**{column: image[column] for column in IMAGE_COLUMNS}, **fields}
     )
+
     return mountain
 
 
 def build_content(mountain_rows, image_rows, discovery_rows, approvals):
     images = images_by_mountain(image_rows)
     mountain_ids = {row["id"] for row in mountain_rows}
+
     orphans = sorted(str(mountain_id) for mountain_id in images.keys() - mountain_ids)
     if orphans:
         raise ExportError(f"media rows reference unknown mountains {orphans}")
+
     unmatched = sorted(approvals.keys() - {row["slug"] for row in mountain_rows})
     if unmatched:
         raise ExportError(f"media entries reference unknown slugs {unmatched}")
+
     mountains = [
         exported_mountain(row, images.get(row["id"]), approvals.get(row["slug"]))
         for row in sorted(mountain_rows, key=lambda row: row["slug"])
@@ -300,6 +321,7 @@ def build_content(mountain_rows, image_rows, discovery_rows, approvals):
         }
         for row in sorted(discovery_rows, key=lambda row: row["date"])
     ]
+
     return {"mountains": mountains, "daily_discoveries": discoveries}
 
 
@@ -341,11 +363,16 @@ def render_artifact(artifact):
 def export(database_url, legacy_repository, exported_on):
     manifest_raw = legacy_repository.media_manifest()
     approvals = parse_media_manifest(manifest_raw)
+
     with read_only_snapshot(database_url) as database:
         check_legacy_schema(database)
         content = build_content(
-            database.mountains(), database.images(), database.discoveries(), approvals
+            database.mountains(),
+            database.images(),
+            database.discoveries(),
+            approvals,
         )
+
     return render_artifact(build_artifact(content, manifest_raw, exported_on))
 
 
@@ -365,6 +392,7 @@ def parse_arguments(argv):
     arguments = parser.parse_args(argv)
     if not arguments.database_url:
         parser.error("--database-url or LEGACY_DATABASE_URL is required")
+
     return arguments
 
 
@@ -372,14 +400,18 @@ def main(argv=None):
     arguments = parse_arguments(argv)
     try:
         rendered = export(
-            arguments.database_url, LegacyRepository(arguments.legacy_repo), arguments.exported_on
+            arguments.database_url,
+            LegacyRepository(arguments.legacy_repo),
+            arguments.exported_on,
         )
     except ExportError as error:
         print(f"export failed: {error}", file=sys.stderr)
         return 1
+
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_bytes(rendered)
     print(f"wrote {arguments.output} ({hashlib.sha256(rendered).hexdigest()})")
+
     return 0
 
 

@@ -15,14 +15,21 @@ class BootstrapCatalog:
         self._store = store
         self._verify_catalog = verify_catalog
 
-    def execute(self, seed: CatalogSeed, frozen: Sequence[FrozenMountain]) -> VerificationReport:
+    def execute(
+        self,
+        seed: CatalogSeed,
+        frozen: Sequence[FrozenMountain],
+    ) -> VerificationReport:
         comparison = compare_with_frozen_catalog(
             frozen, (entry.mountain for entry in seed.mountains)
         )
         if comparison.mismatches:
             raise CatalogMismatch(comparison.mismatches)
+
         self._store.load(seed)
+
         report = self._verify_catalog.execute(seed, frozen)
         if not report.is_consistent:
             raise CatalogMismatch(report.mismatches)
+
         return report

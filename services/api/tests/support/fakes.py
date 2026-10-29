@@ -11,6 +11,7 @@ class InMemoryCatalogStore:
     def load(self, seed: CatalogSeed):
         if self._mountains:
             raise CatalogAlreadyPopulated()
+
         self._mountains.update((entry.mountain.id, entry) for entry in seed.mountains)
         self._discoveries.update((discovery.date, discovery) for discovery in seed.discoveries)
 

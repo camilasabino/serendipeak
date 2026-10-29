@@ -25,4 +25,5 @@ def healthz(request):
     except DatabaseError:
         logger.exception("Health check could not reach the database")
         return json_response({"status": "database unavailable"}, 503)
+
     return json_response({"status": "ok"}, 200)
