@@ -10,15 +10,16 @@ The behavioral reference is the read-only legacy repository at tag `v1-behaviora
 
 - [uv](https://docs.astral.sh/uv/) (Python 3.13 is installed and pinned by uv through `.python-version`)
 - Docker with Compose
-- Node 24 (see `.nvmrc`), used only for repository tooling
+- Node 24 (see `.nvmrc`), used for repository tooling and `apps/web`
 - GDAL and GEOS, required by GeoDjango. On macOS: `brew install gdal`
 
 ## Repository layout
 
 - `services/api/` Django project managed by uv
+- `apps/web/` Next.js (Pages Router) web foundation, npm package with its own lock file
 - `contracts/v1/` frozen contract files vendored from the legacy repository
 - `contracts/v1.lock.json` provenance and sha256 of every vendored file
-- `scripts/` contract verification and sync
+- `scripts/` contract verification and sync, web production gate
 - `docker-compose.yml` local PostgreSQL/PostGIS
 - `.env.example` every environment variable the project reads
 
@@ -79,6 +80,25 @@ uv run ruff check .
 ```
 
 Use `uv run ruff format .` and `uv run ruff check --fix .` to apply fixes.
+
+## Web
+
+```sh
+cd apps/web
+npm ci
+npm run dev
+```
+
+| Script | Purpose |
+|---|---|
+| `npm run lint` | Prettier check and ESLint (`eslint-config-next`) |
+| `npm run typecheck` | `tsc --noEmit`, strict |
+| `npm test` | Vitest unit tests (`src/**/*.spec.ts`) |
+| `npm run build` | Next production build |
+| `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build` |
+| `npm run test:e2e` | Playwright harness: `@nogl` and `@webgl` projects, no scenarios yet |
+
+`e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 
 ## Frozen contracts
 

@@ -19,3 +19,10 @@ __pycache__/
 .vscode/
 *.swp
 *.swo
+
+# Web
+.next/
+next-env.d.ts
+*.tsbuildinfo
+playwright-report/
+test-results/
