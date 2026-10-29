@@ -6,8 +6,6 @@ SerendiPeak shows one mountain per day with a 3D globe and editorial content. Th
 
 The behavioral reference is the read-only legacy repository at tag `v1-behavioral-freeze` (`camilasabino/serendipeak-legacy`, commit `f9a66deb2c0591a9c574fb4751b938b5863e6a1e`). Its `contracts/v1/` files are vendored here byte for byte and protected by `contracts/v1.lock.json`. The legacy repository is never modified.
 
-Current state: milestone M0a (backend foundation). No domain models, no mountain endpoints, no frontend yet.
-
 ## Prerequisites
 
 - [uv](https://docs.astral.sh/uv/) (Python 3.13 is installed and pinned by uv through `.python-version`)
