@@ -38,6 +38,7 @@ cp .env.example .env
 | `ALLOWED_HOSTS` | Comma separated host names. |
 | `GDAL_LIBRARY_PATH`, `GEOS_LIBRARY_PATH` | Optional overrides for the GDAL and GEOS shared library paths. Set them only when Django cannot find the libraries, for example `/opt/homebrew/lib/libgdal.dylib` and `/opt/homebrew/lib/libgeos_c.dylib` on macOS with Homebrew. Leave unset on Linux. |
 | `CORS_ALLOWED_ORIGIN` | Exactly one frontend origin allowed by CORS. Wildcards and lists are rejected at startup. |
+| `LEGACY_DATABASE_URL` | Optional. Legacy database connection used only by the legacy catalog export. |
 
 Django does not load `.env` by itself. Run backend commands with `uv run --env-file ../../.env ...` from `services/api`, or export the variables in your shell.
 
@@ -80,6 +81,22 @@ uv run ruff check .
 ```
 
 Use `uv run ruff format .` and `uv run ruff check --fix .` to apply fixes.
+
+### Legacy catalog export
+
+`services/api/seed/legacy-catalog-v1.json` is the seed input for the catalog bootstrap: every legacy mountain, its primary image and the daily discovery history. It is never a source of truth; the database is the canonical catalog.
+
+`services/api/tools/export_legacy_catalog.py` produces it. The tool is standalone and never imported by the application. It reads the legacy database inside one `REPEATABLE READ, READ ONLY` transaction with SELECT statements only, and reads `data/media.yaml` from the legacy repository at the frozen commit (after checking that `v1-behavioral-freeze` points to it), never from the working tree. It stops without writing when the legacy schema is not at version 9, when a legacy column is neither exported nor deliberately dropped, or when the media manifest disagrees with a stored image.
+
+```sh
+cd services/api
+LEGACY_DATABASE_URL=postgres://serendipeak:serendipeak@localhost:5433/serendipeak \
+  uv run python tools/export_legacy_catalog.py --legacy-repo ../../../serendipeak-legacy
+```
+
+The output is deterministic for a given `--exported-on` date (default: today in UTC). The artifact records the format and version, the export date, the legacy tag, commit and schema version, the sha256 of the media manifest, row counts and `content_sha256`. `content_sha256` is the SHA-256 of `content` serialized as UTF-8 JSON with sorted keys, `(",", ":")` separators, non-ASCII characters unescaped and no NaN, so it does not depend on the file layout or the export date.
+
+The image rows drop the legacy `id`, `type`, `source`, `title`, `is_primary` and `created_at` columns: every image is the primary `wikimedia_commons` image and its title is the file name without the `File:` prefix and the extension, both checked during the export. `license_reported`, `license_election_basis_url` and `approved_on` come from the media manifest and are `null` for images without a manifest entry. Mountain `status` keeps the legacy values.
 
 ## Web
 

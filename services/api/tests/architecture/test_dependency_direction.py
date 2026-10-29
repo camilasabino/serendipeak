@@ -8,6 +8,7 @@ SOURCE_PACKAGES = ("config", "serendipeak")
 
 ORM_MODULES = ("django.db", "django.contrib.gis", "django.contrib.postgres", "psycopg")
 HTTP_CLIENT_MODULES = ("requests", "httpx", "urllib.request", "aiohttp")
+OFFLINE_TOOLING_MODULES = ("tools", "yaml")
 FRAMEWORK_FREE_FORBIDDEN = (
     "django",
     "rest_framework",
@@ -73,6 +74,7 @@ def violations(source, relative_path):
         for rule in rules
     ]
     forbidden.extend(HTTP_CLIENT_MODULES)
+    forbidden.extend(OFFLINE_TOOLING_MODULES)
     if not is_within(module, ORM_OWNER) and relative_path not in ORM_ALLOWED_FILES:
         forbidden.extend(ORM_MODULES)
     return sorted(
@@ -149,6 +151,16 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak/persistence/catalog_store.py",
             "import httpx",
             "serendipeak.persistence.catalog_store imports httpx",
+        ),
+        (
+            "serendipeak/cli/management/commands/bootstrap_catalog.py",
+            "from tools.export_legacy_catalog import export",
+            "serendipeak.cli.management.commands.bootstrap_catalog imports tools",
+        ),
+        (
+            "config/composition.py",
+            "import yaml",
+            "config.composition imports yaml",
         ),
     ],
 )
