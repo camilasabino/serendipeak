@@ -1,0 +1,61 @@
+import pytest
+
+from tests.support.records import image_record, insert_error, mountain_record
+
+REJECTED_IMAGES = [
+    ("mountain_image_url_not_blank", {"url": " "}),
+    ("mountain_image_thumbnail_url_not_blank", {"thumbnail_url": ""}),
+    ("mountain_image_dimensions_complete", {"width": 4994}),
+    ("mountain_image_dimensions_complete", {"height": 2758}),
+    ("mountain_image_width_positive", {"width": 0, "height": 2758}),
+    ("mountain_image_height_positive", {"width": 4994, "height": -1}),
+    ("mountain_image_creator_not_blank", {"creator": " "}),
+    ("mountain_image_attribution_not_blank", {"attribution": ""}),
+    ("mountain_image_license_name_not_blank", {"license_name": ""}),
+    ("mountain_image_license_url_not_blank", {"license_url": " "}),
+    ("mountain_image_license_reported_not_blank", {"license_reported": ""}),
+    ("mountain_image_license_election_basis_url_not_blank", {"license_election_basis_url": " "}),
+    ("mountain_image_source_page_url_not_blank", {"source_page_url": ""}),
+    ("mountain_image_source_identifier_not_blank", {"source_identifier": "\t"}),
+]
+
+
+@pytest.fixture
+def mountain(db):
+    record = mountain_record()
+    record.save()
+    return record
+
+
+@pytest.mark.parametrize(("constraint", "overrides"), REJECTED_IMAGES)
+def test_rejects_invalid_image_rows(mountain, constraint, overrides):
+    error = insert_error(image_record(mountain, **overrides))
+
+    assert error.constraint_name == constraint
+
+
+def test_accepts_an_image_with_only_required_fields(mountain):
+    image_record(mountain).save(force_insert=True)
+
+
+def test_accepts_an_image_with_every_provenance_field(mountain):
+    image_record(
+        mountain,
+        thumbnail_url="https://upload.wikimedia.org/thumb.jpg",
+        width=4994,
+        height=2758,
+        creator="Denali National Park and Preserve",
+        license_name="CC BY 2.0",
+        license_url="https://creativecommons.org/licenses/by/2.0/",
+        license_reported="Public domain",
+        license_election_basis_url="https://www.flickr.com/photos/denalinps/7205909856/",
+        approved_on="2026-10-06",
+    ).save(force_insert=True)
+
+
+def test_allows_one_image_per_mountain(mountain):
+    image_record(mountain).save(force_insert=True)
+
+    error = insert_error(image_record(mountain, source_identifier="File:Other.jpg"))
+
+    assert error.constraint_name == "mountain_image_pkey"

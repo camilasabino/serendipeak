@@ -24,6 +24,7 @@ def database_from_url(url):
         "PASSWORD": unquote(parts.password or ""),
         "HOST": parts.hostname or "",
         "PORT": str(parts.port or ""),
+        # libpq has no default connect timeout; /healthz must answer 503 within the v1 2 s budget.
         "OPTIONS": {"connect_timeout": 2},
     }
 
@@ -37,8 +38,10 @@ if os.environ.get("GEOS_LIBRARY_PATH"):
 
 INSTALLED_APPS = [
     "django.contrib.gis",
+    "django.contrib.postgres",
     "corsheaders",
     "rest_framework",
+    "serendipeak.persistence",
 ]
 
 MIDDLEWARE = [
@@ -49,6 +52,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Contract paths have no trailing slash, and v1 answers unknown paths with 404, never a redirect.
 APPEND_SLASH = False
 
 CORS_ALLOWED_ORIGIN = os.environ["CORS_ALLOWED_ORIGIN"]

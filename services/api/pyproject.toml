@@ -31,3 +31,7 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.ruff.lint.per-file-ignores]
+# Absent text is NULL, matching v1; CheckConstraints reject blank strings instead.
+"serendipeak/persistence/models.py" = ["DJ001"]

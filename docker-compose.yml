@@ -3,6 +3,7 @@ name: serendipeak-v2
 services:
   db:
     image: postgis/postgis:18-3.6
+    # postgis/postgis publishes linux/amd64 images only; Apple silicon runs them under emulation.
     platform: linux/amd64
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-serendipeak}
