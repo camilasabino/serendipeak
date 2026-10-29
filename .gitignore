@@ -1,14 +1,21 @@
-.DS_Store
-.idea/
-.vscode/
+# Dependencies
+node_modules/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Environment variables
 .env
 .env.*
 !.env.example
-node_modules/
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-.ruff_cache/
-.claude/settings.local.json
-.superpowers/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
