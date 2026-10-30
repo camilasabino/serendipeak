@@ -60,6 +60,7 @@ CORS_ALLOWED_ORIGIN = os.environ["CORS_ALLOWED_ORIGIN"]
 if not CORS_ALLOWED_ORIGIN or "*" in CORS_ALLOWED_ORIGIN or "," in CORS_ALLOWED_ORIGIN:
     raise ImproperlyConfigured("CORS_ALLOWED_ORIGIN must be exactly one explicit origin")
 CORS_ALLOWED_ORIGINS = [CORS_ALLOWED_ORIGIN]
+CORS_ALLOW_METHODS = ["GET", "OPTIONS"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

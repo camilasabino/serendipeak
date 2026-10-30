@@ -9,7 +9,7 @@ from rest_framework.test import APIRequestFactory
 from serendipeak.catalog.bootstrap.ports import CatalogMountain
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.errors import ApplicationError, InfrastructureError
-from serendipeak.httpapi.views import MountainBySlugView, TodaysMountainView
+from serendipeak.httpapi.views import MountainBySlugView, RandomMountainView, TodaysMountainView
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.support.catalog import (
     CREATED_AT,
@@ -106,9 +106,8 @@ def test_the_today_path_is_routed_to_its_own_endpoint():
     assert resolve("/api/v1/mountains/today").func.view_class is TodaysMountainView
 
 
-def test_the_random_path_is_not_routed_to_the_slug_endpoint():
-    with pytest.raises(Resolver404):
-        resolve("/api/v1/mountains/random")
+def test_the_random_path_is_routed_to_its_own_endpoint():
+    assert resolve("/api/v1/mountains/random").func.view_class is RandomMountainView
 
 
 @pytest.mark.parametrize(

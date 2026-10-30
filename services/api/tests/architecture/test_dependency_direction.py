@@ -31,6 +31,30 @@ CAPABILITY_FORBIDDEN_STDLIB = (
     "xmlrpc",
 )
 
+NONDETERMINISTIC_SOURCES = frozenset(
+    {
+        "datetime.datetime.now",
+        "datetime.datetime.utcnow",
+        "datetime.datetime.today",
+        "datetime.date.today",
+        "time.time",
+        "time.time_ns",
+        "time.monotonic",
+        "time.monotonic_ns",
+        "time.perf_counter",
+        "time.perf_counter_ns",
+        "time.process_time",
+        "time.process_time_ns",
+        "uuid.uuid1",
+        "uuid.uuid4",
+        "uuid.uuid6",
+        "uuid.uuid7",
+        "uuid.uuid8",
+    }
+)
+NONDETERMINISTIC_SOURCE_ALLOWED_FILES = {"serendipeak/discovery/clock.py"}
+USE_CASE_PACKAGES = ("serendipeak.catalog", "serendipeak.discovery")
+
 CAPABILITY_PACKAGES = ("serendipeak.catalog", "serendipeak.discovery", "serendipeak.errors")
 PERMITTED_BY_PACKAGE = {
     "serendipeak.catalog": ("serendipeak.catalog", "serendipeak.errors"),
@@ -102,6 +126,46 @@ def dynamic_import_calls(tree):
     return calls & set(DYNAMIC_IMPORT_CALLS)
 
 
+def import_aliases(tree):
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.partition(".")[0]
+                aliases[local] = alias.name if alias.asname else local
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    return aliases
+
+
+def dotted_name(node):
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return parts[::-1]
+
+
+def nondeterministic_references(tree):
+    """Return the clock and identifier sources the module reads, called or not."""
+    aliases = import_aliases(tree)
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute | ast.Name):
+            continue
+        parts = dotted_name(node)
+        if parts is None or parts[0] not in aliases:
+            continue
+        qualified = ".".join([aliases[parts[0]], *parts[1:]])
+        if qualified in NONDETERMINISTIC_SOURCES:
+            found.add(qualified)
+    return found
+
+
 def is_permitted(name, permitted, plain, stdlib_denied):
     top_level = name.partition(".")[0]
     if top_level in sys.stdlib_module_names:
@@ -126,6 +190,13 @@ def outside_allowlist(module, imports, plain):
         for name in imports
         if not is_permitted(name, permitted, plain, stdlib_denied)
     ]
+
+
+def nondeterministic_sources(tree, module, relative_path):
+    in_use_case_package = any(is_within(module, package) for package in USE_CASE_PACKAGES)
+    if not in_use_case_package or relative_path in NONDETERMINISTIC_SOURCE_ALLOWED_FILES:
+        return set()
+    return nondeterministic_references(tree)
 
 
 def violations(source, relative_path):
@@ -153,6 +224,10 @@ def violations(source, relative_path):
         }
         | {f"{module} imports {name}" for name in outside_allowlist(module, imports, plain)}
         | {f"{module} calls {call}" for call in dynamic_import_calls(tree)}
+        | {
+            f"{module} reads {source}"
+            for source in nondeterministic_sources(tree, module, relative_path)
+        }
     )
 
 
@@ -173,6 +248,7 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
     assert "serendipeak/httpapi/views.py" in files
     assert "serendipeak/discovery/get_todays_mountain.py" in files
+    assert "serendipeak/discovery/get_random_mountain.py" in files
     assert "serendipeak/persistence/daily_discovery_repository.py" in files
     assert "tools/export_legacy_catalog.py" in files
     assert "config/health.py" in files
@@ -412,4 +488,61 @@ def test_detects_forbidden_imports(relative_path, source, expected):
     ],
 )
 def test_allows_permitted_imports(relative_path, source):
+    assert violations(source, relative_path) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("import datetime\nx = datetime.datetime.now()", "datetime.datetime.now"),
+        ("import datetime as dt\nx = dt.datetime.now()", "datetime.datetime.now"),
+        ("from datetime import datetime\nx = datetime.utcnow()", "datetime.datetime.utcnow"),
+        ("from datetime import datetime as moment\nx = moment.now()", "datetime.datetime.now"),
+        ("from datetime import date\nx = date.today()", "datetime.date.today"),
+        ("import time\nx = time.time()", "time.time"),
+        ("from time import monotonic\nx = monotonic()", "time.monotonic"),
+        ("import uuid\nx = uuid.uuid4()", "uuid.uuid4"),
+        ("from uuid import uuid4 as new_id\nx = new_id()", "uuid.uuid4"),
+        (
+            "from datetime import datetime\ndef f(now=datetime.now):\n    pass",
+            "datetime.datetime.now",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "serendipeak/discovery/get_todays_mountain.py",
+        "serendipeak/catalog/get_mountain_by_slug.py",
+        "serendipeak/catalog/bootstrap/bootstrap_catalog.py",
+    ],
+)
+def test_use_cases_cannot_read_the_clock_or_generate_identifiers(relative_path, source, expected):
+    module = module_name(relative_path)
+
+    assert f"{module} reads {expected}" in violations(source, relative_path)
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "source"),
+    [
+        (
+            "serendipeak/discovery/clock.py",
+            "from datetime import UTC, datetime\nx = datetime.now(UTC)",
+        ),
+        ("serendipeak/persistence/mapping.py", "import uuid\nx = uuid.uuid4()"),
+        ("serendipeak/httpapi/views.py", "import time\nx = time.time()"),
+        ("config/composition.py", "import secrets\nx = secrets.randbelow"),
+        (
+            "serendipeak/discovery/get_todays_mountain.py",
+            "from datetime import date\nx = date(2026, 1, 1)",
+        ),
+        ("serendipeak/discovery/selection.py", "import uuid\nx = uuid.UUID(int=1)"),
+        (
+            "serendipeak/discovery/selection.py",
+            "class Local:\n    def now(self): ...\nx = Local().now()",
+        ),
+    ],
+)
+def test_allows_the_clock_adapter_and_deterministic_uses(relative_path, source):
     assert violations(source, relative_path) == []

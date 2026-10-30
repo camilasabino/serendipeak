@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
 from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
 
@@ -22,3 +23,14 @@ class TodaysMountainView(APIView):
         daily = self.get_todays_mountain.execute()
 
         return Response(represent_daily_mountain(daily))
+
+
+class RandomMountainView(APIView):
+    get_random_mountain: GetRandomMountain | None = None
+
+    def get(self, request):
+        # Only the first exclude value counts, as in v1; QueryDict.get would return the last.
+        exclude = next(iter(request.query_params.getlist("exclude")), "")
+        mountain = self.get_random_mountain.execute(exclude)
+
+        return Response(represent_mountain(mountain))

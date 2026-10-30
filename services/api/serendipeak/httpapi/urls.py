@@ -3,8 +3,9 @@ from django.views.decorators.cache import cache_control
 
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.slug import RESERVED_SLUGS
+from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
-from serendipeak.httpapi.views import MountainBySlugView, TodaysMountainView
+from serendipeak.httpapi.views import MountainBySlugView, RandomMountainView, TodaysMountainView
 
 
 class MountainPathSlugConverter:
@@ -27,6 +28,7 @@ def mountain_urlpatterns(
     *,
     get_mountain: GetMountainBySlug,
     get_todays_mountain: GetTodaysMountain,
+    get_random_mountain: GetRandomMountain,
 ):
     # The wrapper also covers the error responses, which DRF returns from inside the view.
     no_store = cache_control(no_store=True)
@@ -35,6 +37,10 @@ def mountain_urlpatterns(
         path(
             "api/v1/mountains/today",
             no_store(TodaysMountainView.as_view(get_todays_mountain=get_todays_mountain)),
+        ),
+        path(
+            "api/v1/mountains/random",
+            no_store(RandomMountainView.as_view(get_random_mountain=get_random_mountain)),
         ),
         path(
             "api/v1/mountains/<mountain_slug:slug>",

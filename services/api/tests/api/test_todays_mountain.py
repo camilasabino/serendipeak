@@ -8,6 +8,7 @@ from django.urls import resolve
 
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
 from serendipeak.httpapi.urls import mountain_urlpatterns
 from serendipeak.httpapi.views import TodaysMountainView
@@ -40,6 +41,7 @@ urlpatterns = mountain_urlpatterns(
         DjangoDailyDiscoveryRepository(),
         clock,
     ),
+    get_random_mountain=GetRandomMountain(DjangoMountainRepository(), lambda count: 0),
 )
 
 pytestmark = pytest.mark.urls(__name__)

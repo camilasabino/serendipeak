@@ -82,3 +82,14 @@ class FixedClock:
 
     def today(self):
         return self.day
+
+
+class RecordingPickIndex:
+    def __init__(self, *indexes):
+        self._indexes = list(indexes)
+        self.counts = []
+
+    def __call__(self, count):
+        self.counts.append(count)
+
+        return self._indexes.pop(0)

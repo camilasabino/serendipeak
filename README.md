@@ -95,6 +95,24 @@ curl -i http://127.0.0.1:8000/api/v1/mountains/today
 node contracts/v1/verify-api.mjs http://127.0.0.1:8000 --include-stateful-today
 ```
 
+### Random mountain endpoint
+
+`GET /api/v1/mountains/random[?exclude=<slug>]` returns one `active` mountain in the shape of the mountain endpoint, with no wrapper. Consecutive calls may return the same mountain.
+
+- `exclude` removes that mountain from the candidates while another `active` mountain exists. Only the first `exclude` value is read. An empty, unknown, `inactive` or `draft` slug has no effect, the match is exact (no trimming or case folding), and when the excluded mountain is the only `active` one it is returned. An exclusion never produces `404`.
+- The candidates are the `active` mountains sorted by slug code points; the index comes from `secrets.randbelow`, injected into the use case as `pick_index`.
+- The endpoint only reads: it never creates or changes a daily discovery.
+- With no `active` mountain it answers `503 NO_ELIGIBLE_MOUNTAINS`; any other failure answers `500` with code `INTERNAL_ERROR`.
+- Every answer, errors included, carries `Cache-Control: no-store`.
+
+```sh
+curl -i "http://127.0.0.1:8000/api/v1/mountains/random?exclude=aconcagua"
+```
+
+### CORS
+
+Only the origin in `CORS_ALLOWED_ORIGIN` is allowed, never a wildcard. A request from that origin gets `Access-Control-Allow-Origin` with the origin echoed; any other origin gets no `Access-Control-*` header. Allowed methods are `GET` and `OPTIONS`. Every response, errors included, carries `Vary: Origin`. The status code of a preflight answer is not part of the contract; what it grants is.
+
 Logs go to stderr: readable lines with `APP_ENV=development`, one JSON object per line otherwise. Django's warnings for `4xx` answers are not logged. An unexpected failure is logged once, with its traceback, by the API error handler; mapped errors (`404`, `503`) are expected answers and are not logged.
 
 ### Tests, formatting and lint
