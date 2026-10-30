@@ -1,6 +1,11 @@
+from dataclasses import dataclass
+from datetime import date
+
 from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
-from serendipeak.catalog.entities import PUBLIC_STATUSES
+from serendipeak.catalog.entities import PUBLIC_STATUSES, CandidateMountain, MountainStatus
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
+from serendipeak.errors import InfrastructureError
 
 
 class InMemoryCatalogStore:
@@ -34,3 +39,46 @@ class InMemoryMountainRepository:
             return None
 
         return mountain
+
+    def list_active_candidates(self):
+        return tuple(
+            CandidateMountain(id=mountain.id, slug=mountain.slug)
+            for slug, mountain in sorted(self._mountains.items())
+            if mountain.status is MountainStatus.ACTIVE
+        )
+
+
+class InMemoryDailyDiscoveryRepository:
+    def __init__(self, mountains=(), discoveries=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+        self._mountain_ids = {discovery.date: discovery.mountain_id for discovery in discoveries}
+
+    def find_by_date(self, day):
+        mountain_id = self._mountain_ids.get(day)
+        if mountain_id is None:
+            return None
+
+        return DailyMountain(date=day, mountain=self._mountains[mountain_id])
+
+    def list_recent(self, first, last):
+        return tuple(
+            RecentDiscovery(date=day, slug=self._mountains[mountain_id].slug)
+            for day, mountain_id in sorted(self._mountain_ids.items())
+            if first <= day <= last
+        )
+
+    def insert_or_get(self, day, mountain_id):
+        if day not in self._mountain_ids:
+            if mountain_id not in self._mountains:
+                raise InfrastructureError(f"no mountain has the id {mountain_id}")
+            self._mountain_ids[day] = mountain_id
+
+        return self.find_by_date(day)
+
+
+@dataclass
+class FixedClock:
+    day: date
+
+    def today(self):
+        return self.day

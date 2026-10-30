@@ -12,6 +12,7 @@ from serendipeak.catalog.entities import (
     OsmType,
     PrimaryImage,
 )
+from serendipeak.discovery.entities import DailyMountain
 from serendipeak.persistence.models import (
     DailyDiscoveryRecord,
     MountainImageRecord,
@@ -41,6 +42,10 @@ def to_mountain(record: MountainRecord) -> Mountain:
         wikidata_id=record.wikidata_id,
         wikipedia_url=record.wikipedia_url,
     )
+
+
+def to_daily_mountain(record: DailyDiscoveryRecord) -> DailyMountain:
+    return DailyMountain(date=record.date, mountain=to_mountain(record.mountain))
 
 
 def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:

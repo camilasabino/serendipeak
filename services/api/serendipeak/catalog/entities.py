@@ -82,3 +82,9 @@ class Mountain:
     osm: OsmReference | None
     wikidata_id: str | None
     wikipedia_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateMountain:
+    id: UUID
+    slug: str

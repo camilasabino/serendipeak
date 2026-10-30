@@ -78,7 +78,24 @@ curl -i http://127.0.0.1:8000/api/v1/mountains/aconcagua
 node contracts/v1/verify-api.mjs http://127.0.0.1:8000
 ```
 
-Logs go to stderr: readable lines with `APP_ENV=development`, one JSON object per line otherwise. Django's warnings for `4xx` answers are not logged.
+### Today's mountain endpoint
+
+`GET /api/v1/mountains/today` returns `{"date":"YYYY-MM-DD","mountain":{...}}` in the shape of `contracts/v1/daily-mountain.json`, where `date` is the current UTC calendar date and `mountain` has the shape of the mountain endpoint.
+
+- The first request of a UTC date chooses the mountain and stores it in `daily_discovery`; every later request of that date, after restarts too, returns the stored mountain, even when that mountain has been deactivated since. Stored discoveries are never changed or deleted.
+- A new date chooses among the `active` mountains only, leaving out those chosen in the previous 30 UTC dates unless that leaves none, in which case every active mountain is eligible again. The choice is the SHA-256 of the ISO date, first 8 bytes as a big-endian integer, modulo the number of candidates sorted by slug code points.
+- Concurrent first requests of a date store exactly one discovery and all answer it: the date is the table's primary key, and the insert is a single autocommitted `INSERT ... ON CONFLICT DO NOTHING` followed by a re-read of the stored row. There are no locks and no retries.
+- With no `active` mountain, a new date answers `503 {"error":{"code":"NO_ELIGIBLE_MOUNTAINS","message":"No mountains are available for discovery"}}` and stores nothing; any other failure answers `500` with code `INTERNAL_ERROR`.
+- Every answer, errors included, carries `Cache-Control: no-store`.
+
+Requesting `today` writes to the database on a new date, so `verify-api.mjs` skips it unless `--include-stateful-today` is passed; pass it only against a disposable database.
+
+```sh
+curl -i http://127.0.0.1:8000/api/v1/mountains/today
+node contracts/v1/verify-api.mjs http://127.0.0.1:8000 --include-stateful-today
+```
+
+Logs go to stderr: readable lines with `APP_ENV=development`, one JSON object per line otherwise. Django's warnings for `4xx` answers are not logged. An unexpected failure is logged once, with its traceback, by the API error handler; mapped errors (`404`, `503`) are expected answers and are not logged.
 
 ### Tests, formatting and lint
 

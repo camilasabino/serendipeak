@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 SERVICE_ROOT = Path(__file__).resolve().parents[2]
-SOURCE_PACKAGES = ("config", "serendipeak")
+SOURCE_PACKAGES = ("config", "serendipeak", "tools")
 
 ORM_MODULES = ("django.db", "django.contrib.gis", "django.contrib.postgres", "psycopg")
 HTTP_CLIENT_MODULES = (
@@ -18,11 +18,34 @@ HTTP_CLIENT_MODULES = (
 )
 OFFLINE_TOOLING_MODULES = ("tools", "yaml")
 DYNAMIC_IMPORT_CALLS = ("import_module", "__import__")
+CAPABILITY_FORBIDDEN_STDLIB = (
+    "os",
+    "random",
+    "secrets",
+    "subprocess",
+    "socket",
+    "ssl",
+    "sqlite3",
+    "ftplib",
+    "smtplib",
+    "xmlrpc",
+)
 
-PERMITTED_BY_FRAMEWORK_FREE_PACKAGE = {
+CAPABILITY_PACKAGES = ("serendipeak.catalog", "serendipeak.discovery", "serendipeak.errors")
+PERMITTED_BY_PACKAGE = {
     "serendipeak.catalog": ("serendipeak.catalog", "serendipeak.errors"),
     "serendipeak.discovery": ("serendipeak.discovery", "serendipeak.catalog", "serendipeak.errors"),
     "serendipeak.errors": ("serendipeak.errors",),
+    "serendipeak.cli": (
+        "django.apps",
+        "django.core.management",
+        "config.composition",
+        "serendipeak.cli",
+        "serendipeak.catalog",
+        "serendipeak.discovery",
+        "serendipeak.errors",
+    ),
+    "tools": ("psycopg", "yaml", "serendipeak.catalog.bootstrap.seed"),
 }
 FORBIDDEN_BY_PACKAGE = {
     "serendipeak.persistence": (
@@ -34,7 +57,7 @@ FORBIDDEN_BY_PACKAGE = {
     "serendipeak.httpapi": (*ORM_MODULES, "serendipeak.persistence", "config"),
     "serendipeak.cli": ("django.db", "serendipeak.persistence"),
 }
-ORM_OWNER = "serendipeak.persistence"
+ORM_OWNERS = ("serendipeak.persistence", "tools")
 ORM_ALLOWED_FILES = {"config/health.py"}
 
 
@@ -48,12 +71,14 @@ def module_name(relative_path):
 
 
 def imported_modules(tree, relative_path):
+    """Return the imported names, and the subset imported with a plain import statement."""
     module = module_name(relative_path)
     package = module if Path(relative_path).name == "__init__.py" else module.rpartition(".")[0]
     found = set()
+    plain = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            found.update(alias.name for alias in node.names)
+            plain.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             if node.level:
                 anchor = package.rsplit(".", node.level - 1)[0]
@@ -62,7 +87,7 @@ def imported_modules(tree, relative_path):
                 base = node.module
             found.add(base)
             found.update(f"{base}.{alias.name}" for alias in node.names)
-    return found
+    return found | plain, plain
 
 
 def dynamic_import_calls(tree):
@@ -77,28 +102,36 @@ def dynamic_import_calls(tree):
     return calls & set(DYNAMIC_IMPORT_CALLS)
 
 
-def is_permitted(name, permitted):
-    return (
-        name.partition(".")[0] in sys.stdlib_module_names
-        or any(is_within(name, package) for package in permitted)
-        or any(is_within(package, name) for package in permitted)
+def is_permitted(name, permitted, plain, stdlib_denied):
+    top_level = name.partition(".")[0]
+    if top_level in sys.stdlib_module_names:
+        return top_level not in stdlib_denied
+    # "from serendipeak import errors" names its parent package as well; "import serendipeak"
+    # does not get that allowance.
+    return any(is_within(name, package) for package in permitted) or (
+        name not in plain and any(is_within(package, name) for package in permitted)
     )
 
 
-def outside_allowlist(module, imports):
+def outside_allowlist(module, imports, plain):
+    stdlib_denied = (
+        CAPABILITY_FORBIDDEN_STDLIB
+        if any(is_within(module, package) for package in CAPABILITY_PACKAGES)
+        else ()
+    )
     return [
         name
-        for package, permitted in PERMITTED_BY_FRAMEWORK_FREE_PACKAGE.items()
+        for package, permitted in PERMITTED_BY_PACKAGE.items()
         if is_within(module, package)
         for name in imports
-        if not is_permitted(name, permitted)
+        if not is_permitted(name, permitted, plain, stdlib_denied)
     ]
 
 
 def violations(source, relative_path):
     module = module_name(relative_path)
     tree = ast.parse(source)
-    imports = imported_modules(tree, relative_path)
+    imports, plain = imported_modules(tree, relative_path)
     forbidden = [
         rule
         for package, rules in FORBIDDEN_BY_PACKAGE.items()
@@ -106,8 +139,11 @@ def violations(source, relative_path):
         for rule in rules
     ]
     forbidden.extend(HTTP_CLIENT_MODULES)
-    forbidden.extend(OFFLINE_TOOLING_MODULES)
-    if not is_within(module, ORM_OWNER) and relative_path not in ORM_ALLOWED_FILES:
+    is_tool = is_within(module, "tools")
+    if not is_tool:
+        forbidden.extend(OFFLINE_TOOLING_MODULES)
+    is_orm_owner = any(is_within(module, owner) for owner in ORM_OWNERS)
+    if not is_orm_owner and relative_path not in ORM_ALLOWED_FILES:
         forbidden.extend(ORM_MODULES)
     return sorted(
         {
@@ -115,7 +151,7 @@ def violations(source, relative_path):
             for rule in forbidden
             if any(is_within(name, rule) for name in imports)
         }
-        | {f"{module} imports {name}" for name in outside_allowlist(module, imports)}
+        | {f"{module} imports {name}" for name in outside_allowlist(module, imports, plain)}
         | {f"{module} calls {call}" for call in dynamic_import_calls(tree)}
     )
 
@@ -136,6 +172,9 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/persistence/models.py" in files
     assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
     assert "serendipeak/httpapi/views.py" in files
+    assert "serendipeak/discovery/get_todays_mountain.py" in files
+    assert "serendipeak/persistence/daily_discovery_repository.py" in files
+    assert "tools/export_legacy_catalog.py" in files
     assert "config/health.py" in files
 
 
@@ -254,6 +293,84 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "from rest_framework.exceptions import NotFound",
             "serendipeak.catalog.get_mountain_by_slug imports rest_framework.exceptions",
         ),
+        *(
+            (
+                "serendipeak/discovery/get_todays_mountain.py",
+                f"import {name}",
+                f"serendipeak.discovery.get_todays_mountain imports {name}",
+            )
+            for name in CAPABILITY_FORBIDDEN_STDLIB
+        ),
+        (
+            "serendipeak/discovery/selection.py",
+            "from random import choice",
+            "serendipeak.discovery.selection imports random",
+        ),
+        (
+            "serendipeak/catalog/publication.py",
+            "from os.path import join",
+            "serendipeak.catalog.publication imports os.path",
+        ),
+        (
+            "serendipeak/errors.py",
+            "import xmlrpc.client",
+            "serendipeak.errors imports xmlrpc.client",
+        ),
+        (
+            "serendipeak/catalog/slug.py",
+            "import serendipeak",
+            "serendipeak.catalog.slug imports serendipeak",
+        ),
+        (
+            "serendipeak/discovery/ports.py",
+            "import serendipeak.persistence.models",
+            "serendipeak.discovery.ports imports serendipeak.persistence.models",
+        ),
+        (
+            "serendipeak/discovery/get_todays_mountain.py",
+            "from serendipeak.httpapi import views",
+            "serendipeak.discovery.get_todays_mountain imports serendipeak.httpapi",
+        ),
+        (
+            "serendipeak/discovery/clock.py",
+            "from django.utils import timezone",
+            "serendipeak.discovery.clock imports django.utils",
+        ),
+        (
+            "tools/export_legacy_catalog.py",
+            "from serendipeak.catalog.entities import Mountain",
+            "tools.export_legacy_catalog imports serendipeak.catalog.entities",
+        ),
+        (
+            "tools/export_legacy_catalog.py",
+            "from serendipeak.persistence import models",
+            "tools.export_legacy_catalog imports serendipeak.persistence",
+        ),
+        (
+            "tools/export_legacy_catalog.py",
+            "import django",
+            "tools.export_legacy_catalog imports django",
+        ),
+        (
+            "tools/export_legacy_catalog.py",
+            "import httpx",
+            "tools.export_legacy_catalog imports httpx",
+        ),
+        (
+            "serendipeak/cli/management/commands/check_catalog.py",
+            "from rest_framework.response import Response",
+            "serendipeak.cli.management.commands.check_catalog imports rest_framework.response",
+        ),
+        (
+            "serendipeak/cli/management/commands/check_catalog.py",
+            "from config.settings import DEBUG",
+            "serendipeak.cli.management.commands.check_catalog imports config.settings",
+        ),
+        (
+            "serendipeak/cli/management/commands/check_catalog.py",
+            "from serendipeak.httpapi.errors import api_exception_handler",
+            "serendipeak.cli.management.commands.check_catalog imports serendipeak.httpapi.errors",
+        ),
     ],
 )
 def test_detects_forbidden_imports(relative_path, source, expected):
@@ -275,6 +392,23 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         ("serendipeak/catalog/bootstrap/seed.py", "from ..entities import Mountain"),
         ("serendipeak/discovery/selection.py", "from serendipeak.catalog.entities import Mountain"),
         ("serendipeak/errors.py", "from __future__ import annotations"),
+        ("serendipeak/discovery/clock.py", "from datetime import UTC, date, datetime"),
+        ("serendipeak/discovery/selection.py", "import hashlib"),
+        ("serendipeak/discovery/ports.py", "from serendipeak.catalog import entities"),
+        ("serendipeak/persistence/mapping.py", "from serendipeak.discovery import entities"),
+        ("serendipeak/httpapi/views.py", "from serendipeak.discovery import get_todays_mountain"),
+        ("config/composition.py", "import secrets"),
+        ("tools/export_legacy_catalog.py", "import os\nimport subprocess\nimport yaml"),
+        ("tools/export_legacy_catalog.py", "from psycopg.rows import dict_row"),
+        (
+            "tools/export_legacy_catalog.py",
+            "from serendipeak.catalog.bootstrap.seed import content_sha256",
+        ),
+        ("serendipeak/cli/apps.py", "from django.apps import AppConfig"),
+        (
+            "serendipeak/cli/management/commands/check_catalog.py",
+            "from django.core.management.base import BaseCommand",
+        ),
     ],
 )
 def test_allows_permitted_imports(relative_path, source):

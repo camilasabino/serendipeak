@@ -4,7 +4,10 @@ from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.discovery.clock import SystemUtcClock
+from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
+from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
@@ -28,3 +31,11 @@ def build_check_catalog() -> CheckCatalog:
 
 def build_get_mountain_by_slug() -> GetMountainBySlug:
     return GetMountainBySlug(DjangoMountainRepository())
+
+
+def build_get_todays_mountain() -> GetTodaysMountain:
+    return GetTodaysMountain(
+        DjangoMountainRepository(),
+        DjangoDailyDiscoveryRepository(),
+        SystemUtcClock(),
+    )

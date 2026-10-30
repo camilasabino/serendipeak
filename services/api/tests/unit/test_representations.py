@@ -1,11 +1,13 @@
+import datetime
 import json
 from dataclasses import replace
 
 import pytest
 
 from serendipeak.catalog.entities import CanonicalCamera, OsmReference, OsmType
+from serendipeak.discovery.entities import DailyMountain
 from serendipeak.httpapi.renderers import ContractJSONRenderer
-from serendipeak.httpapi.representations import represent_mountain
+from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
 from tests.support.catalog import (
     bare_mountain,
     committed_mountain,
@@ -29,6 +31,20 @@ def rendered(representation):
 )
 def test_the_representation_matches_the_frozen_fixture(entity, fixture):
     assert rendered(represent_mountain(entity)) == load_fixture(fixture)
+
+
+def test_the_daily_representation_matches_the_frozen_fixture():
+    daily = DailyMountain(
+        date=datetime.date(2026, 10, 12), mountain=committed_mountain("aconcagua")
+    )
+
+    assert rendered(represent_daily_mountain(daily)) == load_fixture("daily-mountain.json")
+
+
+def test_the_daily_date_is_an_iso_calendar_date():
+    daily = DailyMountain(date=datetime.date(2028, 2, 9), mountain=bare_mountain())
+
+    assert represent_daily_mountain(daily)["date"] == "2028-02-09"
 
 
 def test_members_without_a_value_are_omitted_never_null():

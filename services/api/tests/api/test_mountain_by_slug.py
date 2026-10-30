@@ -9,7 +9,7 @@ from rest_framework.test import APIRequestFactory
 from serendipeak.catalog.bootstrap.ports import CatalogMountain
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.errors import ApplicationError, InfrastructureError
-from serendipeak.httpapi.views import MountainBySlugView
+from serendipeak.httpapi.views import MountainBySlugView, TodaysMountainView
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.support.catalog import (
     CREATED_AT,
@@ -102,10 +102,13 @@ def test_a_malformed_slug_is_not_found_without_a_query(
     assert body(response) == NOT_FOUND
 
 
-@pytest.mark.parametrize("path", ["/api/v1/mountains/today", "/api/v1/mountains/random"])
-def test_reserved_paths_are_not_routed_to_the_slug_endpoint(path):
+def test_the_today_path_is_routed_to_its_own_endpoint():
+    assert resolve("/api/v1/mountains/today").func.view_class is TodaysMountainView
+
+
+def test_the_random_path_is_not_routed_to_the_slug_endpoint():
     with pytest.raises(Resolver404):
-        resolve(path)
+        resolve("/api/v1/mountains/random")
 
 
 @pytest.mark.parametrize(
@@ -178,11 +181,20 @@ def test_any_other_failure_is_an_internal_error_without_its_cause(error, caplog)
     assert record.exc_info[1] is error
 
 
-def test_a_database_failure_through_the_composed_endpoint_is_an_internal_error(catalog, client):
+def test_a_database_failure_through_the_composed_endpoint_is_an_internal_error_logged_once(
+    catalog,
+    client,
+    caplog,
+):
     with connection.cursor() as cursor:
         cursor.execute('ALTER TABLE "mountain_image" RENAME TO "mountain_image_unavailable"')
 
-    response = client.get("/api/v1/mountains/aconcagua")
+    with caplog.at_level(logging.INFO):
+        response = client.get("/api/v1/mountains/aconcagua")
+
+    [record] = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert record.name == "serendipeak.httpapi.errors"
+    assert record.exc_info is not None
 
     assert response.status_code == 500
     assert body(response) == INTERNAL

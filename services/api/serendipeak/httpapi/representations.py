@@ -1,4 +1,5 @@
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
+from serendipeak.discovery.entities import DailyMountain
 
 OSM_URL = "https://www.openstreetmap.org/{type}/{id}"
 WIKIDATA_URL = "https://www.wikidata.org/wiki/{id}"
@@ -26,6 +27,13 @@ def represent_mountain(mountain: Mountain) -> dict[str, object]:
             "sources": _sources(mountain),
         }
     )
+
+
+def represent_daily_mountain(daily: DailyMountain) -> dict[str, object]:
+    return {
+        "date": daily.date.isoformat(),
+        "mountain": represent_mountain(daily.mountain),
+    }
 
 
 def _camera(camera: CanonicalCamera | None) -> dict[str, object] | None:

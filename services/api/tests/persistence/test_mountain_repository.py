@@ -44,6 +44,20 @@ def test_a_lookup_is_one_query_that_joins_the_image(
     assert """"mountain"."status" IN ('active', 'inactive')""" in sql
 
 
+def test_listing_active_candidates_is_one_query_without_model_instances(
+    repository,
+    django_assert_num_queries,
+):
+    with django_assert_num_queries(1) as captured:
+        candidates = repository.list_active_candidates()
+
+    assert [candidate.slug for candidate in candidates] == ["aconcagua"]
+    sql = captured.captured_queries[0]["sql"]
+    assert sql.startswith('SELECT "mountain"."id" AS "id", "mountain"."slug" AS "slug" FROM')
+    assert """WHERE "mountain"."status" = 'active'""" in sql
+    assert 'ORDER BY "mountain"."slug" COLLATE "C"' in sql
+
+
 def test_database_errors_become_infrastructure_errors(repository):
     with connection.cursor() as cursor:
         cursor.execute('ALTER TABLE "mountain_image" RENAME TO "mountain_image_unavailable"')
