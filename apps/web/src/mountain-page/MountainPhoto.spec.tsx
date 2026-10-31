@@ -2,6 +2,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Mountain, MountainImage } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import { ImagePreloaderProvider } from '../media/ImagePreloaderContext';
+import { ImagePreloader } from '../media/preload';
+import { pageRendition } from '../media/renditions';
 import { MountainPhoto } from './MountainPhoto';
 import { anchorsOf, textsOf } from './test-support/markup';
 
@@ -13,9 +16,18 @@ function without(keys: (keyof MountainImage)[]): MountainImage {
 	) as unknown as MountainImage;
 }
 
-function render(photo: MountainImage): string {
-	return renderToStaticMarkup(<MountainPhoto image={photo} mountainName="Aconcagua" />);
+function render(
+	photo: MountainImage,
+	preloader = new ImagePreloader({ create: () => undefined })
+): string {
+	return renderToStaticMarkup(
+		<ImagePreloaderProvider value={preloader}>
+			<MountainPhoto image={photo} mountainName="Aconcagua" />
+		</ImagePreloaderProvider>
+	);
 }
+
+const escaped = (value: string | undefined) => (value ?? '').replaceAll('&', '&amp;');
 
 describe('MountainPhoto', () => {
 	it('renders the photograph with a name-based alt inside one figure', () => {
@@ -72,10 +84,42 @@ describe('MountainPhoto', () => {
 		expect(render(image).replace(/<[^>]*>/g, ' ')).not.toContain(image.sourceIdentifier);
 	});
 
-	it('carries no readiness or viewer machinery', () => {
+	it('offers every contract rendition that fits the original, with the page sizes hint', () => {
+		const html = render(image);
+		const { srcset, sizes } = pageRendition(image);
+
+		expect(srcset).toMatch(/500w.*960w.*1280w/);
+		expect(html).toContain(`srcSet="${escaped(srcset)}"`);
+		expect(html).toContain(`sizes="${escaped(sizes)}"`);
+	});
+
+	it('keeps a single source when the thumbnail is not a known rendition url', () => {
+		const html = render({ ...image, thumbnailUrl: 'https://example.test/photo.jpg' });
+
+		expect(html).toContain('src="https://example.test/photo.jpg"');
+		expect(html).not.toMatch(/srcSet|sizes=/);
+	});
+
+	it('starts hidden and not openable until the image is ready', () => {
 		const html = render(image);
 
-		expect(html).not.toContain('<button');
-		expect(html).not.toMatch(/opacity|data-ready|aria-busy/);
+		expect(html).toContain('data-state="pending"');
+		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>/);
+		expect(textsOf(html, 'button')).toEqual(['View photo fullscreen']);
+	});
+
+	it('draws the frame from the size the shared preloader already measured', () => {
+		const preloader = new ImagePreloader({ create: () => undefined });
+		preloader.remember(pageRendition(image), { width: 1000, height: 1000 });
+
+		expect(render(image, preloader)).toMatch(/aspect-ratio:1[;"]/);
+	});
+
+	it('renders no viewer until it is opened', () => {
+		expect(render(image)).not.toContain('<dialog');
+	});
+
+	it('keeps the photograph out of the tab order and of any busy announcement', () => {
+		expect(render(image)).not.toMatch(/aria-busy|role="status"|role="alert"|tabindex/);
 	});
 });

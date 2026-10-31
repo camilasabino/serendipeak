@@ -83,10 +83,11 @@ test.describe('@webgl stage controls', () => {
 		// The camera looks along the canonical heading, offset a little by the stage framing.
 		const offset = Math.abs(heading - ACONCAGUA.camera.headingDegrees);
 		expect(Math.min(offset, 360 - offset)).toBeLessThan(5);
-		await expect(page.locator('main').getByRole('button')).toHaveText([
-			'Reset view',
-			'Enter fullscreen'
-		]);
+		const stageButtons = page
+			.locator('main')
+			.getByRole('button')
+			.filter({ hasNotText: 'View photo fullscreen' });
+		await expect(stageButtons).toHaveText(['Reset view', 'Enter fullscreen']);
 	});
 
 	test('Reset returns a moved camera to the canonical pose in the same viewer', async ({

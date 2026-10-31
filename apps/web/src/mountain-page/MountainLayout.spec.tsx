@@ -50,7 +50,7 @@ describe.each([
 
 	it('renders the loader as the only stage content before the globe mounts', () => {
 		expect(countOf(html, 'canvas')).toBe(0);
-		expect(countOf(html, 'button')).toBe(0);
+		expect(countOf(html.replace(/<figure[\s\S]*?<\/figure>/, ''), 'button')).toBe(0);
 		expect(html).not.toMatch(/role="alert"|cesium/i);
 	});
 });

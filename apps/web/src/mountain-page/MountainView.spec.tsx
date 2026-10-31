@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import { TestExperience } from '../test/TestExperience';
 import { MountainView } from './MountainView';
 import { anchorsOf, countOf, hasEmptyElement, textsOf } from './test-support/markup';
 
@@ -10,7 +11,11 @@ const sparse = contractFixture('mountain-sparse.json') as Mountain;
 const minimal = contractFixture('mountain-minimal.json') as Mountain;
 
 function render(mountain: Mountain, daily = false): string {
-	return renderToStaticMarkup(<MountainView mountain={mountain} daily={daily} />);
+	return renderToStaticMarkup(
+		<TestExperience>
+			<MountainView mountain={mountain} daily={daily} />
+		</TestExperience>
+	);
 }
 
 describe.each([
@@ -156,6 +161,6 @@ describe('sheet', () => {
 		const html = render(complete);
 
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
-		expect(countOf(html, 'button')).toBe(0);
+		expect(textsOf(html, 'button')).toEqual(['View photo fullscreen']);
 	});
 });

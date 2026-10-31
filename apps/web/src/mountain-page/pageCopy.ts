@@ -43,10 +43,6 @@ export function pageTitle(model: PageModel): string {
 	}
 }
 
-export function photoAlt(mountainName: string): string {
-	return `Photograph of ${mountainName}`;
-}
-
 export const DAILY_EYEBROW = "Today's discovery";
 export const DAILY_CUE = 'Tomorrow, another mountain.';
 export const TODAY_LINK_LABEL = "Today's mountain";

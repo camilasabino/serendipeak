@@ -17,8 +17,66 @@
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	opacity: 0;
+	transition: opacity 180ms ease-out;
+}
+
+.frame[data-state='ready'] img {
+	opacity: 1;
+}
+
+.open {
+	position: absolute;
+	inset: 0;
+	border: 0;
+	padding: 0;
+	background: none;
+	color: var(--sp-paper);
+	cursor: zoom-in;
+}
+
+.open:focus-visible {
+	outline-offset: -4px;
+}
+
+.open:disabled {
+	cursor: default;
+}
+
+.label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.mark {
+	position: absolute;
+	top: 0.5rem;
+	right: 0.5rem;
+	box-sizing: content-box;
+	padding: 0.5rem;
+	background: color-mix(in srgb, var(--sp-stage) 78%, transparent);
+	opacity: 0;
+	transition: opacity 180ms ease-out;
+	pointer-events: none;
+}
+
+.frame[data-state='ready'] .mark {
+	opacity: 1;
 }
 
 .photo figcaption {
 	margin-top: var(--sp-space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.frame img,
+	.mark {
+		transition: none;
+	}
 }

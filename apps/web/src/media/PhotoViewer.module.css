@@ -1,0 +1,116 @@
+.viewer {
+	--available-height: calc(100dvh - 7.75rem);
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 100vw;
+	height: 100dvh;
+	max-width: none;
+	max-height: none;
+	margin: 0;
+	padding: 4.5rem 1.25rem 1.25rem;
+	border: 0;
+	overflow: hidden;
+	background: var(--sp-stage);
+	color: var(--sp-paper);
+}
+
+.viewer:not([open]) {
+	display: none;
+}
+
+.viewer::backdrop {
+	background: var(--sp-stage);
+}
+
+.sheet {
+	display: flex;
+	flex: 0 1 auto;
+	flex-direction: column;
+	width: fit-content;
+	max-width: 100%;
+	max-height: 100%;
+	min-height: 0;
+	overflow: auto;
+}
+
+.image {
+	display: block;
+	flex: none;
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: var(--available-height);
+	object-fit: contain;
+}
+
+.close {
+	position: absolute;
+	top: 0.75rem;
+	right: 0.75rem;
+	display: grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--sp-paper);
+	cursor: pointer;
+}
+
+.label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.caption {
+	display: flex;
+	flex: none;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.35rem 0.4rem;
+	width: 0;
+	min-width: 100%;
+	margin: 0.875rem 0 0;
+	overflow-wrap: anywhere;
+	font-family: var(--sp-font-ui);
+	font-size: 0.8125rem;
+	font-weight: 400;
+	line-height: 1.4;
+	color: var(--sp-mist);
+}
+
+.caption a {
+	color: var(--sp-link-on-stage);
+}
+
+.caption a:hover {
+	color: var(--sp-link-on-stage-hover);
+}
+
+@media (max-width: 55.99rem) {
+	.viewer {
+		--available-height: calc(100dvh - 10.5rem);
+	}
+
+	.caption {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.2rem;
+	}
+
+	.dot {
+		display: none;
+	}
+}
