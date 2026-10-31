@@ -15,15 +15,11 @@ export class InvalidImageryModeError extends Error {
 	}
 }
 
-export function resolveImageryMode(
-	isDevelopment: boolean,
-	configured?: string,
-	cameraEditorActive = false
-): ImageryMode {
+export function resolveImageryMode(isDevelopment: boolean, configured?: string): ImageryMode {
 	const value = configured?.trim();
 
 	if (!value) {
-		return isDevelopment && !cameraEditorActive ? 'sentinel2' : PRODUCTION_IMAGERY_MODE;
+		return isDevelopment ? 'sentinel2' : PRODUCTION_IMAGERY_MODE;
 	}
 
 	const mode = IMAGERY_MODES.find((candidate) => candidate === value);

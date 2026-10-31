@@ -5,6 +5,8 @@ import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
 import { startScene } from './lifecycle';
+import { releaseBestEffort } from './releaseBestEffort';
+import { INITIALIZATION_FAILED_STATE } from './sceneState';
 import type { SceneStore } from './SceneStore';
 
 export interface SceneSessionOptions {
@@ -14,13 +16,12 @@ export interface SceneSessionOptions {
 	onError?: (error: unknown) => void;
 }
 
-const INITIALIZATION_FAILED_MESSAGE = 'The 3D globe could not be loaded.';
-
 const noop = () => {};
 
 // The constructor starts the session; `stop()` is its only teardown and is idempotent.
 export class SceneSession {
 	private readonly store: SceneStore;
+	private readonly onError: ((error: unknown) => void) | undefined;
 	private scene: GlobeScene | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
@@ -36,6 +37,7 @@ export class SceneSession {
 
 	constructor({ ionToken, createScene, store, onError }: SceneSessionOptions) {
 		this.store = store;
+		this.onError = onError;
 
 		let token: string;
 		try {
@@ -51,14 +53,7 @@ export class SceneSession {
 		store.setState({ status: 'loading' });
 		this.stopScene = startScene(
 			async (signal) => createScene(token, signal),
-			(error) => {
-				onError?.(error);
-				store.setState({
-					status: 'failed',
-					failure: 'initialization-failed',
-					message: INITIALIZATION_FAILED_MESSAGE
-				});
-			},
+			(error) => this.reportInitializationFailure(error),
 			(ready) => this.attach(ready)
 		);
 	}
@@ -92,20 +87,49 @@ export class SceneSession {
 		this.stopped = true;
 		this.presentation += 1;
 		this.publishSettled(false);
-		this.releaseOrientation();
-		this.releaseOrientation = noop;
-		this.releaseScale();
-		this.releaseScale = noop;
-		this.releaseImagery();
-		this.releaseImagery = noop;
 		this.store.setOrientation(undefined);
 		this.store.setScale(undefined);
 		this.scene = undefined;
-		this.stopScene();
+
+		const { releaseOrientation, releaseScale, releaseImagery, stopScene } = this;
+		this.releaseOrientation = noop;
+		this.releaseScale = noop;
+		this.releaseImagery = noop;
 		this.stopScene = noop;
+
+		// The scene goes last: a retry must never meet a live Viewer because a release threw.
+		releaseBestEffort('Scene session', [
+			['orientation subscription', releaseOrientation],
+			['scale subscription', releaseScale],
+			['imagery subscription', releaseImagery],
+			['scene', stopScene]
+		]);
+	}
+
+	// A throw while wiring a scene that exists must still end in the failed state; stop() releases
+	// whatever was wired and destroys the scene, so a retry never meets a second live Viewer.
+	private failSetup(error: unknown): void {
+		if (this.stopped) {
+			return;
+		}
+		this.stop();
+		this.reportInitializationFailure(error);
+	}
+
+	private reportInitializationFailure(error: unknown): void {
+		this.onError?.(error);
+		this.store.setState(INITIALIZATION_FAILED_STATE);
 	}
 
 	private attach(ready: GlobeScene): void {
+		try {
+			this.wire(ready);
+		} catch (error) {
+			this.failSetup(error);
+		}
+	}
+
+	private wire(ready: GlobeScene): void {
 		this.scene = ready;
 		this.releaseOrientation = ready.subscribeOrientation((orientation) => {
 			if (!this.stopped) {
@@ -175,7 +199,14 @@ export class SceneSession {
 		if (!ready) {
 			return;
 		}
-		if (ready.prepareReveal(next)) {
+		let cinematic: boolean;
+		try {
+			cinematic = ready.prepareReveal(next);
+		} catch (error) {
+			this.failSetup(error);
+			return;
+		}
+		if (cinematic) {
 			await this.revealGlobeThenApproach(ready, next, ticket);
 			return;
 		}

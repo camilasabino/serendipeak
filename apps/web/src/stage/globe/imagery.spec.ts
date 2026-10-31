@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
 	InvalidImageryModeError,
-	PRODUCTION_IMAGERY_MODE,
 	SENTINEL2_ASSET_ID,
 	createBaseLayer,
 	imageryStatus,
@@ -37,33 +36,6 @@ describe('resolveImageryMode', () => {
 	it('names the accepted values in the error', () => {
 		expect(() => resolveImageryMode(true, 'bing')).toThrow(/sentinel2, world, none/);
 		expect(() => resolveImageryMode(true, 'bing')).toThrow(/^NEXT_PUBLIC_CESIUM_IMAGERY_MODE /);
-	});
-});
-
-describe('resolveImageryMode with the camera editor', () => {
-	it('uses the canonical production mode in development without an override', () => {
-		expect(resolveImageryMode(true, undefined, true)).toBe(PRODUCTION_IMAGERY_MODE);
-		expect(PRODUCTION_IMAGERY_MODE).toBe('world');
-	});
-
-	it('keeps normal development on Sentinel-2', () => {
-		expect(resolveImageryMode(true, undefined, false)).toBe('sentinel2');
-	});
-
-	it.each(['sentinel2', 'none', 'world'] as const)(
-		'lets an explicit %s override win in the editor',
-		(mode) => {
-			expect(resolveImageryMode(true, mode, true)).toBe(mode);
-		}
-	);
-
-	it('applies the production policy in production regardless of the editor', () => {
-		expect(resolveImageryMode(false, undefined, true)).toBe(PRODUCTION_IMAGERY_MODE);
-		expect(resolveImageryMode(false, undefined, false)).toBe(PRODUCTION_IMAGERY_MODE);
-	});
-
-	it('rejects an invalid override in the editor', () => {
-		expect(() => resolveImageryMode(true, 'bing', true)).toThrow(InvalidImageryModeError);
 	});
 });
 

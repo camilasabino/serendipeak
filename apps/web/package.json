@@ -20,8 +20,9 @@
 		"check:production-gate": "node scripts/production-gate.mjs .next",
 		"test:e2e": "playwright test",
 		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr",
-		"test:webgl": "playwright test --config=playwright.webgl.config.ts",
-		"test:webgl:prod": "WEBGL_SERVER=production playwright test --config=playwright.webgl.config.ts"
+		"test:nogl": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=nogl",
+		"test:webgl": "npm run cesium:assets && playwright test --config=playwright.webgl.config.ts",
+		"test:webgl:prod": "npm run cesium:assets && WEBGL_SERVER=production playwright test --config=playwright.webgl.config.ts"
 	},
 	"dependencies": {
 		"@fontsource/instrument-sans": "^5.3.0",

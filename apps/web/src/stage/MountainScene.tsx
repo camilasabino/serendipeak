@@ -1,11 +1,12 @@
 import { useRef } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
+import { sceneCanRetry } from './experience';
 import type { SceneTarget } from './globe/camera';
 import { StageControls } from './controls/StageControls';
 import styles from './MountainScene.module.css';
 import type { SceneStore } from './SceneStore';
-import { DETAILS_AVAILABLE_MESSAGE, FAILURE_MESSAGES } from './stageCopy';
+import { SceneStatus } from './SceneStatus';
 import { useStage } from './useStage';
 import { useStageFullscreen } from './useStageFullscreen';
 
@@ -26,7 +27,7 @@ interface MountainSceneProps {
 }
 
 export default function MountainScene({ store, target }: MountainSceneProps) {
-	const { viewportRef, snapshot, resetView } = useStage({
+	const { viewportRef, snapshot, resetView, retry } = useStage({
 		store,
 		ionToken: ION_TOKEN,
 		sceneFactory: SCENE_FACTORY,
@@ -40,12 +41,7 @@ export default function MountainScene({ store, target }: MountainSceneProps) {
 		<div ref={stageRef} className={styles.scene}>
 			<div ref={viewportRef} className={styles.viewport} />
 			<StageControls snapshot={snapshot} onReset={resetView} fullscreen={fullscreen} />
-			{state.status === 'failed' && (
-				<div role="alert" className={styles.failure}>
-					<p>{FAILURE_MESSAGES[state.failure]}</p>
-					<p className={styles.hint}>{DETAILS_AVAILABLE_MESSAGE}</p>
-				</div>
-			)}
+			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />
 		</div>
 	);
 }

@@ -137,6 +137,24 @@ test.describe('@webgl static stage', () => {
 		page,
 		probe
 	}) => {
+		// The create path checks its signal right after the terrain provider resolves; recording
+		// those checks turns "the late continuation has run" into something the test can await.
+		await page.addInitScript(() => {
+			const guards: boolean[] = [];
+			(window as Window & { __abortGuards?: boolean[] }).__abortGuards = guards;
+			const original = AbortSignal.prototype.throwIfAborted;
+			AbortSignal.prototype.throwIfAborted = function (this: AbortSignal) {
+				guards.push(this.aborted);
+				return original.call(this);
+			};
+		});
+		const abortedGuards = () =>
+			page.evaluate(
+				() =>
+					((window as Window & { __abortGuards?: boolean[] }).__abortGuards ?? []).filter(Boolean)
+						.length
+			);
+
 		let terrainRequested!: () => void;
 		const requested = new Promise<void>((resolve) => (terrainRequested = resolve));
 		let release!: () => void;
@@ -150,16 +168,19 @@ test.describe('@webgl static stage', () => {
 		await page.goto(PERMALINK);
 		await requested;
 
+		// Strict Mode aborts its first, abandoned create before the terrain request exists.
+		const abortedBeforeTeardown = await abortedGuards();
+		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
+		expect(await probe.webglContexts()).toBe(0);
+
 		await page.evaluate(() => {
 			void (
 				window as Window & { next?: { router: { push(url: string): Promise<boolean> } } }
 			).next!.router.push('/404');
 		});
 		await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
-		const layerRequested = page.waitForRequest(/terrain\.e2e\.invalid\/layer\.json/);
 		release();
-		await layerRequested;
-		await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
+		await expect.poll(abortedGuards).toBeGreaterThan(abortedBeforeTeardown);
 
 		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
 		expect(await probe.webglContexts()).toBe(0);

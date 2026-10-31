@@ -3,26 +3,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const cesium = vi.hoisted(() => ({
 	viewer: undefined as unknown as FakeViewer,
 	releaseLayerListener: vi.fn(),
+	releaseFlight: vi.fn(),
+	destroyLayer: vi.fn(),
+	viewerError: undefined as Error | undefined,
 	Ion: { defaultAccessToken: '' },
 	ScreenSpaceEventType: { LEFT_CLICK: 0, LEFT_DOUBLE_CLICK: 1 },
 	createWorldTerrainAsync: async () => ({}),
 	ImageryLayer: {
 		fromWorldImagery: () => ({
+			isDestroyed: () => false,
+			destroy: () => cesium.destroyLayer(),
 			errorEvent: { addEventListener: () => cesium.releaseLayerListener },
 			readyEvent: { addEventListener: () => cesium.releaseLayerListener }
 		})
 	},
 	IonImageryProvider: { fromAssetId: () => ({}) },
 	Viewer: function Viewer() {
+		if (cesium.viewerError) {
+			throw cesium.viewerError;
+		}
 		return cesium.viewer;
 	}
 }));
 
 vi.mock('cesium', () => cesium);
-vi.mock('./ViewSampler', () => ({ ViewSampler: class {} }));
+vi.mock('./ViewSampler', () => ({
+	ViewSampler: class {
+		viewHeading() {
+			return Number.NaN;
+		}
+	}
+}));
 vi.mock('./ViewerCameraFlight', () => ({
 	ViewerCameraFlight: class {
-		release() {}
+		release() {
+			cesium.releaseFlight();
+		}
 	}
 }));
 vi.mock('./SummitMarkers', () => ({
@@ -35,7 +51,10 @@ vi.mock('./cesiumTerrain', () => ({ createCesiumTerrainSource: () => ({}) }));
 import { CesiumGlobeScene } from './CesiumGlobeScene';
 
 interface FakeViewer {
-	scene: { imageryLayers: { remove(): void } };
+	scene: {
+		imageryLayers: { remove(): void };
+		preUpdate: { addEventListener(listener: () => void): () => void };
+	};
 	screenSpaceEventHandler: { removeInputAction(type: number): void };
 	isDestroyed(): boolean;
 	destroy: ReturnType<typeof vi.fn>;
@@ -45,21 +64,32 @@ class FakeLinkElement {
 	readonly sheet = {};
 }
 
-function fakeViewer(removeInputAction: (type: number) => void = () => {}): FakeViewer {
+function fakeViewer(
+	removeInputAction: (type: number) => void = () => {},
+	removeFrameListener: () => void = () => {},
+	destroyViewer: () => void = () => {}
+): FakeViewer {
 	let destroyed = false;
 	return {
-		scene: { imageryLayers: { remove: () => {} } },
+		scene: {
+			imageryLayers: { remove: () => {} },
+			preUpdate: { addEventListener: () => removeFrameListener }
+		},
 		screenSpaceEventHandler: { removeInputAction },
 		isDestroyed: () => destroyed,
 		destroy: vi.fn(() => {
 			destroyed = true;
+			destroyViewer();
 		})
 	};
 }
 
-function create(exposeCameraReading?: () => () => void): Promise<CesiumGlobeScene> {
+function create(
+	exposeCameraReading?: () => () => void,
+	container: HTMLElement = {} as HTMLElement
+): Promise<CesiumGlobeScene> {
 	return CesiumGlobeScene.create(
-		{} as HTMLElement,
+		container,
 		{ ionToken: 'token', imageryMode: 'world', exposeCameraReading },
 		new AbortController().signal
 	);
@@ -70,11 +100,15 @@ describe('CesiumGlobeScene.create after the viewer exists', () => {
 		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
 		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
 		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
-		cesium.releaseLayerListener.mockClear();
+		cesium.releaseLayerListener.mockReset();
+		cesium.releaseFlight.mockReset();
+		cesium.destroyLayer.mockReset();
+		cesium.viewerError = undefined;
 	});
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
 	});
 
 	it('destroys the viewer and rethrows when entity picking setup fails', async () => {
@@ -101,6 +135,103 @@ describe('CesiumGlobeScene.create after the viewer exists', () => {
 		expect(cesium.releaseLayerListener).toHaveBeenCalledTimes(2);
 	});
 
+	it('still destroys the viewer and rejects with the original error when imagery release throws', async () => {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const failure = new Error('removeInputAction failed');
+		cesium.viewer = fakeViewer(() => {
+			throw failure;
+		});
+		cesium.releaseLayerListener.mockImplementation(() => {
+			throw new Error('imagery release failed');
+		});
+
+		await expect(create()).rejects.toBe(failure);
+
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(cesium.viewer.isDestroyed()).toBe(true);
+		expect(logged).toHaveBeenCalled();
+	});
+
+	it('runs every cleanup and keeps the original error when several of them throw', async () => {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const failure = new Error('removeInputAction failed');
+		cesium.viewer = fakeViewer(
+			() => {
+				throw failure;
+			},
+			() => {},
+			() => {
+				throw new Error('viewer destroy failed');
+			}
+		);
+		cesium.releaseLayerListener.mockImplementation(() => {
+			throw new Error('layer listener release failed');
+		});
+
+		await expect(create()).rejects.toBe(failure);
+
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		const reported = logged.mock.calls.map(([, cause]) => (cause as Error).message);
+		expect(reported).toEqual(
+			expect.arrayContaining(['layer listener release failed', 'viewer destroy failed'])
+		);
+	});
+
+	it('does not clean up twice when the built scene owns the failure', async () => {
+		const failure = new Error('expose failed');
+		cesium.viewer = fakeViewer();
+
+		await expect(
+			create(() => {
+				throw failure;
+			})
+		).rejects.toBe(failure);
+
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
+	});
+
+	describe('when the viewer constructor fails', () => {
+		function container() {
+			const removed: string[] = [];
+			const element = {
+				querySelector: (selector: string) => ({ remove: () => removed.push(selector) })
+			};
+			return { element: element as unknown as HTMLElement, removed };
+		}
+
+		it('releases everything and rejects with the constructor error', async () => {
+			cesium.viewerError = new Error('WebGL unavailable');
+			const { element, removed } = container();
+
+			await expect(create(undefined, element)).rejects.toBe(cesium.viewerError);
+
+			expect(cesium.releaseLayerListener).toHaveBeenCalledTimes(2);
+			expect(cesium.destroyLayer).toHaveBeenCalledOnce();
+			expect(removed).toEqual([':scope > .cesium-viewer', ':scope > .cesium-widget']);
+		});
+
+		it('keeps cleaning up and keeps the constructor error when a cleanup throws', async () => {
+			const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+			cesium.viewerError = new Error('WebGL unavailable');
+			cesium.releaseLayerListener.mockImplementation(() => {
+				throw new Error('imagery release failed');
+			});
+			cesium.destroyLayer.mockImplementation(() => {
+				throw new Error('layer destroy failed');
+			});
+			const { element, removed } = container();
+
+			await expect(create(undefined, element)).rejects.toBe(cesium.viewerError);
+
+			expect(removed).toEqual([':scope > .cesium-viewer', ':scope > .cesium-widget']);
+			const reported = logged.mock.calls.map(([, cause]) => (cause as Error).message);
+			expect(reported).toEqual(
+				expect.arrayContaining(['imagery release failed', 'layer destroy failed'])
+			);
+		});
+	});
+
 	it('keeps the viewer alive when initialization succeeds', async () => {
 		cesium.viewer = fakeViewer();
 
@@ -109,6 +240,144 @@ describe('CesiumGlobeScene.create after the viewer exists', () => {
 		expect(cesium.viewer.destroy).not.toHaveBeenCalled();
 		expect(cesium.releaseLayerListener).not.toHaveBeenCalled();
 		scene.destroy();
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+	});
+});
+
+describe('CesiumGlobeScene.destroy', () => {
+	beforeEach(() => {
+		vi.stubGlobal('requestAnimationFrame', () => 1);
+		vi.stubGlobal('cancelAnimationFrame', () => {});
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.releaseLayerListener.mockReset();
+		cesium.releaseFlight.mockReset();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	it('releases the camera reading before the flight and the viewer, in that order', async () => {
+		const order: string[] = [];
+		cesium.viewer = fakeViewer(
+			() => {},
+			() => order.push('orientation'),
+			() => order.push('viewer')
+		);
+		cesium.releaseFlight.mockImplementation(() => order.push('flight'));
+		const scene = await create(() => () => order.push('reading'));
+		scene.subscribeOrientation(() => {});
+
+		scene.destroy();
+
+		expect(order).toEqual(['reading', 'orientation', 'flight', 'viewer']);
+	});
+
+	it('still destroys the viewer when the first disposer throws', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		cesium.viewer = fakeViewer();
+		const scene = await create(() => () => {
+			throw new Error('reading release failed');
+		});
+
+		expect(() => scene.destroy()).not.toThrow();
+
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
+		expect(cesium.releaseLayerListener).toHaveBeenCalledTimes(2);
+		expect(error).toHaveBeenCalledOnce();
+	});
+
+	it('keeps releasing after the imagery listeners throw', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const orientationReleased = vi.fn();
+		cesium.viewer = fakeViewer(() => {}, orientationReleased);
+		cesium.releaseLayerListener.mockImplementation(() => {
+			throw new Error('imagery release failed');
+		});
+		const scene = await create();
+		scene.subscribeOrientation(() => {});
+
+		scene.destroy();
+
+		expect(orientationReleased).toHaveBeenCalledOnce();
+		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(error).toHaveBeenCalled();
+	});
+
+	it('keeps releasing after the orientation tracker throws', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		cesium.viewer = fakeViewer(
+			() => {},
+			() => {
+				throw new Error('frame listener removal failed');
+			}
+		);
+		const scene = await create();
+		scene.subscribeOrientation(() => {});
+
+		scene.destroy();
+
+		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(error).toHaveBeenCalledOnce();
+	});
+
+	it('destroys the viewer when the camera flight release throws', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		cesium.viewer = fakeViewer();
+		cesium.releaseFlight.mockImplementation(() => {
+			throw new Error('flight release failed');
+		});
+		const scene = await create();
+
+		scene.destroy();
+
+		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+		expect(error).toHaveBeenCalledOnce();
+	});
+
+	it('reports every failing disposer and does not rethrow', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		cesium.viewer = fakeViewer(
+			() => {},
+			() => {
+				throw new Error('orientation');
+			},
+			() => {
+				throw new Error('viewer');
+			}
+		);
+		cesium.releaseFlight.mockImplementation(() => {
+			throw new Error('flight');
+		});
+		const scene = await create(() => () => {
+			throw new Error('reading');
+		});
+		scene.subscribeOrientation(() => {});
+
+		expect(() => scene.destroy()).not.toThrow();
+
+		const reported = error.mock.calls.map(([, cause]) => (cause as Error).message);
+		expect(reported).toEqual(['reading', 'orientation', 'flight', 'viewer']);
+	});
+
+	it('runs each disposer once when destroyed again after a failure', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		cesium.viewer = fakeViewer();
+		cesium.releaseFlight.mockImplementation(() => {
+			throw new Error('flight release failed');
+		});
+		const scene = await create();
+
+		scene.destroy();
+		scene.destroy();
+
+		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
 		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
 	});
 });

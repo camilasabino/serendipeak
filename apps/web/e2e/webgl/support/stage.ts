@@ -30,8 +30,8 @@ export const CAMERA_TOLERANCE = {
 	framing: 0.01
 } as const;
 
-const TERRAIN_HOST = 'https://terrain.e2e.invalid/';
-const IMAGERY_HOST = 'https://imagery.e2e.invalid/';
+export const TERRAIN_HOST = 'https://terrain.e2e.invalid/';
+export const IMAGERY_HOST = 'https://imagery.e2e.invalid/';
 const PNG_PIXEL = Buffer.from(
 	'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
 	'base64'
@@ -50,6 +50,8 @@ export interface StageProbe {
 	webglContexts(): Promise<number>;
 	/** ResizeObserver activity on elements inside the page's main landmark. */
 	stageObservers(): Promise<{ observed: number; live: number }>;
+	/** Declares failures a test causes on purpose; everything else still fails the test. */
+	tolerate(expected: { requests?: RegExp; errors?: RegExp }): void;
 }
 
 function isLocal(url: URL): boolean {
@@ -60,6 +62,7 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 	const external: string[] = [];
 	const failed: string[] = [];
 	const errors: string[] = [];
+	const tolerated: { requests: RegExp[]; errors: RegExp[] } = { requests: [], errors: [] };
 
 	await page.addInitScript(() => {
 		const original = HTMLCanvasElement.prototype.getContext;
@@ -149,8 +152,12 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 
 	return {
 		externalRequests: () => [...external],
-		failedRequests: () => [...failed],
-		errors: () => [...errors],
+		failedRequests: () => failed.filter((entry) => !tolerated.requests.some((p) => p.test(entry))),
+		errors: () => errors.filter((entry) => !tolerated.errors.some((p) => p.test(entry))),
+		tolerate: ({ requests, errors: messages }) => {
+			if (requests) tolerated.requests.push(requests);
+			if (messages) tolerated.errors.push(messages);
+		},
 		webglContexts: () =>
 			page.evaluate(
 				() =>

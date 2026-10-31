@@ -20,6 +20,7 @@ import type { StageSize } from '../stageFrame';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
 import { VIEWER_OPTIONS, disableEntityPicking } from '../viewerOptions';
+import { releaseBestEffort } from '../../releaseBestEffort';
 import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
 import { SummitMarkers } from './SummitMarkers';
@@ -28,6 +29,7 @@ import { ViewSampler } from './ViewSampler';
 
 export const CESIUM_BASE_URL = '/cesium/';
 
+const CLEANUP_OWNER = 'Cesium scene';
 const WIDGETS_STYLESHEET_ID = 'cesium-widgets-stylesheet';
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 const CAMERA_MOVE_EPSILON_METERS = 0.5;
@@ -110,14 +112,26 @@ export class CesiumGlobeScene implements GlobeScene {
 				...VIEWER_OPTIONS
 			});
 		} catch (error) {
-			imagery.release();
-			failedBaseLayer?.release();
-			if (baseLayer && !baseLayer.isDestroyed()) {
-				baseLayer.destroy();
-			}
-			// A failed constructor can leave its half-built DOM behind.
-			container.querySelector(':scope > .cesium-viewer')?.remove();
-			container.querySelector(':scope > .cesium-widget')?.remove();
+			releaseBestEffort(CLEANUP_OWNER, [
+				['imagery monitor', () => imagery.release()],
+				['failed layer removal', () => failedBaseLayer?.release()],
+				[
+					'base layer',
+					() => {
+						if (baseLayer && !baseLayer.isDestroyed()) {
+							baseLayer.destroy();
+						}
+					}
+				],
+				// A failed constructor can leave its half-built DOM behind.
+				[
+					'partial viewer DOM',
+					() => {
+						container.querySelector(':scope > .cesium-viewer')?.remove();
+						container.querySelector(':scope > .cesium-widget')?.remove();
+					}
+				]
+			]);
 			throw error;
 		}
 
@@ -140,10 +154,12 @@ export class CesiumGlobeScene implements GlobeScene {
 			if (scene) {
 				scene.destroy();
 			} else {
-				imagery.release();
-				failedBaseLayer?.release();
 				// The viewer owns the base layer once constructed and destroys it with itself.
-				viewer.destroy();
+				releaseBestEffort(CLEANUP_OWNER, [
+					['imagery monitor', () => imagery.release()],
+					['failed layer removal', () => failedBaseLayer?.release()],
+					['viewer', () => viewer.destroy()]
+				]);
 			}
 			throw error;
 		}
@@ -362,22 +378,32 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 		this.destroyed = true;
 
-		this.releaseCameraReading();
+		const releaseCameraReading = this.releaseCameraReading;
+		const releaseOrientation = this.releaseOrientation;
+		const releaseScale = this.releaseScale;
 		this.releaseCameraReading = noop;
-
-		this.viewReadyWaiter?.settle();
-		this.imagery.release();
-		this.failedBaseLayer?.release();
-		this.releaseOrientation();
 		this.releaseOrientation = noop;
-		this.releaseScale();
 		this.releaseScale = noop;
-		this.camera.stop();
-		this.flight.release();
 
-		if (!this.viewer.isDestroyed()) {
-			this.viewer.destroy();
-		}
+		// One failing disposer must not strand the resources after it, and the Viewer goes last.
+		releaseBestEffort(CLEANUP_OWNER, [
+			['camera reading', releaseCameraReading],
+			['view-ready waiter', () => this.viewReadyWaiter?.settle()],
+			['imagery monitor', () => this.imagery.release()],
+			['failed layer removal', () => this.failedBaseLayer?.release()],
+			['orientation tracker', releaseOrientation],
+			['scale tracker', releaseScale],
+			['camera', () => this.camera.stop()],
+			['camera flight', () => this.flight.release()],
+			[
+				'viewer',
+				() => {
+					if (!this.viewer.isDestroyed()) {
+						this.viewer.destroy();
+					}
+				}
+			]
+		]);
 	}
 
 	private motion(): MotionPreference {

@@ -1,0 +1,50 @@
+.notice {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.375rem;
+	box-sizing: border-box;
+	padding: var(--sp-space-4);
+	text-align: center;
+	pointer-events: none;
+	color: var(--sp-text-on-stage);
+}
+
+/* Top edge: the bottom edge holds Cesium's attribution, which must stay unobscured. The inline
+   padding clears the 2.75rem toolbar buttons and their 0.6rem inset, on both sides to stay centred. */
+.polite {
+	inset: 0 0 auto;
+	padding: var(--sp-space-3) calc(2.75rem + 1.2rem);
+	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
+}
+
+.notice p {
+	margin: 0;
+}
+
+.hint {
+	font-size: var(--sp-text-ui);
+	color: var(--sp-mist);
+}
+
+.retry {
+	margin-top: var(--sp-space-2);
+	padding: 0.5rem 1rem;
+	min-height: 2.75rem;
+	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
+	border-radius: var(--sp-radius);
+	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
+	color: var(--sp-paper);
+	font: inherit;
+	cursor: pointer;
+	pointer-events: auto;
+}
+
+.retry:hover {
+	border-color: var(--sp-glacier-light);
+	background: var(--sp-glacier-dark);
+	color: var(--sp-paper-bright);
+}

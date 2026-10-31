@@ -26,6 +26,8 @@ const REACT_BINDINGS = [
 	'stage/useStage.ts',
 	'stage/useStageFullscreen.ts',
 	'stage/MountainScene.tsx',
+	'stage/SceneStatus.tsx',
+	'stage/StageBoundary.tsx',
 	...sources('stage/controls')
 ];
 const FORBIDDEN_FOR_BINDINGS = /^(cesium|react-dom|next)(\/|$)/;

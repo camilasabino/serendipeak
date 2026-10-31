@@ -2,6 +2,7 @@ import type { SceneTarget } from './globe/camera';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
 import { SceneSession, type SceneSessionOptions } from './SceneSession';
+import { sceneCanRetry } from './experience';
 import type { SceneStore } from './SceneStore';
 
 export interface StageElements {
@@ -26,15 +27,55 @@ function reportInitializationFailure(error: unknown): void {
 }
 
 export class StageBinding {
-	private readonly session: SceneSession;
+	private session: SceneSession;
 	private readonly observer: ResizeObserver;
+	private target: SceneTarget | undefined;
 	private published: StageSize | undefined;
 	private disposed = false;
 
 	constructor(private readonly options: StageBindingOptions) {
-		const { viewport, store, ionToken, createScene, target, onError } = options;
+		this.target = options.target;
+		this.session = this.openSession();
+		this.present();
 
-		this.session = new SceneSession({
+		this.observer = new ResizeObserver(() => this.publishSize());
+		this.observer.observe(options.viewport);
+	}
+
+	setTarget(target: SceneTarget | undefined): void {
+		if (this.disposed) {
+			return;
+		}
+		this.target = target;
+		this.session.setTarget(target);
+	}
+
+	resetView(): ResetResult {
+		return this.disposed ? 'unavailable' : this.session.resetView();
+	}
+
+	// The failed session is stopped before its replacement exists, so one binding never owns two.
+	retry(): void {
+		if (this.disposed || !sceneCanRetry(this.options.store.getSnapshot().state)) {
+			return;
+		}
+		this.session.stop();
+		this.session = this.openSession();
+		this.present();
+	}
+
+	dispose(): void {
+		if (this.disposed) {
+			return;
+		}
+		this.disposed = true;
+		this.observer.disconnect();
+		this.session.stop();
+	}
+
+	private openSession(): SceneSession {
+		const { store, ionToken, createScene, onError } = this.options;
+		const session = new SceneSession({
 			ionToken,
 			createScene,
 			store,
@@ -45,30 +86,13 @@ export class StageBinding {
 			console.error(state.message);
 		}
 
+		return session;
+	}
+
+	private present(): void {
+		this.published = undefined;
 		this.publishSize();
-		this.session.setTarget(target);
-
-		this.observer = new ResizeObserver(() => this.publishSize());
-		this.observer.observe(viewport);
-	}
-
-	setTarget(target: SceneTarget | undefined): void {
-		if (!this.disposed) {
-			this.session.setTarget(target);
-		}
-	}
-
-	resetView(): ResetResult {
-		return this.disposed ? 'unavailable' : this.session.resetView();
-	}
-
-	dispose(): void {
-		if (this.disposed) {
-			return;
-		}
-		this.disposed = true;
-		this.observer.disconnect();
-		this.session.stop();
+		this.session.setTarget(this.target);
 	}
 
 	private publishSize(): void {

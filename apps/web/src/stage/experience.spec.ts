@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { preparingLabel, sceneBlocksExperience } from './experience';
+import { preparingLabel, sceneBlocksExperience, sceneCanRetry } from './experience';
 import type { SceneState } from './sceneState';
 
 const failed: SceneState = {
@@ -22,5 +22,23 @@ describe('scene experience gate', () => {
 		expect(preparingLabel(true)).toBe("Revealing today's mountain...");
 		expect(preparingLabel(false)).toBe('Revealing the mountain...');
 		expect(preparingLabel(true)).not.toMatch(/%|Loading the globe|Preparing/);
+	});
+});
+
+describe('scene retry policy', () => {
+	it('offers retry only for a failure that a new attempt can recover from', () => {
+		expect(sceneCanRetry(failed)).toBe(true);
+	});
+
+	it('offers no retry for a configuration failure that cannot change on this page', () => {
+		expect(sceneCanRetry({ status: 'failed', failure: 'missing-token', message: 'no token' })).toBe(
+			false
+		);
+	});
+
+	it('offers no retry while loading or when the scene is ready', () => {
+		expect(sceneCanRetry({ status: 'loading' })).toBe(false);
+		expect(sceneCanRetry({ status: 'ready' })).toBe(false);
+		expect(sceneCanRetry({ status: 'ready', imageryDegraded: true })).toBe(false);
 	});
 });

@@ -234,6 +234,133 @@ describe('StageBinding disposal', () => {
 	});
 });
 
+describe('StageBinding retry', () => {
+	async function failedBinding(options: Parameters<typeof setup>[0] = {}) {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const context = setup(options);
+		const binding = context.mount();
+		context.factory.reject(0, new Error('terrain unavailable'));
+		await flush();
+
+		return { ...context, binding };
+	}
+
+	it('creates exactly one fresh scene, shows loading again and then ready', async () => {
+		const { factory, store, binding } = await failedBinding();
+
+		binding.retry();
+
+		expect(factory.calls).toHaveLength(2);
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+		factory.resolve(1);
+		await flush();
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(factory.calls).toHaveLength(2);
+	});
+
+	it('keeps the mountain target and the stage size for the new attempt', async () => {
+		const { factory, binding } = await failedBinding({ target: ACONCAGUA });
+		binding.setTarget(FITZ_ROY);
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.stages).toEqual([{ width: 800, height: 500 }]);
+		expect(scene.shown).toEqual([{ target: FITZ_ROY, placement: 'initial' }]);
+	});
+
+	it('keeps one observer registration', async () => {
+		const { binding } = await failedBinding();
+
+		binding.retry();
+
+		expect(FakeResizeObserver.instances).toHaveLength(1);
+		expect(FakeResizeObserver.instances[0]?.disconnected).toBe(false);
+	});
+
+	it('destroys the scene of a setup failure before the replacement is created', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, mount } = setup();
+		const binding = mount();
+		factory.resolve(0, { throwOn: { subscribeScale: new Error('boom') } });
+		await flush();
+
+		binding.retry();
+
+		expect(factory.log).toEqual(['create:1', 'destroy:1', 'create:2']);
+	});
+
+	it('serves a second failure and allows another retry', async () => {
+		const { factory, store, binding } = await failedBinding();
+
+		binding.retry();
+		factory.reject(1, new Error('still down'));
+		await flush();
+		expect(store.getSnapshot().state).toMatchObject({
+			status: 'failed',
+			failure: 'initialization-failed'
+		});
+		binding.retry();
+		factory.resolve(2);
+		await flush();
+
+		expect(factory.calls).toHaveLength(3);
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+	});
+
+	it('ignores retry while an attempt is loading', () => {
+		const { factory, mount } = setup();
+		const binding = mount();
+
+		binding.retry();
+
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('ignores retry once the stage is ready', async () => {
+		const { factory, mount } = setup();
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.retry();
+
+		expect(factory.calls).toHaveLength(1);
+		expect(scene.destroyCount).toBe(0);
+	});
+
+	it('makes no provider request when retrying a missing token', () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, store, mount } = setup({ ionToken: undefined });
+		const binding = mount();
+
+		binding.retry();
+
+		expect(factory.calls).toEqual([]);
+		expect(store.getSnapshot().state).toMatchObject({ failure: 'missing-token' });
+	});
+
+	it('ignores retry after disposal', async () => {
+		const { factory, binding } = await failedBinding();
+
+		binding.dispose();
+		binding.retry();
+
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('does not let the failed attempt answer into the new one', async () => {
+		const { factory, store, binding } = await failedBinding();
+		binding.retry();
+
+		factory.reject(0, new Error('late echo of the first attempt'));
+		await flush();
+
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+	});
+});
+
 describe('StageBinding resize', () => {
 	it('publishes the stage size only when it changed', async () => {
 		const { factory, viewport, mount } = setup();

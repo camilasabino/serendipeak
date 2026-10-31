@@ -23,6 +23,7 @@ export interface UseStageResult {
 	viewportRef: RefObject<HTMLDivElement | null>;
 	snapshot: SceneSnapshot;
 	resetView: () => ResetResult;
+	retry: () => void;
 }
 
 export function useStage({
@@ -70,5 +71,7 @@ export function useStage({
 
 	const resetView = useCallback(() => bindingRef.current?.resetView() ?? 'unavailable', []);
 
-	return { viewportRef, snapshot, resetView };
+	const retry = useCallback(() => bindingRef.current?.retry(), []);
+
+	return { viewportRef, snapshot, resetView, retry };
 }

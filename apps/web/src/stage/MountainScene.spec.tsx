@@ -32,10 +32,18 @@ describe('MountainScene markup', () => {
 
 	it.each([
 		['loading', undefined],
-		['ready', { status: 'ready' } as const],
-		['degraded', { status: 'ready', imageryDegraded: true } as const]
+		['ready', { status: 'ready' } as const]
 	])('renders no notice while %s', (_name, state) => {
 		expect(render(state)).not.toMatch(/role="alert"|globe/);
+	});
+
+	it('keeps the stage controls and adds the polite imagery notice while degraded', () => {
+		const html = render({ status: 'ready', imageryDegraded: true });
+
+		expect(html).toContain('Reset view');
+		expect(html).toContain('role="status"');
+		expect(html).toContain('Map imagery is temporarily unavailable.');
+		expect(html).not.toContain('role="alert"');
 	});
 
 	it('renders no stage controls before the globe is ready', () => {
@@ -67,7 +75,7 @@ describe('MountainScene markup', () => {
 		expect(html).not.toContain('no token');
 	});
 
-	it('announces an initialization failure without leaking the cause', () => {
+	it('offers a retry for an initialization failure and hides the stage controls', () => {
 		const html = render({
 			status: 'failed',
 			failure: 'initialization-failed',
@@ -75,6 +83,8 @@ describe('MountainScene markup', () => {
 		});
 
 		expect(html).toContain('The 3D globe could not be loaded.');
-		expect(html).not.toContain('<button');
+		expect(html.match(/<button/g)).toHaveLength(1);
+		expect(html).toContain('>Try again</button>');
+		expect(html).not.toContain('Reset view');
 	});
 });

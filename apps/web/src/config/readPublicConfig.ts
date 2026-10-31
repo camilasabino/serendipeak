@@ -3,13 +3,12 @@ export type CesiumEnv = {
 	NEXT_PUBLIC_CESIUM_IMAGERY_MODE?: string;
 };
 
-export type PublicEnv = CesiumEnv & {
+export type PublicEnv = {
 	NEXT_PUBLIC_API_BASE_URL?: string;
 };
 
 export type PublicConfig = {
 	apiBaseUrl: string;
-	cesiumIonToken: string | null;
 };
 
 export type CesiumConfig = {
@@ -27,10 +26,7 @@ export class InvalidPublicConfigError extends Error {
 // Next inlines NEXT_PUBLIC_* only for literal `process.env.NAME` reads, so callers must pass
 // those reads as an object instead of handing over `process.env` itself.
 export function readPublicConfig(env: PublicEnv): PublicConfig {
-	return {
-		apiBaseUrl: parseApiBaseUrl(env.NEXT_PUBLIC_API_BASE_URL),
-		cesiumIonToken: readCesiumConfig(env).ionToken
-	};
+	return { apiBaseUrl: parseApiBaseUrl(env.NEXT_PUBLIC_API_BASE_URL) };
 }
 
 // The stage reads only these two values, so a missing or malformed API base URL cannot take the

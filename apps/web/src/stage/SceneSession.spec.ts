@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { FakeReleaseStep, FakeSetupStep } from '../test/FakeGlobeScene';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
 import type { SceneTarget } from './globe/camera';
 import { SceneSession, type SceneSessionOptions } from './SceneSession';
@@ -202,6 +203,85 @@ describe('SceneSession lifecycle ownership', () => {
 		expect(scene.resets).toBe(1);
 		expect(scene.destroyCount).toBe(1);
 		expect(store.getSnapshot().headingDegrees).toBeUndefined();
+	});
+});
+
+describe('SceneSession best-effort stop', () => {
+	const RELEASES: FakeReleaseStep[] = ['orientation', 'scale', 'imagery'];
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it.each(RELEASES)(
+		'still releases the rest and destroys the scene when %s throws',
+		async (step) => {
+			const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const failure = new Error(`${step} release failed`);
+			const { session, scene, store } = await readySession({ throwOnRelease: { [step]: failure } });
+			scene.emitOrientation(40);
+			scene.emitScale({ label: '1 km', meters: 1000, widthPx: 90 });
+
+			expect(() => session.stop()).not.toThrow();
+
+			expect(scene.destroyCount).toBe(1);
+			expect(scene.liveSubscriptions).toBe(0);
+			expect(store.getSnapshot()).toMatchObject({ headingDegrees: undefined, scale: undefined });
+			expect(logged).toHaveBeenCalledOnce();
+			expect(logged.mock.calls[0]?.[1]).toBe(failure);
+		}
+	);
+
+	it('destroys the scene exactly once when every release throws', async () => {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { session, scene } = await readySession({
+			throwOnRelease: {
+				orientation: new Error('orientation'),
+				scale: new Error('scale'),
+				imagery: new Error('imagery')
+			}
+		});
+
+		expect(() => session.stop()).not.toThrow();
+		session.stop();
+
+		expect(scene.destroyCount).toBe(1);
+		expect(scene.liveSubscriptions).toBe(0);
+		expect(logged.mock.calls.map(([, cause]) => (cause as Error).message)).toEqual([
+			'orientation',
+			'scale',
+			'imagery'
+		]);
+	});
+
+	it('leaves no live scene behind for the retry that follows a failing stop', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, open, session, scene } = await readySession({
+			throwOnRelease: { orientation: new Error('orientation') }
+		});
+
+		session.stop();
+		const next = open();
+		const replacement = factory.resolve(1);
+		await flush();
+
+		expect(scene.destroyCount).toBe(1);
+		expect(replacement.destroyCount).toBe(0);
+		next.stop();
+	});
+
+	it('destroys the scene of a setup failure even when a release throws', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { store, factory, session } = setup();
+		session.updateStage({ width: 800, height: 600 });
+		const scene = factory.resolve(0, {
+			throwOn: { updateStage: new Error('updateStage failed') },
+			throwOnRelease: { orientation: new Error('orientation') }
+		});
+		await flush();
+
+		expect(scene.destroyCount).toBe(1);
+		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
 	});
 });
 
@@ -459,5 +539,82 @@ describe('SceneSession imagery degradation', () => {
 		await flush();
 
 		expect(store.getSnapshot().state).toEqual({ status: 'ready', imageryDegraded: true });
+	});
+});
+
+describe('SceneSession synchronous setup failures', () => {
+	const ATTACH_STEPS: FakeSetupStep[] = [
+		'subscribeOrientation',
+		'subscribeScale',
+		'subscribeImageryHealth',
+		'updateStage'
+	];
+
+	it.each(ATTACH_STEPS)(
+		'ends in a controlled failure when %s throws during attach',
+		async (step) => {
+			const onError = vi.fn();
+			const { store, factory, session } = setup({ onError });
+			session.updateStage({ width: 800, height: 600 });
+			const failure = new Error(`${step} failed`);
+
+			const scene = factory.resolve(0, { throwOn: { [step]: failure } });
+			await flush();
+
+			expect(store.getSnapshot().state).toEqual({
+				status: 'failed',
+				failure: 'initialization-failed',
+				message: 'The 3D globe could not be loaded.'
+			});
+			expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+			expect(scene.destroyCount).toBe(1);
+			expect(scene.liveSubscriptions).toBe(0);
+		}
+	);
+
+	it('ends in a controlled failure when reveal preparation throws', async () => {
+		const onError = vi.fn();
+		const { store, factory, session } = setup({ onError });
+		session.setTarget(ACONCAGUA);
+		const failure = new Error('prepareReveal failed');
+
+		const scene = factory.resolve(0, { cinematic: true, throwOn: { prepareReveal: failure } });
+		await flush();
+
+		expect(store.getSnapshot().state).toMatchObject({
+			status: 'failed',
+			failure: 'initialization-failed'
+		});
+		expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+		expect(scene.destroyCount).toBe(1);
+		expect(scene.shown).toEqual([]);
+	});
+
+	it('stays inert after a setup failure and stops without destroying twice', async () => {
+		const { store, factory, session } = setup();
+		const scene = factory.resolve(0, { throwOn: { subscribeScale: new Error('boom') } });
+		await flush();
+
+		session.setTarget(FITZ_ROY);
+		session.updateStage({ width: 10, height: 10 });
+		session.stop();
+		await flush();
+
+		expect(scene.shown).toEqual([]);
+		expect(scene.destroyCount).toBe(1);
+		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
+		expect(session.resetView()).toBe('unavailable');
+	});
+
+	it('does not publish a failure for a scene that failed after the session stopped', async () => {
+		const onError = vi.fn();
+		const { store, factory, session } = setup({ onError });
+		session.stop();
+
+		factory.resolve(0, { throwOn: { subscribeScale: new Error('boom') } });
+		await flush();
+
+		expect(onError).not.toHaveBeenCalled();
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
 	});
 });

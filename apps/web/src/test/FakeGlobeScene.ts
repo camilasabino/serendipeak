@@ -29,7 +29,18 @@ export interface PendingShow {
 	reject(reason: unknown): void;
 }
 
+export type FakeSetupStep =
+	| 'prepareReveal'
+	| 'updateStage'
+	| 'subscribeOrientation'
+	| 'subscribeScale'
+	| 'subscribeImageryHealth';
+
+export type FakeReleaseStep = 'orientation' | 'scale' | 'imagery';
+
 export interface FakeGlobeSceneOptions {
+	throwOn?: Partial<Record<FakeSetupStep, Error>>;
+	throwOnRelease?: Partial<Record<FakeReleaseStep, Error>>;
 	cinematic?: boolean;
 	holdShow?: boolean;
 	holdViewReady?: boolean;
@@ -90,6 +101,8 @@ export class FakeGlobeScene implements GlobeScene {
 	holdViewReady: boolean;
 
 	private readonly onDestroy: (() => void) | undefined;
+	private readonly throwOn: Partial<Record<FakeSetupStep, Error>>;
+	private readonly throwOnRelease: Partial<Record<FakeReleaseStep, Error>>;
 	private readonly viewWaiters: Deferred<void>[] = [];
 	private readonly orientation = new ReplaceableSubscription<ViewOrientation>(() => this.destroyed);
 	private readonly scale = new ReplaceableSubscription<ScaleReading>(() => this.destroyed);
@@ -97,6 +110,8 @@ export class FakeGlobeScene implements GlobeScene {
 	private degraded = false;
 
 	constructor({
+		throwOn = {},
+		throwOnRelease = {},
 		cinematic = false,
 		holdShow = false,
 		holdViewReady = false,
@@ -106,6 +121,27 @@ export class FakeGlobeScene implements GlobeScene {
 		this.holdShow = holdShow;
 		this.holdViewReady = holdViewReady;
 		this.onDestroy = onDestroy;
+		this.throwOn = throwOn;
+		this.throwOnRelease = throwOnRelease;
+	}
+
+	// The subscription ends first, as a real release that fails halfway would leave it.
+	private failingRelease(step: FakeReleaseStep, release: () => void): () => void {
+		const error = this.throwOnRelease[step];
+		if (!error) {
+			return release;
+		}
+		return () => {
+			release();
+			throw error;
+		};
+	}
+
+	private failIfRequested(step: FakeSetupStep): void {
+		const error = this.throwOn[step];
+		if (error) {
+			throw error;
+		}
 	}
 
 	get destroyed(): boolean {
@@ -117,6 +153,7 @@ export class FakeGlobeScene implements GlobeScene {
 	}
 
 	prepareReveal(target: SceneTarget): boolean {
+		this.failIfRequested('prepareReveal');
 		this.prepared.push(target);
 		return !this.destroyed && this.cinematic;
 	}
@@ -147,6 +184,7 @@ export class FakeGlobeScene implements GlobeScene {
 	}
 
 	updateStage(size: StageSize): void {
+		this.failIfRequested('updateStage');
 		if (!this.destroyed) {
 			this.stages.push(size);
 		}
@@ -161,14 +199,17 @@ export class FakeGlobeScene implements GlobeScene {
 	}
 
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void {
-		return this.orientation.subscribe(listener);
+		this.failIfRequested('subscribeOrientation');
+		return this.failingRelease('orientation', this.orientation.subscribe(listener));
 	}
 
 	subscribeScale(listener: (reading: ScaleReading | undefined) => void): () => void {
-		return this.scale.subscribe(listener);
+		this.failIfRequested('subscribeScale');
+		return this.failingRelease('scale', this.scale.subscribe(listener));
 	}
 
 	subscribeImageryHealth(listener: (degraded: boolean) => void): () => void {
+		this.failIfRequested('subscribeImageryHealth');
 		if (this.destroyed) {
 			return () => {};
 		}
@@ -176,9 +217,9 @@ export class FakeGlobeScene implements GlobeScene {
 		if (this.degraded) {
 			listener(true);
 		}
-		return () => {
+		return this.failingRelease('imagery', () => {
 			this.imagery.delete(listener);
-		};
+		});
 	}
 
 	destroy(): void {
