@@ -2,12 +2,7 @@ import type { Coordinates } from '../api/contract';
 
 const COORDINATE_DECIMALS = 4;
 
-const integerFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const countryList = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
-
-export function formatElevation(meters: number): string {
-	return `${integerFormat.format(meters)} m`;
-}
 
 function formatAxis(
 	value: number,

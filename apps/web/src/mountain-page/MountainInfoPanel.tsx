@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import type { Mountain } from '../api/contract';
 import { ExternalLink } from '../links/ExternalLink';
-import { formatCoordinates, formatCountries, formatElevation } from './format';
+import { formatElevation } from '../formatElevation';
+import { formatCoordinates, formatCountries } from './format';
 import { googleMapsUrl } from './googleMaps';
 import styles from './MountainInfoPanel.module.css';
 

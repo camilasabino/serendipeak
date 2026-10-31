@@ -1,19 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCoordinates, formatCountries, formatElevation } from './format';
-
-describe('formatElevation', () => {
-	it('groups thousands with a comma and appends the unit', () => {
-		expect(formatElevation(6961)).toBe('6,961 m');
-	});
-
-	it('does not add a separator below one thousand', () => {
-		expect(formatElevation(852)).toBe('852 m');
-	});
-
-	it('rounds fractional meters', () => {
-		expect(formatElevation(8848.86)).toBe('8,849 m');
-	});
-});
+import { formatCoordinates, formatCountries } from './format';
 
 describe('formatCoordinates', () => {
 	it('labels north and east', () => {
