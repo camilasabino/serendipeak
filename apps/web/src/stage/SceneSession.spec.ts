@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FakeReleaseStep, FakeSetupStep } from '../test/FakeGlobeScene';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
 import type { SceneTarget } from './globe/camera';
-import { SceneSession, type SceneSessionOptions } from './SceneSession';
+import {
+	SceneSession,
+	type PresentationObserver,
+	type PresentationOutcome,
+	type SceneSessionOptions
+} from './SceneSession';
 import { SceneStore } from './SceneStore';
+import { TransitionCoordinator } from './TransitionCoordinator';
 
 const ACONCAGUA: SceneTarget = {
 	slug: 'aconcagua',
@@ -616,5 +622,211 @@ describe('SceneSession synchronous setup failures', () => {
 
 		expect(onError).not.toHaveBeenCalled();
 		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+	});
+});
+
+class RecordingObserver implements PresentationObserver {
+	readonly log: string[] = [];
+
+	presenting(target: SceneTarget): void {
+		this.log.push(`presenting:${target.slug}`);
+	}
+
+	presented(target: SceneTarget, outcome: PresentationOutcome): void {
+		this.log.push(`presented:${target.slug}:${outcome}`);
+	}
+
+	ended(): void {
+		this.log.push('ended');
+	}
+}
+
+async function observed(sceneOptions = {}, target: SceneTarget | undefined = ACONCAGUA) {
+	const observer = new RecordingObserver();
+	const context = setup({ observer });
+	if (target) {
+		context.session.setTarget(target);
+	}
+	const scene = context.factory.resolve(0, sceneOptions);
+	await flush();
+	return { ...context, scene, observer };
+}
+
+describe('SceneSession presentation reports', () => {
+	it('reports the initial presentation and its arrival', async () => {
+		const { observer } = await observed();
+
+		expect(observer.log).toEqual(['presenting:aconcagua', 'presented:aconcagua:arrived']);
+	});
+
+	it('reports a camera failure of the presentation that is still current', async () => {
+		const { observer, scene } = await observed({ holdShow: true });
+
+		scene.pendingShows[0]!.reject(new Error('camera'));
+		await flush();
+
+		expect(observer.log).toEqual(['presenting:aconcagua', 'presented:aconcagua:failed']);
+	});
+
+	it('reports a camera that was interrupted without being superseded', async () => {
+		const { observer, scene } = await observed({ holdShow: true });
+
+		scene.pendingShows[0]!.resolve({ status: 'interrupted' });
+		await flush();
+
+		expect(observer.log).toEqual(['presenting:aconcagua', 'presented:aconcagua:interrupted']);
+	});
+
+	it('reports a later target as a new presentation of the same scene', async () => {
+		const { observer, session } = await observed();
+
+		session.setTarget(FITZ_ROY);
+		await flush();
+
+		expect(observer.log).toEqual([
+			'presenting:aconcagua',
+			'presented:aconcagua:arrived',
+			'presenting:fitz-roy',
+			'presented:fitz-roy:arrived'
+		]);
+	});
+
+	it('never reports the outcome of a superseded presentation', async () => {
+		const { observer, session, scene } = await observed({ holdShow: true });
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		observer.log.length = 0;
+
+		session.setTarget(FITZ_ROY);
+		session.setTarget(ACONCAGUA);
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(observer.log).toEqual(['presenting:fitz-roy', 'presenting:aconcagua']);
+
+		scene.pendingShows[2]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(observer.log.at(-1)).toBe('presented:aconcagua:arrived');
+		expect(observer.log).not.toContain('presented:fitz-roy:arrived');
+	});
+
+	it('reports nothing for a target that waits for a scene that does not exist yet', () => {
+		const observer = new RecordingObserver();
+		const { session } = setup({ observer });
+
+		session.setTarget(ACONCAGUA);
+
+		expect(observer.log).toEqual([]);
+	});
+
+	it('reports the end of the session once, however often it is stopped', async () => {
+		const { observer, session } = await observed();
+		observer.log.length = 0;
+
+		session.stop();
+		session.stop();
+
+		expect(observer.log).toEqual(['ended']);
+	});
+
+	it('reports nothing for an outcome that settles after stop', async () => {
+		const { observer, session, scene } = await observed({ holdShow: true });
+		session.stop();
+		observer.log.length = 0;
+
+		scene.pendingShows[0]?.resolve({ status: 'arrived' });
+		await flush();
+		session.setTarget(FITZ_ROY);
+
+		expect(observer.log).toEqual([]);
+	});
+
+	it('reports the end when the scene fails to initialize', async () => {
+		const observer = new RecordingObserver();
+		const { factory } = setup({ observer });
+
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+
+		expect(observer.log).toEqual(['ended']);
+	});
+
+	it('reports the end when attaching a ready scene throws', async () => {
+		const observer = new RecordingObserver();
+		const { factory } = setup({ observer });
+
+		factory.resolve(0, { throwOn: { subscribeScale: new Error('boom') } });
+		await flush();
+
+		expect(observer.log).toEqual(['ended']);
+	});
+
+	it('reports a target it can never present as the end of the session', async () => {
+		const observer = new RecordingObserver();
+		const { session } = setup({ ionToken: undefined, observer });
+
+		session.setTarget(ACONCAGUA);
+
+		expect(observer.log).toEqual(['ended']);
+	});
+
+	it('reports a target set after an initialization failure as the end of the session', async () => {
+		const observer = new RecordingObserver();
+		const { session, factory } = setup({ observer });
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+		observer.log.length = 0;
+
+		session.setTarget(FITZ_ROY);
+
+		expect(observer.log).toEqual(['ended']);
+	});
+});
+
+describe('SceneSession with the transition coordinator', () => {
+	it('arrives at the destination the scene travelled to', async () => {
+		const coordinator = new TransitionCoordinator();
+		const context = setup({ observer: coordinator });
+		context.session.setTarget(ACONCAGUA);
+		const scene = context.factory.resolve(0, { holdShow: true });
+		await flush();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		const transition = coordinator.begin('fitz-roy');
+		context.session.setTarget(FITZ_ROY);
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+
+		await expect(transition.arrival).resolves.toBe('arrived');
+	});
+
+	it('supersedes the transition when another target takes over mid-travel', async () => {
+		const coordinator = new TransitionCoordinator();
+		const context = setup({ observer: coordinator });
+		context.session.setTarget(ACONCAGUA);
+		const scene = context.factory.resolve(0, { holdShow: true });
+		await flush();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		const transition = coordinator.begin('fitz-roy');
+		context.session.setTarget(FITZ_ROY);
+		context.session.setTarget(ACONCAGUA);
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+
+		await expect(transition.arrival).resolves.toBe('superseded');
+		expect(scene.destroyCount).toBe(0);
+	});
+
+	it('interrupts the transition when the session stops, keeping nothing pending', async () => {
+		const coordinator = new TransitionCoordinator();
+		const context = setup({ observer: coordinator });
+		context.session.setTarget(ACONCAGUA);
+		context.factory.resolve(0, { holdShow: true });
+		await flush();
+
+		const transition = coordinator.begin('fitz-roy');
+		context.session.stop();
+
+		await expect(transition.arrival).resolves.toBe('interrupted');
 	});
 });

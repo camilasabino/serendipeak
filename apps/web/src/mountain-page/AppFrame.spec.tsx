@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import { TestExperience } from '../test/TestExperience';
 import { AppFrame } from './AppFrame';
 import { anchorsOf, countOf, textsOf } from './test-support/markup';
 import { pageModelOf, type PageModel } from './pageModel';
@@ -15,9 +16,11 @@ function render(pageProps: object): string {
 	const content = <h1>Page</h1>;
 
 	return renderToStaticMarkup(
-		<AppFrame pageProps={pageProps} year={2031}>
-			{isMountainPage ? content : <main>{content}</main>}
-		</AppFrame>
+		<TestExperience>
+			<AppFrame pageProps={pageProps} year={2031}>
+				{isMountainPage ? content : <main>{content}</main>}
+			</AppFrame>
+		</TestExperience>
 	);
 }
 
@@ -67,19 +70,21 @@ describe('AppFrame header', () => {
 		}
 	});
 
-	it("offers today's mountain and the Explore placeholder on a permalink", () => {
+	it("offers today's mountain and a usable Explore control on a permalink", () => {
 		const html = render({ model: permalink });
 
 		expect(anchorsOf(html).map(({ text }) => text)).toContain("Today's mountain");
 		expect(textsOf(html, 'button')).toEqual(['Explore another→']);
-		expect(html).toMatch(/<button[^>]*disabled/);
+		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
+		expect(html).toContain('aria-busy="false"');
 	});
 
-	it('offers only the Explore placeholder on the daily page', () => {
+	it('offers only the Explore control on the daily page', () => {
 		const html = render({ model: dailyModel });
 
 		expect(anchorsOf(html).map(({ text }) => text)).not.toContain("Today's mountain");
 		expect(textsOf(html, 'button')).toEqual(['Explore another→']);
+		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
 	});
 
 	it.each([

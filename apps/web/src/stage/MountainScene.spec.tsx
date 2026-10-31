@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { SceneState } from './sceneState';
 import { SceneStore } from './SceneStore';
+import { TransitionCoordinator } from './TransitionCoordinator';
 import MountainScene from './MountainScene';
 import type { SceneTarget } from './globe/camera';
 
@@ -19,7 +20,9 @@ function render(state?: SceneState): string {
 		store.setState(state);
 	}
 
-	return renderToStaticMarkup(<MountainScene store={store} target={TARGET} />);
+	return renderToStaticMarkup(
+		<MountainScene store={store} target={TARGET} observer={new TransitionCoordinator()} />
+	);
 }
 
 describe('MountainScene markup', () => {
@@ -59,7 +62,9 @@ describe('MountainScene markup', () => {
 		const store = new SceneStore();
 		store.setState({ status: 'ready' });
 		store.setOrientation({ viewHeadingDegrees: 10 });
-		const html = renderToStaticMarkup(<MountainScene store={store} target={TARGET} />);
+		const html = renderToStaticMarkup(
+			<MountainScene store={store} target={TARGET} observer={new TransitionCoordinator()} />
+		);
 
 		expect(html).toMatch(/<div[^>]*><div[^>]*><\/div>.*Reset view/s);
 		expect(html).toContain('Compass. Looking 10 degrees north.');

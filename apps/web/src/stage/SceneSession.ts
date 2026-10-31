@@ -9,11 +9,23 @@ import { releaseBestEffort } from './releaseBestEffort';
 import { INITIALIZATION_FAILED_STATE } from './sceneState';
 import type { SceneStore } from './SceneStore';
 
+export type PresentationOutcome = CameraOutcome['status'];
+
+// What the session tells whoever coordinates experiences around it. Only the presentation that is
+// still current is reported, so a superseded one never reaches the observer.
+export interface PresentationObserver {
+	presenting(target: SceneTarget): void;
+	presented(target: SceneTarget, outcome: PresentationOutcome): void;
+	/** The session will present nothing further: it stopped, or it has no scene to present with. */
+	ended(): void;
+}
+
 export interface SceneSessionOptions {
 	ionToken: string | undefined;
 	createScene: (ionToken: string, signal: AbortSignal) => Promise<GlobeScene>;
 	store: SceneStore;
 	onError?: (error: unknown) => void;
+	observer?: PresentationObserver;
 }
 
 const noop = () => {};
@@ -22,6 +34,7 @@ const noop = () => {};
 export class SceneSession {
 	private readonly store: SceneStore;
 	private readonly onError: ((error: unknown) => void) | undefined;
+	private readonly observer: PresentationObserver | undefined;
 	private scene: GlobeScene | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
@@ -35,9 +48,10 @@ export class SceneSession {
 	private revealed = false;
 	private presentation = 0;
 
-	constructor({ ionToken, createScene, store, onError }: SceneSessionOptions) {
+	constructor({ ionToken, createScene, store, onError, observer }: SceneSessionOptions) {
 		this.store = store;
 		this.onError = onError;
+		this.observer = observer;
 
 		let token: string;
 		try {
@@ -53,7 +67,10 @@ export class SceneSession {
 		store.setState({ status: 'loading' });
 		this.stopScene = startScene(
 			async (signal) => createScene(token, signal),
-			(error) => this.reportInitializationFailure(error),
+			(error) => {
+				this.reportInitializationFailure(error);
+				this.observer?.ended();
+			},
 			(ready) => this.attach(ready)
 		);
 	}
@@ -65,6 +82,10 @@ export class SceneSession {
 		this.target = next;
 		if (this.scene && next) {
 			this.begin(next);
+			return;
+		}
+		if (next && this.store.getSnapshot().state.status === 'failed') {
+			this.observer?.ended();
 		}
 	}
 
@@ -90,6 +111,7 @@ export class SceneSession {
 		this.store.setOrientation(undefined);
 		this.store.setScale(undefined);
 		this.scene = undefined;
+		this.observer?.ended();
 
 		const { releaseOrientation, releaseScale, releaseImagery, stopScene } = this;
 		this.releaseOrientation = noop;
@@ -176,13 +198,15 @@ export class SceneSession {
 		this.store.setSettled(next);
 	}
 
-	private publishCamera(outcome: CameraOutcome): void {
+	private publishCamera(target: SceneTarget, outcome: CameraOutcome): void {
 		this.publishSettled(outcome.status === 'arrived');
+		this.observer?.presented(target, outcome.status);
 	}
 
 	private begin(next: SceneTarget): void {
 		const ticket = ++this.presentation;
 		this.publishSettled(false);
+		this.observer?.presenting(next);
 		if (!this.revealed) {
 			void this.presentInitial(next, ticket);
 			return;
@@ -227,11 +251,11 @@ export class SceneSession {
 		try {
 			const outcome = await ready.showMountain(next, 'initial');
 			if (this.isCurrent(ticket)) {
-				this.publishCamera(outcome);
+				this.publishCamera(next, outcome);
 			}
 		} catch (error) {
 			if (this.isCurrent(ticket)) {
-				this.publishCamera({ status: 'failed', error });
+				this.publishCamera(next, { status: 'failed', error });
 			}
 		}
 	}
@@ -246,13 +270,13 @@ export class SceneSession {
 			if (!this.isCurrent(ticket)) {
 				return;
 			}
-			this.publishCamera(outcome);
+			this.publishCamera(next, outcome);
 			await ready.whenViewReady();
 		} catch (error) {
 			if (!this.isCurrent(ticket)) {
 				return;
 			}
-			this.publishCamera({ status: 'failed', error });
+			this.publishCamera(next, { status: 'failed', error });
 			await ready.whenViewReady().catch(() => undefined);
 		}
 		if (!this.isCurrent(ticket)) {
@@ -270,11 +294,11 @@ export class SceneSession {
 		try {
 			const outcome = await ready.showMountain(next, 'next');
 			if (this.isCurrent(ticket)) {
-				this.publishCamera(outcome);
+				this.publishCamera(next, outcome);
 			}
 		} catch (error) {
 			if (this.isCurrent(ticket)) {
-				this.publishCamera({ status: 'failed', error });
+				this.publishCamera(next, { status: 'failed', error });
 			}
 		}
 	}

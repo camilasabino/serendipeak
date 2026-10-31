@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import { TestExperience } from '../test/TestExperience';
 import { MountainLayout } from './MountainLayout';
 import { MountainView } from './MountainView';
 import { countOf } from './test-support/markup';
@@ -15,9 +16,11 @@ function render(model: MountainModel): string {
 	const shown = model.kind === 'daily' ? model.daily.mountain : model.mountain;
 
 	return renderToStaticMarkup(
-		<MountainLayout model={model}>
-			<MountainView mountain={shown} daily={daily_} />
-		</MountainLayout>
+		<TestExperience>
+			<MountainLayout model={model}>
+				<MountainView mountain={shown} daily={daily_} />
+			</MountainLayout>
+		</TestExperience>
 	);
 }
 

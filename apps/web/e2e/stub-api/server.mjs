@@ -9,6 +9,9 @@ export const SCENARIOS = ['ok', 'unreachable', 'malformed', 'server-error', 'no-
 const API_PREFIX = '/api/v1/mountains/';
 const CONTROL_PREFIX = '/__control/';
 
+// The browser calls this API from the web origin, so every answer must be readable cross-origin.
+const CORS = { 'Access-Control-Allow-Origin': '*' };
+
 function fixture(name) {
 	return JSON.parse(readFileSync(new URL(name, contractsDirectory), 'utf8'));
 }
@@ -43,7 +46,7 @@ export function createStubApi() {
 
 	function handleControl(request, response, pathname) {
 		const send = (status, body) => {
-			response.writeHead(status, { 'Content-Type': 'application/json' });
+			response.writeHead(status, { 'Content-Type': 'application/json', ...CORS });
 			response.end(JSON.stringify(body));
 		};
 		const action = pathname.slice(CONTROL_PREFIX.length);
@@ -76,7 +79,7 @@ export function createStubApi() {
 		}
 
 		const send = (status, body, headers = {}) => {
-			response.writeHead(status, { 'Content-Type': 'application/json', ...headers });
+			response.writeHead(status, { 'Content-Type': 'application/json', ...CORS, ...headers });
 			response.end(typeof body === 'string' ? body : JSON.stringify(body));
 		};
 
@@ -104,7 +107,11 @@ export function createStubApi() {
 		} else if (slug === 'today') {
 			send(200, daily, headers);
 		} else if (slug === 'random') {
-			send(200, daily.mountain, headers);
+			const excluded = new URLSearchParams(search).get('exclude');
+			const eligible = [...mountainsBySlug.values()].filter(
+				(mountain) => mountain.slug !== excluded
+			);
+			send(200, eligible[0] ?? daily.mountain, headers);
 		} else {
 			const mountain = slug === null ? undefined : mountainsBySlug.get(slug);
 			send(mountain ? 200 : 404, mountain ?? notFound);

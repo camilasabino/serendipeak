@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { SceneTarget } from './globe/camera';
 import type { ResetResult } from './globe/mountainCamera';
+import type { PresentationObserver } from './SceneSession';
 import type { SceneStore, SceneSnapshot } from './SceneStore';
 import { sameSceneTarget } from './sceneTarget';
 import { StageBinding, type SceneFactory } from './StageBinding';
@@ -17,6 +18,7 @@ export interface UseStageOptions {
 	ionToken: string | undefined;
 	sceneFactory: SceneFactory;
 	target: SceneTarget | undefined;
+	observer?: PresentationObserver;
 }
 
 export interface UseStageResult {
@@ -30,7 +32,8 @@ export function useStage({
 	store,
 	ionToken,
 	sceneFactory,
-	target
+	target,
+	observer
 }: UseStageOptions): UseStageResult {
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const bindingRef = useRef<StageBinding | undefined>(undefined);
@@ -59,7 +62,8 @@ export function useStage({
 			store,
 			ionToken,
 			createScene: sceneFactory({ viewport }),
-			target: targetRef.current
+			target: targetRef.current,
+			observer
 		});
 		bindingRef.current = binding;
 
@@ -67,7 +71,7 @@ export function useStage({
 			binding.dispose();
 			bindingRef.current = undefined;
 		};
-	}, [store, ionToken, sceneFactory]);
+	}, [store, ionToken, sceneFactory, observer]);
 
 	const resetView = useCallback(() => bindingRef.current?.resetView() ?? 'unavailable', []);
 

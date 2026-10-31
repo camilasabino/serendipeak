@@ -1,7 +1,7 @@
 import type { SceneTarget } from './globe/camera';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
-import { SceneSession, type SceneSessionOptions } from './SceneSession';
+import { SceneSession, type PresentationObserver, type SceneSessionOptions } from './SceneSession';
 import { sceneCanRetry } from './experience';
 import type { SceneStore } from './SceneStore';
 
@@ -20,6 +20,7 @@ export interface StageBindingOptions {
 	createScene: CreateScene;
 	target: SceneTarget | undefined;
 	onError?: (error: unknown) => void;
+	observer?: PresentationObserver;
 }
 
 function reportInitializationFailure(error: unknown): void {
@@ -74,12 +75,13 @@ export class StageBinding {
 	}
 
 	private openSession(): SceneSession {
-		const { store, ionToken, createScene, onError } = this.options;
+		const { store, ionToken, createScene, onError, observer } = this.options;
 		const session = new SceneSession({
 			ionToken,
 			createScene,
 			store,
-			onError: onError ?? reportInitializationFailure
+			onError: onError ?? reportInitializationFailure,
+			observer
 		});
 		const { state } = store.getSnapshot();
 		if (state.status === 'failed' && state.failure === 'missing-token') {

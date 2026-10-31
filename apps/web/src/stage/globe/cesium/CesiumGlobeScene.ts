@@ -407,7 +407,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	}
 
 	private motion(): MotionPreference {
-		return motionPreference(this.reducedMotion.matches, false);
+		return motionPreference(this.reducedMotion.matches);
 	}
 
 	private measureStage(): StageSize {

@@ -28,13 +28,18 @@ const REACT_BINDINGS = [
 	'stage/MountainScene.tsx',
 	'stage/SceneStatus.tsx',
 	'stage/StageBoundary.tsx',
+	'stage/TransitionCoordinatorContext.tsx',
+	'media/ImagePreloaderContext.tsx',
 	...sources('stage/controls')
 ];
+const EXPLORE_BINDINGS = ['explore/ExploreControl.tsx', 'explore/useExplorer.ts'];
 const FORBIDDEN_FOR_BINDINGS = /^(cesium|react-dom|next)(\/|$)/;
 
-const FRAMEWORK_FREE_FILES = [...sources('stage'), ...sources('media')].filter(
-	(file) => !REACT_BINDINGS.includes(file)
-);
+const FRAMEWORK_FREE_FILES = [
+	...sources('stage'),
+	...sources('media'),
+	...sources('explore')
+].filter((file) => !REACT_BINDINGS.includes(file) && !EXPLORE_BINDINGS.includes(file));
 
 describe('framework-free scene and media modules', () => {
 	it('discovers the ported modules', () => {
@@ -42,7 +47,9 @@ describe('framework-free scene and media modules', () => {
 			expect.arrayContaining([
 				'stage/sceneState.ts',
 				'stage/globe/choreography.ts',
-				'media/preload.ts'
+				'media/preload.ts',
+				'explore/Explorer.ts',
+				'explore/navigate.ts'
 			])
 		);
 		expect(REACT_BINDINGS).toContain('stage/controls/StageControls.tsx');
@@ -73,5 +80,14 @@ describe('React bindings of the stage', () => {
 		expect(specifiers.filter((s) => FORBIDDEN_FOR_BINDINGS.test(s) || PAGE_CODE.test(s))).toEqual(
 			[]
 		);
+	});
+});
+
+describe('React bindings of Explore', () => {
+	it.each(EXPLORE_BINDINGS)('%s imports no engine or stage internals', (file) => {
+		const specifiers = importSpecifiers(readFileSync(join(SRC, file), 'utf8'));
+
+		expect(specifiers.filter((s) => /^(cesium|react-dom)(\/|$)/.test(s))).toEqual([]);
+		expect(specifiers.filter((s) => /\/stage\/(globe|Scene|Stage|use)/.test(s))).toEqual([]);
 	});
 });

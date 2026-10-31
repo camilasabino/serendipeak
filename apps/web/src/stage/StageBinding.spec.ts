@@ -3,6 +3,7 @@ import { FakeResizeObserver, type FakeViewport } from '../test/FakeResizeObserve
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
 import type { SceneTarget } from './globe/camera';
 import { SceneStore } from './SceneStore';
+import { TransitionCoordinator } from './TransitionCoordinator';
 import { StageBinding } from './StageBinding';
 
 const ACONCAGUA: SceneTarget = {
@@ -32,7 +33,14 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function setup(options: { ionToken?: string; target?: SceneTarget; store?: SceneStore } = {}) {
+function setup(
+	options: {
+		ionToken?: string;
+		target?: SceneTarget;
+		store?: SceneStore;
+		observer?: TransitionCoordinator;
+	} = {}
+) {
 	const factory = new FakeSceneFactory();
 	const store = options.store ?? new SceneStore();
 	const viewport: FakeViewport = { clientWidth: 800, clientHeight: 500 };
@@ -42,7 +50,8 @@ function setup(options: { ionToken?: string; target?: SceneTarget; store?: Scene
 			store,
 			ionToken: 'ionToken' in options ? options.ionToken : 'ion-token',
 			createScene: factory.createScene,
-			target: options.target
+			target: options.target,
+			observer: options.observer
 		});
 
 	return { factory, store, viewport, mount };
@@ -515,5 +524,79 @@ describe('StageBinding reset', () => {
 
 		expect(binding.resetView()).toBe('unavailable');
 		expect(scene.resets).toBe(0);
+	});
+});
+
+describe('StageBinding transitions', () => {
+	async function exploring() {
+		const observer = new TransitionCoordinator();
+		const context = setup({ target: ACONCAGUA, observer });
+		const binding = context.mount();
+		const scene = context.factory.resolve(0);
+		await flush();
+		scene.holdShow = true;
+		return { ...context, observer, binding, scene };
+	}
+
+	it('arrives at a destination presented through the persistent binding', async () => {
+		const { observer, binding, scene, factory } = await exploring();
+
+		const transition = observer.begin('fitz-roy');
+		binding.setTarget(FITZ_ROY);
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+
+		await expect(transition.arrival).resolves.toBe('arrived');
+		expect(factory.calls).toHaveLength(1);
+		expect(scene.destroyCount).toBe(0);
+	});
+
+	it('supersedes the transition when the target changes again, keeping the scene alive', async () => {
+		const { observer, binding, scene } = await exploring();
+
+		const transition = observer.begin('fitz-roy');
+		binding.setTarget(FITZ_ROY);
+		binding.setTarget(ACONCAGUA);
+
+		await expect(transition.arrival).resolves.toBe('superseded');
+		expect(scene.destroyCount).toBe(0);
+	});
+
+	it('interrupts the transition when the stage is disposed', async () => {
+		const { observer, binding } = await exploring();
+
+		const transition = observer.begin('fitz-roy');
+		binding.dispose();
+
+		await expect(transition.arrival).resolves.toBe('interrupted');
+	});
+
+	it('interrupts the transition when retry replaces a failed session and presents again', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const observer = new TransitionCoordinator();
+		const { factory, mount } = setup({ target: ACONCAGUA, observer });
+		const binding = mount();
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+
+		const transition = observer.begin('fitz-roy');
+		binding.retry();
+		factory.resolve(1);
+		await flush();
+
+		await expect(transition.arrival).resolves.toBe('interrupted');
+	});
+
+	it('does not let a destination chosen on a failed stage hang the transition', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const observer = new TransitionCoordinator();
+		const { factory, mount } = setup({ target: ACONCAGUA, observer });
+		const binding = mount();
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+
+		const transition = observer.begin('fitz-roy');
+		binding.setTarget(FITZ_ROY);
+
+		await expect(transition.arrival).resolves.toBe('interrupted');
 	});
 });

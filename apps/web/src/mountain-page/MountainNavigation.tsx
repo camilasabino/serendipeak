@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { ExplorePlaceholder } from '../shell/ExplorePlaceholder';
+import { ExploreControl } from '../explore/ExploreControl';
 import styles from './MountainNavigation.module.css';
 import { TODAY_LINK_LABEL } from './pageCopy';
-import type { MountainModel } from './pageModel';
+import { mountainOf, type MountainModel } from './pageModel';
 
 export function MountainNavigation({ model }: { model: MountainModel }) {
 	return (
@@ -12,7 +12,7 @@ export function MountainNavigation({ model }: { model: MountainModel }) {
 					{TODAY_LINK_LABEL}
 				</Link>
 			)}
-			<ExplorePlaceholder />
+			<ExploreControl slug={mountainOf(model).slug} />
 		</>
 	);
 }

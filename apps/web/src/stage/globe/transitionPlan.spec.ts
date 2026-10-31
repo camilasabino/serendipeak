@@ -75,17 +75,12 @@ const DISTANCES_KM = [
 ];
 
 describe('motionPreference', () => {
-	it('plays the full choreography only when nothing asks for direct placement', () => {
-		expect(motionPreference(false, false)).toBe('full');
+	it('plays the full choreography unless the visitor prefers reduced motion', () => {
+		expect(motionPreference(false)).toBe('full');
 	});
 
 	it('places directly for reduced motion', () => {
-		expect(motionPreference(true, false)).toBe('direct');
-	});
-
-	it('places directly while the camera preview editor is active', () => {
-		expect(motionPreference(false, true)).toBe('direct');
-		expect(motionPreference(true, true)).toBe('direct');
+		expect(motionPreference(true)).toBe('direct');
 	});
 });
 

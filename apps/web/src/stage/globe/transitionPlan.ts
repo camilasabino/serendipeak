@@ -4,11 +4,8 @@ import { SUMMIT_MARKER_STYLE } from './marker';
 
 export type MotionPreference = 'full' | 'direct';
 
-export function motionPreference(
-	reducedMotion: boolean,
-	cameraEditorActive: boolean
-): MotionPreference {
-	return reducedMotion || cameraEditorActive ? 'direct' : 'full';
+export function motionPreference(reducedMotion: boolean): MotionPreference {
+	return reducedMotion ? 'direct' : 'full';
 }
 
 export type TransitionPlan = { mode: 'direct' } | ({ mode: 'glide' } & GlidePlan);

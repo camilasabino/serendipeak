@@ -5,6 +5,7 @@ import { sceneCanRetry } from './experience';
 import type { SceneTarget } from './globe/camera';
 import { StageControls } from './controls/StageControls';
 import styles from './MountainScene.module.css';
+import type { PresentationObserver } from './SceneSession';
 import type { SceneStore } from './SceneStore';
 import { SceneStatus } from './SceneStatus';
 import { useStage } from './useStage';
@@ -24,14 +25,16 @@ const SCENE_FACTORY = cesiumSceneFactory({
 interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
+	observer: PresentationObserver;
 }
 
-export default function MountainScene({ store, target }: MountainSceneProps) {
+export default function MountainScene({ store, target, observer }: MountainSceneProps) {
 	const { viewportRef, snapshot, resetView, retry } = useStage({
 		store,
 		ionToken: ION_TOKEN,
 		sceneFactory: SCENE_FACTORY,
-		target
+		target,
+		observer
 	});
 	const stageRef = useRef<HTMLDivElement>(null);
 	const fullscreen = useStageFullscreen(stageRef);
