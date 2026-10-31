@@ -817,6 +817,32 @@ describe('SceneSession with the transition coordinator', () => {
 		expect(scene.destroyCount).toBe(0);
 	});
 
+	it('lets only the current presentation of a repeated mountain complete its transition', async () => {
+		const coordinator = new TransitionCoordinator();
+		const context = setup({ observer: coordinator });
+		context.session.setTarget(ACONCAGUA);
+		const scene = context.factory.resolve(0, { holdShow: true });
+		await flush();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		context.session.setTarget(FITZ_ROY);
+		context.session.setTarget(ACONCAGUA);
+		const transition = coordinator.begin('fitz-roy');
+		context.session.setTarget(FITZ_ROY);
+
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(await Promise.race([transition.arrival, Promise.resolve('pending')])).toBe('pending');
+
+		scene.pendingShows[2]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(await Promise.race([transition.arrival, Promise.resolve('pending')])).toBe('pending');
+
+		scene.pendingShows[3]!.resolve({ status: 'failed', error: new Error('current') });
+		await expect(transition.arrival).resolves.toBe('failed');
+	});
+
 	it('interrupts the transition when the session stops, keeping nothing pending', async () => {
 		const coordinator = new TransitionCoordinator();
 		const context = setup({ observer: coordinator });

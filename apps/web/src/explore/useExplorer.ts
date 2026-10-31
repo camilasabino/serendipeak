@@ -4,7 +4,7 @@ import { useMountainApi } from '../api/MountainApiContext';
 import { useImagePreloader } from '../media/ImagePreloaderContext';
 import { useTransitionCoordinator } from '../stage/TransitionCoordinatorContext';
 import { Explorer } from './Explorer';
-import { createNavigate } from './navigate';
+import { bindRouteChanges, createNavigate } from './navigate';
 
 // One explorer per mounted control. Cancelling on cleanup rather than discarding keeps it usable
 // when Strict Mode mounts the control a second time.
@@ -16,7 +16,14 @@ export function useExplorer(): Explorer {
 		() => new Explorer({ api, coordinator, preloader, navigate: createNavigate(() => Router) })
 	);
 
-	useEffect(() => () => explorer.cancel(), [explorer]);
+	useEffect(() => {
+		const release = bindRouteChanges(Router.events, explorer.routeChangeStarted);
+
+		return () => {
+			release();
+			explorer.cancel();
+		};
+	}, [explorer]);
 
 	return explorer;
 }

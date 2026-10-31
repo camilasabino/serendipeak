@@ -2,6 +2,7 @@ import type { RandomMountainResult } from '../api/contract';
 import type { MountainApi } from '../api/MountainApi';
 import { prefetchPrimaryImage, type ImagePreloader } from '../media/preload';
 import type { Transition, TransitionCoordinator } from '../stage/TransitionCoordinator';
+import { mountainHref } from './navigate';
 import { API_ERROR_MESSAGE, NO_ELIGIBLE_MESSAGE, UNREACHABLE_MESSAGE } from './exploreCopy';
 
 export type ExploreState =
@@ -18,6 +19,8 @@ export interface ExplorerOptions {
 
 interface Run {
 	transition?: Transition;
+	/** The route this run asked the router for; the route change it causes is not a competitor. */
+	route?: string;
 }
 
 const IDLE: ExploreState = { status: 'idle' };
@@ -82,6 +85,14 @@ export class Explorer {
 		}
 	}
 
+	// Any route change the run did not ask for supersedes it. Lookup and photo warm-up cannot be
+	// aborted, so a late completion is dropped by the run identity check instead.
+	readonly routeChangeStarted = (url: string): void => {
+		if (this.run && this.run.route !== url) {
+			this.cancel();
+		}
+	};
+
 	// Leaves the explorer usable again: a remounted control (Strict Mode) reuses the same instance.
 	cancel(): void {
 		const run = this.run;
@@ -107,6 +118,7 @@ export class Explorer {
 
 		const transition = coordinator.begin(mountain.slug);
 		run.transition = transition;
+		run.route = mountainHref(mountain.slug);
 		const navigated = await navigate(mountain.slug);
 		if (navigated) {
 			await transition.arrival;

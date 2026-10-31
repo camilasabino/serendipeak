@@ -8,7 +8,9 @@ interface Named {
 
 const ACONCAGUA = fixture<Named>('mountain-complete.json');
 const BARE_PEAK = fixture<Named>('mountain-minimal.json');
+const OLYMPUS = fixture<Named>('mountain-sparse.json');
 const DAILY = fixture<{ mountain: Named }>('daily-mountain.json').mountain;
+const BARE_PEAK_RECORD = fixture<unknown>('mountain-minimal.json');
 
 const RANDOM_ENDPOINT = '**/api/v1/mountains/random**';
 
@@ -141,4 +143,177 @@ test.describe('@nogl Explore', () => {
 			expect(watched.pageErrors).toEqual([]);
 		});
 	}
+});
+
+type NextWindow = Window & { next?: { router: { push(url: string): Promise<boolean> } } };
+
+function deferred() {
+	let release!: () => void;
+	const released = new Promise<void>((resolve) => (release = resolve));
+
+	return { release, released };
+}
+
+// Holds the destination choice open and answers it with Bare Peak once released.
+async function holdRandom(page: Page) {
+	const gate = deferred();
+	const requests: string[] = [];
+	await page.route(RANDOM_ENDPOINT, async (route: Route) => {
+		requests.push(new URL(route.request().url()).search);
+		await gate.released;
+		await route.fulfill({
+			json: BARE_PEAK_RECORD,
+			headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
+		});
+	});
+
+	return { release: gate.release, requests };
+}
+
+async function pushRoute(page: Page, url: string) {
+	await page.evaluate((target) => {
+		void (window as NextWindow).next!.router.push(target);
+	}, url);
+}
+
+async function expectSettledOn(page: Page, mountain: Named, path = `/mountains/${mountain.slug}`) {
+	await expect(page).toHaveURL(new RegExp(`${path}$`));
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText(mountain.name);
+	await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'false');
+	await expect(page.locator('header').getByRole('alert')).toHaveCount(0);
+}
+
+// Negative evidence needs a settled network, not a sleep: the late answer must have been consumed.
+async function expectStaleAnswerConsumed(page: Page) {
+	await page.waitForLoadState('networkidle');
+}
+
+test.describe('@nogl Explore superseded by navigation', () => {
+	test('a link followed while the destination is being chosen wins over the late answer', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${OLYMPUS.slug}`);
+		await page.locator('main').evaluate((main) => main.setAttribute('data-probe', 'persistent'));
+		const documentsBefore = watched.documents.length;
+
+		await exploreButton(page).click();
+		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		await page.getByRole('link', { name: /today/i }).click();
+
+		await expectSettledOn(page, DAILY, '');
+		random.release();
+		await expectStaleAnswerConsumed(page);
+		await expectSettledOn(page, DAILY, '');
+		await expect(page.locator('main[data-probe="persistent"]')).toHaveCount(1);
+		expect(watched.documents.length).toBe(documentsBefore);
+		expect(random.requests).toEqual([`?exclude=${OLYMPUS.slug}`]);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('a permalink pushed while the destination is being chosen wins and Explore stays usable', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+		await exploreButton(page).click();
+		await pushRoute(page, `/mountains/${OLYMPUS.slug}`);
+		await expectSettledOn(page, OLYMPUS);
+		random.release();
+		await expectStaleAnswerConsumed(page);
+
+		await expectSettledOn(page, OLYMPUS);
+		await exploreButton(page).click();
+		await expectSettledOn(page, BARE_PEAK);
+		expect(random.requests).toEqual([`?exclude=${ACONCAGUA.slug}`, `?exclude=${OLYMPUS.slug}`]);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('browser Back while the destination is being chosen wins over the late answer', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+		await pushRoute(page, `/mountains/${OLYMPUS.slug}`);
+		await expectSettledOn(page, OLYMPUS);
+
+		await exploreButton(page).click();
+		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		await page.goBack();
+
+		await expectSettledOn(page, ACONCAGUA);
+		random.release();
+		await expectStaleAnswerConsumed(page);
+		await expectSettledOn(page, ACONCAGUA);
+
+		await exploreButton(page).click();
+		await expectSettledOn(page, BARE_PEAK);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('a navigation that replaces Explore’s own route change while it loads wins', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const data = deferred();
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+		await page.route(`**/_next/data/**/mountains/${BARE_PEAK.slug}.json*`, async (route) => {
+			await data.released;
+			await route.continue();
+		});
+
+		await exploreButton(page).click();
+		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		await pushRoute(page, `/mountains/${OLYMPUS.slug}`);
+
+		await expectSettledOn(page, OLYMPUS);
+		data.release();
+		await expectStaleAnswerConsumed(page);
+		await expectSettledOn(page, OLYMPUS);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('a navigation to the destination Explore chose leaves one coherent page', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+		await exploreButton(page).click();
+		await pushRoute(page, `/mountains/${BARE_PEAK.slug}`);
+		await expectSettledOn(page, BARE_PEAK);
+		random.release();
+		await expectStaleAnswerConsumed(page);
+
+		await expectSettledOn(page, BARE_PEAK);
+		await page.goBack();
+		await expectSettledOn(page, ACONCAGUA);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('does not wait for the destination photograph, which can still be loading', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		const photo = deferred();
+		const photoRequests: string[] = [];
+		await page.route(/^https:\/\/(upload|thumb)\.wikimedia\.org\//, async (route) => {
+			photoRequests.push(route.request().url());
+			await photo.released;
+			await route.abort('blockedbyclient');
+		});
+		await page.goto(`/mountains/${BARE_PEAK.slug}`);
+
+		await exploreButton(page).click();
+
+		await expectSettledOn(page, ACONCAGUA);
+		await expect.poll(() => photoRequests.length).toBeGreaterThan(0);
+		photo.release();
+		expect(watched.pageErrors).toEqual([]);
+	});
 });

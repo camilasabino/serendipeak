@@ -607,3 +607,214 @@ describe('Explorer destination photo preload', () => {
 		expect(images).toEqual([]);
 	});
 });
+
+describe('Explorer route supersession', () => {
+	const OWN_ROUTE = '/mountains/mount-olympus';
+
+	function pendingLookup() {
+		const api = new FakeMountainApi();
+		const lookup = createDeferred<RandomMountainResult>();
+		api.getRandomMountain = (exclude) => {
+			api.getRandomMountainCalls.push(exclude);
+			return lookup.promise;
+		};
+
+		return { api, lookup };
+	}
+
+	it('lets a navigation that starts while the destination is being fetched win', async () => {
+		const { api, lookup } = pendingLookup();
+		const { explorer, navigations, images, onError, states } = setup({ api });
+		const exploring = explorer.explore('aconcagua');
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		lookup.resolve({ kind: 'found', mountain: OLYMPUS });
+		await exploring;
+
+		expect(navigations).toEqual([]);
+		expect(images).toEqual([]);
+		expect(onError).not.toHaveBeenCalled();
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+	});
+
+	it('does not report a failure that arrives after a navigation took over', async () => {
+		const { api, lookup } = pendingLookup();
+		const { explorer, onError } = setup({ api });
+		const exploring = explorer.explore('aconcagua');
+
+		explorer.routeChangeStarted('/');
+		lookup.resolve({ kind: 'api-error' } as RandomMountainResult);
+		await exploring;
+
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it('is usable again as soon as a navigation took over, before the lookup settles', async () => {
+		const { api, lookup } = pendingLookup();
+		const { explorer, states } = setup({ api });
+		void explorer.explore('aconcagua');
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+		lookup.resolve({ kind: 'found', mountain: OLYMPUS });
+	});
+
+	it('ignores the route change its own navigation causes', async () => {
+		const { navigate, navigation } = pendingNavigation();
+		const { explorer, coordinator, states } = setup({ navigate });
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.routeChangeStarted(OWN_ROUTE);
+
+		expect(explorer.getSnapshot()).toEqual({ status: 'loading' });
+		navigation.resolve(true);
+		travelTo(coordinator, OLYMPUS);
+		await exploring;
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+	});
+
+	it('lets a navigation that replaces its in-flight navigation win', async () => {
+		const { navigate, navigation, requested } = pendingNavigation();
+		const { explorer, coordinator, onError } = setup({ navigate });
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		navigation.resolve(false);
+		await exploring;
+		travelTo(coordinator, ACONCAGUA);
+
+		expect(requested).toEqual(['mount-olympus']);
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it('releases its transition when a navigation takes over before the router settled', async () => {
+		const { navigate, navigation } = pendingNavigation();
+		const coordinator = new TransitionCoordinator();
+		const transitions: Transition[] = [];
+		const begin = coordinator.begin.bind(coordinator);
+		coordinator.begin = (destination) => {
+			const transition = begin(destination);
+			transitions.push(transition);
+			return transition;
+		};
+		const explorer = new Explorer({
+			api: new FakeMountainApi({ random: { kind: 'found', mountain: OLYMPUS } }),
+			coordinator,
+			preloader: new ImagePreloader({ create: () => undefined }),
+			navigate
+		});
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		navigation.resolve(true);
+		await exploring;
+
+		await expect(transitions[0]?.arrival).resolves.toBe('interrupted');
+	});
+
+	it('lets a navigation that starts while the scene is travelling win', async () => {
+		const { explorer, coordinator, onError, states } = setup();
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+		coordinator.presenting(target(OLYMPUS));
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		await exploring;
+
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it('does nothing when no exploration is running', () => {
+		const { explorer, states } = setup();
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+
+		expect(states).toEqual([]);
+	});
+
+	it('does not touch the run that replaced a superseded one', async () => {
+		const api = new FakeMountainApi({ random: { kind: 'found', mountain: OLYMPUS } });
+		const { explorer, coordinator } = setup({ api });
+		void explorer.explore('aconcagua');
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		const second = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.routeChangeStarted(OWN_ROUTE);
+		travelTo(coordinator, OLYMPUS);
+		await second;
+
+		expect(api.getRandomMountainCalls).toEqual(['aconcagua', 'aconcagua']);
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+	});
+
+	it('keeps observing a lookup failure that is not a cancellation, even when it arrives late', async () => {
+		const boom = new Error('network layer bug');
+		const api = new FakeMountainApi();
+		const lookup = createDeferred<RandomMountainResult>();
+		api.getRandomMountain = () => lookup.promise;
+		const { explorer, onError } = setup({ api });
+		const exploring = explorer.explore('aconcagua');
+		explorer.routeChangeStarted('/mountains/aconcagua');
+
+		lookup.reject(boom);
+		await exploring;
+
+		expect(onError).toHaveBeenCalledExactlyOnceWith(boom);
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+	});
+
+	it('is idempotent when a navigation and a disposal both cancel the same run', async () => {
+		const { api, lookup } = pendingLookup();
+		const { explorer, states } = setup({ api });
+		const exploring = explorer.explore('aconcagua');
+
+		explorer.routeChangeStarted('/mountains/aconcagua');
+		explorer.cancel();
+		explorer.cancel();
+		lookup.resolve({ kind: 'found', mountain: OLYMPUS });
+		await exploring;
+
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+	});
+});
+
+describe('Explorer disposal while busy', () => {
+	it('stops a run waiting for the router, and ignores the route it reaches afterwards', async () => {
+		const { navigate, navigation } = pendingNavigation();
+		const { explorer, coordinator, states } = setup({ navigate });
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.cancel();
+		navigation.resolve(true);
+		travelTo(coordinator, OLYMPUS);
+		await exploring;
+
+		expect(states.map((state) => state.status)).toEqual(['loading', 'idle']);
+	});
+
+	it('does not report a router failure that arrives after disposal as a local failure', async () => {
+		const boom = new Error('router bug');
+		const { navigate, navigation } = pendingNavigation();
+		const { explorer, onError } = setup({ navigate });
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.cancel();
+		navigation.reject(boom);
+		await exploring;
+
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
+		expect(onError).toHaveBeenCalledExactlyOnceWith(boom);
+	});
+});

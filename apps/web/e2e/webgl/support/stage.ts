@@ -22,6 +22,8 @@ export interface ContractMountain {
 
 export const ACONCAGUA = fixture<ContractMountain>('mountain-complete.json');
 export const OLYMPUS = fixture<ContractMountain>('mountain-sparse.json');
+// No stored camera: the pose is derived, so tests identify it by route and heading only.
+export const BARE_PEAK = fixture<Pick<ContractMountain, 'slug' | 'name'>>('mountain-minimal.json');
 
 // BF-SCENE02 tolerances for a rendered canonical pose.
 export const CAMERA_TOLERANCE = {

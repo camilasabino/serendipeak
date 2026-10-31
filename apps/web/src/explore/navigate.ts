@@ -24,3 +24,15 @@ export function createNavigate(router: () => RoutePusher): (slug: string) => Pro
 		}
 	};
 }
+
+export interface RouteEvents {
+	on(event: 'routeChangeStart', handler: (url: string) => void): void;
+	off(event: 'routeChangeStart', handler: (url: string) => void): void;
+}
+
+// Observes only: the router is never intercepted, so unrelated navigation behaves as before.
+export function bindRouteChanges(events: RouteEvents, started: (url: string) => void): () => void {
+	events.on('routeChangeStart', started);
+
+	return () => events.off('routeChangeStart', started);
+}

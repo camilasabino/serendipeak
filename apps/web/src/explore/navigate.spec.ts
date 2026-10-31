@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createNavigate, mountainHref } from './navigate';
+import { bindRouteChanges, createNavigate, mountainHref, type RouteEvents } from './navigate';
 
 function cancelled(): Error {
 	return Object.assign(new Error('Route Cancelled'), { cancelled: true });
@@ -58,5 +58,56 @@ describe('createNavigate', () => {
 		const navigate = createNavigate(() => ({ push: () => Promise.reject({ cancelled: true }) }));
 
 		await expect(navigate('fitz-roy')).rejects.toEqual({ cancelled: true });
+	});
+});
+
+describe('bindRouteChanges', () => {
+	function fakeEvents() {
+		const handlers = new Map<string, Set<(url: string) => void>>();
+		const events: RouteEvents = {
+			on: (event, handler) => {
+				handlers.set(event, (handlers.get(event) ?? new Set()).add(handler));
+			},
+			off: (event, handler) => {
+				handlers.get(event)?.delete(handler);
+			}
+		};
+		const emit = (event: string, url: string) => handlers.get(event)?.forEach((h) => h(url));
+
+		return { events, emit, listening: (event: string) => handlers.get(event)?.size ?? 0 };
+	}
+
+	it('reports the url of every route change as it starts', () => {
+		const { events, emit } = fakeEvents();
+		const started = vi.fn();
+		bindRouteChanges(events, started);
+
+		emit('routeChangeStart', '/mountains/aconcagua');
+		emit('routeChangeStart', '/');
+
+		expect(started.mock.calls).toEqual([['/mountains/aconcagua'], ['/']]);
+	});
+
+	it('listens to route starts only', () => {
+		const { events, emit } = fakeEvents();
+		const started = vi.fn();
+		bindRouteChanges(events, started);
+
+		emit('routeChangeComplete', '/mountains/aconcagua');
+		emit('routeChangeError', '/mountains/aconcagua');
+
+		expect(started).not.toHaveBeenCalled();
+	});
+
+	it('stops reporting once released', () => {
+		const { events, emit, listening } = fakeEvents();
+		const started = vi.fn();
+		const release = bindRouteChanges(events, started);
+
+		release();
+		emit('routeChangeStart', '/');
+
+		expect(started).not.toHaveBeenCalled();
+		expect(listening('routeChangeStart')).toBe(0);
 	});
 });
