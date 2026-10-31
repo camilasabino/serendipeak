@@ -178,3 +178,9 @@ jobs:
 
       - name: Production gate
         run: npm run check:production-gate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: SSR HTTP tests
+        run: npm run test:ssr

@@ -169,8 +169,11 @@ uv run --env-file ../../.env python manage.py check_catalog
 ```sh
 cd apps/web
 npm ci
+echo 'NEXT_PUBLIC_API_BASE_URL=http://localhost:8000' > .env.local
 npm run dev
 ```
+
+`NEXT_PUBLIC_API_BASE_URL` is required at build time because Next inlines it; the server-side pages read it through `readPublicConfig`. A missing or invalid value fails the request with a 500 instead of rendering.
 
 | Script | Purpose |
 |---|---|
@@ -178,9 +181,10 @@ npm run dev
 | `npm run typecheck` | `tsc --noEmit`, strict |
 | `npm test` | Vitest unit tests (`src/**/*.spec.ts`) |
 | `npm run build` | Next production build |
+| `npm run test:ssr` | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
 | `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build` |
 
-`e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
+`e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `POST /__control/scenario/<ok|unreachable|malformed|server-error|no-eligible>` switches every API answer, `GET /__control/requests` lists the API paths requested and `POST /__control/reset` restores `ok` and clears the list. `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 
 ## Frozen contracts
 

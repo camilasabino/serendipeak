@@ -15,7 +15,8 @@
 		"typecheck": "next typegen && tsc --noEmit",
 		"test": "vitest run",
 		"check:production-gate": "node ../../scripts/production-gate.mjs .next",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr"
 	},
 	"dependencies": {
 		"next": "16.4.3",
