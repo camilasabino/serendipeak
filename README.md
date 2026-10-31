@@ -58,8 +58,11 @@ cd services/api
 uv sync
 uv run --env-file ../../.env python manage.py check
 uv run --env-file ../../.env python manage.py migrate
+uv run --env-file ../../.env python manage.py bootstrap_catalog  # first run only, see Catalog bootstrap
 uv run --env-file ../../.env python manage.py runserver
 ```
+
+`runserver` listens on `localhost:8000`.
 
 ### Health endpoint
 
@@ -169,9 +172,11 @@ uv run --env-file ../../.env python manage.py check_catalog
 ```sh
 cd apps/web
 npm ci
-echo 'NEXT_PUBLIC_API_BASE_URL=http://localhost:8000' > .env.local
+echo 'NEXT_PUBLIC_API_BASE_URL=http://localhost:8000' >> .env.local
 npm run dev
 ```
+
+To run the whole app locally, start the database, then the backend (with a bootstrapped catalog), then `npm run dev`, and open `http://localhost:3000`. The backend must be running first: without it the pages answer 500. Open the site at exactly the origin in `CORS_ALLOWED_ORIGIN` (`localhost`, not `127.0.0.1`), or the browser blocks the API calls. If `.env.local` already sets `NEXT_PUBLIC_API_BASE_URL`, edit that line instead of appending, and restart `next dev`: Next inlines the value at build time.
 
 `NEXT_PUBLIC_API_BASE_URL` is required at build time because Next inlines it; the server-side pages read it through `readPublicConfig`. A missing or invalid value fails the request with a 500 instead of rendering.
 
