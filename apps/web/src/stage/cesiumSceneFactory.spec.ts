@@ -8,7 +8,6 @@ vi.mock('./globe/cesium/CesiumGlobeScene', () => ({ CesiumGlobeScene: { create }
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 
 const ELEMENTS = {
-	stage: { name: 'stage' } as unknown as HTMLElement,
 	viewport: { name: 'viewport' } as unknown as HTMLElement
 };
 
@@ -22,7 +21,7 @@ function createScene(config: Parameters<typeof cesiumSceneFactory>[0]) {
 }
 
 describe('cesiumSceneFactory', () => {
-	it('creates the scene in the viewport, with the stage as fullscreen element, token and signal', async () => {
+	it('creates the scene in the viewport with the token and signal', async () => {
 		const signal = new AbortController().signal;
 
 		await createScene({ isDevelopment: false, imageryMode: null })('ion-token', signal);
@@ -30,7 +29,6 @@ describe('cesiumSceneFactory', () => {
 		expect(create).toHaveBeenCalledTimes(1);
 		expect(create).toHaveBeenCalledWith(
 			ELEMENTS.viewport,
-			ELEMENTS.stage,
 			expect.objectContaining({ ionToken: 'ion-token' }),
 			signal
 		);
@@ -47,7 +45,7 @@ describe('cesiumSceneFactory', () => {
 			new AbortController().signal
 		);
 
-		expect(create.mock.calls[0]?.[2]).toMatchObject({ imageryMode: expected });
+		expect(create.mock.calls[0]?.[1]).toMatchObject({ imageryMode: expected });
 	});
 
 	it('rejects an invalid imagery mode before any scene is created', async () => {
@@ -66,6 +64,6 @@ describe('cesiumSceneFactory', () => {
 			new AbortController().signal
 		);
 
-		expect(create.mock.calls[0]?.[2].exposeCameraReading).toBeUndefined();
+		expect(create.mock.calls[0]?.[1].exposeCameraReading).toBeUndefined();
 	});
 });

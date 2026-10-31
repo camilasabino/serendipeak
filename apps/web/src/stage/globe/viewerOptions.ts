@@ -7,12 +7,9 @@ export const VIEWER_OPTIONS = {
 	sceneModePicker: false,
 	infoBox: false,
 	selectionIndicator: false,
-	navigationInstructionsInitiallyVisible: false
+	navigationHelpButton: false,
+	fullscreenButton: false
 } as const;
-
-export function stageViewerOptions(stage: HTMLElement) {
-	return { ...VIEWER_OPTIONS, fullscreenElement: stage };
-}
 
 interface EntityPickingTarget {
 	screenSpaceEventHandler: { removeInputAction(type: number): void };

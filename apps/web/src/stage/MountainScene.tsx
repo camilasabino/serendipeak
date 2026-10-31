@@ -1,10 +1,13 @@
+import { useRef } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import type { SceneTarget } from './globe/camera';
+import { StageControls } from './controls/StageControls';
 import styles from './MountainScene.module.css';
 import type { SceneStore } from './SceneStore';
 import { DETAILS_AVAILABLE_MESSAGE, FAILURE_MESSAGES } from './stageCopy';
 import { useStage } from './useStage';
+import { useStageFullscreen } from './useStageFullscreen';
 
 // Next inlines NEXT_PUBLIC_* only for literal reads, so each variable is named here.
 const CESIUM_CONFIG = readCesiumConfig({
@@ -23,17 +26,20 @@ interface MountainSceneProps {
 }
 
 export default function MountainScene({ store, target }: MountainSceneProps) {
-	const { stageRef, viewportRef, snapshot } = useStage({
+	const { viewportRef, snapshot, resetView } = useStage({
 		store,
 		ionToken: ION_TOKEN,
 		sceneFactory: SCENE_FACTORY,
 		target
 	});
+	const stageRef = useRef<HTMLDivElement>(null);
+	const fullscreen = useStageFullscreen(stageRef);
 	const { state } = snapshot;
 
 	return (
 		<div ref={stageRef} className={styles.scene}>
 			<div ref={viewportRef} className={styles.viewport} />
+			<StageControls snapshot={snapshot} onReset={resetView} fullscreen={fullscreen} />
 			{state.status === 'failed' && (
 				<div role="alert" className={styles.failure}>
 					<p>{FAILURE_MESSAGES[state.failure]}</p>

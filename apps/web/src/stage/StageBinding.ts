@@ -1,10 +1,10 @@
 import type { SceneTarget } from './globe/camera';
+import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
 import { SceneSession, type SceneSessionOptions } from './SceneSession';
 import type { SceneStore } from './SceneStore';
 
 export interface StageElements {
-	stage: HTMLElement;
 	viewport: HTMLElement;
 }
 
@@ -56,6 +56,10 @@ export class StageBinding {
 		if (!this.disposed) {
 			this.session.setTarget(target);
 		}
+	}
+
+	resetView(): ResetResult {
+		return this.disposed ? 'unavailable' : this.session.resetView();
 	}
 
 	dispose(): void {

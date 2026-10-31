@@ -1,0 +1,47 @@
+.button {
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
+	border-radius: var(--sp-radius);
+	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
+	color: var(--sp-paper);
+	cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+	border-color: var(--sp-glacier-light);
+	background: var(--sp-glacier-dark);
+	color: var(--sp-paper-bright);
+}
+
+.button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.button svg {
+	width: 1.5rem;
+	height: 1.5rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.spoken {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}

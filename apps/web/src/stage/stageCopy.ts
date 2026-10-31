@@ -6,3 +6,8 @@ export const FAILURE_MESSAGES: Record<SceneFailure, string> = {
 };
 
 export const DETAILS_AVAILABLE_MESSAGE = 'The mountain details are still available.';
+
+export const RESET_VIEW_LABEL = 'Reset view';
+
+export const ENTER_FULLSCREEN_LABEL = 'Enter fullscreen';
+export const EXIT_FULLSCREEN_LABEL = 'Exit fullscreen';

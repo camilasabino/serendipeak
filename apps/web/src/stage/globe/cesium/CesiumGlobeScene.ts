@@ -19,7 +19,7 @@ import { ScaleTracker } from '../scaleTracker';
 import type { StageSize } from '../stageFrame';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
-import { disableEntityPicking, stageViewerOptions } from '../viewerOptions';
+import { VIEWER_OPTIONS, disableEntityPicking } from '../viewerOptions';
 import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
 import { SummitMarkers } from './SummitMarkers';
@@ -75,7 +75,6 @@ export class CesiumGlobeScene implements GlobeScene {
 
 	static async create(
 		container: HTMLElement,
-		stageElement: HTMLElement,
 		{ ionToken, imageryMode, exposeCameraReading }: CesiumSceneConfig,
 		signal: AbortSignal
 	): Promise<CesiumGlobeScene> {
@@ -108,7 +107,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			viewer = new cesium.Viewer(container, {
 				terrainProvider,
 				baseLayer,
-				...stageViewerOptions(stageElement)
+				...VIEWER_OPTIONS
 			});
 		} catch (error) {
 			imagery.release();

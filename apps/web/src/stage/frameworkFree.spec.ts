@@ -22,7 +22,12 @@ function importSpecifiers(source: string): string[] {
 	return [...source.matchAll(IMPORT_SPECIFIER)].map((match) => match[1]!);
 }
 
-const REACT_BINDINGS = ['stage/useStage.ts', 'stage/MountainScene.tsx'];
+const REACT_BINDINGS = [
+	'stage/useStage.ts',
+	'stage/useStageFullscreen.ts',
+	'stage/MountainScene.tsx',
+	...sources('stage/controls')
+];
 const FORBIDDEN_FOR_BINDINGS = /^(cesium|react-dom|next)(\/|$)/;
 
 const FRAMEWORK_FREE_FILES = [...sources('stage'), ...sources('media')].filter(
@@ -38,6 +43,7 @@ describe('framework-free scene and media modules', () => {
 				'media/preload.ts'
 			])
 		);
+		expect(REACT_BINDINGS).toContain('stage/controls/StageControls.tsx');
 	});
 
 	it('detects normal, side-effect and dynamic imports', () => {

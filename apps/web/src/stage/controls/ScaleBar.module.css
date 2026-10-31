@@ -1,0 +1,63 @@
+.scale {
+	position: absolute;
+	z-index: 1;
+	left: var(--scale-inset);
+	bottom: var(--scale-bottom);
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	pointer-events: none;
+	color: var(--sp-paper);
+	font-family: var(--sp-font-ui);
+	font-size: 0.75rem;
+	letter-spacing: 0.03em;
+	line-height: 1;
+}
+
+/* Must match WRAPPED_CREDITS_STAGE_PX: below it the credits wrap onto a second line. */
+@container (max-width: 379.98px) {
+	.scale {
+		bottom: var(--scale-bottom-narrow);
+	}
+}
+
+.label {
+	margin: 0;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	-webkit-text-stroke: 3px var(--sp-stage);
+	paint-order: stroke fill;
+}
+
+.bar {
+	display: block;
+	overflow: visible;
+}
+
+.casing,
+.rule {
+	fill: none;
+	stroke-linejoin: miter;
+}
+
+.casing {
+	stroke: var(--sp-stage);
+	stroke-width: 4;
+}
+
+.rule {
+	stroke: var(--sp-paper);
+	stroke-width: 2;
+}
+
+.spoken {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}

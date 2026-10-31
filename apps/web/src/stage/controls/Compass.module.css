@@ -1,0 +1,97 @@
+.compass {
+	position: absolute;
+	z-index: 1;
+	right: 0.6rem;
+	bottom: 2.35rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.16rem;
+	max-width: calc(100% - 1.2rem);
+	pointer-events: none;
+	color: var(--sp-mist);
+	font-family: var(--sp-font-ui);
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+	line-height: 1;
+}
+
+.rose {
+	width: 3.5rem;
+	height: 3.5rem;
+	overflow: visible;
+}
+
+.plate {
+	fill: var(--sp-stage);
+	stroke: color-mix(in srgb, var(--sp-mist) 42%, transparent);
+	stroke-width: 1;
+}
+
+.ticks {
+	fill: none;
+	stroke: color-mix(in srgb, var(--sp-mist) 46%, transparent);
+	stroke-width: 1;
+}
+
+.needle {
+	fill: var(--sp-glacier-light);
+}
+
+.pivot {
+	fill: var(--sp-paper);
+}
+
+.north,
+.cardinal {
+	font-family: var(--sp-font-ui);
+	text-anchor: middle;
+}
+
+.north {
+	fill: var(--sp-glacier-light);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.cardinal {
+	fill: var(--sp-mist);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.spoken {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.readout {
+	margin: 0;
+	padding: 0.16rem 0.38rem 0.14rem;
+	border: 1px solid color-mix(in srgb, var(--sp-mist) 34%, transparent);
+	border-radius: 999px;
+	background: var(--sp-stage);
+	color: var(--sp-paper);
+	font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 56rem) {
+	.compass {
+		right: 0.4rem;
+		bottom: calc(2.75rem + 12px);
+		flex-direction: row;
+		gap: 0.35rem;
+	}
+
+	.rose {
+		width: 2.75rem;
+		height: 2.75rem;
+	}
+}

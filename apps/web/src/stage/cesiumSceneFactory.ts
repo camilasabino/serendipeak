@@ -14,14 +14,13 @@ export function cesiumSceneFactory({
 	isDevelopment,
 	imageryMode
 }: CesiumStageConfig): SceneFactory {
-	return ({ stage, viewport }) =>
+	return ({ viewport }) =>
 		async (ionToken, signal) => {
 			const mode = resolveImageryMode(isDevelopment, imageryMode ?? undefined);
 			const diagnostics = E2E_DIAGNOSTICS ? await import('./e2eDiagnostics') : undefined;
 
 			return CesiumGlobeScene.create(
 				viewport,
-				stage,
 				{ ionToken, imageryMode: mode, exposeCameraReading: diagnostics?.exposeCameraReading },
 				signal
 			);

@@ -316,3 +316,77 @@ describe('store snapshots through the binding', () => {
 		expect(heard).toHaveLength(2);
 	});
 });
+
+describe('StageBinding reset', () => {
+	it('is unavailable before the scene exists and after a failed initialization', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+
+		expect(binding.resetView()).toBe('unavailable');
+
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+
+		expect(binding.resetView()).toBe('unavailable');
+	});
+
+	it('is unavailable until the presented mountain has arrived', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0, { holdShow: true });
+		await flush();
+
+		expect(binding.resetView()).toBe('unavailable');
+		expect(scene.resets).toBe(0);
+
+		scene.pendingShows[0]?.resolve({ status: 'arrived' });
+		await flush();
+
+		expect(binding.resetView()).toBe('reset');
+		expect(scene.resets).toBe(1);
+	});
+
+	it('returns the scene result without creating or destroying a scene', async () => {
+		const { factory, store, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		scene.resetResult = 'unchanged';
+		const unchanged = binding.resetView();
+		scene.resetResult = 'reset';
+		const reset = binding.resetView();
+
+		expect([unchanged, reset]).toEqual(['unchanged', 'reset']);
+		expect(scene.resets).toBe(2);
+		expect(factory.calls).toHaveLength(1);
+		expect(scene.destroyCount).toBe(0);
+		expect(store.getSnapshot().state).toMatchObject({ status: 'ready' });
+	});
+
+	it('is unavailable while the next mountain is being presented', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+		scene.holdShow = true;
+
+		binding.setTarget(FITZ_ROY);
+
+		expect(binding.resetView()).toBe('unavailable');
+		expect(scene.resets).toBe(0);
+	});
+
+	it('is unavailable after disposal', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.dispose();
+
+		expect(binding.resetView()).toBe('unavailable');
+		expect(scene.resets).toBe(0);
+	});
+});

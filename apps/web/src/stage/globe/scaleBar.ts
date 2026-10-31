@@ -11,7 +11,7 @@ export interface ScaleReading {
 }
 
 const NARROW_STAGE_PX = 560;
-const WRAPPED_CREDITS_STAGE_PX = 380;
+export const WRAPPED_CREDITS_STAGE_PX = 380;
 const BOTTOM_PX = 40;
 const WRAPPED_CREDITS_BOTTOM_PX = 58;
 const MIN_METERS = 1;

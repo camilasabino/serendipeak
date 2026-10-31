@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+	type RefObject
+} from 'react';
 import type { SceneTarget } from './globe/camera';
+import type { ResetResult } from './globe/mountainCamera';
 import type { SceneStore, SceneSnapshot } from './SceneStore';
 import { sameSceneTarget } from './sceneTarget';
 import { StageBinding, type SceneFactory } from './StageBinding';
@@ -12,9 +20,9 @@ export interface UseStageOptions {
 }
 
 export interface UseStageResult {
-	stageRef: RefObject<HTMLDivElement | null>;
 	viewportRef: RefObject<HTMLDivElement | null>;
 	snapshot: SceneSnapshot;
+	resetView: () => ResetResult;
 }
 
 export function useStage({
@@ -23,7 +31,6 @@ export function useStage({
 	sceneFactory,
 	target
 }: UseStageOptions): UseStageResult {
-	const stageRef = useRef<HTMLDivElement>(null);
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const bindingRef = useRef<StageBinding | undefined>(undefined);
 	const targetRef = useRef(target);
@@ -41,9 +48,8 @@ export function useStage({
 	}, [stableTarget]);
 
 	useEffect(() => {
-		const stage = stageRef.current;
 		const viewport = viewportRef.current;
-		if (!stage || !viewport) {
+		if (!viewport) {
 			return;
 		}
 
@@ -51,7 +57,7 @@ export function useStage({
 			viewport,
 			store,
 			ionToken,
-			createScene: sceneFactory({ stage, viewport }),
+			createScene: sceneFactory({ viewport }),
 			target: targetRef.current
 		});
 		bindingRef.current = binding;
@@ -62,5 +68,7 @@ export function useStage({
 		};
 	}, [store, ionToken, sceneFactory]);
 
-	return { stageRef, viewportRef, snapshot };
+	const resetView = useCallback(() => bindingRef.current?.resetView() ?? 'unavailable', []);
+
+	return { viewportRef, snapshot, resetView };
 }

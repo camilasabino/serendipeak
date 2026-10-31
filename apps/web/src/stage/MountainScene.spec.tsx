@@ -38,6 +38,25 @@ describe('MountainScene markup', () => {
 		expect(render(state)).not.toMatch(/role="alert"|globe/);
 	});
 
+	it('renders no stage controls before the globe is ready', () => {
+		for (const state of [
+			undefined,
+			{ status: 'failed', failure: 'missing-token', message: 'x' } as const
+		]) {
+			expect(render(state)).not.toMatch(/<button|Compass|Scale:/);
+		}
+	});
+
+	it('renders the stage controls beside the viewport, never inside it', () => {
+		const store = new SceneStore();
+		store.setState({ status: 'ready' });
+		store.setOrientation({ viewHeadingDegrees: 10 });
+		const html = renderToStaticMarkup(<MountainScene store={store} target={TARGET} />);
+
+		expect(html).toMatch(/<div[^>]*><div[^>]*><\/div>.*Reset view/s);
+		expect(html).toContain('Compass. Looking 10 degrees north.');
+	});
+
 	it('announces the missing token with the contractual message and no retry', () => {
 		const html = render({ status: 'failed', failure: 'missing-token', message: 'no token' });
 

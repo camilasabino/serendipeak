@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { VIEWER_OPTIONS, disableEntityPicking, stageViewerOptions } from './viewerOptions';
+import { VIEWER_OPTIONS, disableEntityPicking } from './viewerOptions';
 
 describe('VIEWER_OPTIONS', () => {
 	it('removes the Home and scene mode controls', () => {
@@ -7,21 +7,26 @@ describe('VIEWER_OPTIONS', () => {
 		expect(VIEWER_OPTIONS.sceneModePicker).toBe(false);
 	});
 
-	it('keeps the navigation help and fullscreen controls', () => {
-		const disabled = Object.entries(VIEWER_OPTIONS)
-			.filter(([, value]) => value === false)
-			.map(([name]) => name);
+	it('hides every Cesium toolbar control, including the navigation help and fullscreen', () => {
+		const toolbarControls = [
+			'homeButton',
+			'sceneModePicker',
+			'baseLayerPicker',
+			'geocoder',
+			'navigationHelpButton',
+			'fullscreenButton',
+			'animation',
+			'timeline'
+		] as const;
 
-		expect(disabled).not.toContain('navigationHelpButton');
-		expect(disabled).not.toContain('fullscreenButton');
+		for (const control of toolbarControls) {
+			expect(VIEWER_OPTIONS[control], control).toBe(false);
+		}
 	});
 
-	it('keeps the navigation help closed until the user opens it', () => {
-		expect(VIEWER_OPTIONS.navigationInstructionsInitiallyVisible).toBe(false);
-		expect(VIEWER_OPTIONS).not.toHaveProperty('navigationHelpButton');
-		expect(stageViewerOptions({} as HTMLElement).navigationInstructionsInitiallyVisible).toBe(
-			false
-		);
+	it('leaves fullscreen to the stage controls', () => {
+		expect(VIEWER_OPTIONS.fullscreenButton).toBe(false);
+		expect(VIEWER_OPTIONS).not.toHaveProperty('fullscreenElement');
 	});
 
 	it('disables the entity info box and selection indicator', () => {
@@ -55,25 +60,5 @@ describe('disableEntityPicking', () => {
 		expect(removeInputAction).toHaveBeenCalledTimes(2);
 		expect(removeInputAction).toHaveBeenCalledWith(eventTypes.LEFT_CLICK);
 		expect(removeInputAction).toHaveBeenCalledWith(eventTypes.LEFT_DOUBLE_CLICK);
-	});
-});
-
-describe('stageViewerOptions', () => {
-	it('targets the stage wrapper for fullscreen, not the document body', () => {
-		const stage = { id: 'stage' } as unknown as HTMLElement;
-
-		const options = stageViewerOptions(stage);
-
-		expect(options.fullscreenElement).toBe(stage);
-		expect(options.fullscreenElement).not.toBe(undefined);
-	});
-
-	it('keeps every existing viewer option and the default fullscreen and help controls', () => {
-		const options = stageViewerOptions({} as HTMLElement);
-
-		expect(options).toMatchObject(VIEWER_OPTIONS);
-		expect(options).not.toHaveProperty('fullscreenButton');
-		expect(options).not.toHaveProperty('navigationHelpButton');
-		expect(options).not.toHaveProperty('creditContainer');
 	});
 });

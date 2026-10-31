@@ -60,7 +60,6 @@ function fakeViewer(removeInputAction: (type: number) => void = () => {}): FakeV
 function create(exposeCameraReading?: () => () => void): Promise<CesiumGlobeScene> {
 	return CesiumGlobeScene.create(
 		{} as HTMLElement,
-		{} as HTMLElement,
 		{ ionToken: 'token', imageryMode: 'world', exposeCameraReading },
 		new AbortController().signal
 	);

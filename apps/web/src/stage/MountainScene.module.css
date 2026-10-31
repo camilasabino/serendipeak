@@ -1,6 +1,7 @@
 .scene {
 	position: absolute;
 	inset: 0;
+	container-type: inline-size;
 	background: var(--sp-stage);
 }
 
