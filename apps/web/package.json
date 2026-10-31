@@ -7,7 +7,10 @@
 		"node": ">=24.0.0"
 	},
 	"scripts": {
+		"cesium:assets": "node scripts/copy-cesium-assets.mjs",
+		"predev": "npm run cesium:assets",
 		"dev": "next dev",
+		"prebuild": "npm run cesium:assets",
 		"build": "next build",
 		"start": "next start",
 		"lint": "prettier --check . && eslint .",
@@ -16,11 +19,13 @@
 		"test": "vitest run",
 		"check:production-gate": "node ../../scripts/production-gate.mjs .next",
 		"test:e2e": "playwright test",
-		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr"
+		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr",
+		"test:cesium-spike": "npm run cesium:assets && CESIUM_SPIKE=1 next build && playwright test --project=spike"
 	},
 	"dependencies": {
 		"@fontsource/instrument-sans": "^5.3.0",
 		"@fontsource/spectral": "^5.3.0",
+		"cesium": "1.146.0",
 		"next": "16.4.3",
 		"react": "19.2.9",
 		"react-dom": "19.2.9"

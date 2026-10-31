@@ -9,6 +9,7 @@ export default defineConfig({
 	use: { baseURL: `http://127.0.0.1:${WEB_PORT}` },
 	projects: [
 		{ name: 'ssr', testMatch: /ssr\/.*\.spec\.ts/, use: { browserName: 'chromium' } },
+		{ name: 'spike', testMatch: /spike\/.*\.spec\.ts/, use: { browserName: 'chromium' } },
 		{ name: 'nogl', grep: /@nogl/, use: { browserName: 'chromium' } },
 		{ name: 'webgl', grep: /@webgl/, use: { browserName: 'chromium' } }
 	],

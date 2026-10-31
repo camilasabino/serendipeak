@@ -184,3 +184,7 @@ jobs:
 
       - name: SSR HTTP tests
         run: npm run test:ssr
+
+      # Temporary: removed together with the Cesium spike page.
+      - name: Cesium bundling spike
+        run: npm run test:cesium-spike

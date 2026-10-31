@@ -181,6 +181,8 @@ npm run dev
 | `npm run typecheck` | `tsc --noEmit`, strict |
 | `npm test` | Vitest unit tests (`src/**/*.spec.ts`) |
 | `npm run build` | Next production build |
+| `npm run cesium:assets` | Copies Cesium `Workers`, `ThirdParty`, `Assets` and `Widgets` into `public/cesium` (gitignored), served under `CESIUM_BASE_URL` `/cesium/`; runs before `dev` and `build` |
+| `npm run test:cesium-spike` | Temporary Cesium bundling check: builds with `CESIUM_SPIKE=1` (other builds answer 404 on `/spike/cesium`) and asserts in Chromium that a globe initializes with workers and assets from `/cesium/` and no external requests; overwrites `.next` |
 | `npm run test:ssr` | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
 | `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build` |
 

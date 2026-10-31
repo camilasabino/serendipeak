@@ -14,7 +14,8 @@ export default defineConfig([
 		'node_modules/**',
 		'next-env.d.ts',
 		'playwright-report/**',
-		'test-results/**'
+		'test-results/**',
+		'public/cesium/**'
 	]),
 	{
 		files: ['**/*.{js,mjs,cjs,ts,tsx}'],
