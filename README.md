@@ -29,16 +29,16 @@ The behavioral reference is the read-only legacy repository at tag `v1-behaviora
 cp .env.example .env
 ```
 
-| Variable | Purpose |
-|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Local database container. Port `5434` avoids the legacy database on `5433`. |
-| `DATABASE_URL` | Django database connection (`postgres://user:password@host:port/name`). |
-| `APP_ENV` | `development` enables `DEBUG`. Any other value, or none, is production. |
-| `DJANGO_SECRET_KEY` | Django secret key. Required. |
-| `ALLOWED_HOSTS` | Comma separated host names. |
-| `GDAL_LIBRARY_PATH`, `GEOS_LIBRARY_PATH` | Optional overrides for the GDAL and GEOS shared library paths. Set them only when Django cannot find the libraries, for example `/opt/homebrew/lib/libgdal.dylib` and `/opt/homebrew/lib/libgeos_c.dylib` on macOS with Homebrew. Leave unset on Linux. |
-| `CORS_ALLOWED_ORIGIN` | Exactly one frontend origin allowed by CORS. Wildcards and lists are rejected at startup. |
-| `LEGACY_DATABASE_URL` | Optional. Legacy database connection used only by the legacy catalog export. |
+| Variable                                                             | Purpose                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Local database container. Port `5434` avoids the legacy database on `5433`.                                                                                                                                                                             |
+| `DATABASE_URL`                                                       | Django database connection (`postgres://user:password@host:port/name`).                                                                                                                                                                                 |
+| `APP_ENV`                                                            | `development` enables `DEBUG`. Any other value, or none, is production.                                                                                                                                                                                 |
+| `DJANGO_SECRET_KEY`                                                  | Django secret key. Required.                                                                                                                                                                                                                            |
+| `ALLOWED_HOSTS`                                                      | Comma separated host names.                                                                                                                                                                                                                             |
+| `GDAL_LIBRARY_PATH`, `GEOS_LIBRARY_PATH`                             | Optional overrides for the GDAL and GEOS shared library paths. Set them only when Django cannot find the libraries, for example `/opt/homebrew/lib/libgdal.dylib` and `/opt/homebrew/lib/libgeos_c.dylib` on macOS with Homebrew. Leave unset on Linux. |
+| `CORS_ALLOWED_ORIGIN`                                                | Exactly one frontend origin allowed by CORS. Wildcards and lists are rejected at startup.                                                                                                                                                               |
+| `LEGACY_DATABASE_URL`                                                | Optional. Legacy database connection used only by the legacy catalog export.                                                                                                                                                                            |
 
 Django does not load `.env` by itself. Run backend commands with `uv run --env-file ../../.env ...` from `services/api`, or export the variables in your shell.
 
@@ -175,16 +175,15 @@ npm run dev
 
 `NEXT_PUBLIC_API_BASE_URL` is required at build time because Next inlines it; the server-side pages read it through `readPublicConfig`. A missing or invalid value fails the request with a 500 instead of rendering.
 
-| Script | Purpose |
-|---|---|
-| `npm run lint` | Prettier check and ESLint (`eslint-config-next`) |
-| `npm run typecheck` | `tsc --noEmit`, strict |
-| `npm test` | Vitest unit tests (`src/**/*.spec.ts`) |
-| `npm run build` | Next production build |
-| `npm run cesium:assets` | Copies Cesium `Workers`, `ThirdParty`, `Assets` and `Widgets` into `public/cesium` (gitignored), served under `CESIUM_BASE_URL` `/cesium/`; runs before `dev` and `build` |
-| `npm run test:cesium-spike` | Temporary Cesium bundling check: builds with `CESIUM_SPIKE=1` (other builds answer 404 on `/spike/cesium`) and asserts in Chromium that a globe initializes with workers and assets from `/cesium/` and no external requests; overwrites `.next` |
-| `npm run test:ssr` | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
-| `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build` |
+| Script                          | Purpose                                                                                                                                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                  | Prettier check and ESLint (`eslint-config-next`)                                                                                                                                                                                                                        |
+| `npm run typecheck`             | `tsc --noEmit`, strict                                                                                                                                                                                                                                                  |
+| `npm test`                      | Vitest unit tests (`src/**/*.spec.ts`)                                                                                                                                                                                                                                  |
+| `npm run build`                 | Next production build                                                                                                                                                                                                                                                   |
+| `npm run cesium:assets`         | Copies Cesium `Workers`, `ThirdParty`, `Assets` and `Widgets` into `public/cesium` (gitignored), served under `CESIUM_BASE_URL` `/cesium/`; runs before `dev` and `build`                                                                                               |
+| `npm run test:ssr`              | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
+| `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build`                                                                                                                                                                |
 
 `e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `POST /__control/scenario/<ok|unreachable|malformed|server-error|no-eligible>` switches every API answer, `GET /__control/requests` lists the API paths requested and `POST /__control/reset` restores `ok` and clears the list. `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 

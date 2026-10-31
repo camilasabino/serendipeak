@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { SceneTarget } from './camera';
 import {
@@ -578,21 +578,45 @@ describe('superseding reframe', () => {
 });
 
 describe('production camera path', () => {
+	const ADAPTER_DIRECTORY = new URL('./cesium/', import.meta.url);
+	const adapterFiles = readdirSync(ADAPTER_DIRECTORY).filter(
+		(name) => name.endsWith('.ts') && !name.endsWith('.spec.ts')
+	);
+	const files = [
+		'./choreography.ts',
+		'./mountainCamera.ts',
+		'./camera.ts',
+		'./transitionPlan.ts',
+		'./glidePath.ts',
+		...adapterFiles.map((name) => `./cesium/${name}`)
+	];
+
+	it('scans the real Cesium adapter files', () => {
+		expect(adapterFiles).toEqual(
+			expect.arrayContaining(['CesiumGlobeScene.ts', 'ViewerCameraFlight.ts', 'SummitMarkers.ts'])
+		);
+	});
+
+	it('drives the camera through the shared director, plan and terrain modules', () => {
+		const scene = readFileSync(new URL('./cesium/CesiumGlobeScene.ts', import.meta.url), 'utf8');
+		const flight = readFileSync(new URL('./cesium/ViewerCameraFlight.ts', import.meta.url), 'utf8');
+
+		expect(scene).toContain("from '../choreography'");
+		expect(scene).toContain("from '../mountainCamera'");
+		expect(scene).toContain("from '../terrainCamera'");
+		expect(scene).toContain("from '../transitionPlan'");
+		expect(flight).toContain("from '../glidePath'");
+		expect(flight).toContain("from '../framing'");
+	});
+
 	it('does not keep the regional three-stage plan', () => {
-		const files = [
-			'./choreography.ts',
-			'./mountainCamera.ts',
-			'./camera.ts',
-			'./transitionPlan.ts',
-			'./glidePath.ts'
-		];
 		for (const file of files) {
 			const source = readFileSync(new URL(file, import.meta.url), 'utf8');
-			expect(source).not.toContain('planMountainCamera');
-			expect(source).not.toContain('1_500_000');
-			expect(source).not.toContain("name: 'regional'");
-			expect(source).not.toContain('enableLighting');
-			expect(source).not.toContain('fullscreenElement');
+			expect(source, file).not.toContain('planMountainCamera');
+			expect(source, file).not.toContain('1_500_000');
+			expect(source, file).not.toContain("name: 'regional'");
+			expect(source, file).not.toContain('enableLighting');
+			expect(source, file).not.toContain('fullscreenElement');
 		}
 	});
 });

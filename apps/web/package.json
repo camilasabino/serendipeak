@@ -19,8 +19,7 @@
 		"test": "vitest run",
 		"check:production-gate": "node ../../scripts/production-gate.mjs .next",
 		"test:e2e": "playwright test",
-		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr",
-		"test:cesium-spike": "npm run cesium:assets && CESIUM_SPIKE=1 next build && playwright test --project=spike"
+		"test:ssr": "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${STUB_API_PORT:-8099} next build && playwright test --project=ssr"
 	},
 	"dependencies": {
 		"@fontsource/instrument-sans": "^5.3.0",
