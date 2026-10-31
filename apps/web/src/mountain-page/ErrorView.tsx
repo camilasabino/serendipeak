@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
+import styles from './ErrorView.module.css';
 import type { ErrorContent } from './pageCopy';
+import { TopographicMotif } from './TopographicMotif';
 
 export function ErrorView({ content }: { content: ErrorContent }) {
 	const router = useRouter();
@@ -21,15 +23,34 @@ export function ErrorView({ content }: { content: ErrorContent }) {
 	}
 
 	return (
-		<main>
-			<h1>{content.title}</h1>
-			<p role="alert">{content.message}</p>
-			{content.retryable && (
-				<button type="button" aria-disabled={retrying} aria-busy={retrying} onClick={retry}>
-					{retrying ? 'Trying again…' : 'Try again'}
-				</button>
-			)}
-			{router.asPath !== '/' && <Link href="/">Go to today&apos;s mountain</Link>}
+		<main className={styles.missing}>
+			<TopographicMotif className={styles.motif} />
+			<section aria-labelledby="error-title" className={styles.content}>
+				<h1 id="error-title" className={styles.title}>
+					{content.title}
+				</h1>
+				<p role="alert" className={styles.message}>
+					{content.message}
+				</p>
+				<div className={styles.actions}>
+					{content.retryable && (
+						<button
+							type="button"
+							className={styles.action}
+							aria-disabled={retrying}
+							aria-busy={retrying}
+							onClick={retry}
+						>
+							{retrying ? 'Trying again…' : 'Try again'}
+						</button>
+					)}
+					{router.pathname !== '/' && (
+						<Link href="/" className={content.retryable ? styles.quiet : styles.action}>
+							Go to today&apos;s mountain
+						</Link>
+					)}
+				</div>
+			</section>
 		</main>
 	);
 }

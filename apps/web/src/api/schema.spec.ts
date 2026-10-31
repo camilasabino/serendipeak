@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contractFixture, MOUNTAIN_FIXTURES } from './test-support/contractFixtures';
-import { hasErrorCode, isCalendarDate, isDailyMountain, isMountain } from './schema';
+import { hasErrorCode, isCalendarDate, isDailyMountain, isMountain, isValidSlug } from './schema';
 
 type Json = Record<string, unknown>;
 
@@ -123,6 +123,45 @@ describe('isMountain', () => {
 
 	it.each([null, undefined, 'aconcagua', 7, []])('rejects the non-object %j', (value) => {
 		expect(isMountain(value)).toBe(false);
+	});
+});
+
+describe('isValidSlug', () => {
+	it.each(['a', 'k2', 'mont-blanc', 'puncak-jaya-2', '0'])('accepts %j', (value) => {
+		expect(isValidSlug(value)).toBe(true);
+	});
+
+	it.each([
+		'',
+		'.',
+		'..',
+		'Mont-Blanc',
+		'mont_blanc',
+		'mont--blanc',
+		'-mont',
+		'mont-',
+		'mont blanc',
+		'mont/blanc',
+		'mont%2Fblanc',
+		'monté',
+		'mont\n'
+	])('rejects %j', (value) => {
+		expect(isValidSlug(value)).toBe(false);
+	});
+
+	it.each(['today', 'random'])('rejects the reserved route word %j', (value) => {
+		expect(isValidSlug(value)).toBe(false);
+	});
+
+	it.each([null, undefined, 1, {}])('rejects the non-string %j', (value) => {
+		expect(isValidSlug(value)).toBe(false);
+	});
+
+	it('accepts every frozen catalog slug', () => {
+		const { mountains } = contractFixture('catalog.json') as { mountains: { slug: string }[] };
+
+		expect(mountains).toHaveLength(73);
+		expect(mountains.every(({ slug }) => isValidSlug(slug))).toBe(true);
 	});
 });
 

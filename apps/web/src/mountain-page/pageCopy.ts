@@ -42,3 +42,15 @@ export function pageTitle(model: PageModel): string {
 			return documentTitle(describeFailure(model.reason).title);
 	}
 }
+
+export function photoAlt(mountainName: string): string {
+	return `Photograph of ${mountainName}`;
+}
+
+export const DAILY_EYEBROW = "Today's discovery";
+export const DAILY_CUE = 'Tomorrow, another mountain.';
+export const TODAY_LINK_LABEL = "Today's mountain";
+
+export function revealLabel(daily: boolean): string {
+	return daily ? "Revealing today's mountain..." : 'Revealing the mountain...';
+}

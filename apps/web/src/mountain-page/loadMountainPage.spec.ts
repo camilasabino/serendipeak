@@ -48,21 +48,30 @@ describe('loadMountainPage', () => {
 		});
 	});
 
-	it.each(['today', 'random'])(
-		'resolves the reserved slug %s as not found without calling the API',
-		async (slug) => {
-			const api = new FakeMountainApi({ mountain: { kind: 'found', mountain } });
+	it.each([
+		'today',
+		'random',
+		'.',
+		'..',
+		'Aconcagua',
+		'mont blanc',
+		'a--b',
+		'-a',
+		'a-',
+		'monté',
+		''
+	])('resolves the slug %j as not found without calling the API', async (slug) => {
+		const api = new FakeMountainApi({ mountain: { kind: 'found', mountain } });
 
-			const load = await loadMountainPage(api, slug);
+		const load = await loadMountainPage(api, slug);
 
-			expect(load).toEqual({ model: { kind: 'error', reason: 'not-found' }, status: 404 });
-			expect(api.getMountainCalls).toEqual([]);
-			expect(api.getDailyMountainCalls).toBe(0);
-			expect(api.getRandomMountainCalls).toEqual([]);
-		}
-	);
+		expect(load).toEqual({ model: { kind: 'error', reason: 'not-found' }, status: 404 });
+		expect(api.getMountainCalls).toEqual([]);
+		expect(api.getDailyMountainCalls).toBe(0);
+		expect(api.getRandomMountainCalls).toEqual([]);
+	});
 
-	it.each(['Today', 'random-peak', 'todays'])(
+	it.each(['random-peak', 'todays', 'k2', 'mont-blanc'])(
 		'looks up %s because only the exact reserved words are excluded',
 		async (slug) => {
 			const api = new FakeMountainApi({ mountain: { kind: 'not-found' } });

@@ -1,0 +1,95 @@
+.missing {
+	position: relative;
+	display: flex;
+	flex: 1 1 auto;
+	align-items: flex-start;
+	box-sizing: border-box;
+	min-height: 0;
+	padding: clamp(2.5rem, 12vh, 6rem) clamp(1.5rem, 6vw, 4.5rem);
+	overflow: hidden;
+}
+
+.motif {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	color: var(--sp-glacier-light);
+	opacity: 0.22;
+}
+
+.content {
+	position: relative;
+	width: min(100%, 34rem);
+	overflow-wrap: anywhere;
+}
+
+.title {
+	margin: 0 0 var(--sp-space-3);
+	font-family: var(--sp-font-display);
+	font-size: clamp(2.5rem, 7vw, 3.75rem);
+	font-weight: 400;
+	letter-spacing: -0.012em;
+	line-height: 1.15;
+	text-wrap: balance;
+}
+
+.message {
+	max-width: 28rem;
+	margin: 0;
+	font-size: 1.125rem;
+	line-height: 1.5;
+	color: var(--sp-mist);
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-space-2) var(--sp-space-4);
+	margin-top: var(--sp-space-5);
+}
+
+.action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.5rem 1rem;
+	border: 1px solid transparent;
+	border-radius: var(--sp-radius);
+	background: var(--sp-accent);
+	color: var(--sp-paper-bright);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+	line-height: 1.2;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.action:hover {
+	background: var(--sp-accent-hover);
+}
+
+.action[aria-disabled='true'] {
+	opacity: 0.7;
+	cursor: progress;
+}
+
+.quiet {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	color: var(--sp-link-on-stage);
+	font-size: var(--sp-text-ui);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.quiet:hover {
+	color: var(--sp-link-on-stage-hover);
+}

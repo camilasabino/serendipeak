@@ -1,0 +1,47 @@
+:root {
+	color-scheme: dark;
+	--sp-stage: #0b1219;
+	--sp-ink: #14202a;
+	--sp-glacier: #2a78a8;
+	--sp-glacier-dark: #1d5f8a;
+	--sp-glacier-light: #8cb8d2;
+	--sp-paper: #f1f3ef;
+	--sp-paper-bright: #f7f8f5;
+	--sp-mist: #d7dee1;
+	--sp-rule: color-mix(in srgb, var(--sp-mist) 22%, transparent);
+	--sp-rule-quiet: color-mix(in srgb, var(--sp-mist) 12%, transparent);
+	--sp-surface-stage: var(--sp-stage);
+	--sp-text-on-stage: var(--sp-paper);
+	--sp-accent: var(--sp-glacier);
+	--sp-accent-hover: var(--sp-glacier-dark);
+	--sp-link-on-stage: var(--sp-glacier-light);
+	--sp-link-on-stage-hover: var(--sp-paper-bright);
+	--sp-focus: var(--sp-paper-bright);
+	--sp-font-display: 'Spectral', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+	--sp-font-ui: 'Instrument Sans', 'Avenir Next', 'Segoe UI', sans-serif;
+	--sp-text-body: 1rem;
+	--sp-text-ui: 0.875rem;
+	--sp-space-2: 0.5rem;
+	--sp-space-3: 0.75rem;
+	--sp-space-4: 1rem;
+	--sp-space-5: 1.5rem;
+	--sp-space-6: 2rem;
+	--sp-radius: 2px;
+}
+
+body {
+	margin: 0;
+	background: var(--sp-surface-stage);
+	color: var(--sp-text-on-stage);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-body);
+	font-synthesis: none;
+	line-height: 1.45;
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: 2px;
+}

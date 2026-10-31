@@ -18,6 +18,11 @@ const RANGE_MIN = 2_000;
 const RANGE_MAX = 80_000;
 const FRAMING_LIMIT = 1;
 
+// Mirrors services/api catalog/slug.py. The backend serves `today` and `random` as stateful
+// routes, so they are never valid mountain slugs even though they match the grammar.
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const RESERVED_SLUGS: ReadonlySet<string> = new Set(['today', 'random']);
+
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -132,6 +137,10 @@ export function isMountain(value: unknown): value is Mountain {
 		isOptional(value, 'primaryImage', isMountainImage) &&
 		isOptional(value, 'sources', isMountainSources)
 	);
+}
+
+export function isValidSlug(value: unknown): value is string {
+	return typeof value === 'string' && SLUG_PATTERN.test(value) && !RESERVED_SLUGS.has(value);
 }
 
 export function isCalendarDate(value: unknown): value is string {

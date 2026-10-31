@@ -91,6 +91,15 @@ test.describe('daily page', () => {
 
 		expect(html).not.toContain('Go to today&#x27;s mountain');
 	});
+
+	test('offers no link back to itself when the URL carries a query string', async ({ request }) => {
+		await useScenario(request, 'unreachable');
+
+		const html = await (await request.get('/?utm=x')).text();
+
+		expect(headingsOf(html)).toEqual([LOAD_FAILED]);
+		expect(html).not.toContain('Go to today&#x27;s mountain');
+	});
 });
 
 test.describe('permalink page', () => {
@@ -170,6 +179,36 @@ test.describe('permalink page', () => {
 		expect(response.status()).toBe(404);
 		expect(await stubRequests(request)).toEqual([]);
 	});
+
+	for (const slug of ['Aconcagua', 'mont--blanc', 'a%20b', '%C3%A9', '-peak']) {
+		test(`answers 404 for the invalid slug ${slug} without calling the API`, async ({
+			request
+		}) => {
+			const response = await request.get(`/mountains/${slug}`);
+			const html = await response.text();
+
+			expect(response.status()).toBe(404);
+			expect(headingsOf(html)).toEqual(['Mountain not found']);
+			expect(await stubRequests(request)).toEqual([]);
+		});
+	}
+
+	for (const slug of ['%2E%2E', '%2e%2e', '..']) {
+		test(`never turns the dot segment ${slug} into a slug lookup`, async ({ request }) => {
+			await request.get(`/mountains/${slug}`, { maxRedirects: 0 });
+
+			const requests = await stubRequests(request);
+			expect(requests.filter((path) => path !== '/api/v1/mountains/today')).toEqual([]);
+		});
+	}
+
+	test('keeps the link to today when the mountain is not found and the URL has a query', async ({
+		request
+	}) => {
+		const html = await (await request.get('/mountains/nowhere?x=1')).text();
+
+		expect(html).toContain('Go to today&#x27;s mountain');
+	});
 });
 
 test.describe('unknown routes', () => {
@@ -184,11 +223,12 @@ test.describe('unknown routes', () => {
 	});
 });
 
-test.describe('stub API', () => {
-	test('survives a malformed percent-encoded slug', async ({ request }) => {
+test.describe('malformed percent-encoding', () => {
+	test('is rejected by the web server with 400 before reaching the API', async ({ request }) => {
 		const response = await request.get('/mountains/%E0%A4%A');
 
-		expect(response.status()).toBeLessThan(500);
+		expect(response.status()).toBe(400);
+		expect(await stubRequests(request)).toEqual([]);
 		expect(await request.get('/')).toBeOK();
 	});
 });

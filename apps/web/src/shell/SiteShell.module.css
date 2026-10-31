@@ -1,0 +1,43 @@
+.shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+	background: var(--sp-surface-stage);
+	color: var(--sp-text-on-stage);
+}
+
+.split > header {
+	border-bottom: 1px solid var(--sp-rule);
+}
+
+@media (min-width: 56rem) {
+	.shell {
+		height: 100dvh;
+		overflow: hidden;
+	}
+
+	/* The page's main spans every row so its sheet can run the full height next to the header,
+	   stage and footer, which stay in the first column. */
+	.split {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) clamp(21rem, 28vw, 28rem);
+		grid-template-rows: auto minmax(0, 1fr) auto;
+	}
+
+	.split > header {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.split > footer {
+		grid-column: 1;
+		grid-row: 3;
+	}
+
+	.split > main {
+		grid-column: 1 / -1;
+		grid-row: 1 / -1;
+		min-width: 0;
+		min-height: 0;
+	}
+}

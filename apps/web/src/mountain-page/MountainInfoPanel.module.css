@@ -1,0 +1,58 @@
+.name {
+	margin: 0;
+	font-family: var(--sp-font-display);
+	font-size: clamp(2.5rem, 12cqi, 3rem);
+	font-weight: 400;
+	letter-spacing: -0.02em;
+	line-height: 1.12;
+	color: var(--sp-paper);
+	text-wrap: balance;
+	overflow-wrap: break-word;
+}
+
+.summary {
+	margin: var(--sp-space-2) 0 0;
+	font-size: 1.0625rem;
+	line-height: 1.55;
+	color: var(--sp-paper);
+}
+
+.facts {
+	margin: var(--sp-space-5) 0 0;
+}
+
+.fact {
+	display: grid;
+	grid-template-columns: minmax(5.75rem, 34%) minmax(0, 1fr);
+	column-gap: var(--sp-space-4);
+	align-items: baseline;
+	padding: 0.7rem 0;
+	border-top: 1px solid var(--sp-rule-quiet);
+}
+
+.fact dt {
+	font-size: var(--sp-text-ui);
+	line-height: 1.35;
+	color: var(--sp-mist);
+}
+
+.fact dd {
+	min-width: 0;
+	margin: 0;
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.45;
+	color: var(--sp-paper);
+	overflow-wrap: break-word;
+}
+
+.fact a {
+	color: var(--sp-link-on-stage);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
+}
+
+.fact a:hover {
+	color: var(--sp-link-on-stage-hover);
+}

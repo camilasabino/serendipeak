@@ -18,9 +18,9 @@ export function MountainPageView({ model }: MountainPageProps) {
 function renderBody(model: MountainPageProps['model']) {
 	switch (model.kind) {
 		case 'mountain':
-			return <MountainView mountain={model.mountain} />;
+			return <MountainView mountain={model.mountain} daily={false} />;
 		case 'daily':
-			return <MountainView mountain={model.daily.mountain} />;
+			return <MountainView mountain={model.daily.mountain} daily />;
 		case 'error':
 			return <ErrorView content={describeFailure(model.reason)} />;
 	}

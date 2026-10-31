@@ -9,10 +9,20 @@ export type PageModel =
 	| { kind: 'daily'; daily: DailyMountain }
 	| { kind: 'error'; reason: FailureReason };
 
+export type MountainModel = Exclude<PageModel, { kind: 'error' }>;
+
 export interface PageLoad {
 	model: PageModel;
 	status: 200 | FailureStatus;
 	cacheControl?: string;
+}
+
+export function pageModelOf(pageProps: object): PageModel | undefined {
+	const model = 'model' in pageProps ? pageProps.model : undefined;
+
+	return typeof model === 'object' && model !== null && 'kind' in model
+		? (model as PageModel)
+		: undefined;
 }
 
 export const NO_STORE = 'no-store';

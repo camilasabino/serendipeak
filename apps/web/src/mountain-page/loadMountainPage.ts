@@ -1,12 +1,11 @@
+import { isValidSlug } from '../api/schema';
 import type { MountainApi } from '../api/MountainApi';
 import { failedLoad, foundLoad, type PageLoad } from './pageModel';
 
-// The backend serves these paths as stateful routes. `today` persists the day's discovery, so
-// a permalink request for one must never reach the API as a slug lookup.
-const RESERVED_PERMALINK_SLUGS: ReadonlySet<string> = new Set(['today', 'random']);
-
+// A slug the backend would never serve must not reach the API: `.` and `..` would escape the
+// endpoint path, and `today` would persist the day's discovery as a side effect.
 export async function loadMountainPage(api: MountainApi, slug: string): Promise<PageLoad> {
-	if (RESERVED_PERMALINK_SLUGS.has(slug)) {
+	if (!isValidSlug(slug)) {
 		return failedLoad('not-found');
 	}
 

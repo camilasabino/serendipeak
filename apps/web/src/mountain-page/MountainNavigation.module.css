@@ -1,0 +1,20 @@
+.today {
+	display: none;
+	box-sizing: border-box;
+	color: var(--sp-mist);
+	font-size: var(--sp-text-ui);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.today:hover {
+	color: var(--sp-glacier-light);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+@media (min-width: 56rem) {
+	.today {
+		display: inline-flex;
+	}
+}

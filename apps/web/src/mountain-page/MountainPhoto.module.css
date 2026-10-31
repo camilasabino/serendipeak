@@ -1,0 +1,24 @@
+.photo {
+	min-width: 0;
+	margin: var(--sp-space-5) 0 0;
+}
+
+.frame {
+	position: relative;
+	overflow: hidden;
+	border-radius: var(--sp-radius);
+	background: color-mix(in srgb, var(--sp-mist) 16%, var(--sp-ink));
+}
+
+.frame img {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.photo figcaption {
+	margin-top: var(--sp-space-2);
+}

@@ -1,0 +1,17 @@
+.sources {
+	margin-top: var(--sp-space-2);
+}
+
+.sources ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.5rem;
+	margin: 0.35rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sources li:not(:last-child)::after {
+	content: '·';
+	margin-left: 0.5rem;
+}
