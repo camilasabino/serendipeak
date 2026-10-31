@@ -1,5 +1,6 @@
 import type { BoundingSphere, Cartesian3, HeadingPitchRange, Viewer } from 'cesium';
 import type { SceneTarget } from '../camera';
+import type { CameraReading } from '../cameraReading';
 import type { CameraFlight, CameraGlide, CameraMove, GlideCallbacks } from '../choreography';
 import { cameraOffsetFromPose, cesiumVerticalFovRadians, lookAxesForFraming } from '../framing';
 import { lookPose, sampleGlide, type LookState } from '../glidePath';
@@ -144,6 +145,47 @@ export class ViewerCameraFlight implements CameraFlight {
 	}
 
 	look(): LookState | undefined {
+		const view = this.summitView();
+		if (!view) {
+			return undefined;
+		}
+		const { reading, framing } = view;
+		if (
+			!Number.isFinite(reading.headingDegrees) ||
+			!Number.isFinite(reading.pitchDegrees) ||
+			!(reading.displayRangeMeters > 0)
+		) {
+			return undefined;
+		}
+
+		return {
+			...view.anchor,
+			headingDegrees: reading.headingDegrees,
+			pitchDegrees: reading.pitchDegrees,
+			rangeMeters: reading.displayRangeMeters,
+			framingX: framing?.x ?? 0,
+			framingY: framing?.y ?? 0
+		};
+	}
+
+	cameraReading(): CameraReading | undefined {
+		const view = this.summitView();
+		if (!view) {
+			return undefined;
+		}
+		const { reading, framing } = view;
+
+		return {
+			headingDegrees: reading.headingDegrees,
+			pitchDegrees: reading.pitchDegrees,
+			rangeMeters: reading.baseRangeMeters,
+			...(framing ? { framing } : {}),
+			displayRangeMeters: reading.displayRangeMeters,
+			stage: this.measureStage()
+		};
+	}
+
+	private summitView() {
 		if (!this.anchor || this.viewer.isDestroyed()) {
 			return undefined;
 		}
@@ -161,23 +203,11 @@ export class ViewerCameraFlight implements CameraFlight {
 			new Cartesian3()
 		);
 		const size = this.measureStage();
-		const reading = readSummitCamera(offset.x, offset.y, offset.z, size.width, size.height);
-		const framing = this.sampler.projectFraming(focus);
-		if (
-			!Number.isFinite(reading.headingDegrees) ||
-			!Number.isFinite(reading.pitchDegrees) ||
-			!(reading.displayRangeMeters > 0)
-		) {
-			return undefined;
-		}
 
 		return {
-			...this.anchor,
-			headingDegrees: reading.headingDegrees,
-			pitchDegrees: reading.pitchDegrees,
-			rangeMeters: reading.displayRangeMeters,
-			framingX: framing?.x ?? 0,
-			framingY: framing?.y ?? 0
+			anchor: this.anchor,
+			reading: readSummitCamera(offset.x, offset.y, offset.z, size.width, size.height),
+			framing: this.sampler.projectFraming(focus)
 		};
 	}
 

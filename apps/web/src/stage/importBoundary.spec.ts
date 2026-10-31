@@ -8,7 +8,7 @@ const SRC = join(WEB_ROOT, 'src');
 const ADAPTER_DIRECTORY = join('stage', 'globe', 'cesium');
 const TEST_FILE = /\.spec\.tsx?$/;
 const IMPORT_SPECIFIER = /\b(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
-const CESIUM_SPECIFIER = /^cesium(\/|$)/;
+const CESIUM_SPECIFIER = /^(@cesium\/|cesium(\/|$))/;
 
 function sourceFiles(directory = ''): string[] {
 	return readdirSync(join(SRC, directory), { withFileTypes: true }).flatMap((entry) => {
@@ -71,7 +71,13 @@ describe('cesium import boundary (ESLint)', () => {
 		['a type import', "import type { Viewer } from 'cesium';\nexport type X = Viewer;\n"],
 		['a subpath import', "import 'cesium/Build/Cesium/Widgets/widgets.css';\n"],
 		['a re-export', "export * from 'cesium';\n"],
-		['a dynamic import', "export const load = () => import('cesium');\n"]
+		['a dynamic import', "export const load = () => import('cesium');\n"],
+		[
+			'an engine package import',
+			"import { Viewer } from '@cesium/engine';\nexport const x = Viewer;\n"
+		],
+		['a widgets package import', "import '@cesium/widgets/Source/widgets.css';\n"],
+		['a dynamic engine package import', "export const load = () => import('@cesium/engine');\n"]
 	] as const;
 
 	it.each(OUTSIDE)(

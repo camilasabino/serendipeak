@@ -184,3 +184,9 @@ jobs:
 
       - name: SSR HTTP tests
         run: npm run test:ssr
+
+      - name: WebGL scene tests (development server, Strict Mode)
+        run: npm run test:webgl
+
+      - name: WebGL scene tests (production build)
+        run: npm run test:webgl:prod

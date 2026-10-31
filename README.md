@@ -19,7 +19,7 @@ The behavioral reference is the read-only legacy repository at tag `v1-behaviora
 - `apps/web/` Next.js (Pages Router) web foundation, npm package with its own lock file
 - `contracts/v1/` frozen contract files vendored from the legacy repository
 - `contracts/v1.lock.json` provenance and sha256 of every vendored file
-- `scripts/` contract verification and sync, web production gate
+- `scripts/` contract verification and sync
 - `docker-compose.yml` local PostgreSQL/PostGIS
 - `.env.example` every environment variable the project reads
 
@@ -175,6 +175,11 @@ npm run dev
 
 `NEXT_PUBLIC_API_BASE_URL` is required at build time because Next inlines it; the server-side pages read it through `readPublicConfig`. A missing or invalid value fails the request with a 500 instead of rendering.
 
+The 3D stage reads two more build-time values through `readCesiumConfig`, so a bad API URL cannot take the globe down:
+
+- `NEXT_PUBLIC_CESIUM_ION_TOKEN`: the Cesium ion access token. It is public by design; restrict it by domain on the ion side. Without it the stage shows "The 3D globe isn't available on this site." and makes no provider request; the editorial content is unaffected.
+- `NEXT_PUBLIC_CESIUM_IMAGERY_MODE`: `sentinel2`, `world` or `none`. When unset, development uses `sentinel2` and production uses `world`. An invalid value makes the stage report that the globe could not be loaded; the adapter only ever receives the resolved mode.
+
 | Script                          | Purpose                                                                                                                                                                                                                                                                 |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run lint`                  | Prettier check and ESLint (`eslint-config-next`)                                                                                                                                                                                                                        |
@@ -184,6 +189,16 @@ npm run dev
 | `npm run cesium:assets`         | Copies Cesium `Workers`, `ThirdParty`, `Assets` and `Widgets` into `public/cesium` (gitignored), served under `CESIUM_BASE_URL` `/cesium/`; runs before `dev` and `build`                                                                                               |
 | `npm run test:ssr`              | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
 | `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build`                                                                                                                                                                |
+| `npm run test:webgl`            | Real-WebGL scene tests (`@webgl`, Chromium) against `next dev`, where React Strict Mode runs effects twice; builds nothing in `.next`                                                                                                                                   |
+| `npm run test:webgl:prod`       | The same suite against a production build served by `next start`                                                                                                                                                                                                        |
+
+### Stage lifecycle
+
+The stage is one Cesium `Viewer` per mounted `MountainLayout`. `AppFrame` renders the layout at the same position of the React tree for every page that has a mountain (`/` and `/mountains/[slug]`), so client navigation between them keeps the layout, its `SceneStore` and the `Viewer`; only the target changes and the camera travels to the new mountain. A page without a mountain (the 404 and error views) renders no layout: the layout unmounts, the session stops and the `Viewer` is destroyed, and coming back builds a fresh one. A full page load always starts a new one.
+
+`useStage` starts a `StageBinding` in an effect and disposes it in the cleanup. The binding owns a `SceneSession` and a `ResizeObserver` on the viewport, and `SceneSession` aborts creation that is still pending and destroys a scene that resolves after that. Under Strict Mode (`mount`, `cleanup`, `mount`) the first creation is aborted before it builds a `Viewer`, so exactly one WebGL context and one `Viewer` exist. The `SceneStore` is created by the layout and read with `useSyncExternalStore`; the loader and the stage notice both render from its snapshot.
+
+The test-only camera reading (`window.__serendipeakCamera`) exists only in builds made with `NEXT_PUBLIC_E2E_DIAGNOSTICS=1`. `next.config.ts` always defines the variable so the bundler folds the branch away otherwise, and `check:production-gate` fails the build if the identifier reaches the output. `NEXT_DIST_DIR` redirects the build directory; the `@webgl` suite uses `.next-e2e` so it never touches the production build.
 
 `e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `POST /__control/scenario/<ok|unreachable|malformed|server-error|no-eligible>` switches every API answer, `GET /__control/requests` lists the API paths requested and `POST /__control/reset` restores `ok` and clears the list. `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 

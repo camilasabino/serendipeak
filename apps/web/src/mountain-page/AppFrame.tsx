@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { SiteShell } from '../shell/SiteShell';
+import { MountainLayout } from './MountainLayout';
 import { MountainNavigation } from './MountainNavigation';
 import { pageModelOf } from './pageModel';
 
@@ -19,7 +20,7 @@ export function AppFrame({ pageProps, year, children }: AppFrameProps) {
 			year={year}
 			navigation={mountainModel && <MountainNavigation model={mountainModel} />}
 		>
-			{children}
+			{mountainModel ? <MountainLayout model={mountainModel}>{children}</MountainLayout> : children}
 		</SiteShell>
 	);
 }

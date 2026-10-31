@@ -25,7 +25,7 @@ const FETCH_SELECTORS = [
 
 // Core no-restricted-imports does not see dynamic import().
 const CESIUM_DYNAMIC_IMPORT_SELECTOR = {
-	selector: 'ImportExpression[source.value=/^cesium(\\/|$)/]',
+	selector: 'ImportExpression[source.value=/^(@cesium\\/|cesium(\\/|$))/]',
 	message: CESIUM_BOUNDARY_MESSAGE
 };
 
@@ -37,7 +37,7 @@ const CESIUM_IMPORT_RULE = [
 	'error',
 	{
 		paths: [{ name: 'cesium', message: CESIUM_BOUNDARY_MESSAGE }],
-		patterns: [{ group: ['cesium/*'], message: CESIUM_BOUNDARY_MESSAGE }]
+		patterns: [{ group: ['cesium/*', '@cesium/*'], message: CESIUM_BOUNDARY_MESSAGE }]
 	}
 ];
 
@@ -46,6 +46,7 @@ export default defineConfig([
 	...nextTypescript,
 	globalIgnores([
 		'.next/**',
+		'.next-e2e/**',
 		'node_modules/**',
 		'next-env.d.ts',
 		'playwright-report/**',

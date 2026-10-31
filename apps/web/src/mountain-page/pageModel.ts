@@ -11,6 +11,10 @@ export type PageModel =
 
 export type MountainModel = Exclude<PageModel, { kind: 'error' }>;
 
+export function mountainOf(model: MountainModel): Mountain {
+	return model.kind === 'daily' ? model.daily.mountain : model.mountain;
+}
+
 export interface PageLoad {
 	model: PageModel;
 	status: 200 | FailureStatus;

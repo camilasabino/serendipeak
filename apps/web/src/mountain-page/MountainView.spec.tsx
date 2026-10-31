@@ -13,8 +13,6 @@ function render(mountain: Mountain, daily = false): string {
 	return renderToStaticMarkup(<MountainView mountain={mountain} daily={daily} />);
 }
 
-const STAGE_LOADER = 'role="status"';
-
 describe.each([
 	['complete', complete],
 	['sparse', sparse],
@@ -32,21 +30,6 @@ describe.each([
 
 		expect(hasEmptyElement(html)).toBe(false);
 		expect(html).not.toMatch(/undefined|null|NaN|\bN\/A\b|[—–]|\bUnknown\b/);
-	});
-
-	it.each([false, true])('puts every editorial element before the stage (daily: %s)', (daily) => {
-		const html = render(mountain, daily);
-		const stage = html.indexOf(STAGE_LOADER);
-
-		expect(stage).toBeGreaterThan(-1);
-		expect(html.lastIndexOf('</section>')).toBeLessThan(stage);
-		expect(html.indexOf('<h1')).toBeLessThan(stage);
-		for (const label of ['Elevation', 'Coordinates', 'Data sources', 'About this photo']) {
-			const position = html.indexOf(label);
-			if (position !== -1) {
-				expect(position).toBeLessThan(stage);
-			}
-		}
 	});
 
 	it('opens every external link in a new tab without leaking the opener', () => {
@@ -122,11 +105,7 @@ describe('minimal fixture', () => {
 	it('collapses to the name and the facts that exist', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Elevation', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual(['2,000 m', '45.0000° N, 10.0000° E']);
-		expect(textsOf(html, 'p')).toEqual([
-			"Today's mountain",
-			'SerendiPeak',
-			'Revealing the mountain...'
-		]);
+		expect(textsOf(html, 'p')).toEqual(["Today's mountain"]);
 	});
 
 	it.each(['Country', 'Range', 'Wikipedia', 'Data sources', '<figure', 'About this photo'])(
@@ -147,10 +126,6 @@ describe('permalink composition', () => {
 		expect(html).not.toContain("Today's discovery");
 		expect(html).not.toContain('Tomorrow, another mountain.');
 	});
-
-	it('announces the stage reveal without the daily wording', () => {
-		expect(html).toContain('Revealing the mountain...');
-	});
 });
 
 describe('daily composition', () => {
@@ -162,15 +137,10 @@ describe('daily composition', () => {
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeGreaterThan(
 			html.indexOf('Data sources')
 		);
-		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));
 	});
 
 	it('does not link back to itself', () => {
 		expect(anchorsOf(html).some(({ href }) => href === '/')).toBe(false);
-	});
-
-	it('announces the stage reveal with the daily wording', () => {
-		expect(html).toContain('Revealing today&#x27;s mountain...');
 	});
 
 	it('renders the minimal fixture without the cue becoming a placeholder row', () => {
@@ -181,11 +151,11 @@ describe('daily composition', () => {
 	});
 });
 
-describe('stage shell', () => {
-	it('is presentational markup only', () => {
+describe('sheet', () => {
+	it('renders the editorial sheet only, leaving the landmark and the stage to the layout', () => {
 		const html = render(complete);
 
-		expect(html).not.toMatch(/<canvas|<script|<iframe|cesium/i);
+		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
 		expect(countOf(html, 'button')).toBe(0);
 	});
 });

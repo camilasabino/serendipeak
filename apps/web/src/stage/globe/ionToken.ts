@@ -1,7 +1,7 @@
 export class MissingIonTokenError extends Error {
 	constructor() {
 		super(
-			'PUBLIC_CESIUM_ION_TOKEN is not set. Add a Cesium ion access token to the root .env file.'
+			'NEXT_PUBLIC_CESIUM_ION_TOKEN is not set. Add a Cesium ion access token to apps/web/.env.local.'
 		);
 		this.name = 'MissingIonTokenError';
 	}

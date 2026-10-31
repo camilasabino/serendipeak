@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// Starting set carried over from the v1 production gate.
+// `__serendipeak` is the prefix of every test-only window global (see src/stage/e2eDiagnostics.ts).
+// The rest are the v1 development tools, which this codebase must never grow back.
 const forbiddenIdentifiers = [
 	'__serendipeak',
 	'exploreTo',

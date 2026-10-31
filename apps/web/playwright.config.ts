@@ -1,16 +1,15 @@
 import { defineConfig } from '@playwright/test';
+import { STUB_API_PORT, WEB_PORT } from './e2e/support/ports';
 
-const STUB_API_PORT = Number(process.env.STUB_API_PORT ?? 8099);
-const WEB_PORT = 3100;
-
+// WebGL scene tests live in playwright.webgl.config.ts: they need a different build and server.
 export default defineConfig({
 	testDir: './e2e',
+	testIgnore: /webgl\//,
 	workers: 1,
 	use: { baseURL: `http://127.0.0.1:${WEB_PORT}` },
 	projects: [
 		{ name: 'ssr', testMatch: /ssr\/.*\.spec\.ts/, use: { browserName: 'chromium' } },
-		{ name: 'nogl', grep: /@nogl/, use: { browserName: 'chromium' } },
-		{ name: 'webgl', grep: /@webgl/, use: { browserName: 'chromium' } }
+		{ name: 'nogl', grep: /@nogl/, use: { browserName: 'chromium' } }
 	],
 	webServer: [
 		{

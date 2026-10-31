@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidPublicConfigError, readPublicConfig } from './readPublicConfig';
+import { InvalidPublicConfigError, readCesiumConfig, readPublicConfig } from './readPublicConfig';
 
 describe('readPublicConfig', () => {
 	it('reads the API base URL and the ion token', () => {
@@ -34,4 +34,30 @@ describe('readPublicConfig', () => {
 			);
 		}
 	);
+});
+
+describe('readCesiumConfig', () => {
+	it('reads the ion token and the imagery mode without requiring the API base URL', () => {
+		expect(
+			readCesiumConfig({
+				NEXT_PUBLIC_CESIUM_ION_TOKEN: ' token ',
+				NEXT_PUBLIC_CESIUM_IMAGERY_MODE: 'none'
+			})
+		).toEqual({ ionToken: 'token', imageryMode: 'none' });
+	});
+
+	it.each([undefined, '', '   '])('treats %j as unset', (value) => {
+		expect(
+			readCesiumConfig({
+				NEXT_PUBLIC_CESIUM_ION_TOKEN: value,
+				NEXT_PUBLIC_CESIUM_IMAGERY_MODE: value
+			})
+		).toEqual({ ionToken: null, imageryMode: null });
+	});
+
+	it('leaves the imagery mode unvalidated for the imagery policy to resolve', () => {
+		expect(readCesiumConfig({ NEXT_PUBLIC_CESIUM_IMAGERY_MODE: 'satellite' }).imageryMode).toBe(
+			'satellite'
+		);
+	});
 });

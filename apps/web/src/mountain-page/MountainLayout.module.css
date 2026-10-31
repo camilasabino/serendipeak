@@ -1,0 +1,28 @@
+.mountain {
+	display: grid;
+	grid-template-areas: 'stage' 'sheet';
+	grid-template-columns: minmax(0, 1fr);
+	min-width: 0;
+}
+
+.stage {
+	grid-area: stage;
+	height: clamp(16rem, 52dvh, 34rem);
+}
+
+@media (min-width: 56rem) {
+	.mountain {
+		grid-template-areas: none;
+		grid-template-columns: subgrid;
+		grid-template-rows: subgrid;
+		min-height: 0;
+	}
+
+	.stage {
+		grid-area: auto;
+		grid-column: 1;
+		grid-row: 2;
+		height: auto;
+		min-height: 0;
+	}
+}

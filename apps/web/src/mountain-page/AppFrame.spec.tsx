@@ -4,17 +4,19 @@ import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { AppFrame } from './AppFrame';
 import { anchorsOf, countOf, textsOf } from './test-support/markup';
-import type { PageModel } from './pageModel';
+import { pageModelOf, type PageModel } from './pageModel';
 
 const mountain = contractFixture('mountain-complete.json') as Mountain;
 const daily = contractFixture('daily-mountain.json') as DailyMountain;
 
+// A mountain page contributes content only; the layout supplies its landmark.
 function render(pageProps: object): string {
+	const isMountainPage = pageModelOf(pageProps)?.kind !== 'error' && 'model' in pageProps;
+	const content = <h1>Page</h1>;
+
 	return renderToStaticMarkup(
 		<AppFrame pageProps={pageProps} year={2031}>
-			<main>
-				<h1>Page</h1>
-			</main>
+			{isMountainPage ? content : <main>{content}</main>}
 		</AppFrame>
 	);
 }
@@ -36,6 +38,25 @@ describe('AppFrame landmarks', () => {
 		]);
 		expect(html.indexOf('<header')).toBeLessThan(html.indexOf('<main'));
 		expect(html.indexOf('<main')).toBeLessThan(html.indexOf('<footer'));
+	});
+});
+
+describe('AppFrame stage', () => {
+	it.each([
+		['a permalink', { model: permalink }],
+		['the daily page', { model: dailyModel }]
+	])('puts the stage loader after the page content on %s', (_name, props) => {
+		const html = render(props);
+
+		expect(html.indexOf('<h1>Page</h1>')).toBeLessThan(html.indexOf('role="status"'));
+		expect(html.indexOf('role="status"')).toBeLessThan(html.indexOf('</main>'));
+	});
+
+	it.each([
+		['an error page', { model: { kind: 'error', reason: 'not-found' } }],
+		['a page without data', {}]
+	])('renders no stage on %s', (_name, props) => {
+		expect(render(props)).not.toContain('role="status"');
 	});
 });
 

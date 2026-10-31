@@ -1,11 +1,20 @@
-export type PublicEnv = {
-	NEXT_PUBLIC_API_BASE_URL?: string;
+export type CesiumEnv = {
 	NEXT_PUBLIC_CESIUM_ION_TOKEN?: string;
+	NEXT_PUBLIC_CESIUM_IMAGERY_MODE?: string;
+};
+
+export type PublicEnv = CesiumEnv & {
+	NEXT_PUBLIC_API_BASE_URL?: string;
 };
 
 export type PublicConfig = {
 	apiBaseUrl: string;
 	cesiumIonToken: string | null;
+};
+
+export type CesiumConfig = {
+	ionToken: string | null;
+	imageryMode: string | null;
 };
 
 export class InvalidPublicConfigError extends Error {
@@ -20,7 +29,16 @@ export class InvalidPublicConfigError extends Error {
 export function readPublicConfig(env: PublicEnv): PublicConfig {
 	return {
 		apiBaseUrl: parseApiBaseUrl(env.NEXT_PUBLIC_API_BASE_URL),
-		cesiumIonToken: env.NEXT_PUBLIC_CESIUM_ION_TOKEN?.trim() || null
+		cesiumIonToken: readCesiumConfig(env).ionToken
+	};
+}
+
+// The stage reads only these two values, so a missing or malformed API base URL cannot take the
+// globe down. The imagery mode is validated where it is resolved, next to the imagery policy.
+export function readCesiumConfig(env: CesiumEnv): CesiumConfig {
+	return {
+		ionToken: env.NEXT_PUBLIC_CESIUM_ION_TOKEN?.trim() || null,
+		imageryMode: env.NEXT_PUBLIC_CESIUM_IMAGERY_MODE?.trim() || null
 	};
 }
 

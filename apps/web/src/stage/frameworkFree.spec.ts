@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = new URL('..', import.meta.url).pathname;
 const OUTSIDE_BOUNDARY = ['stage/globe/cesium'];
-const TEST_FILE = /\.(spec|test)\.ts$/;
+const TEST_FILE = /\.(spec|test)\.tsx?$/;
 const IMPORT_SPECIFIER = /\b(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
 const FORBIDDEN_PACKAGE = /^(cesium|react|react-dom|next)(\/|$)/;
 const PAGE_CODE = /^(?:\.\.?\/)+(mountain-page|shell|pages)(\/|$)/;
@@ -22,7 +22,12 @@ function importSpecifiers(source: string): string[] {
 	return [...source.matchAll(IMPORT_SPECIFIER)].map((match) => match[1]!);
 }
 
-const FRAMEWORK_FREE_FILES = [...sources('stage'), ...sources('media')];
+const REACT_BINDINGS = ['stage/useStage.ts', 'stage/MountainScene.tsx'];
+const FORBIDDEN_FOR_BINDINGS = /^(cesium|react-dom|next)(\/|$)/;
+
+const FRAMEWORK_FREE_FILES = [...sources('stage'), ...sources('media')].filter(
+	(file) => !REACT_BINDINGS.includes(file)
+);
 
 describe('framework-free scene and media modules', () => {
 	it('discovers the ported modules', () => {
@@ -50,5 +55,15 @@ describe('framework-free scene and media modules', () => {
 		const specifiers = importSpecifiers(readFileSync(join(SRC, file), 'utf8'));
 
 		expect(specifiers.filter((s) => FORBIDDEN_PACKAGE.test(s) || PAGE_CODE.test(s))).toEqual([]);
+	});
+});
+
+describe('React bindings of the stage', () => {
+	it.each(REACT_BINDINGS)('%s imports no engine, Next or page code', (file) => {
+		const specifiers = importSpecifiers(readFileSync(join(SRC, file), 'utf8'));
+
+		expect(specifiers.filter((s) => FORBIDDEN_FOR_BINDINGS.test(s) || PAGE_CODE.test(s))).toEqual(
+			[]
+		);
 	});
 });

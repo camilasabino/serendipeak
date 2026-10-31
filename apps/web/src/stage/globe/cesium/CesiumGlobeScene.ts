@@ -1,5 +1,6 @@
 import type { TerrainProvider, Viewer } from 'cesium';
 import type { SceneTarget } from '../camera';
+import type { CameraReading, ExposeCameraReading } from '../cameraReading';
 import { CameraDirector, type CameraOutcome } from '../choreography';
 import type { GlobeScene } from '../GlobeScene';
 import { FailedLayerRemoval } from '../failedLayerRemoval';
@@ -35,6 +36,7 @@ const CAMERA_TURN_EPSILON = 1e-5;
 export interface CesiumSceneConfig {
 	ionToken: string;
 	imageryMode: ImageryMode;
+	exposeCameraReading?: ExposeCameraReading;
 }
 
 interface ViewReadyWaiter {
@@ -67,13 +69,14 @@ export class CesiumGlobeScene implements GlobeScene {
 	private scaleTracker: ScaleTracker | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
+	private releaseCameraReading: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
 	private destroyed = false;
 
 	static async create(
 		container: HTMLElement,
 		stageElement: HTMLElement,
-		{ ionToken, imageryMode }: CesiumSceneConfig,
+		{ ionToken, imageryMode, exposeCameraReading }: CesiumSceneConfig,
 		signal: AbortSignal
 	): Promise<CesiumGlobeScene> {
 		// Cesium reads the base URL lazily, so it must be set before the module is first used.
@@ -119,17 +122,34 @@ export class CesiumGlobeScene implements GlobeScene {
 			throw error;
 		}
 
-		failedBaseLayer?.attach(viewer.scene.imageryLayers);
-		disableEntityPicking(viewer, cesium.ScreenSpaceEventType);
+		let scene: CesiumGlobeScene | undefined;
+		try {
+			failedBaseLayer?.attach(viewer.scene.imageryLayers);
+			disableEntityPicking(viewer, cesium.ScreenSpaceEventType);
 
-		return new CesiumGlobeScene({
-			cesium,
-			viewer,
-			terrainProvider,
-			imagery,
-			failedBaseLayer,
-			container
-		});
+			const built = new CesiumGlobeScene({
+				cesium,
+				viewer,
+				terrainProvider,
+				imagery,
+				failedBaseLayer,
+				container
+			});
+			scene = built;
+			built.releaseCameraReading = exposeCameraReading?.(() => built.readCamera()) ?? noop;
+		} catch (error) {
+			if (scene) {
+				scene.destroy();
+			} else {
+				imagery.release();
+				failedBaseLayer?.release();
+				// The viewer owns the base layer once constructed and destroys it with itself.
+				viewer.destroy();
+			}
+			throw error;
+		}
+
+		return scene;
 	}
 
 	private constructor({
@@ -333,11 +353,18 @@ export class CesiumGlobeScene implements GlobeScene {
 		return this.imagery.subscribe(listener);
 	}
 
+	readCamera(): CameraReading | undefined {
+		return this.destroyed ? undefined : this.flight.cameraReading();
+	}
+
 	destroy(): void {
 		if (this.destroyed) {
 			return;
 		}
 		this.destroyed = true;
+
+		this.releaseCameraReading();
+		this.releaseCameraReading = noop;
 
 		this.viewReadyWaiter?.settle();
 		this.imagery.release();

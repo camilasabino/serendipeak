@@ -36,6 +36,7 @@ describe('resolveImageryMode', () => {
 
 	it('names the accepted values in the error', () => {
 		expect(() => resolveImageryMode(true, 'bing')).toThrow(/sentinel2, world, none/);
+		expect(() => resolveImageryMode(true, 'bing')).toThrow(/^NEXT_PUBLIC_CESIUM_IMAGERY_MODE /);
 	});
 });
 

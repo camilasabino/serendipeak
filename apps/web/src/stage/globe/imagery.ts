@@ -9,7 +9,7 @@ export const PRODUCTION_IMAGERY_MODE: ImageryMode = 'world';
 export class InvalidImageryModeError extends Error {
 	constructor(value: string) {
 		super(
-			`PUBLIC_CESIUM_IMAGERY_MODE must be one of ${IMAGERY_MODES.join(', ')}, received "${value}".`
+			`NEXT_PUBLIC_CESIUM_IMAGERY_MODE must be one of ${IMAGERY_MODES.join(', ')}, received "${value}".`
 		);
 		this.name = 'InvalidImageryModeError';
 	}
