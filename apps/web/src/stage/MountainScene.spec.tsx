@@ -29,8 +29,9 @@ describe('MountainScene markup', () => {
 	it('renders one empty viewport for the engine to own', () => {
 		const html = render();
 
-		expect(html.match(/<div/g)).toHaveLength(2);
-		expect(html).toMatch(/<div[^>]*><div[^>]*><\/div><\/div>/);
+		expect(html.match(/<div/g)).toHaveLength(3);
+		expect(html).toMatch(/<div[^>]*><div[^>]*><\/div>/);
+		expect(html).toMatch(/<div role="status"><\/div><\/div>$/);
 	});
 
 	it.each([

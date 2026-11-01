@@ -194,7 +194,10 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 export async function expectReadyStage(page: Page) {
-	await expect(page.getByRole('status')).toHaveCount(0, { timeout: 60_000 });
+	// The stage's own status region stays mounted but empty; only the loader fills one before ready.
+	await expect(page.getByRole('status').filter({ hasText: /\S/ })).toHaveCount(0, {
+		timeout: 60_000
+	});
 	// Next's route announcer is also an alert, so only the stage's own failure notice counts.
 	await expect(page.locator('main [role="alert"]')).toHaveCount(0);
 }

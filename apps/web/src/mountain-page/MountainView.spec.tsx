@@ -30,6 +30,16 @@ describe.each([
 		expect(countOf(html, 'h[2-6]')).toBe(0);
 	});
 
+	it.each([false, true])(
+		'names its section by the heading and lets focus land there (daily: %s)',
+		(daily) => {
+			const html = render(mountain, daily);
+
+			expect(html).toMatch(/<section aria-labelledby="mountain-name">/);
+			expect(html).toMatch(/<h1 id="mountain-name" tabindex="-1"/);
+		}
+	);
+
 	it.each([false, true])('leaves no empty element or placeholder text (daily: %s)', (daily) => {
 		const html = render(mountain, daily);
 

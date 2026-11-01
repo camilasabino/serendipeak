@@ -14,6 +14,8 @@ export interface ExplorerOptions {
 	preloader: ImagePreloader;
 	/** Resolves true once the destination route is shown, false when a newer navigation replaced it. */
 	navigate: (slug: string) => Promise<boolean>;
+	/** Called once, while the run is still current, after the destination route is shown. */
+	onNavigated?: (slug: string) => void;
 	onError?: (error: unknown) => void;
 }
 
@@ -121,11 +123,24 @@ export class Explorer {
 		run.route = mountainHref(mountain.slug);
 		const navigated = await navigate(mountain.slug);
 		if (navigated) {
+			if (this.run === run && mountain.slug !== currentSlug) {
+				this.notifyNavigated(mountain.slug);
+			}
+			// A camera that failed or was interrupted leaves the destination fully readable, so the
+			// outcome is deliberately not surfaced: the page already shows the new mountain.
 			await transition.arrival;
 		} else {
 			transition.cancel();
 		}
 		this.publishIfCurrent(run, IDLE);
+	}
+
+	private notifyNavigated(slug: string): void {
+		try {
+			this.options.onNavigated?.(slug);
+		} catch (error) {
+			this.onError(error);
+		}
 	}
 
 	private warm(preload: () => void): void {

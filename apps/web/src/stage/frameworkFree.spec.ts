@@ -30,6 +30,8 @@ const REACT_BINDINGS = [
 	'stage/StageBoundary.tsx',
 	'stage/TransitionCoordinatorContext.tsx',
 	'media/ImagePreloaderContext.tsx',
+	'media/PhotoViewer.tsx',
+	'media/usePhotoReveal.ts',
 	...sources('stage/controls')
 ];
 const EXPLORE_BINDINGS = ['explore/ExploreControl.tsx', 'explore/useExplorer.ts'];

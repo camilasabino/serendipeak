@@ -17,7 +17,11 @@ export function StageShell({ store, daily, className, children }: StageShellProp
 	const { state } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
 	return (
-		<div className={className ? `${styles.stage} ${className}` : styles.stage}>
+		<div
+			className={className ? `${styles.stage} ${className}` : styles.stage}
+			tabIndex={-1}
+			data-stage=""
+		>
 			{children}
 			{sceneBlocksExperience(state) && (
 				<div className={styles.loader} role="status">

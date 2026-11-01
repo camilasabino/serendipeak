@@ -66,7 +66,14 @@ describe('SceneStatus degraded imagery', () => {
 	it.each([
 		['loading', { status: 'loading' } as const],
 		['ready', { status: 'ready' } as const]
-	])('renders nothing while %s', (_name, state) => {
-		expect(render(state)).toBe('');
+	])('keeps only an empty status region mounted while %s', (_name, state) => {
+		expect(render(state)).toBe('<div role="status"></div>');
+	});
+
+	it('fills the same status region that is empty otherwise, so the notice is announced when it appears', () => {
+		const html = render({ status: 'ready', imageryDegraded: true });
+
+		expect(html).toMatch(/^<div role="status" class="[^"]*notice[^"]*"><p>/);
+		expect(html.match(/role="status"/g)).toHaveLength(1);
 	});
 });

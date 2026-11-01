@@ -129,6 +129,7 @@ test.describe('@nogl stage code failure', () => {
 		await expect(alert).toContainText(MISSING_TOKEN_MESSAGE);
 		await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
 		await expect(page.getByText(/^Revealing/)).toHaveCount(0);
+		await expect(page.locator('[data-stage]')).toBeFocused();
 		expect(documentRequests).toEqual([]);
 		expect(watched.providers).toEqual([]);
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(MOUNTAIN.name);
@@ -147,5 +148,43 @@ test.describe('@nogl stage code failure', () => {
 		await expect(page.locator('main').getByRole('alert')).toContainText(FAILURE_MESSAGE);
 		await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 		await expect(page.getByText(/^Revealing/)).toHaveCount(0);
+	});
+
+	test('keeps focus on the stage when retry is pressed and finds the control again after a failure', async ({
+		page
+	}) => {
+		await watchProviders(page);
+		const chunks = await lazyChunkBlocker(page);
+		await page.goto(PERMALINK);
+		const retry = page.getByRole('button', { name: 'Try again' });
+		await expect(retry).toBeVisible();
+		await expect(retry).not.toBeFocused();
+
+		await retry.focus();
+		const before = chunks.blocked.length;
+		await page.keyboard.press('Enter');
+
+		await expect.poll(() => chunks.blocked.length).toBeGreaterThan(before);
+		await expect(retry).toBeVisible();
+		await expect(retry).toBeFocused();
+		await page.keyboard.press('Enter');
+		await expect(retry).toBeFocused();
+
+		chunks.blocking = false;
+		await page.keyboard.press('Enter');
+		await expect(page.locator('main').getByRole('alert')).toContainText(MISSING_TOKEN_MESSAGE);
+		await expect(page.locator('[data-stage]')).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(page.locator('[data-stage]')).not.toBeFocused();
+	});
+
+	test('does not take focus when a failure appears while it is elsewhere', async ({ page }) => {
+		await watchProviders(page);
+		await lazyChunkBlocker(page);
+
+		await page.goto(PERMALINK);
+		await expect(page.locator('main').getByRole('alert')).toContainText(FAILURE_MESSAGE);
+
+		await expect(page.getByRole('button', { name: 'Try again' })).not.toBeFocused();
 	});
 });

@@ -486,4 +486,128 @@ test.describe('@nogl Photograph viewer', () => {
 		await expect(page.locator('dialog')).toHaveCount(0);
 		await expect(frame(page)).toHaveAttribute('data-state', 'ready');
 	});
+
+	test('is operated by keyboard: named, focus enters, Tab stays inside, Escape returns focus', async ({
+		page
+	}) => {
+		await watch(page);
+		await open(page, ACONCAGUA.slug);
+		await expect(openButton(page)).toBeEnabled();
+
+		await openButton(page).focus();
+		await page.keyboard.press('Enter');
+
+		const dialog = viewer(page);
+		await expect(dialog).toBeVisible();
+		await expect(dialog).toHaveAccessibleName(`Photograph of ${ACONCAGUA.name}`);
+		await expect(dialog.getByRole('button', { name: 'Close' })).toBeFocused();
+
+		// A native modal dialog hands focus to the browser UI after its last control and back to its
+		// first: the page behind it must never receive focus (it is inert), whichever way Tab goes.
+		const place = () =>
+			page.evaluate(() => {
+				const active = document.activeElement;
+				if (active === document.body) return 'browser-ui';
+				return active?.closest('dialog[open]') ? (active.textContent ?? '').trim() : 'page';
+			});
+		const visited = new Set<string>();
+		const keys = [...Array<string>(8).fill('Tab'), ...Array<string>(8).fill('Shift+Tab')];
+		for (const key of keys) {
+			await page.keyboard.press(key);
+			visited.add(await place());
+		}
+
+		expect(visited.has('page')).toBe(false);
+		expect(visited).toContain(ACONCAGUA_PHOTO.license);
+		expect(visited).toContain('Source: Wikimedia Commons');
+		expect(visited).toContain('Close');
+
+		await page.keyboard.press('Escape');
+		await expect(page.locator('dialog')).toHaveCount(0);
+		await expect(openButton(page)).toBeFocused();
+	});
+
+	test('leaves the page interactive after a route change closed it', async ({ page }) => {
+		await watch(page);
+		await open(page, ACONCAGUA.slug);
+		await expect(openButton(page)).toBeEnabled();
+		await openButton(page).click();
+		await expect(viewer(page)).toBeVisible();
+
+		await navigate(page, OLYMPUS.name, OLYMPUS.slug);
+
+		await expect(page.locator('dialog')).toHaveCount(0);
+		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+		await expect(frame(page)).toHaveAttribute('data-state', 'ready');
+		await page.keyboard.press('Tab');
+		const reachable = await page.evaluate(() => {
+			const active = document.activeElement;
+			return active !== document.body && active?.closest('header, main, footer') !== null;
+		});
+		expect(reachable).toBe(true);
+	});
+});
+
+test.describe('@nogl Photograph focus visibility', () => {
+	test.use({ viewport: { width: 1280, height: 800 } });
+
+	test('rings the photograph control in two tones, whatever the photograph shows', async ({
+		page
+	}) => {
+		await watch(page);
+		await open(page, ACONCAGUA.slug);
+		await expect(openButton(page)).toBeEnabled();
+
+		await openButton(page).focus();
+		await page.keyboard.press('Tab');
+		await page.keyboard.press('Shift+Tab');
+		await expect(openButton(page)).toBeFocused();
+
+		const ring = await openButton(page).evaluate((node) => {
+			const style = getComputedStyle(node);
+			return {
+				style: style.outlineStyle,
+				width: style.outlineWidth,
+				color: style.outlineColor,
+				shadow: style.boxShadow
+			};
+		});
+		expect(ring.style).toBe('solid');
+		expect(ring.width).toBe('3px');
+		expect(ring.color).toBe('rgb(247, 248, 245)');
+		expect(ring.shadow).toContain('rgb(11, 18, 25)');
+		expect(ring.shadow).toContain('inset');
+	});
+});
+
+test.describe('@nogl Photograph motion preference', () => {
+	test.use({ viewport: { width: 1280, height: 800 } });
+
+	const durations = (page: Page) =>
+		frame(page).evaluate((node) => {
+			const mark = node.querySelector('svg');
+			return {
+				image: getComputedStyle(node.querySelector('img')!).transitionDuration,
+				mark: mark ? getComputedStyle(mark).transitionDuration : undefined
+			};
+		});
+
+	for (const [preference, expected] of [
+		['no-preference', '0.18s'],
+		['reduce', '0s']
+	] as const) {
+		test(`reveals the photograph with ${preference === 'reduce' ? 'no fade' : 'its fade'} and reaches the same final state`, async ({
+			page
+		}) => {
+			await watch(page);
+			await page.emulateMedia({ reducedMotion: preference });
+
+			await open(page, ACONCAGUA.slug);
+
+			await expect(frame(page)).toHaveAttribute('data-state', 'ready');
+			expect(await durations(page)).toEqual({ image: expected, mark: expected });
+			await expect(photo(page)).toHaveCSS('opacity', '1');
+			await expect(openButton(page)).toBeEnabled();
+		});
+	}
 });

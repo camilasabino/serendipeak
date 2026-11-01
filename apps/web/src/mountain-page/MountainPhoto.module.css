@@ -35,8 +35,11 @@
 	cursor: zoom-in;
 }
 
+/* Two-tone ring: the light line is flanked by dark bands, so it reads on snow and on shadow alike. */
 .open:focus-visible {
-	outline-offset: -4px;
+	outline: 3px solid var(--sp-focus);
+	outline-offset: -6px;
+	box-shadow: inset 0 0 0 9px var(--sp-stage);
 }
 
 .open:disabled {

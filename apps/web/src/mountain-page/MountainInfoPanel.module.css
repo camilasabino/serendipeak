@@ -56,3 +56,8 @@
 .fact a:hover {
 	color: var(--sp-link-on-stage-hover);
 }
+
+.name:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: 0.25rem;
+}

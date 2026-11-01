@@ -51,8 +51,9 @@ test.describe('@webgl stage failure and retry', () => {
 		await expect(retry).toBeVisible();
 		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
 
+		await expect(retry).toBeFocused();
+
 		available = true;
-		await retry.focus();
 		await page.keyboard.press('Enter');
 
 		await expectReadyStage(page);
@@ -63,5 +64,8 @@ test.describe('@webgl stage failure and retry', () => {
 		await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Reset view' })).toBeEnabled();
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
+		await expect(page.locator('[data-stage]')).toBeFocused();
+		await page.keyboard.press('Tab');
+		await expect(page.locator('[data-stage]')).not.toBeFocused();
 	});
 });

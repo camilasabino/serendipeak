@@ -39,6 +39,7 @@ interface Setup {
 	api?: FakeMountainApi;
 	navigate?: (slug: string) => Promise<boolean>;
 	onError?: (error: unknown) => void;
+	onNavigated?: (slug: string) => void;
 }
 
 function setup(options: Setup = {}) {
@@ -60,11 +61,22 @@ function setup(options: Setup = {}) {
 			return true;
 		});
 	const onError = options.onError ?? vi.fn();
-	const explorer = new Explorer({ api, coordinator, preloader, navigate, onError });
+	const onNavigated = options.onNavigated ?? vi.fn();
+	const explorer = new Explorer({ api, coordinator, preloader, navigate, onNavigated, onError });
 	const states: ExploreState[] = [];
 	explorer.subscribe(() => states.push(explorer.getSnapshot()));
 
-	return { api, coordinator, explorer, images, navigations, onError, preloader, states };
+	return {
+		api,
+		coordinator,
+		explorer,
+		images,
+		navigations,
+		onError,
+		onNavigated,
+		preloader,
+		states
+	};
 }
 
 // The scene reports what the destination page makes it present, as the real session does.
@@ -319,6 +331,82 @@ describe('Explorer failures', () => {
 
 		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
 		expect(onError).not.toHaveBeenCalled();
+	});
+
+	it('reports the shown destination once, before the camera finishes', async () => {
+		const { explorer, coordinator, onNavigated } = setup();
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		expect(onNavigated).toHaveBeenCalledTimes(1);
+		expect(onNavigated).toHaveBeenCalledWith(OLYMPUS.slug);
+		expect(explorer.getSnapshot()).toEqual({ status: 'loading' });
+
+		travelTo(coordinator, OLYMPUS);
+		await exploring;
+
+		expect(onNavigated).toHaveBeenCalledTimes(1);
+	});
+
+	it('still reports the destination when the camera then fails', async () => {
+		const { explorer, coordinator, onNavigated } = setup();
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		travelTo(coordinator, OLYMPUS, 'failed');
+		await exploring;
+
+		expect(onNavigated).toHaveBeenCalledTimes(1);
+	});
+
+	it('reports nothing when the lookup fails, the navigation was replaced or the page did not change', async () => {
+		const failed = setup({ api: new FakeMountainApi({ random: { kind: 'unreachable' } }) });
+		await failed.explorer.explore('aconcagua');
+
+		const replaced = setup({ navigate: async () => false });
+		await replaced.explorer.explore('aconcagua');
+
+		const same = setup({
+			api: new FakeMountainApi({ random: { kind: 'found', mountain: ACONCAGUA } })
+		});
+		const exploring = same.explorer.explore('aconcagua');
+		await flush();
+		travelTo(same.coordinator, ACONCAGUA);
+		await exploring;
+
+		expect(failed.onNavigated).not.toHaveBeenCalled();
+		expect(replaced.onNavigated).not.toHaveBeenCalled();
+		expect(same.onNavigated).not.toHaveBeenCalled();
+	});
+
+	it('reports nothing for a run that a route change superseded while it navigated', async () => {
+		const pending = pendingNavigation();
+		const { explorer, onNavigated } = setup({ navigate: pending.navigate });
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		explorer.routeChangeStarted('/somewhere-else');
+		pending.navigation.resolve(true);
+		await exploring;
+
+		expect(onNavigated).not.toHaveBeenCalled();
+	});
+
+	it('survives an observer that throws, reporting it without failing the exploration', async () => {
+		const failure = new Error('focus failed');
+		const { explorer, coordinator, onError } = setup({
+			onNavigated: () => {
+				throw failure;
+			}
+		});
+		const exploring = explorer.explore('aconcagua');
+		await flush();
+
+		travelTo(coordinator, OLYMPUS);
+		await exploring;
+
+		expect(onError).toHaveBeenCalledWith(failure);
+		expect(explorer.getSnapshot()).toEqual({ status: 'idle' });
 	});
 
 	it('returns to idle, without a failure, when the scene session ended mid-transition', async () => {

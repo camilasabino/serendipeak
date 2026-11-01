@@ -4,6 +4,7 @@ import { ExternalLink } from '../links/ExternalLink';
 import { formatElevation } from '../formatElevation';
 import { formatCoordinates, formatCountries } from './format';
 import { googleMapsUrl } from './googleMaps';
+import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
 import styles from './MountainInfoPanel.module.css';
 
 export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
@@ -11,8 +12,8 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 	const formattedCoordinates = formatCoordinates(coordinates);
 
 	return (
-		<section aria-labelledby="mountain-name">
-			<h1 id="mountain-name" className={styles.name}>
+		<section aria-labelledby={MOUNTAIN_HEADING_ID}>
+			<h1 id={MOUNTAIN_HEADING_ID} tabIndex={-1} className={styles.name}>
 				{mountain.name}
 			</h1>
 			{summary && <p className={styles.summary}>{summary}</p>}

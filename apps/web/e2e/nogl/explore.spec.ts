@@ -112,6 +112,89 @@ test.describe('@nogl Explore', () => {
 		expect(randoms).toHaveLength(1);
 	});
 
+	test('is operated by keyboard, stays focused while busy and lands on the new heading', async ({
+		page
+	}) => {
+		await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+		const button = exploreButton(page);
+		await button.focus();
+		await page.keyboard.press('Enter');
+
+		await expect(button).toHaveAttribute('aria-busy', 'true');
+		await expect(button).toHaveAttribute('aria-disabled', 'true');
+		await expect(button).toHaveAccessibleName('Exploring…');
+		await expect(button).toBeFocused();
+		await page.keyboard.press('Enter');
+		await page.keyboard.press('Space');
+		await expect(button).toBeFocused();
+		random.release();
+
+		const heading = page.getByRole('heading', { level: 1 });
+		await expect(page).toHaveURL(new RegExp(`/mountains/${BARE_PEAK.slug}$`));
+		await expect(heading).toHaveText(BARE_PEAK.name);
+		await expect(heading).toBeFocused();
+		await expect(button).toHaveAttribute('aria-busy', 'false');
+		await expect(button).toHaveAttribute('aria-disabled', 'false');
+		await expect(button).toHaveAccessibleName(/^Explore another/);
+		expect(random.requests).toHaveLength(1);
+
+		await page.keyboard.press('Tab');
+		const afterHeading = await page.evaluate(
+			() => document.activeElement?.closest('main') !== null
+		);
+		expect(afterHeading).toBe(true);
+	});
+
+	test('announces the new mountain once, through the router announcer', async ({ page }) => {
+		await watch(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+		await exploreButton(page).click();
+
+		await expect(page.locator('#__next-route-announcer__')).toContainText(BARE_PEAK.name);
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(BARE_PEAK.name);
+		const announcing = await page.evaluate((name) => {
+			const live = [...document.querySelectorAll('[role="alert"], [role="status"], [aria-live]')];
+			return live.filter((node) => node.textContent?.includes(name)).length;
+		}, BARE_PEAK.name);
+		expect(announcing).toBe(1);
+	});
+
+	test('leaves focus where the user moved it while the destination was being chosen', async ({
+		page
+	}) => {
+		await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+		await exploreButton(page).click();
+		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		const elsewhere = page.locator('footer').getByRole('link').first();
+		await elsewhere.focus();
+		random.release();
+
+		await expectSettledOn(page, BARE_PEAK);
+		await expect(elsewhere).toBeFocused();
+	});
+
+	test('does not move focus for a run that navigation superseded', async ({ page }) => {
+		await watch(page);
+		const random = await holdRandom(page);
+		await page.goto(`/mountains/${OLYMPUS.slug}`);
+
+		await exploreButton(page).click();
+		await page.getByRole('link', { name: /today/i }).click();
+		await expectSettledOn(page, DAILY, '');
+		random.release();
+		await expectStaleAnswerConsumed(page);
+
+		await expect(page.getByRole('heading', { level: 1 })).not.toBeFocused();
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(DAILY.name);
+	});
+
 	for (const [scenario, message] of [
 		['unreachable', 'Mountain data is unavailable right now. Try again.'],
 		['server-error', 'Another mountain could not be loaded. Try again.'],

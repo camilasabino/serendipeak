@@ -31,4 +31,10 @@ describe('StageShell', () => {
 		expect(html).not.toContain('role="status"');
 		expect(html).toContain('scene');
 	});
+
+	it('is a programmatic focus anchor that is never a tab stop', () => {
+		const html = render(new SceneStore());
+
+		expect(html).toMatch(/<div[^>]*tabindex="-1"[^>]*data-stage=""/);
+	});
 });
