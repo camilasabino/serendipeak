@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if publication_transition %}
+    <li>
+      <form method="post" action="{{ publication_transition.url }}" class="publication-transition">
+        {% csrf_token %}
+        <button type="submit">{{ publication_transition.label }}</button>
+      </form>
+    </li>
+  {% endif %}
+{% endblock %}

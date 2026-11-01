@@ -1,6 +1,7 @@
 from django.contrib.admin import AdminSite
-from django.contrib.auth.admin import GroupAdmin, UserAdmin
-from django.contrib.auth.models import Group, User
+from django.contrib.admin.options import ShowFacets
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import Permission, User
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_deny
 
@@ -11,6 +12,30 @@ from config.composition import (
 )
 from serendipeak.persistence.admin import DailyDiscoveryAdmin, MountainAdmin
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
+
+CATALOG_APP_LABEL = "catalog"
+
+
+class EditorialUserAdmin(UserAdmin):
+    show_facets = ShowFacets.ALWAYS
+    list_filter = ("is_staff", "is_superuser", "is_active")
+
+    def get_fieldsets(self, request, obj=None):
+        return [
+            (
+                name,
+                {**options, "fields": tuple(f for f in options["fields"] if f != "groups")},
+            )
+            for name, options in super().get_fieldsets(request, obj)
+        ]
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "user_permissions":
+            kwargs["queryset"] = Permission.objects.filter(
+                content_type__app_label=CATALOG_APP_LABEL
+            ).select_related("content_type")
+
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
 
 class EditorialAdminSite(AdminSite):
@@ -37,7 +62,6 @@ def build_admin_site() -> EditorialAdminSite:
         reactivate_mountain=build_reactivate_mountain(),
     )
     site.register(DailyDiscoveryRecord, DailyDiscoveryAdmin)
-    site.register(User, UserAdmin)
-    site.register(Group, GroupAdmin)
+    site.register(User, EditorialUserAdmin)
 
     return site

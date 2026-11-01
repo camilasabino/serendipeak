@@ -10,7 +10,7 @@ SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
 def test_the_admin_stack_is_installed_without_autodiscovering_the_default_site():
     for app in (
         "django.contrib.admin.apps.SimpleAdminConfig",
-        "django.contrib.auth",
+        "config.apps.UsersConfig",
         "django.contrib.contenttypes",
         "django.contrib.sessions",
         "django.contrib.messages",

@@ -2,23 +2,32 @@ import re
 
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.admin.options import ActionLocation
+from django.contrib.admin.options import ActionLocation, ShowFacets
 from django.contrib.gis.geos import Point
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import router, transaction
 from django.forms.models import BaseInlineFormSet
+from django.http import Http404, HttpResponseRedirect
+from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html, format_html_join
+from django.utils.text import capfirst
+from django.views.decorators.http import require_POST
 
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
 from serendipeak.catalog.errors import InvalidStatusTransition, PublicationRejected, UnknownMountain
-from serendipeak.catalog.publication import PublicationViolation, image_violations
+from serendipeak.catalog.publication import (
+    PublicationViolation,
+    image_violations,
+    publication_violations,
+)
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
-from serendipeak.persistence.mapping import to_primary_image
+from serendipeak.persistence.mapping import to_mountain, to_primary_image
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 PUBLISH_PERMISSION = "catalog.publish_mountain"
@@ -119,8 +128,22 @@ def _make_optional(form, names):
             field.empty_value = None
 
 
+TRANSITION_BY_STATUS = {
+    MountainStatus.DRAFT.value: ("publish", "Publish"),
+    MountainStatus.ACTIVE.value: ("deactivate", "Deactivate"),
+    MountainStatus.INACTIVE.value: ("reactivate", "Reactivate"),
+}
+STORED_STATE_NOTICE = (
+    "Publication checks the saved mountain, not unsaved changes in the form. Save your edits first."
+)
+
+
 def _single_line(*names):
     return {name: forms.TextInput(attrs={"size": 80}) for name in names}
+
+
+def _summary_textarea():
+    return forms.Textarea(attrs={"rows": 3, "cols": 80})
 
 
 def _clean_summary(value):
@@ -176,7 +199,10 @@ class MountainCreateForm(forms.ModelForm):
             "osm_id",
             "wikidata_id",
         )
-        widgets = _single_line("slug", "name", "range_name", "summary", "wikipedia_url")
+        widgets = {
+            **_single_line("slug", "name", "range_name", "wikipedia_url"),
+            "summary": _summary_textarea(),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -271,7 +297,10 @@ class MountainChangeForm(forms.ModelForm):
     class Meta:
         model = MountainRecord
         fields = EDITORIAL_FIELDS
-        widgets = _single_line("range_name", "summary", "wikipedia_url")
+        widgets = {
+            **_single_line("range_name", "wikipedia_url"),
+            "summary": _summary_textarea(),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -385,6 +414,7 @@ class MountainAdmin(admin.ModelAdmin):
     deactivate_mountain: DeactivateMountain
     reactivate_mountain: ReactivateMountain
 
+    show_facets = ShowFacets.ALWAYS
     list_display = ("name", "slug", "status", "elevation_meters", "range_name", "updated_at")
     list_filter = ("status",)
     search_fields = ("name", "slug", "range_name")
@@ -392,13 +422,16 @@ class MountainAdmin(admin.ModelAdmin):
     inlines = [MountainImageInline]
     actions = ["publish_selected", "deactivate_selected", "reactivate_selected"]
 
+    class Media:
+        css = {"all": ("serendipeak/admin/editorial.css",)}
+
     def get_form(self, request, obj=None, **kwargs):
         kwargs["form"] = MountainCreateForm if obj is None else MountainChangeForm
 
         return super().get_form(request, obj, **kwargs)
 
     def get_readonly_fields(self, request, obj=None):
-        return () if obj is None else MOUNTAIN_FROZEN
+        return () if obj is None else (*MOUNTAIN_FROZEN, "publication_readiness")
 
     def get_fieldsets(self, request, obj=None):
         identity = ("slug", "name", "latitude", "longitude", "elevation_meters")
@@ -417,9 +450,80 @@ class MountainAdmin(admin.ModelAdmin):
             ("Provenance", {"fields": provenance}),
         ]
         if obj is not None:
-            fieldsets.append(("Publication", {"fields": ("status", "created_at", "updated_at")}))
+            publication = (
+                "Publication",
+                {"fields": ("status", "created_at", "updated_at", "publication_readiness")},
+            )
+            fieldsets.insert(0, publication)
 
         return fieldsets
+
+    @admin.display(description="Publication readiness")
+    def publication_readiness(self, obj):
+        if obj.status != MountainStatus.DRAFT.value:
+            return "Not applicable: only a draft is checked before publishing."
+
+        violations = publication_violations(to_mountain(obj))
+        if not violations:
+            return format_html("Ready to publish. {}", STORED_STATE_NOTICE)
+
+        reasons = format_html_join(
+            "", "<li>{}</li>", ((capfirst(VIOLATION_MESSAGES[v]),) for v in violations)
+        )
+
+        return format_html(
+            "<p>Not ready to publish. {}</p><ul>{}</ul>", STORED_STATE_NOTICE, reasons
+        )
+
+    def get_urls(self):
+        transition = path(
+            "<path:object_id>/transition/<str:kind>/",
+            self.admin_site.admin_view(require_POST(self.transition_view)),
+            name=f"{self.opts.app_label}_{self.opts.model_name}_transition",
+        )
+
+        return [transition, *super().get_urls()]
+
+    def transition_view(self, request, object_id, kind):
+        if not self.has_publish_permission(request):
+            raise PermissionDenied
+        use_case = self._use_cases().get(kind)
+        if use_case is None:
+            raise Http404
+        record = self.get_object(request, object_id)
+        if record is None:
+            raise Http404
+
+        queryset = MountainRecord.objects.filter(pk=record.pk)
+        use_case, past_tense = use_case
+        done = self._transition(request, queryset, use_case, past_tense)
+        if not done:
+            self.message_user(request, STORED_STATE_NOTICE, messages.INFO)
+
+        return HttpResponseRedirect(
+            reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_change", args=[record.pk])
+        )
+
+    def _use_cases(self):
+        return {
+            "publish": (self.publish_mountain, "published"),
+            "deactivate": (self.deactivate_mountain, "deactivated"),
+            "reactivate": (self.reactivate_mountain, "reactivated"),
+        }
+
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        offered = TRANSITION_BY_STATUS.get(obj.status) if obj is not None else None
+        if offered and self.has_publish_permission(request):
+            kind, label = offered
+            context["publication_transition"] = {
+                "label": label,
+                "url": reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_transition",
+                    args=[obj.pk, kind],
+                ),
+            }
+
+        return super().render_change_form(request, context, add, change, form_url, obj)
 
     @admin.display(description="Latitude")
     def latitude(self, obj):
@@ -514,6 +618,8 @@ class MountainAdmin(admin.ModelAdmin):
 
         if done:
             self.message_user(request, f"{done} mountain(s) {past_tense}.", messages.SUCCESS)
+
+        return done
 
 
 class DailyDiscoveryAdmin(admin.ModelAdmin):

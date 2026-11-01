@@ -1,0 +1,11 @@
+.aligned textarea.vLargeTextField {
+  resize: vertical;
+}
+
+.object-tools .publication-transition {
+  display: inline;
+}
+
+.object-tools .publication-transition button {
+  cursor: pointer;
+}
