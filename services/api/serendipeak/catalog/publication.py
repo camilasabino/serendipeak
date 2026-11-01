@@ -18,8 +18,6 @@ class PublicationViolation(StrEnum):
     CAMERA_OUT_OF_BOUNDS = "camera_out_of_bounds"
     CAMERA_FRAMING_MISSING = "camera_framing_missing"
     CAMERA_FRAMING_OUT_OF_BOUNDS = "camera_framing_out_of_bounds"
-    OSM_REFERENCE_MISSING = "osm_reference_missing"
-    WIKIDATA_ID_MISSING = "wikidata_id_missing"
     PRIMARY_IMAGE_MISSING = "primary_image_missing"
     IMAGE_URL_MISSING = "image_url_missing"
     IMAGE_ATTRIBUTION_MISSING = "image_attribution_missing"
@@ -52,11 +50,6 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
         violations.append(PublicationViolation.ELEVATION_NOT_POSITIVE)
 
     violations.extend(_camera_violations(mountain.camera))
-
-    if mountain.osm is None:
-        violations.append(PublicationViolation.OSM_REFERENCE_MISSING)
-    if _is_blank(mountain.wikidata_id):
-        violations.append(PublicationViolation.WIKIDATA_ID_MISSING)
 
     violations.extend(image_violations(mountain.primary_image))
 

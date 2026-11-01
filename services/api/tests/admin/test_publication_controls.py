@@ -15,6 +15,13 @@ INCOMPLETE_DRAFT = catalog_mountain(
     camera=None,
     primary_image=primary_image(license_url=None),
 )
+UNSOURCED_DRAFT = catalog_mountain(
+    "unsourced-draft",
+    status=MountainStatus.DRAFT,
+    osm=None,
+    wikidata_id=None,
+    wikipedia_url=None,
+)
 ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
 
@@ -178,6 +185,21 @@ class TestPublicationSection:
         html = publisher_client.get(change_url(COMPLETE_DRAFT)).content.decode()
 
         assert "Ready to publish" in html
+
+    def test_a_draft_without_source_references_is_ready_and_publishes(
+        self, publisher_client, load_catalog
+    ):
+        load_catalog(UNSOURCED_DRAFT)
+
+        html = publisher_client.get(change_url(UNSOURCED_DRAFT)).content.decode()
+        assert "Ready to publish" in html
+
+        response = publisher_client.post(transition_url(UNSOURCED_DRAFT, "publish"), follow=True)
+
+        assert messages_of(response) == ["1 mountain(s) published."]
+        assert status_of(UNSOURCED_DRAFT) == "active"
+        served = publisher_client.get("/api/v1/mountains/unsourced-draft").json()
+        assert "sources" not in served
 
     def test_an_incomplete_draft_lists_the_stored_violations(self, publisher_client, load_catalog):
         load_catalog(INCOMPLETE_DRAFT)

@@ -1,10 +1,14 @@
+import re
+
 import pytest
 from django.contrib.admin.models import LogEntry
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from config.admin import build_admin_site
 from serendipeak.catalog.entities import MountainStatus
-from serendipeak.persistence.admin import MountainChangeForm
+from serendipeak.persistence.admin import CAMERA_FIELDS, MountainForm
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.admin.support import form_payload, input_names
 from tests.support.catalog import catalog_mountain, primary_image
@@ -37,11 +41,6 @@ NEW_MOUNTAIN = {
     "countries": "",
     "summary": "",
     "wikipedia_url": "",
-    "camera_heading_degrees": "66.87",
-    "camera_pitch_degrees": "-19.85",
-    "camera_range_meters": "17132",
-    "camera_framing_x": "-0.0587",
-    "camera_framing_y": "0.3857",
     "osm_type": "node",
     "osm_id": "1504741757",
     "wikidata_id": "Q39739",
@@ -57,6 +56,39 @@ def new_mountain_payload(client, **overrides):
 
 def create_mountain(client, **overrides):
     return client.post(ADD_URL, new_mountain_payload(client, **overrides))
+
+
+EDITABLE = (
+    "name",
+    "latitude",
+    "longitude",
+    "elevation_meters",
+    "summary",
+    "range_name",
+    "countries",
+    "prominence_meters",
+    "osm_type",
+    "osm_id",
+    "wikidata_id",
+    "wikipedia_url",
+)
+CORRECTIONS = {
+    "name": "Cerro Aconcagua",
+    "latitude": "-32.65",
+    "longitude": "-70.01",
+    "elevation_meters": "6960",
+    "osm_type": "way",
+    "osm_id": "42",
+    "wikidata_id": "Q1",
+}
+
+
+def stored(entry):
+    return MountainRecord.objects.filter(pk=entry.mountain.id).values().get()
+
+
+def inline_errors_of(response):
+    return list(response.context["inline_admin_formsets"][0].formset.non_form_errors())
 
 
 def errors_of(response):
@@ -152,17 +184,45 @@ class TestCreation:
         assert record.status == "draft"
         assert (record.location.y, record.location.x) == (46.5, 8.5)
         assert record.location.srid == 4326
-        assert (record.camera_heading_degrees, record.osm_id) == (66.87, 1504741757)
+        assert record.osm_id == 1504741757
+        assert all(getattr(record, name) is None for name in CAMERA_FIELDS)
         assert record.countries == []
         assert record.prominence_meters is None
         assert record.summary is None
 
-    def test_the_add_form_offers_no_status_and_no_map_widget(self, editor_client):
+    def test_the_add_form_offers_no_status_no_camera_and_no_map_widget(self, editor_client):
         names = input_names(editor_client.get(ADD_URL))
 
         assert "status" not in names
         assert "location" not in names
-        assert {"latitude", "longitude", "slug", "camera_heading_degrees"} <= names
+        assert names & set(CAMERA_FIELDS) == set()
+        assert {"latitude", "longitude", "slug", "osm_type", "wikidata_id"} <= names
+
+    def test_a_posted_camera_is_ignored_on_creation(self, editor_client):
+        payload = new_mountain_payload(editor_client) | {
+            "camera_heading_degrees": "66.87",
+            "camera_pitch_degrees": "-19.85",
+            "camera_range_meters": "17132",
+        }
+
+        assert editor_client.post(ADD_URL, payload).status_code == 302
+        assert MountainRecord.objects.get(slug="new-peak").camera_heading_degrees is None
+
+    def test_the_add_form_groups_the_secondary_data(self, editor_client):
+        fieldsets = [
+            (fieldset.name, list(fieldset.fields), fieldset.classes)
+            for fieldset in editor_client.get(ADD_URL).context["adminform"]
+        ]
+
+        assert fieldsets == [
+            ("Mountain", ["name", "slug", "latitude", "longitude", "elevation_meters"], ""),
+            ("Editorial", ["summary", "range_name", "countries"], ""),
+            (
+                "Additional data",
+                ["prominence_meters", "osm_type", "osm_id", "wikidata_id", "wikipedia_url"],
+                "collapse",
+            ),
+        ]
 
     def test_a_posted_status_is_ignored(self, editor_client):
         payload = new_mountain_payload(editor_client) | {"status": "active"}
@@ -249,12 +309,6 @@ class TestCreation:
             ({"elevation_meters": "0"}, "elevation_meters"),
             ({"elevation_meters": "-5"}, "elevation_meters"),
             ({"elevation_meters": ""}, "elevation_meters"),
-            ({"camera_heading_degrees": "360"}, "camera_heading_degrees"),
-            ({"camera_pitch_degrees": "15.1"}, "camera_pitch_degrees"),
-            ({"camera_range_meters": "1999"}, "camera_range_meters"),
-            ({"camera_framing_x": "1.1"}, "camera_framing_x"),
-            ({"camera_heading_degrees": ""}, "camera_heading_degrees"),
-            ({"camera_framing_y": ""}, "camera_framing_y"),
             ({"osm_id": ""}, "osm_id"),
             ({"osm_type": ""}, "osm_id"),
             ({"osm_id": "0"}, "osm_id"),
@@ -276,33 +330,16 @@ class TestCreation:
         assert field in errors_of(response)
         assert not MountainRecord.objects.exists()
 
-    def test_framing_without_a_camera_is_rejected(self, editor_client):
-        response = create_mountain(
-            editor_client,
-            camera_heading_degrees="",
-            camera_pitch_degrees="",
-            camera_range_meters="",
-        )
-
-        assert response.status_code == 200
-        assert errors_of(response)
-        assert not MountainRecord.objects.exists()
-
     def test_a_draft_may_be_saved_without_camera_provenance_or_photograph(self, editor_client):
-        response = create_mountain(
-            editor_client,
-            camera_heading_degrees="",
-            camera_pitch_degrees="",
-            camera_range_meters="",
-            camera_framing_x="",
-            camera_framing_y="",
-            osm_type="",
-            osm_id="",
-            wikidata_id="",
-        )
+        response = create_mountain(editor_client, osm_type="", osm_id="", wikidata_id="")
 
         assert response.status_code == 302
-        assert MountainRecord.objects.get(slug="new-peak").camera_heading_degrees is None
+        record = MountainRecord.objects.get(slug="new-peak")
+        assert (record.camera_heading_degrees, record.osm_type, record.wikidata_id) == (
+            None,
+            None,
+            None,
+        )
 
     def test_a_duplicate_slug_is_a_form_error(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -328,30 +365,18 @@ class TestCreation:
 
 
 class TestEditing:
-    def test_frozen_fields_are_not_inputs_after_creation(self, editor_client, load_catalog):
-        load_catalog(ACTIVE)
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    def test_mountain_data_including_the_slug_is_input_on_every_status(
+        self, editor_client, load_catalog, entry
+    ):
+        load_catalog(entry)
 
-        names = input_names(editor_client.get(change_url(ACTIVE)))
+        names = input_names(editor_client.get(change_url(entry)))
 
-        assert {"summary", "range_name", "countries", "prominence_meters", "wikipedia_url"} <= names
-        frozen = {
-            "slug",
-            "name",
-            "latitude",
-            "longitude",
-            "location",
-            "elevation_meters",
-            "status",
-            "camera_heading_degrees",
-            "camera_pitch_degrees",
-            "camera_range_meters",
-            "camera_framing_x",
-            "camera_framing_y",
-            "osm_type",
-            "osm_id",
-            "wikidata_id",
-            "created_at",
-            "updated_at",
+        assert {"slug", *EDITABLE} <= names
+        never_inputs = {"status", "location", "created_at", "updated_at", *CAMERA_FIELDS}
+        assert names & never_inputs == set()
+        legacy_photograph = {
             "image-0-url",
             "image-0-thumbnail_url",
             "image-0-width",
@@ -362,7 +387,21 @@ class TestEditing:
             "image-0-license_election_basis_url",
             "image-0-approved_on",
         }
-        assert names & frozen == set()
+        assert names & legacy_photograph == set()
+
+    def test_the_change_form_sections(self, editor_client, load_catalog):
+        load_catalog(ACTIVE)
+
+        page = editor_client.get(change_url(ACTIVE))
+
+        sections = [(fieldset.name, fieldset.classes) for fieldset in page.context["adminform"]]
+        assert sections == [
+            ("Publication", ""),
+            ("Mountain", ""),
+            ("Editorial", ""),
+            ("Camera", ""),
+            ("Additional data", "collapse"),
+        ]
 
     def test_the_photograph_credit_stays_editable(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -376,45 +415,251 @@ class TestEditing:
             "image-0-license_url",
         } <= names
 
-    def test_frozen_values_are_shown_read_only(self, editor_client, load_catalog):
+    def test_read_only_values_and_current_coordinates_are_shown(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
 
         page = editor_client.get(change_url(ACTIVE))
 
         content = page.content.decode()
         assert "aconcagua" in content
-        assert "-32.6531487" in content
-        assert "6961" in content
+        assert "66.87" in content
+        values = form_payload(page)
+        assert (values["latitude"], values["longitude"]) == ("-32.6531487", "-70.0119607")
+        assert values["elevation_meters"] == "6961"
 
-    def test_editorial_fields_are_saved_and_frozen_ones_cannot_be_forged(
-        self, editor_client, load_catalog
-    ):
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    def test_mountain_data_is_saved_on_every_status(self, editor_client, load_catalog, entry):
+        load_catalog(entry)
+        before = stored(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(change_url(entry), form_payload(page, **CORRECTIONS))
+
+        assert response.status_code == 302, errors_of(response)
+        after = stored(entry)
+        changed = {name for name in before if before[name] != after[name]}
+        assert changed == {
+            "name",
+            "location",
+            "elevation_meters",
+            "osm_type",
+            "osm_id",
+            "wikidata_id",
+            "updated_at",
+        }
+        assert (after["location"].y, after["location"].x) == (-32.65, -70.01)
+        assert after["location"].srid == 4326
+        assert (after["name"], after["elevation_meters"]) == ("Cerro Aconcagua", 6960)
+        assert (after["osm_type"], after["osm_id"], after["wikidata_id"]) == ("way", 42, "Q1")
+        assert after["status"] == entry.mountain.status.value
+
+    def test_unchanged_coordinates_keep_the_stored_point(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
-        before = MountainRecord.objects.filter(pk=ACTIVE.mountain.id).values().get()
+        before = stored(ACTIVE)["location"]
         page = editor_client.get(change_url(ACTIVE))
-        payload = form_payload(page, summary="Highest mountain in the Andes.", range_name="Andes")
+
+        editor_client.post(change_url(ACTIVE), form_payload(page, name="Cerro Aconcagua"))
+
+        assert stored(ACTIVE)["location"].ewkb == before.ewkb
+
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    def test_the_slug_can_be_corrected_on_every_status(self, editor_client, load_catalog, entry):
+        load_catalog(entry)
+        before = stored(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(change_url(entry), form_payload(page, slug="renamed-peak"))
+
+        assert response.status_code == 302, errors_of(response)
+        after = stored(entry)
+        assert {name for name in before if before[name] != after[name]} == {"slug", "updated_at"}
+        assert after["slug"] == "renamed-peak"
+        assert after["status"] == entry.mountain.status.value
+
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    @pytest.mark.parametrize("slug", ["Bad Slug", "today", "random", "other-peak", ""])
+    def test_a_changed_slug_follows_the_slug_rules(self, editor_client, load_catalog, entry, slug):
+        load_catalog(entry, catalog_mountain("other-peak"))
+        before = stored(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(change_url(entry), form_payload(page, slug=slug))
+
+        assert response.status_code == 200
+        assert "slug" in errors_of(response)
+        assert stored(entry) == before
+
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    def test_forged_status_camera_and_legacy_photograph_values_are_ignored(
+        self, editor_client, load_catalog, entry
+    ):
+        load_catalog(entry)
+        before = stored(entry)
+        page = editor_client.get(change_url(entry))
+        payload = form_payload(page, summary="Highest mountain in the Andes.")
         payload |= {
-            "slug": "forged",
-            "name": "Forged",
-            "elevation_meters": "1",
-            "latitude": "0",
-            "longitude": "0",
-            "status": "draft",
+            "status": "draft" if entry is not DRAFT else "active",
             "camera_heading_degrees": "1",
-            "wikidata_id": "Q1",
+            "camera_pitch_degrees": "1",
+            "camera_range_meters": "2000",
+            "camera_framing_x": "0",
+            "camera_framing_y": "0",
+            "location": "POINT(0 0)",
             "image-0-url": "https://forged.example/a.jpg",
             "image-0-source_identifier": "File:forged.jpg",
         }
 
-        response = editor_client.post(change_url(ACTIVE), payload)
+        response = editor_client.post(change_url(entry), payload)
 
         assert response.status_code == 302
-        after = MountainRecord.objects.filter(pk=ACTIVE.mountain.id).values().get()
-        changed = {name for name in before if before[name] != after[name]}
-        assert changed == {"summary", "range_name", "updated_at"}
-        image = MountainImageRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert image.url == ACTIVE.mountain.primary_image.url
-        assert image.source_identifier == ACTIVE.mountain.primary_image.source_identifier
+        after = stored(entry)
+        assert {name for name in before if before[name] != after[name]} == {
+            "summary",
+            "updated_at",
+        }
+        image = MountainImageRecord.objects.get(pk=entry.mountain.id)
+        assert image.url == entry.mountain.primary_image.url
+        assert image.source_identifier == entry.mountain.primary_image.source_identifier
+
+    def test_the_update_writes_only_the_columns_the_form_owns(self, editor_client, load_catalog):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+
+        with CaptureQueriesContext(connection) as queries:
+            editor_client.post(change_url(ACTIVE), form_payload(page, name="Cerro Aconcagua"))
+
+        updates = [q["sql"] for q in queries if q["sql"].startswith('UPDATE "mountain" SET')]
+        assert len(updates) == 1
+        assigned = set(re.findall(r'"(\w+)" = ', updates[0].split(" WHERE ")[0]))
+        assert assigned == {
+            "name",
+            "slug",
+            "location",
+            "elevation_meters",
+            "prominence_meters",
+            "range_name",
+            "countries",
+            "summary",
+            "wikipedia_url",
+            "osm_type",
+            "osm_id",
+            "wikidata_id",
+            "updated_at",
+        }
+
+    def test_a_stale_form_cannot_rewrite_a_camera_changed_after_it_was_rendered(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        MountainRecord.objects.filter(pk=ACTIVE.mountain.id).update(
+            camera_heading_degrees=10.0, camera_framing_x=0.1
+        )
+
+        response = editor_client.post(change_url(ACTIVE), form_payload(page, name="Renamed"))
+
+        assert response.status_code == 302
+        after = stored(ACTIVE)
+        assert (after["camera_heading_degrees"], after["camera_framing_x"]) == (10.0, 0.1)
+        assert after["name"] == "Renamed"
+
+    def test_optional_source_references_can_be_cleared_on_a_public_mountain(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+
+        response = editor_client.post(
+            change_url(ACTIVE),
+            form_payload(page, osm_type="", osm_id="", wikidata_id="", wikipedia_url=""),
+        )
+
+        assert response.status_code == 302
+        after = stored(ACTIVE)
+        assert (after["osm_type"], after["osm_id"], after["wikidata_id"]) == (None, None, None)
+
+    @pytest.mark.parametrize(
+        ("overrides", "field"),
+        [
+            ({"osm_id": ""}, "osm_id"),
+            ({"osm_type": ""}, "osm_id"),
+            ({"osm_id": "0"}, "osm_id"),
+            ({"wikidata_id": "39739"}, "wikidata_id"),
+        ],
+    )
+    def test_present_source_references_keep_their_format_rules(
+        self, editor_client, load_catalog, overrides, field
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+
+        response = editor_client.post(change_url(ACTIVE), form_payload(page, **overrides))
+
+        assert response.status_code == 200
+        assert field in errors_of(response)
+        assert stored(ACTIVE)["osm_id"] == 1504741757
+
+    @pytest.mark.parametrize("entry", [ACTIVE, INACTIVE])
+    @pytest.mark.parametrize(
+        ("overrides", "field"),
+        [
+            ({"elevation_meters": "0"}, "elevation_meters"),
+            ({"latitude": "90.5"}, "latitude"),
+            ({"longitude": "-181"}, "longitude"),
+            ({"latitude": "nan"}, "latitude"),
+            ({"name": " "}, "name"),
+            ({"summary": "highest mountain."}, "summary"),
+        ],
+    )
+    def test_a_public_mountain_cannot_be_saved_into_an_unpublishable_state(
+        self, editor_client, load_catalog, entry, overrides, field
+    ):
+        load_catalog(entry)
+        before = stored(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(
+            change_url(entry), form_payload(page, **{"range_name": "Andes", **overrides})
+        )
+
+        assert response.status_code == 200
+        assert field in errors_of(response)
+        assert stored(entry) == before
+
+    def test_a_public_mountain_is_judged_on_its_whole_prospective_state(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(INACTIVE)
+        MountainRecord.objects.filter(pk=INACTIVE.mountain.id).update(
+            camera_framing_x=None, camera_framing_y=None
+        )
+        before = stored(INACTIVE)
+        page = editor_client.get(change_url(INACTIVE))
+
+        response = editor_client.post(change_url(INACTIVE), form_payload(page, name="Renamed"))
+
+        assert response.status_code == 200
+        assert inline_errors_of(response) == [
+            "Not allowed on a published mountain: the camera framing is missing."
+        ]
+        assert stored(INACTIVE) == before
+
+    def test_a_draft_may_stay_incomplete(self, editor_client, load_catalog):
+        draft = catalog_mountain(
+            "bare-draft",
+            status=MountainStatus.DRAFT,
+            camera=None,
+            primary_image=None,
+            osm=None,
+            wikidata_id=None,
+        )
+        load_catalog(draft)
+        page = editor_client.get(change_url(draft))
+
+        response = editor_client.post(change_url(draft), form_payload(page, name="Bare Draft"))
+
+        assert response.status_code == 302
+        assert stored(draft)["name"] == "Bare Draft"
 
     def test_countries_prominence_and_wikipedia_url_are_editable(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -499,10 +744,19 @@ class TestEditing:
         stale = MountainRecord.objects.get(pk=DRAFT.mountain.id)
         MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(status="active")
         model_admin = admin_site().get_model_admin(MountainRecord)
-        form = MountainChangeForm(
-            {"summary": "Highest in the Andes.", "countries": "Argentina"}, instance=stale
+        form = MountainForm(
+            {
+                "name": stale.name,
+                "slug": stale.slug,
+                "latitude": "-32.6531487",
+                "longitude": "-70.0119607",
+                "elevation_meters": "6961",
+                "summary": "Highest in the Andes.",
+                "countries": "Argentina",
+            },
+            instance=stale,
         )
-        assert form.is_valid()
+        assert form.is_valid(), form.errors
         request = rf.post("/")
         request.user = publisher
 

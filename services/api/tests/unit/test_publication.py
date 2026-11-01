@@ -54,8 +54,6 @@ def test_every_committed_seed_mountain_is_publishable():
             {"camera": replace(CAMERA, framing=CameraFraming(x=1.5, y=0.0))},
             PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS,
         ),
-        ({"osm": None}, PublicationViolation.OSM_REFERENCE_MISSING),
-        ({"wikidata_id": None}, PublicationViolation.WIKIDATA_ID_MISSING),
         ({"primary_image": None}, PublicationViolation.PRIMARY_IMAGE_MISSING),
         ({"primary_image": primary_image(url=" ")}, PublicationViolation.IMAGE_URL_MISSING),
         (
@@ -101,6 +99,10 @@ def test_each_publication_invariant_is_reported(overrides, violation):
 
 def test_a_mountain_without_a_summary_is_publishable():
     assert publication_violations(mountain(summary=None)) == ()
+
+
+def test_source_metadata_is_optional_for_publication():
+    assert publication_violations(mountain(osm=None, wikidata_id=None, wikipedia_url=None)) == ()
 
 
 def test_a_public_domain_image_with_a_creator_needs_no_license_url():

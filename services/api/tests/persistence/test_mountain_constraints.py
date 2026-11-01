@@ -2,7 +2,9 @@ import math
 
 import pytest
 from django.contrib.gis.geos import Point
+from django.db import connection
 
+from serendipeak.persistence.models import MountainRecord
 from tests.support.records import insert_error, mountain_record
 
 NO_CAMERA = {
@@ -78,8 +80,6 @@ REJECTED_DRAFTS = [
 REJECTED_ACTIVE = [
     ("mountain_active_has_camera", NO_CAMERA),
     ("mountain_active_has_camera_framing", {"camera_framing_x": None, "camera_framing_y": None}),
-    ("mountain_active_has_osm_reference", {"osm_type": None, "osm_id": None}),
-    ("mountain_active_has_wikidata_id", {"wikidata_id": None}),
 ]
 
 
@@ -120,6 +120,7 @@ def test_rejects_a_duplicate_slug():
         {"location": Point(180.0, 90.0, srid=4326)},
         {"prominence_meters": 0},
         {"prominence_meters": None, "range_name": None, "summary": None, "wikipedia_url": None},
+        {"osm_type": None, "osm_id": None, "wikidata_id": None},
     ],
 )
 def test_accepts_active_mountains_at_the_bounds(overrides):
@@ -135,3 +136,25 @@ def test_unpublished_statuses_need_only_identity_fields(status):
 @pytest.mark.django_db
 def test_camera_without_framing_is_allowed_outside_active():
     mountain_record(status="inactive", camera_framing_x=None, camera_framing_y=None).save()
+
+
+@pytest.mark.django_db
+def test_the_database_holds_exactly_the_declared_mountain_constraints():
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = 'mountain'::regclass AND contype IN ('c', 'u')"
+        )
+        stored = {name for (name,) in cursor.fetchall()}
+
+    declared = {constraint.name for constraint in MountainRecord._meta.constraints}
+    assert stored == declared
+    assert {
+        "mountain_active_has_osm_reference",
+        "mountain_active_has_wikidata_id",
+    } & stored == set()
+
+
+@pytest.mark.django_db
+def test_an_active_mountain_may_lack_every_source_reference():
+    mountain_record(osm_type=None, osm_id=None, wikidata_id=None, wikipedia_url=None).save()

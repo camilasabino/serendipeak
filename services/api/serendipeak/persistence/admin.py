@@ -14,7 +14,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.text import capfirst
 from django.views.decorators.http import require_POST
 
-from serendipeak.catalog import camera, coordinates
+from serendipeak.catalog import coordinates
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
 from serendipeak.catalog.errors import InvalidStatusTransition, PublicationRejected, UnknownMountain
@@ -22,7 +22,6 @@ from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.publication import (
     PublicationViolation,
     PublicLinkField,
-    image_violations,
     publication_violations,
     unsafe_public_links,
 )
@@ -30,7 +29,7 @@ from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
-from serendipeak.persistence.mapping import to_mountain, to_primary_image
+from serendipeak.persistence.mapping import to_mountain, to_mountain_with_image
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 PUBLISH_PERMISSION = "catalog.publish_mountain"
@@ -56,8 +55,6 @@ VIOLATION_MESSAGES = {
     PublicationViolation.CAMERA_OUT_OF_BOUNDS: "the camera is out of bounds",
     PublicationViolation.CAMERA_FRAMING_MISSING: "the camera framing is missing",
     PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS: "the camera framing is out of bounds",
-    PublicationViolation.OSM_REFERENCE_MISSING: "the OpenStreetMap reference is missing",
-    PublicationViolation.WIKIDATA_ID_MISSING: "the Wikidata id is missing",
     PublicationViolation.PRIMARY_IMAGE_MISSING: "the photograph is missing",
     PublicationViolation.IMAGE_URL_MISSING: "the photograph URL is missing",
     PublicationViolation.IMAGE_ATTRIBUTION_MISSING: "the photograph attribution is missing",
@@ -82,13 +79,13 @@ PUBLIC_LINK_LABELS = {
 PUBLIC_LINK_MESSAGE = "Use an https:// link."
 
 OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
-CAMERA_RULES = (
-    ("camera_heading_degrees", camera.HEADING_MIN_DEGREES, camera.HEADING_MAX_DEGREES_EXCLUSIVE),
-    ("camera_pitch_degrees", camera.PITCH_MIN_DEGREES, camera.PITCH_MAX_DEGREES),
-    ("camera_range_meters", camera.RANGE_MIN_METERS, camera.RANGE_MAX_METERS),
+CAMERA_FIELDS = (
+    "camera_heading_degrees",
+    "camera_pitch_degrees",
+    "camera_range_meters",
+    "camera_framing_x",
+    "camera_framing_y",
 )
-HEADING = "camera_heading_degrees"
-FRAMING_FIELDS = ("camera_framing_x", "camera_framing_y")
 IMAGE_OPTIONAL = (
     "thumbnail_url",
     "creator",
@@ -111,25 +108,12 @@ IMAGE_FROZEN = (
     "license_election_basis_url",
     "approved_on",
 )
-MOUNTAIN_FROZEN = (
-    "slug",
-    "name",
-    "latitude",
-    "longitude",
-    "elevation_meters",
-    "camera_heading_degrees",
-    "camera_pitch_degrees",
-    "camera_range_meters",
-    "camera_framing_x",
-    "camera_framing_y",
-    "osm_type",
-    "osm_id",
-    "wikidata_id",
-    "status",
-    "created_at",
-    "updated_at",
-)
-EDITORIAL_FIELDS = ("summary", "range_name", "countries", "prominence_meters", "wikipedia_url")
+MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
+EDITORIAL_FIELDS = ("summary", "range_name", "countries")
+ADDITIONAL_FIELDS = ("prominence_meters", "osm_type", "osm_id", "wikidata_id", "wikipedia_url")
+PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
+COLUMN_OF_FORM_FIELD = {"latitude": "location", "longitude": "location"}
+NEVER_FORM_WRITTEN = frozenset({"status", *CAMERA_FIELDS})
 _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 
 
@@ -194,7 +178,7 @@ def _clean_summary(value):
     return value
 
 
-class MountainCreateForm(forms.ModelForm):
+class MountainForm(forms.ModelForm):
     latitude = forms.FloatField(
         help_text=f"Degrees, {coordinates.LATITUDE_MIN_DEGREES:g} to "
         f"{coordinates.LATITUDE_MAX_DEGREES:g}."
@@ -204,11 +188,6 @@ class MountainCreateForm(forms.ModelForm):
         f"{coordinates.LONGITUDE_MAX_DEGREES:g}."
     )
     elevation_meters = forms.IntegerField(min_value=1)
-    camera_heading_degrees = forms.FloatField(required=False)
-    camera_pitch_degrees = forms.FloatField(required=False)
-    camera_range_meters = forms.FloatField(required=False)
-    camera_framing_x = forms.FloatField(required=False)
-    camera_framing_y = forms.FloatField(required=False)
     osm_type = forms.TypedChoiceField(
         required=False,
         empty_value=None,
@@ -228,11 +207,6 @@ class MountainCreateForm(forms.ModelForm):
             "countries",
             "summary",
             "wikipedia_url",
-            "camera_heading_degrees",
-            "camera_pitch_degrees",
-            "camera_range_meters",
-            "camera_framing_x",
-            "camera_framing_y",
             "osm_type",
             "osm_id",
             "wikidata_id",
@@ -246,6 +220,11 @@ class MountainCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         _make_optional(self, (*OPTIONAL_TEXT, "prominence_meters", "countries"))
         _require_public_links(self, ("wikipedia_url",))
+
+        location = self.instance.location
+        if location is not None:
+            self.initial.setdefault("latitude", location.y)
+            self.initial.setdefault("longitude", location.x)
 
     def clean_slug(self):
         slug = self.cleaned_data["slug"]
@@ -290,7 +269,6 @@ class MountainCreateForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        self._check_camera(cleaned)
         self._check_osm_reference(cleaned)
 
         if "latitude" in cleaned and "longitude" in cleaned:
@@ -298,56 +276,11 @@ class MountainCreateForm(forms.ModelForm):
 
         return cleaned
 
-    def _check_camera(self, cleaned):
-        names = [name for name, *_ in CAMERA_RULES]
-        if any(name in self.errors for name in (*names, *FRAMING_FIELDS)):
-            return
-        values = {name: cleaned.get(name) for name in names}
-        framing = {name: cleaned.get(name) for name in FRAMING_FIELDS}
-
-        if any(value is not None for value in values.values()):
-            for name, minimum, maximum in CAMERA_RULES:
-                value = values[name]
-                if value is None:
-                    self.add_error(name, "The camera needs heading, pitch and range together.")
-                elif value < minimum or value > maximum or (name == HEADING and value == maximum):
-                    self.add_error(name, f"Use a value from {minimum:g} to {maximum:g}.")
-
-        if all(value is None for value in framing.values()):
-            return
-        if any(value is None for value in framing.values()):
-            self.add_error("camera_framing_y", "Framing needs both x and y.")
-        elif all(value is None for value in values.values()):
-            self.add_error("camera_framing_x", "Framing needs a camera.")
-        for name, value in framing.items():
-            if value is not None and not camera.FRAMING_MIN <= value <= camera.FRAMING_MAX:
-                self.add_error(
-                    name, f"Use a value from {camera.FRAMING_MIN:g} to {camera.FRAMING_MAX:g}."
-                )
-
     def _check_osm_reference(self, cleaned):
         if "osm_type" in self.errors or "osm_id" in self.errors:
             return
         if (cleaned.get("osm_type") is None) != (cleaned.get("osm_id") is None):
             self.add_error("osm_id", "The OpenStreetMap type and id go together.")
-
-
-class MountainChangeForm(forms.ModelForm):
-    class Meta:
-        model = MountainRecord
-        fields = EDITORIAL_FIELDS
-        widgets = {
-            **_single_line("range_name", "wikipedia_url"),
-            "summary": _summary_textarea(),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        _make_optional(self, (*OPTIONAL_TEXT, "prominence_meters", "countries"))
-        _require_public_links(self, ("wikipedia_url",))
-
-    def clean_summary(self):
-        return _clean_summary(self.cleaned_data.get("summary"))
 
 
 class MountainImageForm(forms.ModelForm):
@@ -400,22 +333,32 @@ class MountainImageForm(forms.ModelForm):
 
 class MountainImageFormSet(BaseInlineFormSet):
     def clean(self):
+        # The admin validates inline formsets after the mountain form has applied its cleaned
+        # values to the locked instance, so this is the one point that sees the whole
+        # prospective mountain: stored row, form changes and photograph.
         super().clean()
         if any(self.errors) or self.instance.status not in PUBLIC_STATUS_VALUES:
             return
 
-        problems = []
-        for form in self.forms:
-            if not form.has_changed() or self._should_delete_form(form):
-                continue
-            problems.extend(
-                VIOLATION_MESSAGES[violation]
-                for violation in image_violations(to_primary_image(form.instance))
-            )
-        if problems:
+        prospective = to_mountain_with_image(self.instance, self._prospective_image())
+        violations = publication_violations(prospective)
+        if violations:
             raise ValidationError(
-                [f"Not allowed on a published mountain: {problem}." for problem in problems]
+                [
+                    f"Not allowed on a published mountain: {reason}."
+                    for reason in violation_reasons(violations, prospective)
+                ]
             )
+
+    def _prospective_image(self):
+        image = None
+        for form in self.forms:
+            if self._should_delete_form(form):
+                continue
+            if form in self.initial_forms or form.has_changed():
+                image = form.instance
+
+        return image
 
 
 def _has_image(mountain):
@@ -460,44 +403,36 @@ class MountainAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("name", "slug", "range_name")
     ordering = ("slug",)
+    form = MountainForm
     inlines = [MountainImageInline]
     actions = ["publish_selected", "deactivate_selected", "reactivate_selected"]
 
     class Media:
         css = {"all": ("serendipeak/admin/editorial.css",)}
 
-    def get_form(self, request, obj=None, **kwargs):
-        kwargs["form"] = MountainCreateForm if obj is None else MountainChangeForm
-
-        return super().get_form(request, obj, **kwargs)
-
     def get_readonly_fields(self, request, obj=None):
-        return () if obj is None else (*MOUNTAIN_FROZEN, "publication_readiness")
+        if obj is None:
+            return ()
+
+        return (*PUBLICATION_FIELDS, *CAMERA_FIELDS)
 
     def get_fieldsets(self, request, obj=None):
-        identity = ("slug", "name", "latitude", "longitude", "elevation_meters")
-        camera_fields = (
-            "camera_heading_degrees",
-            "camera_pitch_degrees",
-            "camera_range_meters",
-            "camera_framing_x",
-            "camera_framing_y",
-        )
-        provenance = ("osm_type", "osm_id", "wikidata_id")
-        fieldsets = [
-            ("Identity", {"fields": identity}),
-            ("Editorial", {"fields": EDITORIAL_FIELDS}),
-            ("Camera", {"fields": camera_fields}),
-            ("Provenance", {"fields": provenance}),
-        ]
-        if obj is not None:
-            publication = (
-                "Publication",
-                {"fields": ("status", "created_at", "updated_at", "publication_readiness")},
-            )
-            fieldsets.insert(0, publication)
+        mountain = ("Mountain", {"fields": MOUNTAIN_FIELDS})
+        editorial = ("Editorial", {"fields": EDITORIAL_FIELDS})
+        additional = ("Additional data", {"fields": ADDITIONAL_FIELDS, "classes": ("collapse",)})
+        if obj is None:
+            return [mountain, editorial, additional]
 
-        return fieldsets
+        publication = ("Publication", {"fields": PUBLICATION_FIELDS})
+        camera_diagnostics = (
+            "Camera",
+            {
+                "fields": CAMERA_FIELDS,
+                "description": "Read-only. The mountain form never changes the camera.",
+            },
+        )
+
+        return [publication, mountain, editorial, camera_diagnostics, additional]
 
     @admin.display(description="Publication readiness")
     def publication_readiness(self, obj):
@@ -567,14 +502,6 @@ class MountainAdmin(admin.ModelAdmin):
 
         return super().render_change_form(request, context, add, change, form_url, obj)
 
-    @admin.display(description="Latitude")
-    def latitude(self, obj):
-        return obj.location.y
-
-    @admin.display(description="Longitude")
-    def longitude(self, obj):
-        return obj.location.x
-
     def get_object(self, request, object_id, from_field=None):
         # Django opens the transaction of a mutating change or delete view before calling this,
         # and keeps it until the view returns. Locking here puts the row lock ahead of every
@@ -601,9 +528,13 @@ class MountainAdmin(admin.ModelAdmin):
             return
 
         # Fields are written selectively so the whole row is not rewritten from the form's
-        # copy; the status and anything else outside the form are never part of this UPDATE.
+        # copy; the status, the camera and anything else outside the form are never part of
+        # this UPDATE.
+        columns = dict.fromkeys(COLUMN_OF_FORM_FIELD.get(name, name) for name in form.fields)
+        owned = [column for column in columns if column not in NEVER_FORM_WRITTEN]
+
         obj.updated_at = timezone.now()
-        obj.save(update_fields=[*form.fields, "updated_at"])
+        obj.save(update_fields=[*owned, "updated_at"])
 
     def has_delete_permission(self, request, obj=None):
         return super().has_delete_permission(request, obj) and (

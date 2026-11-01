@@ -21,8 +21,10 @@ from serendipeak.persistence.models import (
 
 
 def to_mountain(record: MountainRecord) -> Mountain:
-    image = _image_of(record)
+    return to_mountain_with_image(record, _image_of(record))
 
+
+def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | None) -> Mountain:
     return Mountain(
         id=record.id,
         slug=record.slug,

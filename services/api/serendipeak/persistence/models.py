@@ -207,14 +207,6 @@ class MountainRecord(models.Model):
                 condition=_when_active(Q(camera_framing_x__isnull=False)),
                 name="mountain_active_has_camera_framing",
             ),
-            CheckConstraint(
-                condition=_when_active(Q(osm_type__isnull=False)),
-                name="mountain_active_has_osm_reference",
-            ),
-            CheckConstraint(
-                condition=_when_active(Q(wikidata_id__isnull=False)),
-                name="mountain_active_has_wikidata_id",
-            ),
         ]
 
     def __str__(self):
