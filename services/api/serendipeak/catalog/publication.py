@@ -3,6 +3,7 @@ from enum import StrEnum
 from serendipeak.catalog import camera as camera_bounds
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
+from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.slug import is_valid_slug
 from serendipeak.catalog.summary import summary_violations
 
@@ -29,6 +30,15 @@ class PublicationViolation(StrEnum):
     IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING = "image_public_domain_creator_missing"
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
     SUMMARY_INVALID = "summary_invalid"
+    LINK_NOT_HTTPS = "link_not_https"
+
+
+class PublicLinkField(StrEnum):
+    WIKIPEDIA_URL = "wikipedia_url"
+    IMAGE_URL = "image_url"
+    IMAGE_THUMBNAIL_URL = "image_thumbnail_url"
+    IMAGE_SOURCE_PAGE_URL = "image_source_page_url"
+    IMAGE_LICENSE_URL = "image_license_url"
 
 
 def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ...]:
@@ -53,7 +63,30 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
     if mountain.summary is not None and summary_violations(mountain.summary):
         violations.append(PublicationViolation.SUMMARY_INVALID)
 
+    if unsafe_public_links(mountain):
+        violations.append(PublicationViolation.LINK_NOT_HTTPS)
+
     return tuple(violations)
+
+
+def unsafe_public_links(mountain: Mountain) -> tuple[PublicLinkField, ...]:
+    links = [(PublicLinkField.WIKIPEDIA_URL, mountain.wikipedia_url)]
+
+    image = mountain.primary_image
+    if image is not None:
+        links.extend(
+            [
+                (PublicLinkField.IMAGE_URL, image.url),
+                (PublicLinkField.IMAGE_THUMBNAIL_URL, image.thumbnail_url),
+                (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
+                (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
+            ]
+        )
+
+    # A blank link is reported as missing (or rejected as blank), not as unsafe.
+    return tuple(
+        field for field, value in links if not _is_blank(value) and not is_public_link(value)
+    )
 
 
 def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolation]:

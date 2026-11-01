@@ -17,6 +17,7 @@ from django.db.models.lookups import Range
 
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
+from serendipeak.catalog.public_link import PUBLIC_LINK_PATTERN
 from serendipeak.catalog.slug import RESERVED_SLUGS, SLUG_PATTERN
 
 # Plain strings keep the deconstructed constraints equal to the migration.
@@ -31,6 +32,14 @@ def _has_text(field):
 
 def _absent_or_has_text(field):
     return Q(**{f"{field}__isnull": True}) | _has_text(field)
+
+
+def _is_public_link(field):
+    return Q(**{f"{field}__regex": PUBLIC_LINK_PATTERN})
+
+
+def _absent_or_public_link(field):
+    return Q(**{f"{field}__isnull": True}) | _is_public_link(field)
 
 
 def _absent_or_between(field, minimum, maximum):
@@ -119,6 +128,10 @@ class MountainRecord(models.Model):
             CheckConstraint(
                 condition=_absent_or_has_text("wikipedia_url"),
                 name="mountain_wikipedia_url_not_blank",
+            ),
+            CheckConstraint(
+                condition=_absent_or_public_link("wikipedia_url"),
+                name="mountain_wikipedia_url_public_link",
             ),
             CheckConstraint(
                 condition=Q(status__in=MOUNTAIN_STATUSES), name="mountain_status_valid"
@@ -231,8 +244,15 @@ class MountainImageRecord(models.Model):
         constraints = [
             CheckConstraint(condition=_has_text("url"), name="mountain_image_url_not_blank"),
             CheckConstraint(
+                condition=_is_public_link("url"), name="mountain_image_url_public_link"
+            ),
+            CheckConstraint(
                 condition=_absent_or_has_text("thumbnail_url"),
                 name="mountain_image_thumbnail_url_not_blank",
+            ),
+            CheckConstraint(
+                condition=_absent_or_public_link("thumbnail_url"),
+                name="mountain_image_thumbnail_url_public_link",
             ),
             CheckConstraint(
                 condition=_all_or_none("width", "height"),
@@ -261,6 +281,10 @@ class MountainImageRecord(models.Model):
                 name="mountain_image_license_url_not_blank",
             ),
             CheckConstraint(
+                condition=_absent_or_public_link("license_url"),
+                name="mountain_image_license_url_public_link",
+            ),
+            CheckConstraint(
                 condition=_absent_or_has_text("license_reported"),
                 name="mountain_image_license_reported_not_blank",
             ),
@@ -271,6 +295,10 @@ class MountainImageRecord(models.Model):
             CheckConstraint(
                 condition=_has_text("source_page_url"),
                 name="mountain_image_source_page_url_not_blank",
+            ),
+            CheckConstraint(
+                condition=_is_public_link("source_page_url"),
+                name="mountain_image_source_page_url_public_link",
             ),
             CheckConstraint(
                 condition=_has_text("source_identifier"),

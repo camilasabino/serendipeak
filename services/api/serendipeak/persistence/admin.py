@@ -18,10 +18,13 @@ from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
 from serendipeak.catalog.errors import InvalidStatusTransition, PublicationRejected, UnknownMountain
+from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.publication import (
     PublicationViolation,
+    PublicLinkField,
     image_violations,
     publication_violations,
+    unsafe_public_links,
 )
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
@@ -67,7 +70,16 @@ VIOLATION_MESSAGES = {
     ),
     PublicationViolation.IMAGE_DIMENSIONS_MISSING: "the photograph dimensions are missing",
     PublicationViolation.SUMMARY_INVALID: "the summary breaks the summary rules",
+    PublicationViolation.LINK_NOT_HTTPS: "a public link does not use https://",
 }
+PUBLIC_LINK_LABELS = {
+    PublicLinkField.WIKIPEDIA_URL: "the Wikipedia link",
+    PublicLinkField.IMAGE_URL: "the photograph URL",
+    PublicLinkField.IMAGE_THUMBNAIL_URL: "the photograph thumbnail URL",
+    PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photograph source page",
+    PublicLinkField.IMAGE_LICENSE_URL: "the photograph license URL",
+}
+PUBLIC_LINK_MESSAGE = "Use an https:// link."
 
 OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
 CAMERA_RULES = (
@@ -86,6 +98,7 @@ IMAGE_OPTIONAL = (
     "license_election_basis_url",
     "approved_on",
 )
+IMAGE_LINKS = ("url", "thumbnail_url", "source_page_url", "license_url")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 IMAGE_FROZEN = (
     "url",
@@ -144,6 +157,31 @@ def _single_line(*names):
 
 def _summary_textarea():
     return forms.Textarea(attrs={"rows": 3, "cols": 80})
+
+
+def _validate_public_link(value):
+    if not is_public_link(value):
+        raise ValidationError(PUBLIC_LINK_MESSAGE, code="public_link")
+
+
+def _require_public_links(form, names):
+    for name in names:
+        if name in form.fields:
+            form.fields[name].validators.append(_validate_public_link)
+
+
+def violation_reasons(violations, mountain):
+    reasons = []
+    for violation in violations:
+        if violation == PublicationViolation.LINK_NOT_HTTPS:
+            reasons.extend(
+                f"{PUBLIC_LINK_LABELS[field]} does not use https://"
+                for field in unsafe_public_links(mountain)
+            )
+        else:
+            reasons.append(VIOLATION_MESSAGES[violation])
+
+    return reasons
 
 
 def _clean_summary(value):
@@ -207,6 +245,7 @@ class MountainCreateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _make_optional(self, (*OPTIONAL_TEXT, "prominence_meters", "countries"))
+        _require_public_links(self, ("wikipedia_url",))
 
     def clean_slug(self):
         slug = self.cleaned_data["slug"]
@@ -305,6 +344,7 @@ class MountainChangeForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _make_optional(self, (*OPTIONAL_TEXT, "prominence_meters", "countries"))
+        _require_public_links(self, ("wikipedia_url",))
 
     def clean_summary(self):
         return _clean_summary(self.cleaned_data.get("summary"))
@@ -347,6 +387,7 @@ class MountainImageForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _make_optional(self, [name for name in IMAGE_OPTIONAL if name in self.fields])
+        _require_public_links(self, IMAGE_LINKS)
 
     def clean(self):
         cleaned = super().clean()
@@ -463,12 +504,13 @@ class MountainAdmin(admin.ModelAdmin):
         if obj.status != MountainStatus.DRAFT.value:
             return "Not applicable: only a draft is checked before publishing."
 
-        violations = publication_violations(to_mountain(obj))
+        mountain = to_mountain(obj)
+        violations = publication_violations(mountain)
         if not violations:
             return format_html("Ready to publish. {}", STORED_STATE_NOTICE)
 
         reasons = format_html_join(
-            "", "<li>{}</li>", ((capfirst(VIOLATION_MESSAGES[v]),) for v in violations)
+            "", "<li>{}</li>", ((capfirst(r),) for r in violation_reasons(violations, mountain))
         )
 
         return format_html(
@@ -596,7 +638,7 @@ class MountainAdmin(admin.ModelAdmin):
             try:
                 use_case.execute(record.id)
             except PublicationRejected as rejected:
-                reasons = "; ".join(VIOLATION_MESSAGES[v] for v in rejected.violations)
+                reasons = "; ".join(violation_reasons(rejected.violations, to_mountain(record)))
                 self.message_user(
                     request, f"{record.slug} was not {past_tense}: {reasons}.", messages.ERROR
                 )

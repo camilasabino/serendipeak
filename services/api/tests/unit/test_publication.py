@@ -5,7 +5,12 @@ import pytest
 
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import CameraFraming, Coordinates
-from serendipeak.catalog.publication import PublicationViolation, publication_violations
+from serendipeak.catalog.publication import (
+    PublicationViolation,
+    PublicLinkField,
+    publication_violations,
+    unsafe_public_links,
+)
 from tests.support.catalog import committed_seed, mountain, primary_image
 
 CAMERA = mountain().camera
@@ -129,3 +134,66 @@ def test_camera_bounds_are_inclusive_except_the_heading_maximum():
 )
 def test_coordinates_in_range(latitude, longitude, expected):
     assert coordinates_in_range(latitude, longitude) is expected
+
+
+UNSAFE_LINK = "http://example.com/page"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"wikipedia_url": UNSAFE_LINK}, PublicLinkField.WIKIPEDIA_URL),
+        ({"primary_image": primary_image(url=UNSAFE_LINK)}, PublicLinkField.IMAGE_URL),
+        (
+            {"primary_image": primary_image(thumbnail_url="javascript:alert(1)")},
+            PublicLinkField.IMAGE_THUMBNAIL_URL,
+        ),
+        (
+            {"primary_image": primary_image(source_page_url="HTTPS://example.com")},
+            PublicLinkField.IMAGE_SOURCE_PAGE_URL,
+        ),
+        (
+            {"primary_image": primary_image(license_url="https://user@example.com/license")},
+            PublicLinkField.IMAGE_LICENSE_URL,
+        ),
+    ],
+)
+def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overrides, field):
+    candidate = mountain(**overrides)
+
+    assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
+    assert unsafe_public_links(candidate) == (field,)
+
+
+def test_several_unsafe_links_are_one_violation_naming_every_field():
+    candidate = mountain(
+        wikipedia_url=UNSAFE_LINK,
+        primary_image=primary_image(url=UNSAFE_LINK, license_url=UNSAFE_LINK),
+    )
+
+    assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
+    assert unsafe_public_links(candidate) == (
+        PublicLinkField.WIKIPEDIA_URL,
+        PublicLinkField.IMAGE_URL,
+        PublicLinkField.IMAGE_LICENSE_URL,
+    )
+
+
+def test_absent_optional_links_are_not_unsafe():
+    candidate = mountain(
+        wikipedia_url=None,
+        primary_image=primary_image(
+            thumbnail_url=None, license_name="Public domain", license_url=None
+        ),
+    )
+
+    assert unsafe_public_links(candidate) == ()
+
+
+def test_a_blank_required_link_is_missing_not_unsafe():
+    candidate = mountain(primary_image=primary_image(source_page_url=" "))
+
+    assert unsafe_public_links(candidate) == ()
+    assert publication_violations(candidate) == (
+        PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING,
+    )

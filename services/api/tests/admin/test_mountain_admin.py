@@ -655,3 +655,129 @@ class TestDiscoveries:
         assert editor_client.post(change, {"mountain": "x"}).status_code == 403
         delete = reverse("admin:catalog_dailydiscoveryrecord_delete", args=[day])
         assert editor_client.post(delete, {"post": "yes"}).status_code == 403
+
+
+UNSAFE_LINKS = [
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "http://example.com/page",
+    "HTTPS://example.com/page",
+    "https://user@example.com/page",
+    "https://",
+    "https://exa mple.com",
+]
+PHOTOGRAPH = {
+    "image-0-url": "https://upload.wikimedia.org/a.jpg",
+    "image-0-source_page_url": "https://commons.wikimedia.org/wiki/File:a.jpg",
+    "image-0-source_identifier": "File:a.jpg",
+    "image-0-attribution": "A. Photographer",
+    "image-0-width": "400",
+    "image-0-height": "300",
+}
+USE_HTTPS_LINK = "Use an https:// link."
+
+
+def image_errors_of(response):
+    formset = response.context["inline_admin_formsets"][0].formset
+
+    return {name: list(messages) for name, messages in formset.forms[0].errors.items()}
+
+
+@pytest.mark.django_db
+class TestPublicLinks:
+    @pytest.mark.parametrize("value", UNSAFE_LINKS)
+    def test_an_unsafe_wikipedia_url_is_a_form_error_on_creation(self, editor_client, value):
+        response = create_mountain(editor_client, wikipedia_url=value)
+
+        assert response.status_code == 200
+        assert errors_of(response) == {"wikipedia_url": [USE_HTTPS_LINK]}
+        assert not MountainRecord.objects.exists()
+
+    @pytest.mark.parametrize("value", UNSAFE_LINKS)
+    @pytest.mark.parametrize("field", ["url", "thumbnail_url", "source_page_url", "license_url"])
+    def test_an_unsafe_photograph_link_is_a_form_error_on_creation(
+        self, editor_client, field, value
+    ):
+        payload = form_payload(
+            editor_client.get(ADD_URL),
+            **NEW_MOUNTAIN,
+            **{**PHOTOGRAPH, f"image-0-{field}": value},
+        )
+
+        response = editor_client.post(ADD_URL, payload)
+
+        assert response.status_code == 200
+        assert image_errors_of(response) == {field: [USE_HTTPS_LINK]}
+        assert not MountainRecord.objects.exists()
+        assert not MountainImageRecord.objects.exists()
+
+    def test_safe_links_are_stored_unchanged(self, editor_client):
+        links = {
+            "image-0-thumbnail_url": "https://upload.wikimedia.org/thumb/a.jpg?width=300#top",
+            "image-0-license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+        }
+        payload = form_payload(
+            editor_client.get(ADD_URL),
+            **{**NEW_MOUNTAIN, "wikipedia_url": "https://unsplash.com/@user"},
+            **PHOTOGRAPH,
+            **links,
+        )
+
+        response = editor_client.post(ADD_URL, payload)
+
+        assert response.status_code == 302
+        record = MountainRecord.objects.get(slug="new-peak")
+        image = record.image
+        assert record.wikipedia_url == "https://unsplash.com/@user"
+        assert image.thumbnail_url == links["image-0-thumbnail_url"]
+        assert image.license_url == links["image-0-license_url"]
+
+    def test_surrounding_whitespace_is_trimmed_before_the_rule_applies(self, editor_client):
+        response = create_mountain(editor_client, wikipedia_url="  https://example.com/a  ")
+
+        assert response.status_code == 302
+        assert MountainRecord.objects.get().wikipedia_url == "https://example.com/a"
+
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
+    @pytest.mark.parametrize("value", ["http://example.com/page", "javascript:alert(1)"])
+    def test_an_unsafe_wikipedia_url_is_a_form_error_on_any_mountain(
+        self, editor_client, load_catalog, entry, value
+    ):
+        load_catalog(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(change_url(entry), form_payload(page, wikipedia_url=value))
+
+        assert response.status_code == 200
+        assert errors_of(response) == {"wikipedia_url": [USE_HTTPS_LINK]}
+        stored = MountainRecord.objects.get(pk=entry.mountain.id).wikipedia_url
+        assert stored == entry.mountain.wikipedia_url
+
+    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE])
+    def test_an_unsafe_license_url_is_a_form_error_on_the_editable_photograph(
+        self, editor_client, load_catalog, entry
+    ):
+        load_catalog(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(
+            change_url(entry),
+            form_payload(page, **{"image-0-license_url": "http://example.com/license"}),
+        )
+
+        assert response.status_code == 200
+        assert image_errors_of(response) == {"license_url": [USE_HTTPS_LINK]}
+        stored = MountainImageRecord.objects.get(pk=entry.mountain.id).license_url
+        assert stored == entry.mountain.primary_image.license_url
+
+    def test_optional_links_can_still_be_cleared(self, editor_client, load_catalog):
+        load_catalog(DRAFT)
+        page = editor_client.get(change_url(DRAFT))
+
+        response = editor_client.post(
+            change_url(DRAFT),
+            form_payload(page, wikipedia_url="", **{"image-0-license_url": ""}),
+        )
+
+        assert response.status_code == 302
+        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).wikipedia_url is None
