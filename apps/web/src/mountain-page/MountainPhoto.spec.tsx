@@ -84,16 +84,22 @@ describe('MountainPhoto', () => {
 		expect(render(image).replace(/<[^>]*>/g, ' ')).not.toContain(image.sourceIdentifier);
 	});
 
-	it('offers every contract rendition that fits the original, with the page sizes hint', () => {
+	it('requests exactly the contract thumbnail, without synthesized candidates', () => {
 		const html = render(image);
-		const { srcset, sizes } = pageRendition(image);
 
-		expect(srcset).toMatch(/500w.*960w.*1280w/);
-		expect(html).toContain(`srcSet="${escaped(srcset)}"`);
-		expect(html).toContain(`sizes="${escaped(sizes)}"`);
+		expect(html).toContain(`src="${escaped(image.thumbnailUrl!)}"`);
+		expect(html).not.toMatch(/srcSet|sizes=/);
+		expect(html.match(/\bsrc="[^"]*"/g)).toHaveLength(1);
 	});
 
-	it('keeps a single source when the thumbnail is not a known rendition url', () => {
+	it('requests the original when the contract has no thumbnail', () => {
+		const html = render({ ...image, thumbnailUrl: undefined });
+
+		expect(html).toContain(`src="${escaped(image.url)}"`);
+		expect(html).not.toMatch(/srcSet|sizes=/);
+	});
+
+	it('keeps a single source for a thumbnail that is not a known rendition url', () => {
 		const html = render({ ...image, thumbnailUrl: 'https://example.test/photo.jpg' });
 
 		expect(html).toContain('src="https://example.test/photo.jpg"');

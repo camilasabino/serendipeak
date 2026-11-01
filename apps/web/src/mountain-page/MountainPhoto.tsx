@@ -51,13 +51,11 @@ export function MountainPhoto({
 				style={{ aspectRatio: ratio }}
 				data-state={ready ? 'ready' : 'pending'}
 			>
-				{/* eslint-disable-next-line @next/next/no-img-element -- remote Wikimedia renditions, sized by the contract */}
+				{/* eslint-disable-next-line @next/next/no-img-element -- remote Wikimedia photograph, sized by the contract */}
 				<img
 					key={rendition.src}
 					ref={bind}
 					src={rendition.src}
-					srcSet={rendition.srcset}
-					sizes={rendition.sizes}
 					alt={photoAlt(mountainName)}
 					loading="eager"
 					decoding="async"

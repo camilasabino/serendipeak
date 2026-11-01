@@ -7,8 +7,6 @@ class FakeImage extends EventTarget implements PreloadableImage {
 	naturalWidth = 0;
 	naturalHeight = 0;
 	currentSrc = '';
-	sizes = '';
-	srcset = '';
 	private current = '';
 	order: string[] = [];
 
@@ -33,7 +31,7 @@ class FakeImage extends EventTarget implements PreloadableImage {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const target = { src: 'https://x.test/1280.jpg', srcset: 'a 500w, b 960w', sizes: '25rem' };
+const target = { src: 'https://x.test/1280.jpg' };
 
 function setup(limit?: number) {
 	const created: FakeImage[] = [];
@@ -49,14 +47,12 @@ function setup(limit?: number) {
 }
 
 describe('ImagePreloader', () => {
-	it('starts the request with the same sizes, srcset and src the page image uses', () => {
+	it('starts the request with the same src the page image uses', () => {
 		const { created, preloader } = setup();
 
 		preloader.preload(target);
 
 		expect(created).toHaveLength(1);
-		expect(created[0]!.sizes).toBe('25rem');
-		expect(created[0]!.srcset).toBe('a 500w, b 960w');
 		expect(created[0]!.src).toBe('https://x.test/1280.jpg');
 	});
 

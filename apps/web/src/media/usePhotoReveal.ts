@@ -17,8 +17,8 @@ export function usePhotoReveal(image: MountainImage) {
 		reveal.getSnapshot,
 		() => SERVER_SNAPSHOT
 	);
-	const { src, srcset, sizes } = pageRendition(image);
-	const rendition = useMemo(() => ({ src, srcset, sizes }), [src, srcset, sizes]);
+	const { src } = pageRendition(image);
+	const rendition = useMemo(() => ({ src }), [src]);
 	const imageRef = useRef<HTMLImageElement | null>(null);
 
 	const bind = useCallback(

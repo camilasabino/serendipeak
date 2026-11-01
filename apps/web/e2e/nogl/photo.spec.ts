@@ -56,7 +56,7 @@ function svgFor(url: URL, photo: Photo): string {
 async function watch(page: Page) {
 	const modes = new Map<string, Mode>();
 	const gates = new Map<string, { promise: Promise<void>; open: () => void }>();
-	const requested: { name: string; width: number | undefined; pageUrl: string }[] = [];
+	const requested: { name: string; width: number | undefined; url: URL; pageUrl: string }[] = [];
 	const pageErrors: string[] = [];
 	const consoleErrors: string[] = [];
 
@@ -92,6 +92,7 @@ async function watch(page: Page) {
 			requested.push({
 				name,
 				width: width === undefined ? undefined : Number(width),
+				url,
 				pageUrl: page.url()
 			});
 
@@ -227,31 +228,51 @@ test.describe('@nogl Photograph reveal', () => {
 	});
 });
 
-test.describe('@nogl Responsive rendition', () => {
+test.describe('@nogl Contract-only photograph URLs', () => {
 	const cases = [
-		{ label: 'desktop at 1x', viewport: { width: 1280, height: 800 }, scale: 1, width: 500 },
-		{ label: 'phone at 1x', viewport: { width: 390, height: 844 }, scale: 1, width: 500 },
-		{ label: 'phone at 2x', viewport: { width: 390, height: 844 }, scale: 2, width: 960 },
-		{ label: 'desktop at 2x', viewport: { width: 1280, height: 800 }, scale: 2, width: 960 }
+		{ label: 'desktop at 1x', viewport: { width: 1280, height: 800 }, scale: 1 },
+		{ label: 'phone at 2x', viewport: { width: 390, height: 844 }, scale: 2 },
+		{ label: 'desktop at 2x', viewport: { width: 1280, height: 800 }, scale: 2 }
 	];
 
-	for (const { label, viewport, scale, width } of cases) {
+	for (const { label, viewport, scale } of cases) {
 		test.describe(label, () => {
 			test.use({ viewport, deviceScaleFactor: scale });
 
-			test(`loads the ${width}px rendition and never the viewer-sized ones`, async ({ page }) => {
+			test('requests only the contract thumbnail on the page', async ({ page }) => {
 				const watched = await watch(page);
 
 				await open(page, ACONCAGUA.slug);
 				await expect(frame(page)).toHaveAttribute('data-state', 'ready');
 
+				const thumbnail = new URL(ACONCAGUA_PHOTO.thumbnailUrl);
 				const current = await photo(page).evaluate((img: HTMLImageElement) => img.currentSrc);
-				expect(current).toContain(`/${width}px-`);
-				expect(watched.requested.every((request) => (request.width ?? 0) <= 1280)).toBe(true);
-				expect(watched.requested.some((request) => request.width === 1920)).toBe(false);
+				expect(current).toBe(ACONCAGUA_PHOTO.thumbnailUrl);
+				expect(await photo(page).getAttribute('srcset')).toBeNull();
+				expect(
+					watched.requested.every((request) => request.url.pathname === thumbnail.pathname)
+				).toBe(true);
 			});
 		});
 	}
+
+	test.describe('viewer on a dense large screen', () => {
+		test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+
+		test('upgrades to the contract original and never to a derived width', async ({ page }) => {
+			const watched = await watch(page);
+			const original = new URL(ACONCAGUA_PHOTO.url);
+			const thumbnail = new URL(ACONCAGUA_PHOTO.thumbnailUrl);
+
+			await open(page, ACONCAGUA.slug);
+			await expect(openButton(page)).toBeEnabled();
+			await openButton(page).click();
+
+			await expect(viewer(page).getByRole('img')).toHaveAttribute('src', ACONCAGUA_PHOTO.url);
+			const allowed = new Set([original.pathname, thumbnail.pathname]);
+			expect(watched.requested.every((request) => allowed.has(request.url.pathname))).toBe(true);
+		});
+	});
 });
 
 test.describe('@nogl Photograph failure', () => {

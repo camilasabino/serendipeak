@@ -150,7 +150,7 @@ export function PhotoViewer({ image, mountainName, initial, onClose }: PhotoView
 				</svg>
 			</button>
 			<div className={styles.sheet}>
-				{/* eslint-disable-next-line @next/next/no-img-element -- remote Wikimedia renditions chosen by viewerTarget */}
+				{/* eslint-disable-next-line @next/next/no-img-element -- remote Wikimedia photograph chosen by viewerTarget */}
 				<img
 					className={styles.image}
 					src={upgraded?.src ?? start}

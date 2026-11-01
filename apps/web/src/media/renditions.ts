@@ -1,21 +1,14 @@
 import type { MountainImage } from '../api/contract';
 
-export const PAGE_WIDTHS: readonly number[] = [500, 960, 1280];
-export const VIEWER_WIDTHS: readonly number[] = [960, 1280, 1920];
-const ALLOWED_WIDTHS: readonly number[] = [...PAGE_WIDTHS, 1920];
 export const MAX_VIEWER_DPR = 2;
 export const ORIGINAL_MIN_GAIN = 1.25;
-export const PAGE_SIZES = '(min-width: 56rem) 25rem, calc(100vw - 3rem)';
 
-const THUMB = /^(https:\/\/.*\/)(\d+)px-([^/?#]+)(\?[^#]*)?$/;
-const MAX_VIEWER_WIDTH = VIEWER_WIDTHS[VIEWER_WIDTHS.length - 1]!;
+const THUMB_WIDTH = /\/(\d+)px-[^/?#]+(?:\?[^#]*)?$/;
 const DISPLAYABLE_ORIGINAL = /\.(jpe?g|png|webp)(\?|#|$)/i;
 const VIEWER_CHROME = { inline: 40, block: 124 } as const;
 
 export interface PageRendition {
 	src: string;
-	srcset?: string;
-	sizes?: string;
 }
 
 export interface ViewerViewport {
@@ -42,77 +35,15 @@ export function intrinsicDimensions(image: MountainImage): IntrinsicDimensions |
 		: undefined;
 }
 
-function parseThumbnail(url: string) {
-	const match = THUMB.exec(url);
-
-	if (!match) {
-		return undefined;
-	}
-
-	const width = Number(match[2]);
-
-	return Number.isInteger(width) && width > 0
-		? { prefix: match[1], width, name: match[3], query: match[4] ?? '' }
-		: undefined;
-}
-
+// Reads the width a contract thumbnail declares in its path; no URL is ever built from it.
 export function renditionWidth(url: string): number | undefined {
-	return parseThumbnail(url)?.width;
-}
+	const width = Number(THUMB_WIDTH.exec(url)?.[1]);
 
-export function renditionUrl(thumbnailUrl: string, width: number): string | undefined {
-	const parsed = parseThumbnail(thumbnailUrl);
-
-	if (!parsed || !ALLOWED_WIDTHS.includes(width)) {
-		return undefined;
-	}
-
-	return `${parsed.prefix}${width}px-${parsed.name}${parsed.query}`;
+	return Number.isInteger(width) && width > 0 ? width : undefined;
 }
 
 export function pageRendition(image: MountainImage): PageRendition {
-	const src = image.thumbnailUrl ?? image.url;
-	const parsed = image.thumbnailUrl ? parseThumbnail(image.thumbnailUrl) : undefined;
-
-	if (!parsed) {
-		return { src };
-	}
-
-	const limit = Math.min(parsed.width, intrinsicDimensions(image)?.width ?? Infinity);
-	const widths = PAGE_WIDTHS.filter((width) => width <= limit);
-	const candidates = widths.flatMap((width) => {
-		const url = renditionUrl(src, width);
-		return url ? [`${url} ${width}w`] : [];
-	});
-
-	if (candidates.length < 2 || !widths.includes(parsed.width)) {
-		return { src };
-	}
-
-	return { src, srcset: candidates.join(', '), sizes: PAGE_SIZES };
-}
-
-function viewerCandidates(image: MountainImage, thumbnail: string): ViewerTarget[] {
-	const original = intrinsicDimensions(image)?.width;
-	const candidates = VIEWER_WIDTHS.filter(
-		(width) => original === undefined || width <= original
-	).flatMap((width) => {
-		const src = renditionUrl(thumbnail, width);
-		return src ? [{ src, width }] : [];
-	});
-	const largest = candidates.at(-1)?.width ?? 0;
-
-	if (
-		original !== undefined &&
-		largest > 0 &&
-		original >= largest * ORIGINAL_MIN_GAIN &&
-		original < MAX_VIEWER_WIDTH &&
-		DISPLAYABLE_ORIGINAL.test(image.url)
-	) {
-		candidates.push({ src: image.url, width: original });
-	}
-
-	return candidates;
+	return { src: image.thumbnailUrl ?? image.url };
 }
 
 export function viewerTarget(
@@ -121,10 +52,15 @@ export function viewerTarget(
 	viewport: ViewerViewport,
 	ratio?: number
 ): ViewerTarget | undefined {
-	const thumbnail = image.thumbnailUrl;
-	const parsed = thumbnail ? parseThumbnail(thumbnail) : undefined;
+	const original = intrinsicDimensions(image);
 
-	if (!thumbnail || !parsed || !PAGE_WIDTHS.includes(parsed.width)) {
+	if (
+		!original ||
+		current.width <= 0 ||
+		image.url === current.src ||
+		!DISPLAYABLE_ORIGINAL.test(image.url) ||
+		original.width < current.width * ORIGINAL_MIN_GAIN
+	) {
 		return undefined;
 	}
 
@@ -134,13 +70,9 @@ export function viewerTarget(
 	const cssWidth =
 		ratio && ratio > 0 ? Math.min(fitWidth, fitHeight * ratio) : Math.min(fitWidth, fitHeight);
 
-	if (!(cssWidth > 0)) {
+	if (!(cssWidth > 0) || Math.ceil(cssWidth * dpr) <= current.width) {
 		return undefined;
 	}
 
-	const wanted = Math.ceil(cssWidth * dpr);
-	const candidates = viewerCandidates(image, thumbnail);
-	const chosen = candidates.find((candidate) => candidate.width >= wanted) ?? candidates.at(-1);
-
-	return chosen && chosen.width > current.width && chosen.src !== current.src ? chosen : undefined;
+	return { src: image.url, width: original.width };
 }

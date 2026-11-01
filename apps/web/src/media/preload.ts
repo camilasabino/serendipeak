@@ -3,8 +3,6 @@ import { watchImage, type ImageDimensions, type ImageLike } from './imageReadine
 import { pageRendition, type PageRendition } from './renditions';
 
 export interface PreloadableImage extends ImageLike {
-	sizes: string;
-	srcset: string;
 	src: string;
 }
 
@@ -25,8 +23,8 @@ function createBrowserImage(): PreloadableImage | undefined {
 	return typeof Image === 'undefined' ? undefined : new Image();
 }
 
-function identity({ src, srcset, sizes }: PageRendition): string {
-	return [src, srcset ?? '', sizes ?? ''].join('|');
+function identity({ src }: PageRendition): string {
+	return src;
 }
 
 export class ImagePreloader {
@@ -56,14 +54,6 @@ export class ImagePreloader {
 
 		this.entries.set(key, entry);
 		this.evict();
-
-		if (target.sizes) {
-			image.sizes = target.sizes;
-		}
-
-		if (target.srcset) {
-			image.srcset = target.srcset;
-		}
 
 		image.src = target.src;
 		entry.cancel = watchImage(image, (outcome) => {
