@@ -1,7 +1,12 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
+from uuid import UUID
 
-from serendipeak.catalog.entities import CandidateMountain, Mountain
+from serendipeak.catalog.entities import CandidateMountain, Mountain, MountainStatus
+from serendipeak.catalog.publication import PublicationViolation
+from serendipeak.catalog.status_transitions import Gate, StatusTransition
 
 
 class MountainRepository(Protocol):
@@ -15,4 +20,37 @@ class MountainRepository(Protocol):
         """Return the id and slug of every active mountain, ordered by slug code points.
 
         Returns an empty sequence when no mountain is active.
+        """
+
+
+class StatusChangeOutcome(StrEnum):
+    APPLIED = "applied"
+    NOT_FOUND = "not_found"
+    WRONG_STATUS = "wrong_status"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class StatusChange:
+    outcome: StatusChangeOutcome
+    status: MountainStatus | None
+    violations: tuple[PublicationViolation, ...] = ()
+
+
+class MountainStatusStore(Protocol):
+    def change_status(
+        self,
+        mountain_id: UUID,
+        transition: StatusTransition,
+        gate: Gate,
+    ) -> StatusChange:
+        """Move the mountain from transition.source to transition.target, atomically.
+
+        The mountain is read and written under one lock, so concurrent changes to the same
+        mountain run one at a time and the gate judges exactly the state that is then written.
+        The gate runs only when the mountain is in transition.source; a non-empty answer
+        rejects the change and nothing is written.
+
+        APPLIED carries the new status. NOT_FOUND carries none. WRONG_STATUS and REJECTED carry
+        the unchanged status. Any mountain status is addressable, drafts included.
         """

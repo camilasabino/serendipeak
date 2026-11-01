@@ -163,9 +163,26 @@ uv run --env-file ../../.env python manage.py check_catalog
 - The verification runs after the load has committed. When it reports mismatches, the loaded rows stay; recreate the database, run `migrate` and `bootstrap_catalog` again.
 - `bootstrap_catalog --verify-only` runs only the verification, writes nothing and can be repeated. It verifies a freshly bootstrapped catalog, not a catalog in use: later daily discoveries and catalog edits are legitimate differences from the seed, and it reports them as mismatches.
 - `check_catalog` is the routine check. It does not compare the catalog with the seed and can run at any time.
-- `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, OpenStreetMap and Wikidata references, and a primary image with URL, attribution, source page, source identifier, license name, dimensions and a license URL (a public-domain image needs a creator instead).
+- `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, OpenStreetMap and Wikidata references, a primary image with URL, attribution, source page, source identifier, license name, dimensions and a license URL (a public-domain image needs a creator instead), and a summary that follows the summary rules when there is one.
 
 `--seed` and `--frozen-catalog` replace the input files. On failure each command lists the mismatches or violations on stderr and exits with status 1.
+
+### Editorial admin
+
+Django Admin at `/admin/` is the editorial interface. It edits the catalog in place; there is no other source of truth. Create the first user with `manage.py createsuperuser`, then give editors a group with the `catalog` permissions they need. Publishing and changing a published mountain's status need the separate `catalog | mountain record | Can publish, deactivate and reactivate mountains` permission, so changing a mountain does not imply publishing it. The admin sets session and CSRF cookies (`Secure` outside `APP_ENV=development`, `HttpOnly`, `SameSite=Lax`), sends `X-Frame-Options: DENY`, and loads no map tiles: coordinates are plain latitude and longitude fields. The public API is unaffected: it sets no cookies and no frame policy.
+
+- A mountain is created as a `draft` with every field the form offers. A draft is editable and never public: it is not served by slug, `today` or `random`. The status is never a form field.
+- Identity and provenance are frozen after creation: slug, name, coordinates, elevation, camera and framing, OpenStreetMap and Wikidata references, the status and the photograph's URLs, dimensions, source page, identifier and license provenance. They are shown read-only. Editable afterwards: summary, range, countries, prominence, Wikipedia URL and the photograph's creator, attribution and license name and URL. Changing a frozen field is a catalog decision, not an edit.
+- Every save writes `updated_at`. The change history records who changed what.
+- The summary is one trimmed line of at most 200 characters with no markup and in sentence form (a capitalized first word and a final period, by the same formatting rules as v1). The form shows why a summary is refused, and publication refuses a mountain whose stored summary breaks them.
+- Statuses change only through the changelist actions, which call the publication use cases:
+  - **Publish** moves `draft` to `active`. It is refused, with the reasons, unless the mountain passes the same checks as `check_catalog`.
+  - **Deactivate** moves `active` to `inactive`: the mountain stays addressable by slug and keeps its daily history, and leaves `random`.
+  - **Reactivate** moves `inactive` to `active`, with the same checks as publishing.
+  - Nothing returns a mountain to `draft`.
+- Editing a published or inactive mountain cannot remove what publication requires from its photograph.
+- Only a `draft` can be deleted, one at a time. Its photograph is removed first, from the mountain page; the database refuses to delete a mountain that still has one or has a daily discovery.
+- The daily discovery history is listed read-only. The database refuses to update or delete it.
 
 ## Web
 

@@ -85,10 +85,17 @@ def test_every_committed_seed_mountain_is_publishable():
             {"primary_image": primary_image(dimensions=None)},
             PublicationViolation.IMAGE_DIMENSIONS_MISSING,
         ),
+        ({"summary": "highest mountain."}, PublicationViolation.SUMMARY_INVALID),
+        ({"summary": "Highest\nmountain."}, PublicationViolation.SUMMARY_INVALID),
+        ({"summary": "A" * 201}, PublicationViolation.SUMMARY_INVALID),
     ],
 )
 def test_each_publication_invariant_is_reported(overrides, violation):
     assert publication_violations(mountain(**overrides)) == (violation,)
+
+
+def test_a_mountain_without_a_summary_is_publishable():
+    assert publication_violations(mountain(summary=None)) == ()
 
 
 def test_a_public_domain_image_with_a_creator_needs_no_license_url():

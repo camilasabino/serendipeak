@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.entities import PUBLIC_STATUSES, CandidateMountain, MountainStatus
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.catalog.ports import StatusChange, StatusChangeOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 
@@ -46,6 +47,32 @@ class InMemoryMountainRepository:
             for slug, mountain in sorted(self._mountains.items())
             if mountain.status is MountainStatus.ACTIVE
         )
+
+
+class InMemoryMountainStatusStore:
+    def __init__(self, mountains=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+
+    def change_status(self, mountain_id, transition, gate):
+        mountain = self._mountains.get(mountain_id)
+        if mountain is None:
+            return StatusChange(StatusChangeOutcome.NOT_FOUND, None)
+        if mountain.status is not transition.source:
+            return StatusChange(StatusChangeOutcome.WRONG_STATUS, mountain.status)
+
+        violations = tuple(gate(mountain))
+        if violations:
+            return StatusChange(StatusChangeOutcome.REJECTED, mountain.status, violations)
+
+        self._mountains[mountain_id] = replace(mountain, status=transition.target)
+
+        return StatusChange(StatusChangeOutcome.APPLIED, transition.target)
+
+    def replace(self, mountain):
+        self._mountains[mountain.id] = mountain
+
+    def status_of(self, mountain_id):
+        return self._mountains[mountain_id].status
 
 
 class InMemoryDailyDiscoveryRepository:

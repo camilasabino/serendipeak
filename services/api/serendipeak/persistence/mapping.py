@@ -35,7 +35,7 @@ def to_mountain(record: MountainRecord) -> Mountain:
         countries=tuple(record.countries),
         summary=record.summary,
         camera=_camera(record),
-        primary_image=None if image is None else _primary_image(image),
+        primary_image=None if image is None else to_primary_image(image),
         osm=None
         if record.osm_type is None
         else OsmReference(type=OsmType(record.osm_type), id=record.osm_id),
@@ -157,7 +157,7 @@ def _camera(record: MountainRecord) -> CanonicalCamera | None:
     )
 
 
-def _primary_image(image: MountainImageRecord) -> PrimaryImage:
+def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
     return PrimaryImage(
         url=image.url,
         thumbnail_url=image.thumbnail_url,

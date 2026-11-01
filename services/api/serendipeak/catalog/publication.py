@@ -4,6 +4,7 @@ from serendipeak.catalog import camera as camera_bounds
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
 from serendipeak.catalog.slug import is_valid_slug
+from serendipeak.catalog.summary import summary_violations
 
 _PUBLIC_DOMAIN_LICENSE_NAME = "Public domain"
 
@@ -27,6 +28,7 @@ class PublicationViolation(StrEnum):
     IMAGE_LICENSE_URL_MISSING = "image_license_url_missing"
     IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING = "image_public_domain_creator_missing"
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
+    SUMMARY_INVALID = "summary_invalid"
 
 
 def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ...]:
@@ -46,7 +48,10 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
     if _is_blank(mountain.wikidata_id):
         violations.append(PublicationViolation.WIKIDATA_ID_MISSING)
 
-    violations.extend(_image_violations(mountain.primary_image))
+    violations.extend(image_violations(mountain.primary_image))
+
+    if mountain.summary is not None and summary_violations(mountain.summary):
+        violations.append(PublicationViolation.SUMMARY_INVALID)
 
     return tuple(violations)
 
@@ -79,7 +84,7 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
     return violations
 
 
-def _image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
+def image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
     if image is None:
         return [PublicationViolation.PRIMARY_IMAGE_MISSING]
     required = (

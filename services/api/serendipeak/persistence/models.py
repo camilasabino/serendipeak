@@ -83,6 +83,7 @@ class MountainRecord(models.Model):
 
     class Meta:
         db_table = "mountain"
+        permissions = [("publish_mountain", "Can publish, deactivate and reactivate mountains")]
         constraints = [
             UniqueConstraint(fields=["slug"], name="mountain_slug_key"),
             CheckConstraint(condition=Q(slug__regex=SLUG_PATTERN), name="mountain_slug_format"),
