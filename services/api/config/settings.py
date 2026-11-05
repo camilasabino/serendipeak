@@ -109,6 +109,61 @@ if not CORS_ALLOWED_ORIGIN or "*" in CORS_ALLOWED_ORIGIN or "," in CORS_ALLOWED_
 CORS_ALLOWED_ORIGINS = [CORS_ALLOWED_ORIGIN]
 CORS_ALLOW_METHODS = ["GET", "OPTIONS"]
 
+MEDIA_STORES = ("filesystem", "s3")
+
+
+def required_setting(name):
+    value = os.environ.get(name, "")
+    if not value:
+        raise ImproperlyConfigured(f"{name} is required when MEDIA_STORE is {MEDIA_STORE}")
+    return value
+
+
+def media_base_url(name, *, allow_http):
+    value = os.environ.get(name, "")
+    parts = urlsplit(value)
+    schemes = ("https", "http") if allow_http else ("https",)
+    if (
+        parts.scheme not in schemes
+        or not parts.hostname
+        or parts.username is not None
+        or parts.query
+        or parts.fragment
+        or value.endswith("/")
+    ):
+        raise ImproperlyConfigured(
+            f"{name} must be an {' or '.join(schemes)} URL without credentials, query, "
+            "fragment or trailing slash"
+        )
+    return value
+
+
+MEDIA_STORE = os.environ.get("MEDIA_STORE", "")
+if MEDIA_STORE not in MEDIA_STORES:
+    raise ImproperlyConfigured(f"MEDIA_STORE must be one of: {', '.join(MEDIA_STORES)}")
+
+MEDIA_PUBLIC_BASE_URL = media_base_url("MEDIA_PUBLIC_BASE_URL", allow_http=DEBUG)
+
+if MEDIA_STORE == "filesystem":
+    # Production photographs live in R2. A filesystem store there would be ephemeral (the
+    # deployment has no volume) and every redeploy would silently discard uploaded media.
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "MEDIA_STORE=filesystem is only allowed when APP_ENV=development"
+        )
+
+    # Relative to the service directory, so the media location does not depend on where the
+    # process was started from.
+    MEDIA_ROOT = BASE_DIR / required_setting("MEDIA_ROOT")
+else:
+    MEDIA_S3_ENDPOINT_URL = media_base_url("MEDIA_S3_ENDPOINT_URL", allow_http=False)
+    MEDIA_S3_ACCESS_KEY_ID = required_setting("MEDIA_S3_ACCESS_KEY_ID")
+    MEDIA_S3_SECRET_ACCESS_KEY = required_setting("MEDIA_S3_SECRET_ACCESS_KEY")
+    MEDIA_PUBLIC_BUCKET = required_setting("MEDIA_PUBLIC_BUCKET")
+    MEDIA_ORIGINALS_BUCKET = required_setting("MEDIA_ORIGINALS_BUCKET")
+    if MEDIA_PUBLIC_BUCKET == MEDIA_ORIGINALS_BUCKET:
+        raise ImproperlyConfigured("MEDIA_PUBLIC_BUCKET and MEDIA_ORIGINALS_BUCKET must differ")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 USE_TZ = True

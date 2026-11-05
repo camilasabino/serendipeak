@@ -17,6 +17,7 @@ HTTP_CLIENT_MODULES = (
     "aiohttp",
 )
 OFFLINE_TOOLING_MODULES = ("tools", "yaml")
+MEDIA_VENDOR_MODULES = ("PIL", "boto3", "botocore")
 DYNAMIC_IMPORT_CALLS = ("import_module", "__import__")
 CAPABILITY_FORBIDDEN_STDLIB = (
     "os",
@@ -69,6 +70,12 @@ PERMITTED_BY_PACKAGE = {
         "serendipeak.discovery",
         "serendipeak.errors",
     ),
+    "serendipeak.media": (
+        *MEDIA_VENDOR_MODULES,
+        "serendipeak.media",
+        "serendipeak.catalog",
+        "serendipeak.errors",
+    ),
     "tools": ("psycopg", "yaml", "serendipeak.catalog.bootstrap.seed"),
 }
 FORBIDDEN_BY_PACKAGE = {
@@ -80,6 +87,13 @@ FORBIDDEN_BY_PACKAGE = {
     ),
     "serendipeak.httpapi": (*ORM_MODULES, "serendipeak.persistence", "config"),
     "serendipeak.cli": ("django.db", "serendipeak.persistence"),
+    "serendipeak.media": (
+        "rest_framework",
+        "serendipeak.persistence",
+        "serendipeak.httpapi",
+        "serendipeak.cli",
+        "config",
+    ),
 }
 ORM_OWNERS = ("serendipeak.persistence", "tools")
 ORM_ALLOWED_FILES = {"config/health.py"}
@@ -213,6 +227,8 @@ def violations(source, relative_path):
     is_tool = is_within(module, "tools")
     if not is_tool:
         forbidden.extend(OFFLINE_TOOLING_MODULES)
+    if not is_within(module, "serendipeak.media"):
+        forbidden.extend(MEDIA_VENDOR_MODULES)
     is_orm_owner = any(is_within(module, owner) for owner in ORM_OWNERS)
     if not is_orm_owner and relative_path not in ORM_ALLOWED_FILES:
         forbidden.extend(ORM_MODULES)
@@ -256,6 +272,10 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/persistence/admin.py" in files
     assert "serendipeak/persistence/mountain_status_store.py" in files
     assert "serendipeak/catalog/publish_mountain.py" in files
+    assert "serendipeak/catalog/media/ingestion.py" in files
+    assert "serendipeak/media/pillow_processor.py" in files
+    assert "serendipeak/media/s3_media_store.py" in files
+    assert "serendipeak/media/filesystem_media_store.py" in files
 
 
 @pytest.mark.parametrize("relative_path", source_files())
@@ -451,6 +471,66 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "from serendipeak.httpapi.errors import api_exception_handler",
             "serendipeak.cli.management.commands.check_catalog imports serendipeak.httpapi.errors",
         ),
+        (
+            "serendipeak/catalog/media/ingestion.py",
+            "from PIL import Image",
+            "serendipeak.catalog.media.ingestion imports PIL",
+        ),
+        (
+            "serendipeak/catalog/media/ports.py",
+            "import boto3",
+            "serendipeak.catalog.media.ports imports boto3",
+        ),
+        (
+            "serendipeak/persistence/mapping.py",
+            "from botocore.exceptions import ClientError",
+            "serendipeak.persistence.mapping imports botocore",
+        ),
+        (
+            "serendipeak/httpapi/views.py",
+            "from PIL import Image",
+            "serendipeak.httpapi.views imports PIL",
+        ),
+        (
+            "config/composition.py",
+            "import boto3",
+            "config.composition imports boto3",
+        ),
+        (
+            "serendipeak/media/s3_media_store.py",
+            "from serendipeak.persistence.models import MountainImageRecord",
+            "serendipeak.media.s3_media_store imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/media/pillow_processor.py",
+            "from django.db import transaction",
+            "serendipeak.media.pillow_processor imports django.db",
+        ),
+        (
+            "serendipeak/media/pillow_processor.py",
+            "from rest_framework.exceptions import ValidationError",
+            "serendipeak.media.pillow_processor imports rest_framework",
+        ),
+        (
+            "serendipeak/media/filesystem_media_store.py",
+            "from config.settings import MEDIA_ROOT",
+            "serendipeak.media.filesystem_media_store imports config",
+        ),
+        (
+            "serendipeak/media/filesystem_media_store.py",
+            "from serendipeak.httpapi import urls",
+            "serendipeak.media.filesystem_media_store imports serendipeak.httpapi",
+        ),
+        (
+            "serendipeak/media/s3_media_store.py",
+            "import requests",
+            "serendipeak.media.s3_media_store imports requests",
+        ),
+        (
+            "serendipeak/media/s3_media_store.py",
+            "from django.conf import settings",
+            "serendipeak.media.s3_media_store imports django.conf",
+        ),
     ],
 )
 def test_detects_forbidden_imports(relative_path, source, expected):
@@ -488,6 +568,15 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         (
             "serendipeak/cli/management/commands/check_catalog.py",
             "from django.core.management.base import BaseCommand",
+        ),
+        ("serendipeak/media/pillow_processor.py", "from PIL import Image, ImageCms"),
+        ("serendipeak/media/s3_media_store.py", "import boto3\nfrom botocore.config import Config"),
+        ("serendipeak/media/s3_media_store.py", "from serendipeak.catalog.media.keys import keys"),
+        ("serendipeak/media/filesystem_media_store.py", "import os\nimport tempfile"),
+        ("serendipeak/media/filesystem_media_store.py", "from serendipeak.errors import Error"),
+        (
+            "config/composition.py",
+            "from serendipeak.media.s3_media_store import S3MediaStore",
         ),
     ],
 )

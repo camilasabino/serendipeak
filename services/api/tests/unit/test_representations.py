@@ -12,6 +12,7 @@ from tests.support.catalog import (
     bare_mountain,
     committed_mountain,
     mountain,
+    photograph_media,
     primary_image,
 )
 from tests.support.contract_fixtures import load_fixture
@@ -88,6 +89,16 @@ def test_an_image_without_dimensions_omits_width_and_height():
         "sourcePageUrl": image.source_page_url,
         "sourceIdentifier": image.source_identifier,
     }
+
+
+def test_stored_photograph_media_does_not_change_the_representation():
+    aconcagua = committed_mountain("aconcagua")
+    with_media = replace(
+        aconcagua,
+        primary_image=replace(aconcagua.primary_image, media=photograph_media("ab" * 32)),
+    )
+
+    assert represent_mountain(with_media) == represent_mountain(aconcagua)
 
 
 @pytest.mark.parametrize(

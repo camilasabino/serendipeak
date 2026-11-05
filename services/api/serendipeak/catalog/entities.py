@@ -47,9 +47,18 @@ class ImageDimensions:
 
 
 @dataclass(frozen=True, slots=True)
+class PhotographMedia:
+    original_key: str
+    original_sha256: str
+    page_key: str
+    viewer_key: str
+
+
+@dataclass(frozen=True, slots=True)
 class PrimaryImage:
     url: str
     thumbnail_url: str | None
+    media: PhotographMedia | None
     dimensions: ImageDimensions | None
     creator: str | None
     attribution: str

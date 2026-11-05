@@ -26,6 +26,7 @@ from serendipeak.catalog.entities import (
     MountainStatus,
     OsmReference,
     OsmType,
+    PhotographMedia,
     PrimaryImage,
 )
 from tests.support.contract_fixtures import load_fixture
@@ -49,10 +50,20 @@ def frozen_catalog():
     return parse_frozen_catalog(load_fixture("catalog.json"))
 
 
+def photograph_media(sha256="0" * 64):
+    return PhotographMedia(
+        original_key=f"photographs/{sha256}/original.jpg",
+        original_sha256=sha256,
+        page_key=f"photographs/{sha256}/page-r1.jpg",
+        viewer_key=f"photographs/{sha256}/viewer-r1.jpg",
+    )
+
+
 def primary_image(**overrides):
     fields = {
         "url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
         "thumbnail_url": None,
+        "media": None,
         "dimensions": ImageDimensions(width=4994, height=2758),
         "creator": "Bjørn Christian Tørrissen",
         "attribution": "Bjørn Christian Tørrissen",

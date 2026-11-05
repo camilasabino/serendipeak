@@ -5,6 +5,15 @@ import pytest
 from django.conf import settings
 
 SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
+MEDIA_ENVIRONMENT = {
+    "MEDIA_STORE": "s3",
+    "MEDIA_PUBLIC_BASE_URL": "https://media.example",
+    "MEDIA_S3_ENDPOINT_URL": "https://account.r2.cloudflarestorage.example",
+    "MEDIA_S3_ACCESS_KEY_ID": "access-key",
+    "MEDIA_S3_SECRET_ACCESS_KEY": "secret-key",
+    "MEDIA_PUBLIC_BUCKET": "photographs-public",
+    "MEDIA_ORIGINALS_BUCKET": "photographs-originals",
+}
 
 
 def test_the_admin_stack_is_installed_without_autodiscovering_the_default_site():
@@ -49,6 +58,8 @@ def test_cookies_are_http_only_and_same_site():
 @pytest.mark.parametrize(("app_env", "secure"), [("production", True), ("development", False)])
 def test_cookies_are_secure_outside_development(monkeypatch, app_env, secure):
     monkeypatch.setenv("APP_ENV", app_env)
+    for name, value in MEDIA_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
 
     loaded = run_path(str(SETTINGS_FILE))
 

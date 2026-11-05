@@ -1,16 +1,23 @@
 import secrets
 from pathlib import Path
 
+from django.conf import settings
+
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
+from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
+from serendipeak.media.filesystem_media_store import FilesystemMediaStore
+from serendipeak.media.pillow_processor import PillowPhotographProcessor
+from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
@@ -19,6 +26,12 @@ from serendipeak.persistence.mountain_status_store import DjangoMountainStatusSt
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 SEED_PATH = SERVICE_ROOT / "seed" / "legacy-catalog-v1.json"
 FROZEN_CATALOG_PATH = SERVICE_ROOT.parents[1] / "contracts" / "v1" / "catalog.json"
+
+MEBIBYTE = 1024 * 1024
+ADMIN_INGESTION_LIMITS = IngestionLimits(max_bytes=30 * MEBIBYTE)
+# Photographs of the existing catalog come from their sources at full resolution, some well
+# beyond an editor's upload limit, and every one of them must still be stored.
+LEGACY_SOURCE_INGESTION_LIMITS = IngestionLimits(max_bytes=150 * MEBIBYTE)
 
 
 def build_bootstrap_catalog() -> BootstrapCatalog:
@@ -61,3 +74,36 @@ def build_deactivate_mountain() -> DeactivateMountain:
 
 def build_reactivate_mountain() -> ReactivateMountain:
     return ReactivateMountain(DjangoMountainStatusStore())
+
+
+def build_media_store() -> MediaStore:
+    if settings.MEDIA_STORE == "filesystem":
+        return FilesystemMediaStore(settings.MEDIA_ROOT)
+
+    return S3MediaStore.connect(
+        endpoint_url=settings.MEDIA_S3_ENDPOINT_URL,
+        access_key_id=settings.MEDIA_S3_ACCESS_KEY_ID,
+        secret_access_key=settings.MEDIA_S3_SECRET_ACCESS_KEY,
+        public_bucket=settings.MEDIA_PUBLIC_BUCKET,
+        originals_bucket=settings.MEDIA_ORIGINALS_BUCKET,
+    )
+
+
+def build_photograph_processor() -> PhotographProcessor:
+    return PillowPhotographProcessor()
+
+
+def build_admin_photograph_ingestion() -> PhotographIngestion:
+    return PhotographIngestion(
+        build_photograph_processor(),
+        build_media_store(),
+        ADMIN_INGESTION_LIMITS,
+    )
+
+
+def build_legacy_photograph_ingestion() -> PhotographIngestion:
+    return PhotographIngestion(
+        build_photograph_processor(),
+        build_media_store(),
+        LEGACY_SOURCE_INGESTION_LIMITS,
+    )

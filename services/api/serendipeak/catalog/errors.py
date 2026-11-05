@@ -1,3 +1,4 @@
+from enum import StrEnum
 from uuid import UUID
 
 from serendipeak.catalog.entities import MountainStatus
@@ -47,3 +48,18 @@ class InvalidStatusTransition(DomainError):
         super().__init__(f"a {current.value} mountain cannot become {target.value}")
         self.current = current
         self.target = target
+
+
+class PhotographRejection(StrEnum):
+    TOO_MANY_BYTES = "too_many_bytes"
+    TOO_MANY_PIXELS = "too_many_pixels"
+    UNSUPPORTED_FORMAT = "unsupported_format"
+    NOT_AN_IMAGE = "not_an_image"
+    CORRUPT = "corrupt"
+    ANIMATED = "animated"
+
+
+class PhotographRejected(ApplicationError):
+    def __init__(self, reason: PhotographRejection):
+        super().__init__(f"the photograph was rejected: {reason.value}")
+        self.reason = reason

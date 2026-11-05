@@ -257,6 +257,7 @@ def _image(raw, label):
     image = PrimaryImage(
         url=_text(fields["url"], f"{label} url"),
         thumbnail_url=_optional(_text, fields["thumbnail_url"], f"{label} thumbnail_url"),
+        media=None,
         dimensions=None
         if width is None
         else ImageDimensions(

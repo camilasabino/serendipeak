@@ -8,6 +8,8 @@ dependencies = [
     "djangorestframework>=3.18.3,<3.19",
     "psycopg[binary]>=3.3.6,<3.4",
     "django-cors-headers>=4.9.0,<5",
+    "pillow>=13.0.0,<14",
+    "boto3>=1.43.123,<2",
 ]
 
 [dependency-groups]

@@ -10,6 +10,7 @@ from serendipeak.catalog.entities import (
     MountainStatus,
     OsmReference,
     OsmType,
+    PhotographMedia,
     PrimaryImage,
 )
 from serendipeak.discovery.entities import DailyMountain
@@ -111,11 +112,16 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
         return None
     provenance = entry.image_provenance or ImageProvenance(None, None, None)
     dimensions = image.dimensions
+    media = image.media
 
     return MountainImageRecord(
         mountain_id=entry.mountain.id,
         url=image.url,
         thumbnail_url=image.thumbnail_url,
+        original_key=None if media is None else media.original_key,
+        original_sha256=None if media is None else media.original_sha256,
+        page_key=None if media is None else media.page_key,
+        viewer_key=None if media is None else media.viewer_key,
         width=None if dimensions is None else dimensions.width,
         height=None if dimensions is None else dimensions.height,
         creator=image.creator,
@@ -163,6 +169,7 @@ def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
     return PrimaryImage(
         url=image.url,
         thumbnail_url=image.thumbnail_url,
+        media=_photograph_media(image),
         dimensions=None
         if image.width is None
         else ImageDimensions(width=image.width, height=image.height),
@@ -172,4 +179,16 @@ def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
         license_url=image.license_url,
         source_page_url=image.source_page_url,
         source_identifier=image.source_identifier,
+    )
+
+
+def _photograph_media(image: MountainImageRecord) -> PhotographMedia | None:
+    if image.original_key is None:
+        return None
+
+    return PhotographMedia(
+        original_key=image.original_key,
+        original_sha256=image.original_sha256,
+        page_key=image.page_key,
+        viewer_key=image.viewer_key,
     )

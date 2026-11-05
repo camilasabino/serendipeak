@@ -3,7 +3,8 @@ from datetime import date
 
 from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.entities import PUBLIC_STATUSES, CandidateMountain, MountainStatus
-from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.catalog.errors import CatalogAlreadyPopulated, PhotographRejected
+from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.ports import StatusChange, StatusChangeOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
@@ -120,3 +121,56 @@ class RecordingPickIndex:
         self.counts.append(count)
 
         return self._indexes.pop(0)
+
+
+class FakeMediaStore:
+    def __init__(self):
+        self.originals = {}
+        self.public = {}
+        self.calls = []
+        self.failing = False
+
+    def put_original(self, key, data, content_type):
+        self._record("put_original", key)
+        self.originals.setdefault(key, (data, content_type))
+
+    def put_public(self, key, data, content_type):
+        self._record("put_public", key)
+        self.public.setdefault(key, (data, content_type))
+
+    def has_original(self, key):
+        self._record("has_original", key)
+
+        return key in self.originals
+
+    def has_public(self, key):
+        self._record("has_public", key)
+
+        return key in self.public
+
+    def read_original(self, key):
+        self._record("read_original", key)
+        if key not in self.originals:
+            raise InfrastructureError(f"no original is stored under {key}")
+
+        return self.originals[key][0]
+
+    def _record(self, operation, key):
+        require_media_key(key)
+        if self.failing:
+            raise InfrastructureError(f"{operation} failed")
+        self.calls.append((operation, key))
+
+
+class FakePhotographProcessor:
+    def __init__(self, result=None, rejection=None):
+        self._result = result
+        self._rejection = rejection
+        self.processed = []
+
+    def process(self, data):
+        self.processed.append(data)
+        if self._rejection is not None:
+            raise PhotographRejected(self._rejection)
+
+        return self._result

@@ -17,6 +17,7 @@ from django.db.models.lookups import Range
 
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
+from serendipeak.catalog.media.keys import MEDIA_KEY_PATTERN, SHA256_PATTERN
 from serendipeak.catalog.public_link import PUBLIC_LINK_PATTERN
 from serendipeak.catalog.slug import RESERVED_SLUGS, SLUG_PATTERN
 
@@ -40,6 +41,10 @@ def _is_public_link(field):
 
 def _absent_or_public_link(field):
     return Q(**{f"{field}__isnull": True}) | _is_public_link(field)
+
+
+def _absent_or_matching(field, pattern):
+    return Q(**{f"{field}__isnull": True}) | Q(**{f"{field}__regex": pattern})
 
 
 def _absent_or_between(field, minimum, maximum):
@@ -219,6 +224,10 @@ class MountainImageRecord(models.Model):
     )
     url = models.TextField()
     thumbnail_url = models.TextField(null=True)
+    original_key = models.TextField(null=True)
+    original_sha256 = models.TextField(null=True)
+    page_key = models.TextField(null=True)
+    viewer_key = models.TextField(null=True)
     width = models.IntegerField(null=True)
     height = models.IntegerField(null=True)
     creator = models.TextField(null=True)
@@ -245,6 +254,30 @@ class MountainImageRecord(models.Model):
             CheckConstraint(
                 condition=_absent_or_public_link("thumbnail_url"),
                 name="mountain_image_thumbnail_url_public_link",
+            ),
+            CheckConstraint(
+                condition=_all_or_none("original_key", "original_sha256", "page_key", "viewer_key"),
+                name="mountain_image_media_complete",
+            ),
+            CheckConstraint(
+                condition=_absent_or_matching("original_key", MEDIA_KEY_PATTERN),
+                name="mountain_image_original_key_format",
+            ),
+            CheckConstraint(
+                condition=_absent_or_matching("original_sha256", SHA256_PATTERN),
+                name="mountain_image_original_sha256_format",
+            ),
+            CheckConstraint(
+                condition=_absent_or_matching("page_key", MEDIA_KEY_PATTERN),
+                name="mountain_image_page_key_format",
+            ),
+            CheckConstraint(
+                condition=_absent_or_matching("viewer_key", MEDIA_KEY_PATTERN),
+                name="mountain_image_viewer_key_format",
+            ),
+            CheckConstraint(
+                condition=Q(original_key__isnull=True) | Q(width__isnull=False),
+                name="mountain_image_media_has_dimensions",
             ),
             CheckConstraint(
                 condition=_all_or_none("width", "height"),

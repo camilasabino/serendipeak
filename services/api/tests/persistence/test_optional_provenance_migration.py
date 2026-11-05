@@ -1,7 +1,7 @@
 import pytest
-from django.db import IntegrityError, connection
-from django.db.migrations.executor import MigrationExecutor
+from django.db import IntegrityError
 
+from tests.support.migrations import applied_head, migrate_to, migrate_to_latest
 from tests.support.records import mountain_record
 
 BEFORE = ("catalog", "0004_public_link_https")
@@ -10,22 +10,10 @@ AFTER = ("catalog", "0005_optional_provenance")
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def migrate_to(target):
-    executor = MigrationExecutor(connection)
-    executor.loader.build_graph()
-    executor.migrate([target])
-
-
-def applied_head():
-    executor = MigrationExecutor(connection)
-
-    return max(name for app, name in executor.loader.applied_migrations if app == "catalog")
-
-
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to(AFTER)
+    migrate_to_latest()
 
 
 def test_reversing_and_reapplying_succeeds_while_every_active_mountain_has_its_references():
@@ -44,4 +32,4 @@ def test_reversing_fails_once_an_active_mountain_lacks_source_references():
     with pytest.raises(IntegrityError):
         migrate_to(BEFORE)
 
-    assert applied_head() == AFTER[1]
+    assert applied_head() >= AFTER[1]
