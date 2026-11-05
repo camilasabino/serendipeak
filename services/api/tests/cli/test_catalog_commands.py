@@ -13,7 +13,7 @@ from serendipeak.cli.errors import command_error
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.support.catalog import load_seed_document, photograph_media
-from tests.support.records import mountain_record
+from tests.support.records import attach_committed_media, mountain_record
 
 pytestmark = pytest.mark.django_db
 
@@ -106,12 +106,22 @@ def test_bootstrap_reports_an_unreadable_seed(tmp_path):
     assert message.startswith(f"cannot read {missing}")
 
 
-def test_check_catalog_passes_on_the_bootstrapped_catalog():
+def test_check_catalog_passes_on_the_bootstrapped_and_materialized_catalog():
     run("bootstrap_catalog")
+    attach_committed_media()
 
     stdout, _ = run("check_catalog")
 
     assert stdout == "73 active mountains satisfy the publication invariants.\n"
+
+
+def test_check_catalog_reports_every_photograph_still_awaiting_materialization():
+    run("bootstrap_catalog")
+
+    message, stderr = failure("check_catalog")
+
+    assert message == "73 publication violations in 73 active mountains"
+    assert stderr.splitlines()[0] == "aconcagua: image_media_missing"
 
 
 def test_check_catalog_lists_violations_and_fails():

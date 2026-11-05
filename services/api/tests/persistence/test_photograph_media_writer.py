@@ -6,12 +6,13 @@ from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
-from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media
+from tests.support.catalog import catalog_seed, photograph_media, seeded_mountain
 
 pytestmark = pytest.mark.django_db
 
-FUJI = catalog_mountain("fuji")
+FUJI = seeded_mountain("fuji")
 IMAGE = FUJI.mountain.primary_image
+FILE_URL = FUJI.image_provenance.legacy_file_url
 MEDIA = photograph_media("b" * 64)
 
 
@@ -22,7 +23,7 @@ def writer():
 
 
 def attach(writer, media=MEDIA):
-    return writer.attach_media(FUJI.mountain.id, IMAGE.url, IMAGE.dimensions, media)
+    return writer.attach_media(FUJI.mountain.id, FILE_URL, IMAGE.dimensions, media)
 
 
 def test_attaching_changes_only_the_media_columns(writer):

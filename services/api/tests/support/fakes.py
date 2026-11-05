@@ -47,7 +47,10 @@ class InMemoryCatalogStore:
             return AttachOutcome.NOT_FOUND
         if image.media is not None:
             return AttachOutcome.ALREADY_ATTACHED if image.media == media else AttachOutcome.STALE
-        if image.url != expected_file_url or image.dimensions != expected_dimensions:
+        if (
+            entry.image_provenance.legacy_file_url != expected_file_url
+            or image.dimensions != expected_dimensions
+        ):
             return AttachOutcome.STALE
 
         self.replace(

@@ -11,12 +11,14 @@ from django.db.models import (
     Func,
     Q,
     UniqueConstraint,
+    Value,
 )
-from django.db.models.functions import Now
+from django.db.models.functions import Concat, Now
 from django.db.models.lookups import Range
 
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
+from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.keys import MEDIA_KEY_PATTERN, SHA256_PATTERN
 from serendipeak.catalog.public_link import PUBLIC_LINK_PATTERN
 from serendipeak.catalog.slug import RESERVED_SLUGS, SLUG_PATTERN
@@ -51,6 +53,20 @@ def _absent_or_between(field, minimum, maximum):
     return Q(**{f"{field}__isnull": True}) | Q(
         **{f"{field}__gte": minimum, f"{field}__lte": maximum}
     )
+
+
+def _absent_or_derived_from_checksum(field, name, *, prefix_only=False):
+    # Mirrors catalog.media.keys, which builds the same keys from the checksum. A new
+    # rendition version needs a migration that replaces these constraints.
+    derived = Concat(
+        Value(keys.KEY_PREFIX),
+        F("original_sha256"),
+        Value(f"/{name}"),
+        output_field=models.TextField(),
+    )
+    matches = Q(**{f"{field}__startswith": derived}) if prefix_only else Q(**{field: derived})
+
+    return Q(**{f"{field}__isnull": True}) | matches
 
 
 def _all_or_none(*fields):
@@ -222,8 +238,7 @@ class MountainImageRecord(models.Model):
     mountain = models.OneToOneField(
         MountainRecord, primary_key=True, on_delete=models.PROTECT, related_name="image"
     )
-    url = models.TextField()
-    thumbnail_url = models.TextField(null=True)
+    legacy_file_url = models.TextField()
     original_key = models.TextField(null=True)
     original_sha256 = models.TextField(null=True)
     page_key = models.TextField(null=True)
@@ -243,17 +258,13 @@ class MountainImageRecord(models.Model):
     class Meta:
         db_table = "mountain_image"
         constraints = [
-            CheckConstraint(condition=_has_text("url"), name="mountain_image_url_not_blank"),
             CheckConstraint(
-                condition=_is_public_link("url"), name="mountain_image_url_public_link"
+                condition=_has_text("legacy_file_url"),
+                name="mountain_image_legacy_file_url_not_blank",
             ),
             CheckConstraint(
-                condition=_absent_or_has_text("thumbnail_url"),
-                name="mountain_image_thumbnail_url_not_blank",
-            ),
-            CheckConstraint(
-                condition=_absent_or_public_link("thumbnail_url"),
-                name="mountain_image_thumbnail_url_public_link",
+                condition=_is_public_link("legacy_file_url"),
+                name="mountain_image_legacy_file_url_https",
             ),
             CheckConstraint(
                 condition=_all_or_none("original_key", "original_sha256", "page_key", "viewer_key"),
@@ -274,6 +285,20 @@ class MountainImageRecord(models.Model):
             CheckConstraint(
                 condition=_absent_or_matching("viewer_key", MEDIA_KEY_PATTERN),
                 name="mountain_image_viewer_key_format",
+            ),
+            CheckConstraint(
+                condition=_absent_or_derived_from_checksum(
+                    "original_key", keys.ORIGINAL_NAME_PREFIX, prefix_only=True
+                ),
+                name="mountain_image_original_key_matches_sha256",
+            ),
+            CheckConstraint(
+                condition=_absent_or_derived_from_checksum("page_key", keys.PAGE_NAME),
+                name="mountain_image_page_key_matches_sha256",
+            ),
+            CheckConstraint(
+                condition=_absent_or_derived_from_checksum("viewer_key", keys.VIEWER_NAME),
+                name="mountain_image_viewer_key_matches_sha256",
             ),
             CheckConstraint(
                 condition=Q(original_key__isnull=True) | Q(width__isnull=False),

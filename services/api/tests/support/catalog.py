@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import json
 import uuid
 from dataclasses import replace
@@ -34,6 +35,7 @@ from tests.support.contract_fixtures import load_fixture
 SEED_PATH = Path(__file__).resolve().parents[2] / "seed" / "legacy-catalog-v1.json"
 CREATED_AT = datetime.datetime(2026, 10, 2, 2, 55, 52, 889902, tzinfo=datetime.UTC)
 UPDATED_AT = datetime.datetime(2026, 10, 12, 17, 59, 25, 645765, tzinfo=datetime.UTC)
+LEGACY_FILE_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg"
 
 
 def load_seed_document():
@@ -59,11 +61,21 @@ def photograph_media(sha256="0" * 64):
     )
 
 
+def image_provenance(**overrides):
+    fields = {
+        "legacy_file_url": LEGACY_FILE_URL,
+        "license_reported": None,
+        "license_election_basis_url": None,
+        "approved_on": None,
+    }
+    fields.update(overrides)
+
+    return ImageProvenance(**fields)
+
+
 def primary_image(**overrides):
     fields = {
-        "url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
-        "thumbnail_url": None,
-        "media": None,
+        "media": photograph_media(),
         "dimensions": ImageDimensions(width=4994, height=2758),
         "creator": "Bjørn Christian Tørrissen",
         "attribution": "Bjørn Christian Tørrissen",
@@ -105,17 +117,25 @@ def mountain(slug="aconcagua", **overrides):
     return Mountain(**fields)
 
 
-def catalog_mountain(slug="aconcagua", provenance=None, **overrides):
+def catalog_mountain(slug="aconcagua", provenance=None, file_url=None, **overrides):
     entry = mountain(slug, **overrides)
 
     return CatalogMountain(
         mountain=entry,
         image_provenance=None
         if entry.primary_image is None
-        else provenance or ImageProvenance(None, None, None),
+        else provenance
+        or image_provenance(**({} if file_url is None else {"legacy_file_url": file_url})),
         created_at=CREATED_AT,
         updated_at=UPDATED_AT,
     )
+
+
+def seeded_mountain(slug="aconcagua", **overrides):
+    """A mountain as the committed seed holds it: its photograph has no owned media yet."""
+    overrides.setdefault("primary_image", primary_image(media=None))
+
+    return catalog_mountain(slug, **overrides)
 
 
 def catalog_discovery(day, entry):
@@ -152,6 +172,33 @@ def frozen_mountain(entry):
 
 def with_mountain(entry, **overrides):
     return replace(entry, mountain=replace(entry.mountain, **overrides))
+
+
+def with_file_url(entry, legacy_file_url):
+    return replace(
+        entry, image_provenance=replace(entry.image_provenance, legacy_file_url=legacy_file_url)
+    )
+
+
+def media_of(slug):
+    return photograph_media(hashlib.sha256(slug.encode()).hexdigest())
+
+
+def with_media(entry):
+    image = entry.mountain.primary_image
+
+    return with_mountain(entry, primary_image=replace(image, media=media_of(entry.mountain.slug)))
+
+
+@cache
+def committed_seed_with_media():
+    """The committed seed as served after materialization: every photograph holds media."""
+    seed = committed_seed()
+
+    return CatalogSeed(
+        mountains=tuple(with_media(entry) for entry in seed.mountains),
+        discoveries=seed.discoveries,
+    )
 
 
 def committed_mountain(slug):

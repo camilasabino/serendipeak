@@ -1,6 +1,8 @@
 import pytest
 
 from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.media import keys
+from serendipeak.catalog.media.ports import PhotographFormat
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainImageRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
@@ -10,10 +12,12 @@ from tests.support.catalog import (
     committed_seed,
     photograph_media,
     primary_image,
+    seeded_mountain,
 )
 from tests.support.records import image_record, insert_error, mountain_record
 
 DIGEST = "5d" * 32
+OTHER_DIGEST = "6e" * 32
 MEDIA = {
     "original_key": f"photographs/{DIGEST}/original.jpg",
     "original_sha256": DIGEST,
@@ -27,8 +31,28 @@ REJECTED_MEDIA = [
     ("mountain_image_media_complete", {"original_sha256": None}),
     ("mountain_image_original_key_format", {"original_key": "originals/photo.jpg"}),
     ("mountain_image_original_key_format", {"original_key": f"photographs/{DIGEST}/../x.jpg"}),
-    ("mountain_image_original_sha256_format", {"original_sha256": DIGEST.upper()}),
-    ("mountain_image_original_sha256_format", {"original_sha256": f"{DIGEST}\n"}),
+    ("mountain_image_original_key_matches_sha256", {"original_sha256": DIGEST.upper()}),
+    ("mountain_image_original_key_matches_sha256", {"original_sha256": f"{DIGEST}\n"}),
+    ("mountain_image_original_key_matches_sha256", {"original_sha256": OTHER_DIGEST}),
+    ("mountain_image_original_key_matches_sha256", {"original_key": f"photographs/{DIGEST}/x.jpg"}),
+    (
+        "mountain_image_original_key_matches_sha256",
+        {"original_key": f"photographs/{OTHER_DIGEST}/original.jpg"},
+    ),
+    (
+        "mountain_image_page_key_matches_sha256",
+        {"page_key": f"photographs/{OTHER_DIGEST}/page-r1.jpg"},
+    ),
+    ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/page-r2.jpg"}),
+    ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/viewer-r1.jpg"}),
+    (
+        "mountain_image_viewer_key_matches_sha256",
+        {"viewer_key": f"photographs/{OTHER_DIGEST}/viewer-r1.jpg"},
+    ),
+    (
+        "mountain_image_viewer_key_matches_sha256",
+        {"viewer_key": f"photographs/{DIGEST}/page-r1.jpg"},
+    ),
     ("mountain_image_page_key_format", {"page_key": f"/photographs/{DIGEST}/page-r1.jpg"}),
     ("mountain_image_viewer_key_format", {"viewer_key": f"photographs/{DIGEST}/Viewer.jpg"}),
     ("mountain_image_media_has_dimensions", {"width": None, "height": None}),
@@ -51,6 +75,25 @@ def test_rejects_invalid_photograph_media(mountain, constraint, overrides):
 
 def test_accepts_complete_photograph_media(mountain):
     image_record(mountain, **MEDIA).save(force_insert=True)
+
+
+@pytest.mark.parametrize("photograph_format", list(PhotographFormat))
+def test_accepts_the_original_key_of_every_accepted_format(mountain, photograph_format):
+    original_key = keys.original_key(DIGEST, photograph_format)
+
+    image_record(mountain, **{**MEDIA, "original_key": original_key}).save(force_insert=True)
+
+
+def test_the_constraints_accept_exactly_the_keys_the_key_builders_derive(mountain):
+    image_record(
+        mountain,
+        **{
+            **MEDIA,
+            "original_key": keys.original_key(DIGEST, PhotographFormat.JPEG),
+            "page_key": keys.page_key(DIGEST),
+            "viewer_key": keys.viewer_key(DIGEST),
+        },
+    ).save(force_insert=True)
 
 
 def test_two_images_may_share_the_same_photograph(mountain, db):
@@ -76,7 +119,7 @@ def test_photograph_media_round_trips_through_the_catalog_store_and_repository()
 
 @pytest.mark.django_db
 def test_an_image_without_photograph_media_reads_back_without_it():
-    entry = catalog_mountain(status=MountainStatus.ACTIVE)
+    entry = seeded_mountain(status=MountainStatus.ACTIVE)
     DjangoCatalogStore().load(catalog_seed(entry))
 
     assert DjangoCatalogStore().snapshot().mountains[0].mountain.primary_image.media is None

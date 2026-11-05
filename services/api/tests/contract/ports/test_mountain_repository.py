@@ -16,7 +16,9 @@ from tests.support.catalog import (
 from tests.support.fakes import InMemoryMountainRepository
 
 ACONCAGUA = catalog_mountain("aconcagua")
-WITHOUT_DIMENSIONS = catalog_mountain("mont-blanc", primary_image=primary_image(dimensions=None))
+WITHOUT_DIMENSIONS = catalog_mountain(
+    "mont-blanc", primary_image=primary_image(dimensions=None, media=None)
+)
 INACTIVE_WITHOUT_IMAGE = catalog_mountain(
     "old-peak",
     status=MountainStatus.INACTIVE,

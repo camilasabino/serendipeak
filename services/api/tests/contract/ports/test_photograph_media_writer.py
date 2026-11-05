@@ -7,11 +7,18 @@ from serendipeak.catalog.bootstrap.ports import AttachOutcome
 from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
-from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media, with_mountain
+from tests.support.catalog import (
+    catalog_mountain,
+    catalog_seed,
+    photograph_media,
+    seeded_mountain,
+    with_mountain,
+)
 from tests.support.fakes import InMemoryCatalogStore
 
-FUJI = catalog_mountain("fuji")
+FUJI = seeded_mountain("fuji")
 IMAGE = FUJI.mountain.primary_image
+FILE_URL = FUJI.image_provenance.legacy_file_url
 ATTACHED = with_mountain(
     catalog_mountain("aconcagua"),
     primary_image=replace(IMAGE, media=photograph_media("a" * 64)),
@@ -44,7 +51,7 @@ def attach(writer, entry, media=MEDIA, url=None, dimensions=None):
     image = entry.mountain.primary_image
     return writer.attach_media(
         entry.mountain.id,
-        url or image.url,
+        url or entry.image_provenance.legacy_file_url,
         dimensions or image.dimensions,
         media,
     )
@@ -90,10 +97,10 @@ def test_a_missing_mountain_or_photograph_is_not_found(arranged):
     writer, _ = arranged
 
     assert (
-        writer.attach_media(uuid.uuid4(), IMAGE.url, IMAGE.dimensions, MEDIA)
+        writer.attach_media(uuid.uuid4(), FILE_URL, IMAGE.dimensions, MEDIA)
         is AttachOutcome.NOT_FOUND
     )
     assert (
-        writer.attach_media(BARE.mountain.id, IMAGE.url, IMAGE.dimensions, MEDIA)
+        writer.attach_media(BARE.mountain.id, FILE_URL, IMAGE.dimensions, MEDIA)
         is AttachOutcome.NOT_FOUND
     )

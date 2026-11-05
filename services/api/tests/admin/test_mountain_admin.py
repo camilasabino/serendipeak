@@ -11,7 +11,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.admin import CAMERA_FIELDS, MountainForm
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.admin.support import form_payload, input_names
-from tests.support.catalog import catalog_mountain, primary_image
+from tests.support.catalog import catalog_mountain, primary_image, seeded_mountain
 
 ADD_URL = reverse("admin:catalog_mountainrecord_add")
 CHANGELIST_URL = reverse("admin:catalog_mountainrecord_changelist")
@@ -253,7 +253,7 @@ class TestCreation:
             page,
             **NEW_MOUNTAIN,
             **{
-                "image-0-url": "https://upload.wikimedia.org/a.jpg",
+                "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
                 "image-0-source_page_url": "https://commons.wikimedia.org/wiki/File:a.jpg",
                 "image-0-source_identifier": "File:a.jpg",
                 "image-0-attribution": "A. Photographer",
@@ -354,7 +354,10 @@ class TestCreation:
         payload = form_payload(
             editor_client.get(ADD_URL),
             **NEW_MOUNTAIN,
-            **{"image-0-url": "https://upload.wikimedia.org/a.jpg", "image-0-width": "400"},
+            **{
+                "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
+                "image-0-width": "400",
+            },
         )
 
         response = editor_client.post(ADD_URL, payload)
@@ -377,8 +380,7 @@ class TestEditing:
         never_inputs = {"status", "location", "created_at", "updated_at", *CAMERA_FIELDS}
         assert names & never_inputs == set()
         legacy_photograph = {
-            "image-0-url",
-            "image-0-thumbnail_url",
+            "image-0-legacy_file_url",
             "image-0-width",
             "image-0-height",
             "image-0-source_page_url",
@@ -505,7 +507,7 @@ class TestEditing:
             "camera_framing_x": "0",
             "camera_framing_y": "0",
             "location": "POINT(0 0)",
-            "image-0-url": "https://forged.example/a.jpg",
+            "image-0-legacy_file_url": "https://forged.example/a.jpg",
             "image-0-source_identifier": "File:forged.jpg",
         }
 
@@ -518,7 +520,7 @@ class TestEditing:
             "updated_at",
         }
         image = MountainImageRecord.objects.get(pk=entry.mountain.id)
-        assert image.url == entry.mountain.primary_image.url
+        assert image.legacy_file_url == entry.image_provenance.legacy_file_url
         assert image.source_identifier == entry.mountain.primary_image.source_identifier
 
     def test_the_update_writes_only_the_columns_the_form_owns(self, editor_client, load_catalog):
@@ -643,6 +645,22 @@ class TestEditing:
             "Not allowed on a published mountain: the camera framing is missing."
         ]
         assert stored(INACTIVE) == before
+
+    def test_a_public_mountain_whose_photograph_awaits_its_file_cannot_be_saved(
+        self, editor_client, load_catalog
+    ):
+        awaiting = seeded_mountain("awaiting-peak")
+        load_catalog(awaiting)
+        before = stored(awaiting)
+        page = editor_client.get(change_url(awaiting))
+
+        response = editor_client.post(change_url(awaiting), form_payload(page, name="Renamed"))
+
+        assert response.status_code == 200
+        assert inline_errors_of(response) == [
+            "Not allowed on a published mountain: the photograph file is not stored yet."
+        ]
+        assert stored(awaiting) == before
 
     def test_a_draft_may_stay_incomplete(self, editor_client, load_catalog):
         draft = catalog_mountain(
@@ -921,7 +939,7 @@ UNSAFE_LINKS = [
     "https://exa mple.com",
 ]
 PHOTOGRAPH = {
-    "image-0-url": "https://upload.wikimedia.org/a.jpg",
+    "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
     "image-0-source_page_url": "https://commons.wikimedia.org/wiki/File:a.jpg",
     "image-0-source_identifier": "File:a.jpg",
     "image-0-attribution": "A. Photographer",
@@ -948,7 +966,7 @@ class TestPublicLinks:
         assert not MountainRecord.objects.exists()
 
     @pytest.mark.parametrize("value", UNSAFE_LINKS)
-    @pytest.mark.parametrize("field", ["url", "thumbnail_url", "source_page_url", "license_url"])
+    @pytest.mark.parametrize("field", ["legacy_file_url", "source_page_url", "license_url"])
     def test_an_unsafe_photograph_link_is_a_form_error_on_creation(
         self, editor_client, field, value
     ):
@@ -967,14 +985,14 @@ class TestPublicLinks:
 
     def test_safe_links_are_stored_unchanged(self, editor_client):
         links = {
-            "image-0-thumbnail_url": "https://upload.wikimedia.org/thumb/a.jpg?width=300#top",
+            "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg?width=300#top",
+            "image-0-source_page_url": "https://unsplash.com/photos/a?utm_source=app#top",
             "image-0-license_url": "https://creativecommons.org/licenses/by-sa/4.0",
         }
         payload = form_payload(
             editor_client.get(ADD_URL),
             **{**NEW_MOUNTAIN, "wikipedia_url": "https://unsplash.com/@user"},
-            **PHOTOGRAPH,
-            **links,
+            **{**PHOTOGRAPH, **links},
         )
 
         response = editor_client.post(ADD_URL, payload)
@@ -983,7 +1001,8 @@ class TestPublicLinks:
         record = MountainRecord.objects.get(slug="new-peak")
         image = record.image
         assert record.wikipedia_url == "https://unsplash.com/@user"
-        assert image.thumbnail_url == links["image-0-thumbnail_url"]
+        assert image.legacy_file_url == links["image-0-legacy_file_url"]
+        assert image.source_page_url == links["image-0-source_page_url"]
         assert image.license_url == links["image-0-license_url"]
 
     def test_surrounding_whitespace_is_trimmed_before_the_rule_applies(self, editor_client):
@@ -1035,3 +1054,81 @@ class TestPublicLinks:
 
         assert response.status_code == 302
         assert MountainRecord.objects.get(pk=DRAFT.mountain.id).wikipedia_url is None
+
+
+@pytest.mark.django_db
+class TestPhotographInline:
+    def test_the_source_file_url_is_an_input_only_when_adding_a_photograph(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+
+        adding = input_names(editor_client.get(ADD_URL))
+        changing = input_names(editor_client.get(change_url(DRAFT)))
+
+        assert "image-0-legacy_file_url" in adding
+        assert "image-0-legacy_file_url" not in changing
+
+    def test_the_source_file_url_of_an_existing_photograph_is_shown_read_only(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+
+        html = editor_client.get(change_url(DRAFT)).content.decode()
+
+        assert DRAFT.image_provenance.legacy_file_url in html
+        assert "Source file URL" in html
+
+    def test_the_stored_original_is_identified_by_its_checksum_and_never_by_its_keys(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        media = DRAFT.mountain.primary_image.media
+
+        html = editor_client.get(change_url(DRAFT)).content.decode()
+
+        assert media.original_sha256 in html
+        for key in (media.original_key, media.page_key, media.viewer_key):
+            assert key not in html
+
+    def test_a_photograph_awaiting_its_file_says_so(self, editor_client, load_catalog):
+        awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
+        load_catalog(awaiting)
+
+        html = editor_client.get(change_url(awaiting)).content.decode()
+
+        assert "Not stored yet" in html
+
+    def test_media_columns_are_never_form_inputs_and_forged_ones_are_ignored(
+        self, editor_client, load_catalog
+    ):
+        awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
+        load_catalog(awaiting)
+        page = editor_client.get(change_url(awaiting))
+        forged = {
+            "image-0-original_key": "photographs/{}/original.jpg".format("a" * 64),
+            "image-0-original_sha256": "a" * 64,
+            "image-0-page_key": "photographs/{}/page-r1.jpg".format("a" * 64),
+            "image-0-viewer_key": "photographs/{}/viewer-r1.jpg".format("a" * 64),
+        }
+
+        assert input_names(page) & set(forged) == set()
+        response = editor_client.post(
+            change_url(awaiting), {**form_payload(page, summary="Edited."), **forged}
+        )
+
+        assert response.status_code == 302
+        assert MountainImageRecord.objects.get(pk=awaiting.mountain.id).original_key is None
+
+    def test_a_photograph_added_by_file_url_has_no_media_and_blocks_publication(
+        self, publisher_client
+    ):
+        payload = form_payload(publisher_client.get(ADD_URL), **NEW_MOUNTAIN, **PHOTOGRAPH)
+        assert publisher_client.post(ADD_URL, payload).status_code == 302
+        record = MountainRecord.objects.get(slug="new-peak")
+
+        assert record.image.original_key is None
+        html = publisher_client.get(
+            reverse("admin:catalog_mountainrecord_change", args=[record.pk])
+        ).content.decode()
+        assert "The photograph file is not stored yet" in html

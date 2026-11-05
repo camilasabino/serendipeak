@@ -18,8 +18,8 @@ from tests.support.catalog import (
     catalog_mountain,
     catalog_seed,
     committed_seed,
+    committed_seed_with_media,
     frozen_catalog,
-    primary_image,
 )
 
 DAY = datetime.date(2026, 10, 3)
@@ -99,7 +99,7 @@ def test_snapshot_is_two_queries_whether_or_not_a_mountain_has_an_image(
 @pytest.mark.django_db
 def test_check_catalog_reads_the_catalog_in_two_queries(django_assert_num_queries):
     store = DjangoCatalogStore()
-    store.load(committed_seed())
+    store.load(committed_seed_with_media())
 
     with django_assert_num_queries(2):
         report = CheckCatalog(store).execute()
@@ -110,13 +110,16 @@ def test_check_catalog_reads_the_catalog_in_two_queries(django_assert_num_querie
 @pytest.mark.django_db
 def test_a_constraint_violation_rolls_back_every_table():
     valid = catalog_mountain("aconcagua")
-    invalid_image = catalog_mountain("mont-blanc", primary_image=primary_image(url=" "))
+    invalid_image = catalog_mountain("mont-blanc", file_url=" ")
     seed = catalog_seed(valid, invalid_image, discoveries=[catalog_discovery(DAY, valid)])
 
     with pytest.raises(InfrastructureError) as raised:
         DjangoCatalogStore().load(seed)
 
-    assert raised.value.__cause__.__cause__.diag.constraint_name == "mountain_image_url_not_blank"
+    assert (
+        raised.value.__cause__.__cause__.diag.constraint_name
+        == "mountain_image_legacy_file_url_https"
+    )
     assert not MountainRecord.objects.exists()
     assert not DailyDiscoveryRecord.objects.exists()
 

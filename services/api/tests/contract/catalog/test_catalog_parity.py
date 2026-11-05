@@ -4,9 +4,11 @@ import pytest
 
 from config.composition import build_bootstrap_catalog, build_check_catalog
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
 from tests.support.catalog import committed_seed, frozen_catalog, load_seed_document
 from tests.support.contract_fixtures import load_fixture, load_frozen_catalog
+from tests.support.records import attach_committed_media
 
 COORDINATE_TOLERANCE_DEGREES = 1e-7
 CAMERA_TOLERANCE = 1e-9
@@ -129,7 +131,19 @@ def test_a_second_bootstrap_refuses_and_changes_nothing(bootstrapped):
     assert DailyDiscoveryRecord.objects.count() == 8
 
 
-def test_the_bootstrapped_catalog_passes_the_catalog_check(bootstrapped):
+def test_the_bootstrapped_and_materialized_catalog_passes_the_catalog_check(bootstrapped):
+    attach_committed_media()
+
     report = build_check_catalog().execute()
 
     assert (report.checked, report.violations) == (73, ())
+
+
+def test_a_bootstrapped_catalog_awaits_materialization(bootstrapped):
+    report = build_check_catalog().execute()
+
+    assert report.checked == 73
+    assert {violation.violation for violation in report.violations} == {
+        PublicationViolation.IMAGE_MEDIA_MISSING
+    }
+    assert len(report.violations) == 73

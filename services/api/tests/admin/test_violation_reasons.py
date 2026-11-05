@@ -24,3 +24,11 @@ def test_other_violations_keep_their_own_message():
 
     assert reasons == ["the camera is missing", "the Wikipedia link does not use https://"]
     assert PublicationViolation.CAMERA_MISSING in publication_violations(candidate)
+
+
+def test_a_photograph_without_media_is_reported_as_not_stored_yet():
+    candidate = mountain(primary_image=primary_image(media=None))
+
+    reasons = violation_reasons(publication_violations(candidate), candidate)
+
+    assert reasons == ["the photograph file is not stored yet"]

@@ -2,6 +2,7 @@ import json
 import logging
 
 import pytest
+from django.conf import settings
 from django.db import OperationalError, connection
 from django.urls import Resolver404, resolve
 from rest_framework.test import APIRequestFactory
@@ -17,9 +18,10 @@ from tests.support.catalog import (
     bare_mountain,
     catalog_mountain,
     catalog_seed,
-    committed_seed,
+    committed_seed_with_media,
+    media_of,
 )
-from tests.support.contract_fixtures import load_fixture
+from tests.support.contract_fixtures import load_fixture, served_with_owned_media
 
 CONTENT_TYPE = "application/json; charset=utf-8"
 NOT_FOUND = load_fixture("error-mountain-not-found.json")
@@ -36,7 +38,7 @@ def catalog(db):
     )
     draft = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 
-    DjangoCatalogStore().load(catalog_seed(*committed_seed().mountains, bare, draft))
+    DjangoCatalogStore().load(catalog_seed(*committed_seed_with_media().mountains, bare, draft))
 
 
 def body(response):
@@ -57,7 +59,9 @@ def test_a_public_mountain_matches_its_fixture(catalog, client, slug, fixture):
     assert response.status_code == 200
     assert response["Content-Type"] == CONTENT_TYPE
     assert "Cache-Control" not in response
-    assert body(response) == load_fixture(fixture)
+    assert body(response) == served_with_owned_media(
+        load_fixture(fixture), settings.MEDIA_PUBLIC_BASE_URL, media_of
+    )
 
 
 def test_non_ascii_text_is_served_unescaped(catalog, client):
@@ -128,7 +132,9 @@ def test_json_is_served_whatever_the_client_asks_for(catalog, client, accept, qu
 
     assert response.status_code == 200
     assert response["Content-Type"] == CONTENT_TYPE
-    assert body(response) == load_fixture("mountain-complete.json")
+    assert body(response) == served_with_owned_media(
+        load_fixture("mountain-complete.json"), settings.MEDIA_PUBLIC_BASE_URL, media_of
+    )
 
 
 def test_a_not_found_answer_logs_no_warning(catalog, client, caplog):

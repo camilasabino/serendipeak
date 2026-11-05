@@ -16,14 +16,24 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.models import DailyDiscoveryRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import catalog_mountain, catalog_seed, committed_seed
-from tests.support.contract_fixtures import load_fixture, load_frozen_catalog
+from tests.support.catalog import (
+    catalog_mountain,
+    catalog_seed,
+    committed_seed_with_media,
+    media_of,
+)
+from tests.support.contract_fixtures import (
+    load_fixture,
+    load_frozen_catalog,
+    served_with_owned_media,
+)
 from tests.support.fakes import FixedClock
 
 CONTENT_TYPE = "application/json; charset=utf-8"
 PATH = "/api/v1/mountains/random"
 NO_ELIGIBLE = load_fixture("error-no-eligible-mountains.json")
 INTERNAL = load_fixture("error-internal.json")
+MEDIA_BASE_URL = "https://media.example.test"
 FROZEN_BY_SLUG = {mountain["slug"]: mountain for mountain in load_frozen_catalog()}
 
 
@@ -47,6 +57,7 @@ urlpatterns = mountain_urlpatterns(
         FixedClock(None),
     ),
     get_random_mountain=GetRandomMountain(DjangoMountainRepository(), pick_index),
+    media_base_url=MEDIA_BASE_URL,
 )
 
 pytestmark = pytest.mark.urls(__name__)
@@ -60,7 +71,7 @@ def fresh_pick_index():
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(committed_seed())
+    DjangoCatalogStore().load(committed_seed_with_media())
 
 
 @pytest.fixture
@@ -106,7 +117,9 @@ def test_a_random_mountain_matches_the_complete_fixture(
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)
-    assert body(response) == load_fixture("mountain-complete.json")
+    assert body(response) == served_with_owned_media(
+        load_fixture("mountain-complete.json"), MEDIA_BASE_URL, media_of
+    )
 
 
 def test_every_active_mountain_is_served_exactly_as_the_slug_endpoint_serves_it(

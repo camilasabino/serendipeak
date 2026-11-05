@@ -16,17 +16,21 @@ from serendipeak.catalog.bootstrap.photograph_manifest import (
 from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainImageRecord
-from tests.support.catalog import catalog_mountain, catalog_seed, primary_image
+from tests.support.catalog import catalog_seed, primary_image, seeded_mountain
 
 pytestmark = pytest.mark.django_db
 
 ACONCAGUA_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg"
 FUJI_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1b/Fuji.jpg"
-ACONCAGUA = catalog_mountain(
-    "aconcagua", primary_image=primary_image(url=ACONCAGUA_URL, dimensions=ImageDimensions(64, 48))
+ACONCAGUA = seeded_mountain(
+    "aconcagua",
+    file_url=ACONCAGUA_URL,
+    primary_image=primary_image(media=None, dimensions=ImageDimensions(64, 48)),
 )
-FUJI = catalog_mountain(
-    "fuji", primary_image=primary_image(url=FUJI_URL, dimensions=ImageDimensions(40, 30))
+FUJI = seeded_mountain(
+    "fuji",
+    file_url=FUJI_URL,
+    primary_image=primary_image(media=None, dimensions=ImageDimensions(40, 30)),
 )
 
 
@@ -59,7 +63,7 @@ def pin(entry, data, **overrides):
         "mountain_id": entry.mountain.id,
         "slug": entry.mountain.slug,
         "source_identifier": image.source_identifier,
-        "file_url": image.url,
+        "file_url": entry.image_provenance.legacy_file_url,
         "sha256": hashlib.sha256(data).hexdigest(),
         "bytes": len(data),
         "dimensions": image.dimensions,
@@ -416,7 +420,7 @@ def test_the_checks_report_a_pinned_photograph_the_catalog_does_not_have(
     media_root, cache, committed_manifest
 ):
     run("materialize_photographs", "--cache-dir", str(cache))
-    extra = pin(catalog_mountain("k2"), b"k2", dimensions=ImageDimensions(10, 10))
+    extra = pin(seeded_mountain("k2"), b"k2", dimensions=ImageDimensions(10, 10))
     write_manifest(committed_manifest, pin(ACONCAGUA, ACONCAGUA_FILE), pin(FUJI, FUJI_FILE), extra)
 
     message, _, stderr = failure("check_photograph_media")

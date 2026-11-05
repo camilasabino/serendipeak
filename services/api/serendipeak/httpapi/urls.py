@@ -29,6 +29,7 @@ def mountain_urlpatterns(
     get_mountain: GetMountainBySlug,
     get_todays_mountain: GetTodaysMountain,
     get_random_mountain: GetRandomMountain,
+    media_base_url: str,
 ):
     # The wrapper also covers the error responses, which DRF returns from inside the view.
     no_store = cache_control(no_store=True)
@@ -36,14 +37,22 @@ def mountain_urlpatterns(
     return [
         path(
             "api/v1/mountains/today",
-            no_store(TodaysMountainView.as_view(get_todays_mountain=get_todays_mountain)),
+            no_store(
+                TodaysMountainView.as_view(
+                    get_todays_mountain=get_todays_mountain, media_base_url=media_base_url
+                )
+            ),
         ),
         path(
             "api/v1/mountains/random",
-            no_store(RandomMountainView.as_view(get_random_mountain=get_random_mountain)),
+            no_store(
+                RandomMountainView.as_view(
+                    get_random_mountain=get_random_mountain, media_base_url=media_base_url
+                )
+            ),
         ),
         path(
             "api/v1/mountains/<mountain_slug:slug>",
-            MountainBySlugView.as_view(get_mountain=get_mountain),
+            MountainBySlugView.as_view(get_mountain=get_mountain, media_base_url=media_base_url),
         ),
     ]

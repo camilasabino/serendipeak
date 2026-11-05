@@ -9,16 +9,16 @@ from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.errors import CatalogAlreadyPopulated, CatalogMismatch
 from tests.support.catalog import (
     catalog_discovery,
-    catalog_mountain,
     catalog_seed,
     committed_seed,
     frozen_catalog,
     frozen_mountain,
+    seeded_mountain,
 )
 from tests.support.fakes import InMemoryCatalogStore
 
-ACONCAGUA = catalog_mountain("aconcagua")
-MONT_BLANC = catalog_mountain("mont-blanc")
+ACONCAGUA = seeded_mountain("aconcagua")
+MONT_BLANC = seeded_mountain("mont-blanc")
 SEED = catalog_seed(
     ACONCAGUA,
     MONT_BLANC,

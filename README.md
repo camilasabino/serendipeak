@@ -86,6 +86,17 @@ curl -i http://127.0.0.1:8000/api/v1/mountains/aconcagua
 node contracts/v1/verify-api.mjs http://127.0.0.1:8000
 ```
 
+#### Photograph delivery
+
+The shape of `primaryImage` is the v1 shape. Its photograph is the one SerendiPeak stores (see Photograph media), so two member values differ from v1, which pointed at Wikimedia hosts, and this is the only approved divergence from the v1 fixtures:
+
+- `url` is the public URL of the viewer rendition, `{MEDIA_PUBLIC_BASE_URL}/{viewer key}`.
+- `thumbnailUrl` is the public URL of the page rendition, `{MEDIA_PUBLIC_BASE_URL}/{page key}`. It is always present.
+
+`width` and `height` keep describing the oriented original (the renditions keep its ratio and never exceed its size), and `sourcePageUrl`, `sourceIdentifier`, `attribution`, `creator`, `license` and `licenseUrl` are unchanged provenance. Storage keys, buckets, checksums and the original's location are never in a response. A photograph that has no media yet is served as a mountain without `primaryImage`, which v1 allows; `check_catalog` and `check_photograph_media` report it, so it must not reach a served environment. The API makes no outbound request: URLs are derived from the stored keys and the configured base.
+
+The v1 fixtures stay untouched. The API tests compare each response with its fixture member by member and substitute exactly `primaryImage.url` and `primaryImage.thumbnailUrl`; any other difference fails. `node contracts/v1/verify-api.mjs` only requires `url` to be a non-empty string, so it passes unchanged against a materialized catalog.
+
 ### Today's mountain endpoint
 
 `GET /api/v1/mountains/today` returns `{"date":"YYYY-MM-DD","mountain":{...}}` in the shape of `contracts/v1/daily-mountain.json`, where `date` is the current UTC calendar date and `mountain` has the shape of the mountain endpoint.
@@ -150,7 +161,7 @@ LEGACY_DATABASE_URL=postgres://serendipeak:serendipeak@localhost:5433/serendipea
 
 The output is deterministic for a given `--exported-on` date (default: today in UTC). The artifact records the format and version, the export date, the legacy tag, commit and schema version, the sha256 of the media manifest, row counts and `content_sha256`. `content_sha256` is the SHA-256 of `content` serialized as UTF-8 JSON with sorted keys, `(",", ":")` separators, non-ASCII characters unescaped and no NaN, so it does not depend on the file layout or the export date.
 
-The image rows drop the legacy `id`, `type`, `source`, `title`, `is_primary` and `created_at` columns: every image is the primary `wikimedia_commons` image and its title is the file name without the `File:` prefix and the extension, both checked during the export. `license_reported`, `license_election_basis_url` and `approved_on` come from the media manifest and are `null` for images without a manifest entry. Mountain `status` keeps the legacy values.
+The seed keeps each image's Commons `url` and `thumbnail_url`. Loading stores the `url` as the photograph's source file URL (`legacy_file_url`) and validates but does not store the `thumbnail_url`, which nothing delivers any more. The image rows drop the legacy `id`, `type`, `source`, `title`, `is_primary` and `created_at` columns: every image is the primary `wikimedia_commons` image and its title is the file name without the `File:` prefix and the extension, both checked during the export. `license_reported`, `license_election_basis_url` and `approved_on` come from the media manifest and are `null` for images without a manifest entry. Mountain `status` keeps the legacy values.
 
 ### Catalog bootstrap
 
@@ -168,7 +179,7 @@ uv run --env-file ../../.env python manage.py check_catalog
 - The verification runs after the load has committed. When it reports mismatches, the loaded rows stay; recreate the database, run `migrate` and `bootstrap_catalog` again.
 - `bootstrap_catalog --verify-only` runs only the verification, writes nothing and can be repeated. It verifies a freshly bootstrapped catalog, not a catalog in use: later daily discoveries and catalog edits are legitimate differences from the seed, and it reports them as mismatches.
 - `check_catalog` is the routine check. It does not compare the catalog with the seed and can run at any time.
-- `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, a primary image with URL, attribution, source page, source identifier, license name, dimensions and a license URL (a public-domain image needs a creator instead), and a summary that follows the summary rules when there is one.
+- `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, a primary image with owned media, attribution, source page, source identifier, license name, dimensions and a license URL (a public-domain image needs a creator instead), and a summary that follows the summary rules when there is one.
 
 `--seed` and `--frozen-catalog` replace the input files. On failure each command lists the mismatches or violations on stderr and exits with status 1.
 
@@ -182,7 +193,7 @@ Django Admin at `/admin/` is the editorial interface. It edits the catalog in pl
 - The slug is editable on every status and keeps its syntax, reserved-name and uniqueness checks. The catalog is a pre-cutover editorial seed, so a slug change does not leave redirects or history.
 - The camera is read-only in the admin. The mountain form never writes it, including on creation, so a draft starts without a camera; publication still needs one.
 - OpenStreetMap and Wikidata references are optional. When present, the OpenStreetMap type and id go together and the Wikidata id is a `Q` item id. Reversing the `catalog` migration `0005_optional_provenance` restores the former requirement that an `active` mountain has both references, so the reversal fails, and changes nothing, while an active mountain lacks either one; no data is invented to make it pass.
-- The photograph's URLs, dimensions, source page, identifier and license provenance are read-only after creation. Its creator, attribution and license name and URL stay editable.
+- A photograph is added with its source file URL and provenance. After creation the source file URL, dimensions, source page, identifier and license provenance are read-only, and the stored original is identified by its checksum; storage keys are never shown. Its creator, attribution and license name and URL stay editable. A photograph has no delivered file until it is materialized: a draft with an unmaterialized photograph is not ready to publish, and a published mountain cannot be saved while its photograph lacks media.
 - Every save writes `updated_at`. The change history records who changed what.
 - The summary is one trimmed line of at most 200 characters with no markup and in sentence form (a capitalized first word and a final period, by the same formatting rules as v1). The form shows why a summary is refused, and publication refuses a mountain whose stored summary breaks them.
 - The mountain page opens with a read-only Publication section: the status, the timestamps and, for a draft, either `Ready to publish` or the reasons it cannot be published. Readiness uses the same checks as publishing and judges the saved mountain, not unsaved form edits. The summary is a multiline text area.
@@ -209,13 +220,13 @@ Renditions are progressive 8-bit sRGB JPEGs at quality 85 with the EXIF orientat
 
 Only JPEG, PNG and WebP decoded from the content are accepted; animated images and other formats are rejected. Corruption detection is whatever Pillow rejects: the file is verified and then fully decoded, and a truncated or undecodable image is refused (`LOAD_TRUNCATED_IMAGES` is never enabled). Some damaged JPEGs are still decodable, and libjpeg completes the missing data with gray pixels; such a file is accepted, because ingestion makes no forensic claim beyond what Pillow can reject. A JPEG may have at most 200 megapixels and a PNG or WebP at most 50, checked from the header before any pixel is decoded. An editor's upload may have at most 30 MiB; photographs of the existing catalog may have up to 150 MiB (the largest of the 73 has 78.4 MiB).
 
-An image row records its photograph media in four columns (`original_key`, `original_sha256`, `page_key`, `viewer_key`): all or none, each matching the key or digest format, and only with dimensions. Images without media keep serving their stored URLs, and the public API does not expose media keys.
+An image row records its photograph media in four columns (`original_key`, `original_sha256`, `page_key`, `viewer_key`): all or none, each matching the key or digest format, and only with dimensions. The public API derives the photograph URLs from these keys and the configured `MEDIA_PUBLIC_BASE_URL` and never exposes the keys. The database also ties the keys to the checksum: `original_key` starts with `photographs/{original_sha256}/original.`, and `page_key` and `viewer_key` are the page and viewer keys of that checksum. A new rendition version therefore needs a migration that replaces those constraints along with the code that builds the keys. An image without media is not served as a photograph (see Photograph delivery).
 
 Production stores photographs in S3-compatible storage (Cloudflare R2): outside `APP_ENV=development`, `MEDIA_STORE=filesystem` is rejected at startup, because a deployment without a volume would lose its media on every redeploy. With `MEDIA_STORE=filesystem` (development and tests), originals and public renditions live in separate `originals/` and `public/` directories under `MEDIA_ROOT`. In development only, Django serves the public directory at `/media/`; originals are never served. With `MEDIA_STORE=s3`, originals go to `MEDIA_ORIGINALS_BUCKET` and renditions to `MEDIA_PUBLIC_BUCKET` with `Cache-Control: public, max-age=31536000, immutable`. No ACLs are sent; bucket policy alone makes the public bucket public. Requests use region `auto`, a 5 s connect and 60 s read timeout, and at most three attempts with the SDK's standard backoff.
 
 #### Materializing the catalog photographs
 
-The seed records where each of its 73 photographs was published (the Commons original file URL), not the photograph itself. `materialize_photographs` copies those files into the media store; until it has run, an image has no media. It is the only part of the backend that downloads anything, and the public API never does.
+The seed records where each of its 73 photographs was published (the Commons original file URL), not the photograph itself. `materialize_photographs` copies those files into the media store; until it has run, an image has no media and the mountain is served without a photograph. A local database needs this one-time run to show photographs: with `--cache-dir` the files are downloaded once and later rebuilds need no network, and `--slug` limits the run to a subset. It is the only part of the backend that downloads anything, and the public API never does.
 
 ```sh
 cd services/api
@@ -244,13 +255,15 @@ Every photograph gets one line, then a summary with the largest source file. A f
 | storage failed part way | nothing is attached | rerun: objects already stored are skipped |
 | stored but not attached (database error, or the row changed meanwhile) | the objects exist but are not referenced | rerun: the same file has the same keys, so it attaches without uploading |
 
+A photograph added in the Admin gets its file the same way until the Admin accepts uploads: add it by its source file URL, download and check the file yourself, then run `materialize_photographs --slug SLUG --file SLUG=PATH`. The source file URL is provenance and the materialization source only; it is never delivered, and the command never downloads a URL the manifest does not pin.
+
 A rerun skips photographs that already have media (`already attached`) without downloading, and still checks their stored checksum, file URL, source identifier and dimensions against the manifest.
 
 `check_photograph_media` checks every image, in any status, and exits non-zero on any problem: by default that the row has media whose keys derive from its checksum, and that every photograph the manifest pins is the pinned one (same file URL, source identifier, dimensions and checksum, so media that is consistent with itself but is another file than the pinned one fails); `--deep` also that the original and both renditions exist in the store; `--checksums` (implies `--deep`) also downloads every original and compares its SHA-256 with the stored checksum. Together, the last two prove that the stored bytes are the pinned ones. A pinned photograph the catalog no longer has is a problem; a photograph the manifest does not pin gets the other checks and is compared with nothing. It uses the committed manifest unless given `--manifest PATH`.
 
 The manifest pins the identity of the 73 photographs from their first materialization: per mountain id, the slug, source identifier and file URL from the seed, and the SHA-256, size and dimensions of the file. Legacy never stored bytes, so the identity it proves is the same Commons file at the same dimensions; from the first materialization on, the checksum pins the bytes and every rendition key contains it.
 
-An environment is ready for owned photographs when, on a freshly bootstrapped and materialized catalog, `check_photograph_media --deep --checksums` (against the committed manifest), `check_catalog` and `bootstrap_catalog --verify-only` are clean. Media is attached after the bootstrap and is not part of the seed, so `--verify-only` ignores it.
+An environment is ready for owned photographs when, on a freshly bootstrapped and materialized catalog, `check_photograph_media --deep --checksums` (against the committed manifest), `check_catalog` (which reports a missing photograph file as `image_media_missing`) and `bootstrap_catalog --verify-only` are clean, and `node contracts/v1/verify-api.mjs` passes against the running API. Media is attached after the bootstrap and is not part of the seed, so `--verify-only` ignores it; it compares the source file URL with the seed's `url`.
 
 The R2 smoke test checks a real S3-compatible store and is deselected by default; run it on demand with the development bucket settings (`MEDIA_STORE=s3`): `uv run --env-file ../../.env pytest -m r2_smoke`. It stores a few bytes under fresh keys, reads the original back, checks that the original is not reachable through `MEDIA_PUBLIC_BASE_URL`, and fetches the public object through it with its `Content-Type` and immutable `Cache-Control`.
 

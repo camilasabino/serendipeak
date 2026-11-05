@@ -1,7 +1,13 @@
 from serendipeak.catalog.bootstrap.check_catalog import CatalogViolation, CheckCatalog
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.publication import PublicationViolation
-from tests.support.catalog import catalog_mountain, catalog_seed, committed_seed, primary_image
+from tests.support.catalog import (
+    catalog_mountain,
+    catalog_seed,
+    committed_seed,
+    committed_seed_with_media,
+    primary_image,
+)
 from tests.support.fakes import InMemoryCatalogStore
 
 
@@ -11,25 +17,35 @@ def check(seed):
     return CheckCatalog(store).execute()
 
 
-def test_the_committed_seed_satisfies_every_publication_invariant():
-    report = check(committed_seed())
+def test_the_materialized_committed_seed_satisfies_every_publication_invariant():
+    report = check(committed_seed_with_media())
 
     assert report.checked == 73
     assert report.violations == ()
+
+
+def test_the_unmaterialized_committed_seed_lacks_media_for_every_photograph():
+    report = check(committed_seed())
+
+    assert report.checked == 73
+    assert {violation.violation for violation in report.violations} == {
+        PublicationViolation.IMAGE_MEDIA_MISSING
+    }
+    assert len(report.violations) == 73
 
 
 def test_violations_of_active_mountains_are_reported_in_slug_order():
     report = check(
         catalog_seed(
             catalog_mountain("mont-blanc", primary_image=None),
-            catalog_mountain("aconcagua", camera=None, primary_image=primary_image(url="")),
+            catalog_mountain("aconcagua", camera=None, primary_image=primary_image(media=None)),
         )
     )
 
     assert report.checked == 2
     assert report.violations == (
         CatalogViolation("aconcagua", PublicationViolation.CAMERA_MISSING),
-        CatalogViolation("aconcagua", PublicationViolation.IMAGE_URL_MISSING),
+        CatalogViolation("aconcagua", PublicationViolation.IMAGE_MEDIA_MISSING),
         CatalogViolation("mont-blanc", PublicationViolation.PRIMARY_IMAGE_MISSING),
     )
 

@@ -1,11 +1,12 @@
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
+from serendipeak.catalog.media.keys import public_url
 from serendipeak.discovery.entities import DailyMountain
 
 OSM_URL = "https://www.openstreetmap.org/{type}/{id}"
 WIKIDATA_URL = "https://www.wikidata.org/wiki/{id}"
 
 
-def represent_mountain(mountain: Mountain) -> dict[str, object]:
+def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, object]:
     coordinates = mountain.coordinates
 
     return _present(
@@ -23,16 +24,16 @@ def represent_mountain(mountain: Mountain) -> dict[str, object]:
             "countries": list(mountain.countries),
             "summary": mountain.summary,
             "camera": _camera(mountain.camera),
-            "primaryImage": _primary_image(mountain.primary_image),
+            "primaryImage": _primary_image(mountain.primary_image, media_base_url),
             "sources": _sources(mountain),
         }
     )
 
 
-def represent_daily_mountain(daily: DailyMountain) -> dict[str, object]:
+def represent_daily_mountain(daily: DailyMountain, media_base_url: str) -> dict[str, object]:
     return {
         "date": daily.date.isoformat(),
-        "mountain": represent_mountain(daily.mountain),
+        "mountain": represent_mountain(daily.mountain, media_base_url),
     }
 
 
@@ -52,16 +53,18 @@ def _camera(camera: CanonicalCamera | None) -> dict[str, object] | None:
     )
 
 
-def _primary_image(image: PrimaryImage | None) -> dict[str, object] | None:
-    if image is None:
+def _primary_image(image: PrimaryImage | None, media_base_url: str) -> dict[str, object] | None:
+    # An image still awaiting its stored file has nothing to deliver: v1 allows a mountain
+    # without a primary image, and readiness checks keep it from reaching a served environment.
+    if image is None or image.media is None:
         return None
 
     dimensions = image.dimensions
 
     return _present(
         {
-            "url": image.url,
-            "thumbnailUrl": image.thumbnail_url,
+            "url": public_url(media_base_url, image.media.viewer_key),
+            "thumbnailUrl": public_url(media_base_url, image.media.page_key),
             "width": None if dimensions is None else dimensions.width,
             "height": None if dimensions is None else dimensions.height,
             "creator": image.creator,

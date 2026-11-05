@@ -6,8 +6,8 @@ from serendipeak.catalog.bootstrap.photograph_manifest import (
     PhotographManifest,
     manifest_differences,
 )
-from serendipeak.catalog.bootstrap.ports import CatalogStore
-from serendipeak.catalog.entities import Mountain, PhotographMedia
+from serendipeak.catalog.bootstrap.ports import CatalogMountain, CatalogStore
+from serendipeak.catalog.entities import PhotographMedia
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.ports import MediaStore
 
@@ -49,17 +49,17 @@ class CheckPhotographMedia:
 
     def execute(self, *, deep: bool = False, checksums: bool = False) -> MediaCheckReport:
         photographed = [
-            entry.mountain
+            entry
             for entry in self._catalog_store.snapshot().mountains
             if entry.mountain.primary_image is not None
         ]
         problems = [
-            MediaProblem(mountain.slug, problem)
-            for mountain in photographed
-            for problem in self._problems(mountain, deep or checksums, checksums)
+            MediaProblem(entry.mountain.slug, problem)
+            for entry in photographed
+            for problem in self._problems(entry, deep or checksums, checksums)
         ]
 
-        present = {mountain.id for mountain in photographed}
+        present = {entry.mountain.id for entry in photographed}
         problems.extend(
             MediaProblem(pinned.slug, "the manifest photograph is not in the catalog")
             for pinned in self._manifest.photographs
@@ -68,15 +68,15 @@ class CheckPhotographMedia:
 
         return MediaCheckReport(checked=len(photographed), problems=tuple(problems))
 
-    def _problems(self, mountain: Mountain, deep: bool, checksums: bool) -> list[str]:
-        media = mountain.primary_image.media
+    def _problems(self, entry: CatalogMountain, deep: bool, checksums: bool) -> list[str]:
+        media = entry.mountain.primary_image.media
         if media is None:
             return ["no media"]
 
         if _keys_do_not_match(media):
             return ["the media keys do not match the original checksum"]
 
-        problems = self._manifest_problems(mountain)
+        problems = self._manifest_problems(entry)
         if not deep:
             return problems
 
@@ -95,15 +95,15 @@ class CheckPhotographMedia:
 
         return problems
 
-    def _manifest_problems(self, mountain: Mountain) -> list[str]:
-        pinned = self._manifest.photograph_of(mountain.id)
+    def _manifest_problems(self, entry: CatalogMountain) -> list[str]:
+        pinned = self._manifest.photograph_of(entry.mountain.id)
         if pinned is None:
             return []
 
-        image = mountain.primary_image
+        image = entry.mountain.primary_image
         differences = manifest_differences(
             pinned,
-            file_url=image.url,
+            file_url=entry.image_provenance.legacy_file_url,
             source_identifier=image.source_identifier,
             sha256=image.media.original_sha256,
             dimensions=image.dimensions,
@@ -118,10 +118,8 @@ class CheckPhotographMedia:
 
 
 def _keys_do_not_match(media: PhotographMedia) -> bool:
-    prefix = f"photographs/{media.original_sha256}/original."
-
     return (
-        not media.original_key.startswith(prefix)
+        not media.original_key.startswith(keys.original_key_prefix(media.original_sha256))
         or media.page_key != keys.page_key(media.original_sha256)
         or media.viewer_key != keys.viewer_key(media.original_sha256)
     )

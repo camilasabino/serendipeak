@@ -59,6 +59,7 @@ def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:
         image_provenance=None
         if image is None
         else ImageProvenance(
+            legacy_file_url=image.legacy_file_url,
             license_reported=image.license_reported,
             license_election_basis_url=image.license_election_basis_url,
             approved_on=image.approved_on,
@@ -110,14 +111,15 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
     image = entry.mountain.primary_image
     if image is None:
         return None
-    provenance = entry.image_provenance or ImageProvenance(None, None, None)
+    provenance = entry.image_provenance
+    if provenance is None:
+        raise ValueError(f"the photograph of {entry.mountain.slug} has no legacy file URL")
     dimensions = image.dimensions
     media = image.media
 
     return MountainImageRecord(
         mountain_id=entry.mountain.id,
-        url=image.url,
-        thumbnail_url=image.thumbnail_url,
+        legacy_file_url=provenance.legacy_file_url,
         original_key=None if media is None else media.original_key,
         original_sha256=None if media is None else media.original_sha256,
         page_key=None if media is None else media.page_key,
@@ -167,8 +169,6 @@ def _camera(record: MountainRecord) -> CanonicalCamera | None:
 
 def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
     return PrimaryImage(
-        url=image.url,
-        thumbnail_url=image.thumbnail_url,
         media=_photograph_media(image),
         dimensions=None
         if image.width is None

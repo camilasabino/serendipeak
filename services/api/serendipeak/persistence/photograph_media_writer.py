@@ -36,7 +36,10 @@ class DjangoPhotographMediaWriter:
                     if current.media == media
                     else AttachOutcome.STALE
                 )
-            if current.url != expected_file_url or current.dimensions != expected_dimensions:
+            if (
+                image.legacy_file_url != expected_file_url
+                or current.dimensions != expected_dimensions
+            ):
                 return AttachOutcome.STALE
 
             # The lock already guarantees the compared state; the predicate keeps the write
@@ -45,7 +48,7 @@ class DjangoPhotographMediaWriter:
             updated = MountainImageRecord.objects.filter(
                 pk=mountain_id,
                 original_key__isnull=True,
-                url=expected_file_url,
+                legacy_file_url=expected_file_url,
             ).update(
                 original_key=media.original_key,
                 original_sha256=media.original_sha256,

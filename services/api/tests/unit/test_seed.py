@@ -82,6 +82,23 @@ def test_parsed_values_keep_the_exported_precision():
     assert entry.mountain.id == uuid.UUID(raw["id"])
 
 
+def test_the_seed_file_url_becomes_the_legacy_file_url_of_every_photograph():
+    document = load_seed_document()
+
+    seed = parse_catalog_seed(document)
+
+    assert [entry.image_provenance.legacy_file_url for entry in seed.mountains] == [
+        raw["image"]["url"] for raw in document["content"]["mountains"]
+    ]
+
+
+def test_the_seed_thumbnail_is_validated_and_not_kept():
+    document = edited(lambda document: first_mountain(document)["image"].update(thumbnail_url=7))
+
+    with pytest.raises(InvalidCatalogSeed, match="thumbnail_url must be a string"):
+        parse_catalog_seed(document)
+
+
 def test_content_hash_ignores_key_order():
     assert content_sha256({"a": 1, "b": [1.5, "é"]}) == content_sha256({"b": [1.5, "é"], "a": 1})
 

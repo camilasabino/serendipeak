@@ -3,8 +3,7 @@ import pytest
 from tests.support.records import image_record, insert_error, mountain_record
 
 REJECTED_IMAGES = [
-    ("mountain_image_url_not_blank", {"url": " "}),
-    ("mountain_image_thumbnail_url_not_blank", {"thumbnail_url": ""}),
+    ("mountain_image_legacy_file_url_https", {"legacy_file_url": " "}),
     ("mountain_image_dimensions_complete", {"width": 4994}),
     ("mountain_image_dimensions_complete", {"height": 2758}),
     ("mountain_image_width_positive", {"width": 0, "height": 2758}),
@@ -41,7 +40,6 @@ def test_accepts_an_image_with_only_required_fields(mountain):
 def test_accepts_an_image_with_every_provenance_field(mountain):
     image_record(
         mountain,
-        thumbnail_url="https://upload.wikimedia.org/thumb.jpg",
         width=4994,
         height=2758,
         creator="Denali National Park and Preserve",

@@ -3,7 +3,6 @@ import type { MountainImage } from '../api/contract';
 export const MAX_VIEWER_DPR = 2;
 export const ORIGINAL_MIN_GAIN = 1.25;
 
-const THUMB_WIDTH = /\/(\d+)px-[^/?#]+(?:\?[^#]*)?$/;
 const DISPLAYABLE_ORIGINAL = /\.(jpe?g|png|webp)(\?|#|$)/i;
 const VIEWER_CHROME = { inline: 40, block: 124 } as const;
 
@@ -33,13 +32,6 @@ export function intrinsicDimensions(image: MountainImage): IntrinsicDimensions |
 	return Number.isInteger(width) && Number.isInteger(height) && width! > 0 && height! > 0
 		? { width: width!, height: height! }
 		: undefined;
-}
-
-// Reads the width a contract thumbnail declares in its path; no URL is ever built from it.
-export function renditionWidth(url: string): number | undefined {
-	const width = Number(THUMB_WIDTH.exec(url)?.[1]);
-
-	return Number.isInteger(width) && width > 0 ? width : undefined;
 }
 
 export function pageRendition(image: MountainImage): PageRendition {

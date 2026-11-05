@@ -11,11 +11,24 @@ from serendipeak.httpapi.representations import represent_daily_mountain, repres
 from tests.support.catalog import (
     bare_mountain,
     committed_mountain,
+    media_of,
     mountain,
     photograph_media,
     primary_image,
 )
-from tests.support.contract_fixtures import load_fixture
+from tests.support.contract_fixtures import (
+    APPROVED_V1_DIVERGENCES,
+    load_fixture,
+    served_with_owned_media,
+)
+
+MEDIA_BASE_URL = "https://media.example.test"
+
+
+def with_media_of(entity):
+    image = replace(entity.primary_image, media=media_of(entity.slug))
+
+    return replace(entity, primary_image=image)
 
 
 def rendered(representation):
@@ -30,8 +43,18 @@ def rendered(representation):
         (bare_mountain(), "mountain-minimal.json"),
     ],
 )
-def test_the_representation_matches_the_frozen_fixture(entity, fixture):
-    assert rendered(represent_mountain(entity)) == load_fixture(fixture)
+def test_the_representation_matches_the_frozen_fixture_except_the_approved_divergences(
+    entity, fixture
+):
+    owned = (
+        replace(entity, primary_image=None)
+        if entity.primary_image is None
+        else with_media_of(entity)
+    )
+
+    assert rendered(represent_mountain(owned, MEDIA_BASE_URL)) == served_with_owned_media(
+        load_fixture(fixture), MEDIA_BASE_URL, media_of
+    )
 
 
 def test_the_daily_representation_matches_the_frozen_fixture():
@@ -39,17 +62,21 @@ def test_the_daily_representation_matches_the_frozen_fixture():
         date=datetime.date(2026, 10, 12), mountain=committed_mountain("aconcagua")
     )
 
-    assert rendered(represent_daily_mountain(daily)) == load_fixture("daily-mountain.json")
+    owned = replace(daily, mountain=with_media_of(daily.mountain))
+
+    assert rendered(represent_daily_mountain(owned, MEDIA_BASE_URL)) == served_with_owned_media(
+        load_fixture("daily-mountain.json"), MEDIA_BASE_URL, media_of
+    )
 
 
 def test_the_daily_date_is_an_iso_calendar_date():
     daily = DailyMountain(date=datetime.date(2028, 2, 9), mountain=bare_mountain())
 
-    assert represent_daily_mountain(daily)["date"] == "2028-02-09"
+    assert represent_daily_mountain(daily, MEDIA_BASE_URL)["date"] == "2028-02-09"
 
 
 def test_members_without_a_value_are_omitted_never_null():
-    representation = represent_mountain(bare_mountain())
+    representation = represent_mountain(bare_mountain(), MEDIA_BASE_URL)
 
     assert set(representation) == {
         "id",
@@ -63,7 +90,9 @@ def test_members_without_a_value_are_omitted_never_null():
 
 
 def test_a_zero_prominence_is_kept():
-    assert represent_mountain(mountain(prominence_meters=0))["prominenceMeters"] == 0
+    assert (
+        represent_mountain(mountain(prominence_meters=0), MEDIA_BASE_URL)["prominenceMeters"] == 0
+    )
 
 
 def test_a_camera_without_framing_omits_the_framing():
@@ -71,7 +100,7 @@ def test_a_camera_without_framing_omits_the_framing():
         heading_degrees=0.0, pitch_degrees=-10.0, range_meters=9000.0, framing=None
     )
 
-    assert represent_mountain(mountain(camera=camera))["camera"] == {
+    assert represent_mountain(mountain(camera=camera), MEDIA_BASE_URL)["camera"] == {
         "headingDegrees": 0.0,
         "pitchDegrees": -10.0,
         "rangeMeters": 9000.0,
@@ -79,26 +108,73 @@ def test_a_camera_without_framing_omits_the_framing():
 
 
 def test_an_image_without_dimensions_omits_width_and_height():
-    image = primary_image(
-        dimensions=None, thumbnail_url=None, creator=None, license_name=None, license_url=None
-    )
+    image = primary_image(dimensions=None, creator=None, license_name=None, license_url=None)
 
-    assert represent_mountain(mountain(primary_image=image))["primaryImage"] == {
-        "url": image.url,
+    assert represent_mountain(mountain(primary_image=image), MEDIA_BASE_URL)["primaryImage"] == {
+        "url": f"{MEDIA_BASE_URL}/{image.media.viewer_key}",
+        "thumbnailUrl": f"{MEDIA_BASE_URL}/{image.media.page_key}",
         "attribution": image.attribution,
         "sourcePageUrl": image.source_page_url,
         "sourceIdentifier": image.source_identifier,
     }
 
 
-def test_stored_photograph_media_does_not_change_the_representation():
-    aconcagua = committed_mountain("aconcagua")
-    with_media = replace(
-        aconcagua,
-        primary_image=replace(aconcagua.primary_image, media=photograph_media("ab" * 32)),
-    )
+def test_the_url_is_the_viewer_rendition_and_the_thumbnail_is_the_page_rendition():
+    media = photograph_media("ab" * 32)
+    entity = mountain(primary_image=primary_image(media=media))
 
-    assert represent_mountain(with_media) == represent_mountain(aconcagua)
+    image = represent_mountain(entity, MEDIA_BASE_URL)["primaryImage"]
+
+    assert image["url"] == f"{MEDIA_BASE_URL}/photographs/{'ab' * 32}/viewer-r1.jpg"
+    assert image["thumbnailUrl"] == f"{MEDIA_BASE_URL}/photographs/{'ab' * 32}/page-r1.jpg"
+
+
+def test_the_delivery_base_is_joined_to_the_key_whatever_its_path():
+    entity = mountain()
+
+    image = represent_mountain(entity, "http://localhost:8000/media")["primaryImage"]
+
+    assert image["url"] == f"http://localhost:8000/media/{entity.primary_image.media.viewer_key}"
+
+
+def test_storage_details_are_never_exposed():
+    image = represent_mountain(mountain(), MEDIA_BASE_URL)["primaryImage"]
+
+    assert set(image) == {
+        "url",
+        "thumbnailUrl",
+        "width",
+        "height",
+        "creator",
+        "attribution",
+        "license",
+        "licenseUrl",
+        "sourcePageUrl",
+        "sourceIdentifier",
+    }
+    assert "/original." not in json.dumps(image)
+
+
+def test_a_photograph_without_media_is_represented_without_a_primary_image():
+    entity = mountain(primary_image=primary_image(media=None))
+
+    assert "primaryImage" not in represent_mountain(entity, MEDIA_BASE_URL)
+
+
+def test_only_the_approved_members_differ_from_the_v1_fixture():
+    original = load_fixture("mountain-complete.json")
+
+    expected = served_with_owned_media(original, MEDIA_BASE_URL, media_of)
+
+    assert set(APPROVED_V1_DIVERGENCES) == {"url", "thumbnailUrl"}
+    assert {
+        **original["primaryImage"],
+        **{m: expected["primaryImage"][m] for m in APPROVED_V1_DIVERGENCES},
+    } == expected["primaryImage"]
+    assert {k: v for k, v in original.items() if k != "primaryImage"} == {
+        k: v for k, v in expected.items() if k != "primaryImage"
+    }
+    assert expected["primaryImage"]["url"].startswith(MEDIA_BASE_URL)
 
 
 @pytest.mark.parametrize(
@@ -117,17 +193,10 @@ def test_stored_photograph_media_does_not_change_the_representation():
 def test_sources_hold_only_the_stored_references(references, sources):
     entity = mountain(wikipedia_url=None, **references)
 
-    assert represent_mountain(entity)["sources"] == sources
+    assert represent_mountain(entity, MEDIA_BASE_URL)["sources"] == sources
 
 
 def test_sources_are_omitted_without_any_reference():
     entity = mountain(osm=None, wikidata_id=None, wikipedia_url=None)
 
-    assert "sources" not in represent_mountain(entity)
-
-
-def test_urls_are_served_as_stored():
-    url = "https://upload.wikimedia.org/a.jpg?utm_source=commons.wikimedia.org&x=%C3%B8"
-    entity = replace(mountain(), primary_image=primary_image(url=url))
-
-    assert represent_mountain(entity)["primaryImage"]["url"] == url
+    assert "sources" not in represent_mountain(entity, MEDIA_BASE_URL)

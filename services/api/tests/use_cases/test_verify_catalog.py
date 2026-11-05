@@ -1,21 +1,21 @@
 import datetime
 from dataclasses import replace
 
-from serendipeak.catalog.bootstrap.ports import ImageProvenance
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from tests.support.catalog import (
     catalog_discovery,
-    catalog_mountain,
     catalog_seed,
     frozen_mountain,
     photograph_media,
+    seeded_mountain,
+    with_file_url,
     with_mountain,
 )
 from tests.support.fakes import InMemoryCatalogStore
 
 DAY = datetime.date(2026, 10, 3)
-ACONCAGUA = catalog_mountain("aconcagua")
-MONT_BLANC = catalog_mountain("mont-blanc")
+ACONCAGUA = seeded_mountain("aconcagua")
+MONT_BLANC = seeded_mountain("mont-blanc")
 SEED = catalog_seed(ACONCAGUA, MONT_BLANC, discoveries=[catalog_discovery(DAY, ACONCAGUA)])
 FROZEN = [frozen_mountain(ACONCAGUA), frozen_mountain(MONT_BLANC)]
 
@@ -50,7 +50,7 @@ def test_an_empty_catalog_reports_every_seed_row_as_missing():
 def test_differing_fields_are_named():
     changed = replace(
         with_mountain(ACONCAGUA, summary="Changed.", countries=("Argentina", "Chile")),
-        image_provenance=ImageProvenance("Public domain", None, None),
+        image_provenance=replace(ACONCAGUA.image_provenance, license_reported="Public domain"),
     )
 
     report = verify(catalog_seed(changed, MONT_BLANC, discoveries=SEED.discoveries))
@@ -83,7 +83,7 @@ def test_other_image_differences_are_still_reported_next_to_media():
 
 
 def test_rows_that_are_not_in_the_seed_are_reported():
-    extra = catalog_mountain("monte-rosa")
+    extra = seeded_mountain("monte-rosa")
     stored = catalog_seed(
         ACONCAGUA,
         MONT_BLANC,
@@ -107,3 +107,13 @@ def test_a_discovery_of_another_mountain_is_reported():
     stored = catalog_seed(ACONCAGUA, MONT_BLANC, discoveries=[catalog_discovery(DAY, MONT_BLANC)])
 
     assert verify(stored).seed_mismatches == ("daily discovery 2026-10-03 differs from the seed",)
+
+
+def test_a_changed_legacy_file_url_is_reported_as_a_provenance_difference():
+    changed = with_file_url(ACONCAGUA, "https://upload.wikimedia.org/other.jpg")
+
+    report = verify(catalog_seed(changed, MONT_BLANC, discoveries=SEED.discoveries))
+
+    assert report.seed_mismatches == (
+        f"mountain aconcagua ({ACONCAGUA.mountain.id}) differs in image_provenance",
+    )

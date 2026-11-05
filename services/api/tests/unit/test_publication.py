@@ -11,7 +11,7 @@ from serendipeak.catalog.publication import (
     publication_violations,
     unsafe_public_links,
 )
-from tests.support.catalog import committed_seed, mountain, primary_image
+from tests.support.catalog import committed_seed, committed_seed_with_media, mountain, primary_image
 
 CAMERA = mountain().camera
 
@@ -20,12 +20,18 @@ def test_a_complete_mountain_is_publishable():
     assert publication_violations(mountain()) == ()
 
 
-def test_every_committed_seed_mountain_is_publishable():
+def test_every_materialized_committed_seed_mountain_is_publishable():
     assert [
         (entry.mountain.slug, publication_violations(entry.mountain))
-        for entry in committed_seed().mountains
+        for entry in committed_seed_with_media().mountains
         if publication_violations(entry.mountain)
     ] == []
+
+
+def test_a_committed_seed_mountain_only_lacks_the_media_that_materialization_adds():
+    assert {publication_violations(entry.mountain) for entry in committed_seed().mountains} == {
+        (PublicationViolation.IMAGE_MEDIA_MISSING,)
+    }
 
 
 @pytest.mark.parametrize(
@@ -55,7 +61,7 @@ def test_every_committed_seed_mountain_is_publishable():
             PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS,
         ),
         ({"primary_image": None}, PublicationViolation.PRIMARY_IMAGE_MISSING),
-        ({"primary_image": primary_image(url=" ")}, PublicationViolation.IMAGE_URL_MISSING),
+        ({"primary_image": primary_image(media=None)}, PublicationViolation.IMAGE_MEDIA_MISSING),
         (
             {"primary_image": primary_image(attribution="")},
             PublicationViolation.IMAGE_ATTRIBUTION_MISSING,
@@ -145,11 +151,6 @@ UNSAFE_LINK = "http://example.com/page"
     ("overrides", "field"),
     [
         ({"wikipedia_url": UNSAFE_LINK}, PublicLinkField.WIKIPEDIA_URL),
-        ({"primary_image": primary_image(url=UNSAFE_LINK)}, PublicLinkField.IMAGE_URL),
-        (
-            {"primary_image": primary_image(thumbnail_url="javascript:alert(1)")},
-            PublicLinkField.IMAGE_THUMBNAIL_URL,
-        ),
         (
             {"primary_image": primary_image(source_page_url="HTTPS://example.com")},
             PublicLinkField.IMAGE_SOURCE_PAGE_URL,
@@ -170,13 +171,13 @@ def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overri
 def test_several_unsafe_links_are_one_violation_naming_every_field():
     candidate = mountain(
         wikipedia_url=UNSAFE_LINK,
-        primary_image=primary_image(url=UNSAFE_LINK, license_url=UNSAFE_LINK),
+        primary_image=primary_image(source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK),
     )
 
     assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
     assert unsafe_public_links(candidate) == (
         PublicLinkField.WIKIPEDIA_URL,
-        PublicLinkField.IMAGE_URL,
+        PublicLinkField.IMAGE_SOURCE_PAGE_URL,
         PublicLinkField.IMAGE_LICENSE_URL,
     )
 
@@ -184,9 +185,7 @@ def test_several_unsafe_links_are_one_violation_naming_every_field():
 def test_absent_optional_links_are_not_unsafe():
     candidate = mountain(
         wikipedia_url=None,
-        primary_image=primary_image(
-            thumbnail_url=None, license_name="Public domain", license_url=None
-        ),
+        primary_image=primary_image(license_name="Public domain", license_url=None),
     )
 
     assert unsafe_public_links(candidate) == ()

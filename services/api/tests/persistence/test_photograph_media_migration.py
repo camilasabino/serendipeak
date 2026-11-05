@@ -1,7 +1,6 @@
 import pytest
 from django.db import connection
 
-from serendipeak.persistence.models import MountainImageRecord
 from tests.support.migrations import historical_model, migrate_to, migrate_to_latest
 from tests.support.records import image_record, mountain_record
 
@@ -35,19 +34,33 @@ def stored_fields(record, model):
     }
 
 
+def historical_columns(record, model):
+    columns = stored_fields(record, model)
+    columns.pop("legacy_file_url", None)
+
+    return columns
+
+
 def test_existing_images_keep_their_urls_and_gain_empty_photograph_media():
     migrate_to(BEFORE)
     historical_mountain = historical_model(BEFORE, "MountainRecord")
     historical_image = historical_model(BEFORE, "MountainImageRecord")
     mountain = mountain_record()
     historical_mountain.objects.create(**stored_fields(mountain, historical_mountain))
-    image = image_record(mountain, thumbnail_url="https://upload.wikimedia.org/thumb.jpg")
-    historical_image.objects.create(**stored_fields(image, historical_image))
+    image = image_record(mountain)
+    historical_image.objects.create(
+        **historical_columns(image, historical_image),
+        url=image.legacy_file_url,
+        thumbnail_url="https://upload.wikimedia.org/thumb.jpg",
+    )
 
     migrate_to(AFTER)
 
-    migrated = MountainImageRecord.objects.get()
-    assert (migrated.url, migrated.thumbnail_url) == (image.url, image.thumbnail_url)
+    migrated = historical_model(AFTER, "MountainImageRecord").objects.get()
+    assert (migrated.url, migrated.thumbnail_url) == (
+        image.legacy_file_url,
+        "https://upload.wikimedia.org/thumb.jpg",
+    )
     assert (
         migrated.original_key,
         migrated.original_sha256,

@@ -39,6 +39,7 @@ urlpatterns = [
         get_mountain=build_get_mountain_by_slug(),
         get_todays_mountain=build_get_todays_mountain(),
         get_random_mountain=build_get_random_mountain(),
+        media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
     ),
     *development_media_urlpatterns(
         debug=settings.DEBUG,

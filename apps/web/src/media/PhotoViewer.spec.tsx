@@ -90,6 +90,16 @@ describe('PhotoViewer', () => {
 		expect(render()).toContain(`aspect-ratio:${(image.width ?? 0) / (image.height ?? 1)}`);
 	});
 
+	it('caps the frame at the measured width of the shown image, whatever its URL', () => {
+		const shown = { src: 'https://media.test/photographs/a/page-r1.jpg', width: 1280, height: 707 };
+
+		expect(render(image, shown)).toContain('1280px)');
+	});
+
+	it('caps the frame at the contract width when opened without a measured start', () => {
+		expect(render(image, null)).toContain(`${image.width}px)`);
+	});
+
 	it('does not size the image when neither the contract nor the page know the ratio', () => {
 		expect(render(without(['width', 'height']), null)).not.toContain('aspect-ratio');
 	});

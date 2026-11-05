@@ -19,7 +19,7 @@ class PublicationViolation(StrEnum):
     CAMERA_FRAMING_MISSING = "camera_framing_missing"
     CAMERA_FRAMING_OUT_OF_BOUNDS = "camera_framing_out_of_bounds"
     PRIMARY_IMAGE_MISSING = "primary_image_missing"
-    IMAGE_URL_MISSING = "image_url_missing"
+    IMAGE_MEDIA_MISSING = "image_media_missing"
     IMAGE_ATTRIBUTION_MISSING = "image_attribution_missing"
     IMAGE_SOURCE_PAGE_URL_MISSING = "image_source_page_url_missing"
     IMAGE_SOURCE_IDENTIFIER_MISSING = "image_source_identifier_missing"
@@ -33,8 +33,6 @@ class PublicationViolation(StrEnum):
 
 class PublicLinkField(StrEnum):
     WIKIPEDIA_URL = "wikipedia_url"
-    IMAGE_URL = "image_url"
-    IMAGE_THUMBNAIL_URL = "image_thumbnail_url"
     IMAGE_SOURCE_PAGE_URL = "image_source_page_url"
     IMAGE_LICENSE_URL = "image_license_url"
 
@@ -69,8 +67,6 @@ def unsafe_public_links(mountain: Mountain) -> tuple[PublicLinkField, ...]:
     if image is not None:
         links.extend(
             [
-                (PublicLinkField.IMAGE_URL, image.url),
-                (PublicLinkField.IMAGE_THUMBNAIL_URL, image.thumbnail_url),
                 (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
                 (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
             ]
@@ -114,13 +110,15 @@ def image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
     if image is None:
         return [PublicationViolation.PRIMARY_IMAGE_MISSING]
     required = (
-        (image.url, PublicationViolation.IMAGE_URL_MISSING),
         (image.attribution, PublicationViolation.IMAGE_ATTRIBUTION_MISSING),
         (image.source_page_url, PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING),
         (image.source_identifier, PublicationViolation.IMAGE_SOURCE_IDENTIFIER_MISSING),
         (image.license_name, PublicationViolation.IMAGE_LICENSE_NAME_MISSING),
     )
     violations = [violation for value, violation in required if _is_blank(value)]
+
+    if image.media is None:
+        violations.insert(0, PublicationViolation.IMAGE_MEDIA_MISSING)
 
     if not _is_blank(image.license_name) and _is_blank(image.license_url):
         if image.license_name.casefold() != _PUBLIC_DOMAIN_LICENSE_NAME.casefold():

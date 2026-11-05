@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Mountain, MountainImage } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
-import { intrinsicDimensions, pageRendition, renditionWidth, viewerTarget } from './renditions';
+import { intrinsicDimensions, pageRendition, viewerTarget } from './renditions';
 
 const image = (contractFixture('mountain-complete.json') as Mountain).primaryImage as MountainImage;
 
@@ -16,17 +16,6 @@ function sized(width: number, height = Math.round(width / 1.5)): MountainImage {
 function contractUrls(photo: MountainImage): string[] {
 	return [photo.url, photo.thumbnailUrl].filter((url): url is string => url !== undefined);
 }
-
-describe('renditionWidth', () => {
-	it('reads the width a contract thumbnail declares', () => {
-		expect(renditionWidth(image.thumbnailUrl!)).toBe(1280);
-	});
-
-	it('is undefined for URLs without a declared width', () => {
-		expect(renditionWidth(image.url)).toBe(undefined);
-		expect(renditionWidth('not a url')).toBe(undefined);
-	});
-});
 
 describe('pageRendition', () => {
 	it('uses the contract thumbnail as the only source, without a srcset', () => {

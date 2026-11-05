@@ -20,9 +20,10 @@ from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,
     catalog_seed,
-    committed_seed,
+    committed_seed_with_media,
+    media_of,
 )
-from tests.support.contract_fixtures import load_fixture
+from tests.support.contract_fixtures import load_fixture, served_with_owned_media
 from tests.support.fakes import FixedClock
 
 CONTENT_TYPE = "application/json; charset=utf-8"
@@ -30,6 +31,8 @@ PATH = "/api/v1/mountains/today"
 DAILY = load_fixture("daily-mountain.json")
 NO_ELIGIBLE = load_fixture("error-no-eligible-mountains.json")
 INTERNAL = load_fixture("error-internal.json")
+MEDIA_BASE_URL = "https://media.example.test"
+OWNED_DAILY = served_with_owned_media(DAILY, MEDIA_BASE_URL, media_of)
 FIXTURE_DAY = datetime.date.fromisoformat(DAILY["date"])
 NEW_DAY = datetime.date(2026, 10, 20)
 
@@ -42,6 +45,7 @@ urlpatterns = mountain_urlpatterns(
         clock,
     ),
     get_random_mountain=GetRandomMountain(DjangoMountainRepository(), lambda count: 0),
+    media_base_url=MEDIA_BASE_URL,
 )
 
 pytestmark = pytest.mark.urls(__name__)
@@ -58,7 +62,7 @@ def on_day():
 
 @pytest.fixture
 def catalog(db):
-    seed = committed_seed()
+    seed = committed_seed_with_media()
     aconcagua = next(entry for entry in seed.mountains if entry.mountain.slug == "aconcagua")
     history = [discovery for discovery in seed.discoveries if discovery.date != FIXTURE_DAY]
 
@@ -85,7 +89,7 @@ def test_a_persisted_date_matches_the_daily_fixture(catalog, client, django_asse
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)
-    assert body(response) == DAILY
+    assert body(response) == OWNED_DAILY
 
 
 def test_a_new_date_persists_its_discovery_and_later_requests_reuse_it(
@@ -178,7 +182,7 @@ def test_json_is_served_whatever_the_client_asks_for(catalog, client, accept, qu
     response = client.get(f"{PATH}{query}", headers={"Accept": accept})
 
     assert_no_store_json(response, 200)
-    assert body(response) == DAILY
+    assert body(response) == OWNED_DAILY
 
 
 @pytest.mark.parametrize("path", [f"{PATH}/", "/api/v1/mountains/today/x"])

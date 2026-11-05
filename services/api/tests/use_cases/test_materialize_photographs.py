@@ -22,6 +22,7 @@ from tests.support.catalog import (
     catalog_seed,
     photograph_media,
     primary_image,
+    with_file_url,
     with_mountain,
 )
 from tests.support.fakes import (
@@ -35,11 +36,13 @@ ACONCAGUA_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua20
 FUJI_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1b/Fuji.jpg"
 ACONCAGUA = catalog_mountain(
     "aconcagua",
-    primary_image=primary_image(url=ACONCAGUA_URL, dimensions=ImageDimensions(4994, 2758)),
+    file_url=ACONCAGUA_URL,
+    primary_image=primary_image(media=None, dimensions=ImageDimensions(4994, 2758)),
 )
 FUJI = catalog_mountain(
     "fuji",
-    primary_image=primary_image(url=FUJI_URL, dimensions=ImageDimensions(3000, 2000)),
+    file_url=FUJI_URL,
+    primary_image=primary_image(media=None, dimensions=ImageDimensions(3000, 2000)),
 )
 BARE = catalog_mountain("bare-peak", primary_image=None)
 ACONCAGUA_FILE = b"4994x2758:aconcagua"
@@ -72,7 +75,7 @@ class Arrangement:
         self.writer = self.catalog
         self.manifest = manifest_for(
             *(
-                (entry, FILES[entry.mountain.primary_image.url])
+                (entry, FILES[entry.image_provenance.legacy_file_url])
                 for entry in entries
                 if entry in KNOWN
             )
@@ -108,7 +111,7 @@ def manifest_for(*pairs):
             mountain_id=entry.mountain.id,
             slug=entry.mountain.slug,
             source_identifier=entry.mountain.primary_image.source_identifier,
-            file_url=entry.mountain.primary_image.url,
+            file_url=entry.image_provenance.legacy_file_url,
             sha256=sha256(data),
             bytes=len(data),
             dimensions=entry.mountain.primary_image.dimensions,
@@ -231,10 +234,7 @@ def test_a_partial_upload_attaches_nothing_and_a_rerun_uploads_only_what_is_miss
 
 def test_a_photograph_changed_during_the_run_is_stale_and_left_alone():
     arranged = Arrangement(FUJI)
-    changed = with_mountain(
-        FUJI,
-        primary_image=replace(FUJI.mountain.primary_image, url="https://example.com/other.jpg"),
-    )
+    changed = with_file_url(FUJI, "https://example.com/other.jpg")
 
     class ChangingFetcher(FakeSourceImageFetcher):
         def fetch(self, url):
@@ -404,8 +404,7 @@ def test_an_empty_manifest_authorizes_no_download():
 
 
 def test_a_file_url_the_manifest_does_not_pin_is_never_fetched():
-    typed = replace(FUJI.mountain.primary_image, url="https://internal.example/fuji.jpg")
-    arranged = Arrangement(with_mountain(FUJI, primary_image=typed))
+    arranged = Arrangement(with_file_url(FUJI, "https://internal.example/fuji.jpg"))
 
     report = arranged.run(manifest=manifest_for((FUJI, FUJI_FILE)))
 

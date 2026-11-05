@@ -87,7 +87,7 @@ def test_a_malformed_manifest_is_refused(document):
 def test_the_committed_manifest_pins_every_photograph_of_the_seed():
     manifest = committed_manifest()
     images = {
-        entry.mountain.id: entry.mountain
+        entry.mountain.id: entry
         for entry in committed_seed().mountains
         if entry.mountain.primary_image is not None
     }
@@ -95,11 +95,11 @@ def test_the_committed_manifest_pins_every_photograph_of_the_seed():
     assert len(manifest.photographs) == 73
     assert {photograph.mountain_id for photograph in manifest.photographs} == set(images)
     for photograph in manifest.photographs:
-        mountain = images[photograph.mountain_id]
-        image = mountain.primary_image
-        assert photograph.slug == mountain.slug
+        entry = images[photograph.mountain_id]
+        image = entry.mountain.primary_image
+        assert photograph.slug == entry.mountain.slug
         assert photograph.source_identifier == image.source_identifier
-        assert photograph.file_url == image.url
+        assert photograph.file_url == entry.image_provenance.legacy_file_url
         assert photograph.dimensions == image.dimensions
 
 

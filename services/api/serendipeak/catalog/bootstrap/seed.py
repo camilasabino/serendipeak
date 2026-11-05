@@ -254,9 +254,11 @@ def _image(raw, label):
     if (width is None) != (height is None):
         raise InvalidCatalogSeed(f"{label}: incomplete dimensions")
 
+    # The seed's thumbnail is validated like the rest of the document and then dropped:
+    # delivery renditions are owned, so nothing consumes a Wikimedia thumbnail.
+    _optional(_text, fields["thumbnail_url"], f"{label} thumbnail_url")
+
     image = PrimaryImage(
-        url=_text(fields["url"], f"{label} url"),
-        thumbnail_url=_optional(_text, fields["thumbnail_url"], f"{label} thumbnail_url"),
         media=None,
         dimensions=None
         if width is None
@@ -271,6 +273,7 @@ def _image(raw, label):
         source_identifier=_text(fields["source_identifier"], f"{label} source_identifier"),
     )
     provenance = ImageProvenance(
+        legacy_file_url=_text(fields["url"], f"{label} url"),
         license_reported=_optional(_text, fields["license_reported"], f"{label} license_reported"),
         license_election_basis_url=_optional(
             _text, fields["license_election_basis_url"], f"{label} license_election_basis_url"

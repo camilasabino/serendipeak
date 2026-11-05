@@ -12,13 +12,7 @@ import { intrinsicRatio, pageRatio } from './aspect';
 import { watchImage } from './imageReadiness';
 import styles from './PhotoViewer.module.css';
 import { photoAlt } from './primaryPhoto';
-import {
-	intrinsicDimensions,
-	pageRendition,
-	renditionWidth,
-	viewerTarget,
-	type ViewerTarget
-} from './renditions';
+import { intrinsicDimensions, pageRendition, viewerTarget, type ViewerTarget } from './renditions';
 
 export interface ViewerStart {
 	src: string;
@@ -45,7 +39,7 @@ function upgradeFor(
 
 	return viewerTarget(
 		image,
-		{ src: start, width: renditionWidth(start) ?? initial?.width ?? 0 },
+		{ src: start, width: initial?.width ?? 0 },
 		{
 			width: window.innerWidth,
 			height: window.innerHeight,
@@ -69,8 +63,7 @@ export function PhotoViewer({ image, mountainName, initial, onClose }: PhotoView
 			? undefined
 			: pageRatio(image, observed);
 	const [target] = useState(() => upgradeFor(image, start, initial, ratio));
-	const fitWidth =
-		target?.width ?? renditionWidth(start) ?? initial?.width ?? intrinsicDimensions(image)?.width;
+	const fitWidth = target?.width ?? initial?.width ?? intrinsicDimensions(image)?.width;
 	const sized = ratio !== undefined && fitWidth !== undefined;
 
 	// Layout effect: the lock and the focus return must settle in the same commit that removes the dialog.
@@ -150,7 +143,7 @@ export function PhotoViewer({ image, mountainName, initial, onClose }: PhotoView
 				</svg>
 			</button>
 			<div className={styles.sheet}>
-				{/* eslint-disable-next-line @next/next/no-img-element -- remote Wikimedia photograph chosen by viewerTarget */}
+				{/* eslint-disable-next-line @next/next/no-img-element -- remote photograph chosen by viewerTarget */}
 				<img
 					className={styles.image}
 					src={upgraded?.src ?? start}

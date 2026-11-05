@@ -56,8 +56,6 @@ class PhotographMedia:
 
 @dataclass(frozen=True, slots=True)
 class PrimaryImage:
-    url: str
-    thumbnail_url: str | None
     media: PhotographMedia | None
     dimensions: ImageDimensions | None
     creator: str | None

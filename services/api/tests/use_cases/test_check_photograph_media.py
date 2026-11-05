@@ -15,7 +15,13 @@ from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.ports import PhotographFormat
 from serendipeak.errors import InfrastructureError
-from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media, with_mountain
+from tests.support.catalog import (
+    catalog_mountain,
+    catalog_seed,
+    photograph_media,
+    seeded_mountain,
+    with_mountain,
+)
 from tests.support.fakes import FakeMediaStore, InMemoryCatalogStore
 
 ORIGINAL = b"original bytes"
@@ -28,7 +34,7 @@ def with_media(slug, media):
 
 
 ATTACHED = with_media("aconcagua", photograph_media(DIGEST))
-UNATTACHED = catalog_mountain("fuji")
+UNATTACHED = seeded_mountain("fuji")
 BARE = catalog_mountain("bare-peak", primary_image=None)
 
 
@@ -38,7 +44,7 @@ def pin(entry, sha256=DIGEST, **overrides):
         "mountain_id": entry.mountain.id,
         "slug": entry.mountain.slug,
         "source_identifier": image.source_identifier,
-        "file_url": image.url,
+        "file_url": entry.image_provenance.legacy_file_url,
         "sha256": sha256,
         "bytes": len(ORIGINAL),
         "dimensions": image.dimensions,

@@ -16,6 +16,7 @@ from tests.support.catalog import (
     frozen_catalog,
     primary_image,
 )
+from tests.support.records import attach_committed_media
 
 CHANGELIST_URL = reverse("admin:catalog_mountainrecord_changelist")
 
@@ -276,6 +277,7 @@ class TestCommittedCatalogParity:
         from serendipeak.persistence.catalog_store import DjangoCatalogStore
 
         DjangoCatalogStore().load(committed_seed())
+        attach_committed_media()
 
     def test_editorial_edits_leave_the_73_mountains_equal_to_the_frozen_catalog(
         self, publisher_client, seeded

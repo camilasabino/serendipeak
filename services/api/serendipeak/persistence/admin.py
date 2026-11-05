@@ -56,7 +56,7 @@ VIOLATION_MESSAGES = {
     PublicationViolation.CAMERA_FRAMING_MISSING: "the camera framing is missing",
     PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS: "the camera framing is out of bounds",
     PublicationViolation.PRIMARY_IMAGE_MISSING: "the photograph is missing",
-    PublicationViolation.IMAGE_URL_MISSING: "the photograph URL is missing",
+    PublicationViolation.IMAGE_MEDIA_MISSING: "the photograph file is not stored yet",
     PublicationViolation.IMAGE_ATTRIBUTION_MISSING: "the photograph attribution is missing",
     PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING: "the photograph source page is missing",
     PublicationViolation.IMAGE_SOURCE_IDENTIFIER_MISSING: "the photograph identifier is missing",
@@ -71,8 +71,6 @@ VIOLATION_MESSAGES = {
 }
 PUBLIC_LINK_LABELS = {
     PublicLinkField.WIKIPEDIA_URL: "the Wikipedia link",
-    PublicLinkField.IMAGE_URL: "the photograph URL",
-    PublicLinkField.IMAGE_THUMBNAIL_URL: "the photograph thumbnail URL",
     PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photograph source page",
     PublicLinkField.IMAGE_LICENSE_URL: "the photograph license URL",
 }
@@ -87,7 +85,6 @@ CAMERA_FIELDS = (
     "camera_framing_y",
 )
 IMAGE_OPTIONAL = (
-    "thumbnail_url",
     "creator",
     "license_name",
     "license_url",
@@ -95,11 +92,10 @@ IMAGE_OPTIONAL = (
     "license_election_basis_url",
     "approved_on",
 )
-IMAGE_LINKS = ("url", "thumbnail_url", "source_page_url", "license_url")
+IMAGE_LINKS = ("legacy_file_url", "source_page_url", "license_url")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 IMAGE_FROZEN = (
-    "url",
-    "thumbnail_url",
+    "legacy_file_url",
     "width",
     "height",
     "source_page_url",
@@ -290,8 +286,7 @@ class MountainImageForm(forms.ModelForm):
     class Meta:
         model = MountainImageRecord
         fields = (
-            "url",
-            "thumbnail_url",
+            "legacy_file_url",
             "width",
             "height",
             "source_page_url",
@@ -304,9 +299,15 @@ class MountainImageForm(forms.ModelForm):
             "license_election_basis_url",
             "approved_on",
         )
+        labels = {"legacy_file_url": "Source file URL"}
+        help_texts = {
+            "legacy_file_url": (
+                "Where the photograph file was downloaded from. It is never shown to visitors: "
+                "they get the stored copy once the file is materialized."
+            )
+        }
         widgets = _single_line(
-            "url",
-            "thumbnail_url",
+            "legacy_file_url",
             "source_page_url",
             "source_identifier",
             "creator",
@@ -374,7 +375,11 @@ class MountainImageInline(admin.StackedInline):
     can_delete = True
 
     def get_readonly_fields(self, request, obj=None):
-        return IMAGE_FROZEN if _has_image(obj) else ()
+        return (*IMAGE_FROZEN, "stored_original") if _has_image(obj) else ()
+
+    @admin.display(description="Stored original (SHA-256)")
+    def stored_original(self, image):
+        return image.original_sha256 or "Not stored yet"
 
     def has_view_permission(self, request, obj=None):
         return request.user.has_perm("catalog.view_mountainrecord")

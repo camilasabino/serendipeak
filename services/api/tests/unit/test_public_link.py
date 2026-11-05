@@ -28,8 +28,7 @@ def test_every_committed_seed_link_is_a_public_link():
         links.extend(
             [
                 mountain.wikipedia_url,
-                image.url,
-                image.thumbnail_url,
+                entry.image_provenance.legacy_file_url,
                 image.source_page_url,
                 image.license_url,
             ]

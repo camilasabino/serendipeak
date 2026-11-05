@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from serendipeak.catalog.bootstrap.ports import CatalogSnapshot, ImageProvenance
+from serendipeak.catalog.bootstrap.ports import CatalogSnapshot
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
@@ -16,6 +16,7 @@ from tests.support.catalog import (
     catalog_mountain,
     catalog_seed,
     committed_seed,
+    image_provenance,
     primary_image,
 )
 from tests.support.fakes import InMemoryCatalogStore
@@ -23,13 +24,15 @@ from tests.support.fakes import InMemoryCatalogStore
 DAY = datetime.date(2026, 10, 3)
 ACONCAGUA = catalog_mountain(
     "aconcagua",
-    provenance=ImageProvenance(
+    provenance=image_provenance(
         license_reported="Public domain",
         license_election_basis_url="https://www.flickr.com/photos/example/1/",
         approved_on=datetime.date(2026, 10, 6),
     ),
 )
-MONT_BLANC = catalog_mountain("mont-blanc", primary_image=primary_image(dimensions=None))
+MONT_BLANC = catalog_mountain(
+    "mont-blanc", primary_image=primary_image(dimensions=None, media=None)
+)
 MONTA = catalog_mountain("monta")
 SPARSE_DRAFT = catalog_mountain(
     "draft-peak",

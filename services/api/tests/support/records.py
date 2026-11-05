@@ -1,6 +1,7 @@
 from django.contrib.gis.geos import Point
 from django.db import IntegrityError, transaction
 
+from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 
@@ -28,7 +29,7 @@ def mountain_record(**overrides):
 def image_record(mountain, **overrides):
     fields = {
         "mountain": mountain,
-        "url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
+        "legacy_file_url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
         "attribution": "Bjørn Christian Tørrissen",
         "source_page_url": "https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
         "source_identifier": "File:Aconcagua2016.jpg",
@@ -45,3 +46,19 @@ def insert_error(record):
     except IntegrityError as error:
         return error.__cause__.diag
     raise AssertionError("insert was accepted")
+
+
+def attach_committed_media():
+    """Materializes every stored photograph the way the command does: through the writer."""
+    from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
+    from tests.support.catalog import media_of
+
+    writer = DjangoPhotographMediaWriter()
+    for image in MountainImageRecord.objects.select_related("mountain"):
+        outcome = writer.attach_media(
+            image.mountain_id,
+            image.legacy_file_url,
+            ImageDimensions(image.width, image.height),
+            media_of(image.mountain.slug),
+        )
+        assert outcome.value == "applied"
