@@ -16,6 +16,10 @@ HTTP_CLIENT_MODULES = (
     "http.client",
     "aiohttp",
 )
+# Only the source fetcher downloads, through the standard library's urllib transport.
+HTTP_CLIENT_ALLOWED_BY_FILE = {
+    "serendipeak/media/http_source_fetcher.py": ("urllib.request", "http.client"),
+}
 OFFLINE_TOOLING_MODULES = ("tools", "yaml")
 MEDIA_VENDOR_MODULES = ("PIL", "boto3", "botocore")
 DYNAMIC_IMPORT_CALLS = ("import_module", "__import__")
@@ -85,7 +89,7 @@ FORBIDDEN_BY_PACKAGE = {
         "serendipeak.cli",
         "config",
     ),
-    "serendipeak.httpapi": (*ORM_MODULES, "serendipeak.persistence", "config"),
+    "serendipeak.httpapi": (*ORM_MODULES, "serendipeak.persistence", "serendipeak.media", "config"),
     "serendipeak.cli": ("django.db", "serendipeak.persistence"),
     "serendipeak.media": (
         "rest_framework",
@@ -223,7 +227,8 @@ def violations(source, relative_path):
         if is_within(module, package)
         for rule in rules
     ]
-    forbidden.extend(HTTP_CLIENT_MODULES)
+    allowed_http_clients = HTTP_CLIENT_ALLOWED_BY_FILE.get(relative_path, ())
+    forbidden.extend(name for name in HTTP_CLIENT_MODULES if name not in allowed_http_clients)
     is_tool = is_within(module, "tools")
     if not is_tool:
         forbidden.extend(OFFLINE_TOOLING_MODULES)
@@ -276,6 +281,9 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/media/pillow_processor.py" in files
     assert "serendipeak/media/s3_media_store.py" in files
     assert "serendipeak/media/filesystem_media_store.py" in files
+    assert "serendipeak/media/http_source_fetcher.py" in files
+    assert "serendipeak/persistence/photograph_media_writer.py" in files
+    assert "serendipeak/catalog/bootstrap/materialize_photographs.py" in files
 
 
 @pytest.mark.parametrize("relative_path", source_files())
@@ -382,6 +390,16 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak/httpapi/views.py",
             "from serendipeak.persistence.mountain_repository import DjangoMountainRepository",
             "serendipeak.httpapi.views imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/httpapi/views.py",
+            "from serendipeak.media.http_source_fetcher import HttpSourceImageFetcher",
+            "serendipeak.httpapi.views imports serendipeak.media",
+        ),
+        (
+            "serendipeak/httpapi/representations.py",
+            "from serendipeak.media import filesystem_media_store",
+            "serendipeak.httpapi.representations imports serendipeak.media",
         ),
         (
             "serendipeak/httpapi/urls.py",
@@ -531,6 +549,26 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "from django.conf import settings",
             "serendipeak.media.s3_media_store imports django.conf",
         ),
+        (
+            "serendipeak/media/caching_source_fetcher.py",
+            "import urllib.request",
+            "serendipeak.media.caching_source_fetcher imports urllib.request",
+        ),
+        (
+            "serendipeak/catalog/bootstrap/materialize_photographs.py",
+            "from urllib.request import urlopen",
+            "serendipeak.catalog.bootstrap.materialize_photographs imports urllib.request",
+        ),
+        (
+            "serendipeak/media/http_source_fetcher.py",
+            "import httpx",
+            "serendipeak.media.http_source_fetcher imports httpx",
+        ),
+        (
+            "serendipeak/media/http_source_fetcher.py",
+            "import urllib3",
+            "serendipeak.media.http_source_fetcher imports urllib3",
+        ),
     ],
 )
 def test_detects_forbidden_imports(relative_path, source, expected):
@@ -577,6 +615,10 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         (
             "config/composition.py",
             "from serendipeak.media.s3_media_store import S3MediaStore",
+        ),
+        (
+            "serendipeak/media/http_source_fetcher.py",
+            "import urllib.request\nfrom http.client import HTTPException",
         ),
     ],
 )

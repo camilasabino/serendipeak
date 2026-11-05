@@ -31,7 +31,7 @@ def test_a_failed_write_leaves_neither_the_object_nor_a_temporary_file(tmp_path,
     def failing_replace(source, destination):
         raise OSError("disk full")
 
-    monkeypatch.setattr("serendipeak.media.filesystem_media_store.os.replace", failing_replace)
+    monkeypatch.setattr("serendipeak.media.atomic_file.os.replace", failing_replace)
     store = FilesystemMediaStore(tmp_path)
 
     with pytest.raises(InfrastructureError):

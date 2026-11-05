@@ -26,7 +26,11 @@ package = false
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# r2_smoke runs against real development buckets: only on demand, with pytest -m r2_smoke.
+addopts = "-ra --strict-markers -m 'not r2_smoke'"
+markers = [
+    "r2_smoke: talks to the real development R2 buckets; needs MEDIA_STORE=s3 and credentials",
+]
 
 [tool.ruff]
 line-length = 100

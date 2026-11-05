@@ -8,6 +8,7 @@ from tests.support.catalog import (
     catalog_mountain,
     catalog_seed,
     frozen_mountain,
+    photograph_media,
     with_mountain,
 )
 from tests.support.fakes import InMemoryCatalogStore
@@ -59,6 +60,26 @@ def test_differing_fields_are_named():
         " countries, summary, image_provenance",
     )
     assert report.frozen.mismatches == ()
+
+
+def test_materialized_media_is_not_compared_with_the_seed():
+    image = ACONCAGUA.mountain.primary_image
+    materialized = with_mountain(ACONCAGUA, primary_image=replace(image, media=photograph_media()))
+
+    report = verify(catalog_seed(materialized, MONT_BLANC, discoveries=SEED.discoveries))
+
+    assert report.is_consistent
+
+
+def test_other_image_differences_are_still_reported_next_to_media():
+    image = replace(ACONCAGUA.mountain.primary_image, media=photograph_media(), creator="Other")
+    changed = with_mountain(ACONCAGUA, primary_image=image)
+
+    report = verify(catalog_seed(changed, MONT_BLANC, discoveries=SEED.discoveries))
+
+    assert report.seed_mismatches == (
+        f"mountain aconcagua ({ACONCAGUA.mountain.id}) differs in primary_image",
+    )
 
 
 def test_rows_that_are_not_in_the_seed_are_reported():

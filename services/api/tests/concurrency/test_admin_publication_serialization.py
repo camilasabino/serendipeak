@@ -1,9 +1,5 @@
-import threading
-from concurrent.futures import ThreadPoolExecutor
-
 import pytest
 from django.contrib.auth.models import Permission, User
-from django.db import connection, transaction
 from django.test import Client
 from django.urls import reverse
 
@@ -16,11 +12,7 @@ from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from tests.admin.support import form_payload
 from tests.support.catalog import catalog_mountain, catalog_seed
-from tests.support.concurrency import (
-    WAIT_SECONDS,
-    a_backend_is_waiting_for_a_row_lock,
-    wait_until,
-)
+from tests.support.concurrency import run_while_a_change_holds_the_lock
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -63,44 +55,6 @@ def publish_the_draft():
         DRAFT.mountain.id, PUBLISH, publication_violations
     )
     assert change.outcome is StatusChangeOutcome.APPLIED
-
-
-def run_while_a_change_holds_the_lock(change, request):
-    """Run request in a thread that blocks behind change, which has not yet committed.
-
-    change runs inside an outer transaction and must lock the mountain row, so the lock stays
-    held until the test lets that transaction commit.
-    """
-    changed_but_uncommitted = threading.Event()
-    commit_the_change = threading.Event()
-
-    def hold():
-        try:
-            with transaction.atomic():
-                change()
-                changed_but_uncommitted.set()
-                assert commit_the_change.wait(WAIT_SECONDS)
-        finally:
-            connection.close()
-
-    def send_request():
-        try:
-            return request()
-        finally:
-            connection.close()
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        holder = pool.submit(hold)
-        assert changed_but_uncommitted.wait(WAIT_SECONDS)
-        stale_request = pool.submit(send_request)
-
-        wait_until(a_backend_is_waiting_for_a_row_lock)
-        assert not stale_request.done()
-        commit_the_change.set()
-
-        holder.result(WAIT_SECONDS)
-
-        return stale_request.result(WAIT_SECONDS)
 
 
 def run_while_a_publication_holds_the_lock(request):

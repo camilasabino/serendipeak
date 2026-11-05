@@ -29,3 +29,6 @@ next-env.d.ts
 playwright-report/
 test-results/
 apps/web/public/cesium/
+
+# Local cache of downloaded legacy photograph source files (materialize_photographs --cache-dir).
+.photograph-cache/

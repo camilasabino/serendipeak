@@ -207,11 +207,52 @@ Mountain photographs are owned by SerendiPeak and stored as uploads, never hotli
 
 Renditions are progressive 8-bit sRGB JPEGs at quality 85 with the EXIF orientation applied, transparency flattened onto white and no metadata (no EXIF, GPS, XMP, ICC profile or comments). They keep the aspect ratio and are never upscaled. `r1` is the rendition version: public objects are cached for a year as immutable, so changing any rendition parameter needs a new version rather than new bytes under an existing key. Objects are never overwritten and never deleted automatically; storing the same photograph again writes nothing, and a retry after a partial failure writes only the missing objects. The original is stored before its renditions.
 
-Only JPEG, PNG and WebP decoded from the content are accepted; animated images and other formats are rejected. Corruption detection is whatever Pillow rejects: the file is verified and then fully decoded, and a truncated or undecodable image is refused (`LOAD_TRUNCATED_IMAGES` is never enabled). Some damaged JPEGs are still decodable, and libjpeg completes the missing data with gray pixels; such a file is accepted, because ingestion makes no forensic claim beyond what Pillow can reject. A JPEG may have at most 200 megapixels and a PNG or WebP at most 50, checked from the header before any pixel is decoded. An editor's upload may have at most 30 MiB; photographs of the existing catalog may have up to 150 MiB.
+Only JPEG, PNG and WebP decoded from the content are accepted; animated images and other formats are rejected. Corruption detection is whatever Pillow rejects: the file is verified and then fully decoded, and a truncated or undecodable image is refused (`LOAD_TRUNCATED_IMAGES` is never enabled). Some damaged JPEGs are still decodable, and libjpeg completes the missing data with gray pixels; such a file is accepted, because ingestion makes no forensic claim beyond what Pillow can reject. A JPEG may have at most 200 megapixels and a PNG or WebP at most 50, checked from the header before any pixel is decoded. An editor's upload may have at most 30 MiB; photographs of the existing catalog may have up to 150 MiB (the largest of the 73 has 78.4 MiB).
 
 An image row records its photograph media in four columns (`original_key`, `original_sha256`, `page_key`, `viewer_key`): all or none, each matching the key or digest format, and only with dimensions. Images without media keep serving their stored URLs, and the public API does not expose media keys.
 
 Production stores photographs in S3-compatible storage (Cloudflare R2): outside `APP_ENV=development`, `MEDIA_STORE=filesystem` is rejected at startup, because a deployment without a volume would lose its media on every redeploy. With `MEDIA_STORE=filesystem` (development and tests), originals and public renditions live in separate `originals/` and `public/` directories under `MEDIA_ROOT`. In development only, Django serves the public directory at `/media/`; originals are never served. With `MEDIA_STORE=s3`, originals go to `MEDIA_ORIGINALS_BUCKET` and renditions to `MEDIA_PUBLIC_BUCKET` with `Cache-Control: public, max-age=31536000, immutable`. No ACLs are sent; bucket policy alone makes the public bucket public. Requests use region `auto`, a 5 s connect and 60 s read timeout, and at most three attempts with the SDK's standard backoff.
+
+#### Materializing the catalog photographs
+
+The seed records where each of its 73 photographs was published (the Commons original file URL), not the photograph itself. `materialize_photographs` copies those files into the media store; until it has run, an image has no media. It is the only part of the backend that downloads anything, and the public API never does.
+
+```sh
+cd services/api
+uv run --env-file ../../.env python manage.py materialize_photographs --cache-dir ../../.photograph-cache
+uv run --env-file ../../.env python manage.py check_photograph_media --deep --checksums
+```
+
+For each photograph without media, in slug order and one at a time, it downloads the file (https only, redirects included, at most 150 MiB, with a descriptive User-Agent), runs it through the same ingestion as an upload, and requires the decoded, oriented dimensions to equal the photograph's stored dimensions. The file must also be the one the manifest pins for that mountain in `services/api/seed/legacy-photographs-v1.json` (or in the manifest given with `--manifest`): its file URL, source identifier, checksum, size and dimensions. The manifest is always in force; there is no way to run without it. Only then are the original and the two renditions stored, and only after all three exist is the media attached to the image row, in a short transaction that locks the mountain and then its image and changes nothing else (not even `updated_at`). Attaching is refused when the row changed meanwhile: another file URL, other dimensions or other media.
+
+The manifest also decides what the command contacts. A photograph's file URL can be edited in the Admin, and the command runs on an operator's network, which may reach hosts an editor cannot. So only the file URL the manifest pins for a mountain is downloaded; a different URL on that mountain fails without any request. The fetcher itself contacts only `upload.wikimedia.org`, on the https port, redirects included. A photograph the manifest does not pin (for instance a new one added in the Admin by file URL) is never downloaded: it is materialized only with an explicit `--file SLUG=PATH`, which still has to have the photograph's dimensions.
+
+- `--manifest PATH` uses this manifest instead of the committed one.
+- `--cache-dir DIR` keeps each downloaded file (named after the SHA-256 of its URL) and reads it from there on later runs, so a rebuild needs no network.
+- `--dry-run` downloads and verifies every file but stores and attaches nothing.
+- `--slug SLUG` (repeatable) limits the run to those photographs.
+- `--file SLUG=PATH` uses a local file instead of downloading. For a pinned photograph it goes through the same dimension and manifest checks: a different file is never accepted, so an archived revision of a changed Commons file is accepted only after the manifest is deliberately changed to pin it. For a photograph outside the manifest it is the only way in, and only the dimension check applies.
+- `--write-manifest PATH` writes the manifest of the run to a new file. It is written only when the run covered the whole catalog and downloaded and verified every photograph. It never replaces a file holding another manifest, including the committed one: it succeeds, writing nothing, when the file already holds exactly this manifest.
+
+Every photograph gets one line, then a summary with the largest source file. A failed photograph never stops the run, and the command exits non-zero listing the failures:
+
+| Failure | What happens | What to do |
+|---|---|---|
+| download failed (network, timeout, non-200 status, non-https redirect, over 150 MiB) | nothing is stored | rerun; use `--file` if the source is gone |
+| not an accepted image, or other dimensions than the photograph's | nothing is stored | the Commons file probably changed: find the archived revision with the stored dimensions and pass it with `--file` |
+| `checksum_differs` or another manifest difference, or a photograph outside the manifest | nothing is stored | as above; the manifest pins the file materialized first. Outside the manifest, pass the file with `--file` |
+| storage failed part way | nothing is attached | rerun: objects already stored are skipped |
+| stored but not attached (database error, or the row changed meanwhile) | the objects exist but are not referenced | rerun: the same file has the same keys, so it attaches without uploading |
+
+A rerun skips photographs that already have media (`already attached`) without downloading, and still checks their stored checksum, file URL, source identifier and dimensions against the manifest.
+
+`check_photograph_media` checks every image, in any status, and exits non-zero on any problem: by default that the row has media whose keys derive from its checksum, and that every photograph the manifest pins is the pinned one (same file URL, source identifier, dimensions and checksum, so media that is consistent with itself but is another file than the pinned one fails); `--deep` also that the original and both renditions exist in the store; `--checksums` (implies `--deep`) also downloads every original and compares its SHA-256 with the stored checksum. Together, the last two prove that the stored bytes are the pinned ones. A pinned photograph the catalog no longer has is a problem; a photograph the manifest does not pin gets the other checks and is compared with nothing. It uses the committed manifest unless given `--manifest PATH`.
+
+The manifest pins the identity of the 73 photographs from their first materialization: per mountain id, the slug, source identifier and file URL from the seed, and the SHA-256, size and dimensions of the file. Legacy never stored bytes, so the identity it proves is the same Commons file at the same dimensions; from the first materialization on, the checksum pins the bytes and every rendition key contains it.
+
+An environment is ready for owned photographs when, on a freshly bootstrapped and materialized catalog, `check_photograph_media --deep --checksums` (against the committed manifest), `check_catalog` and `bootstrap_catalog --verify-only` are clean. Media is attached after the bootstrap and is not part of the seed, so `--verify-only` ignores it.
+
+The R2 smoke test checks a real S3-compatible store and is deselected by default; run it on demand with the development bucket settings (`MEDIA_STORE=s3`): `uv run --env-file ../../.env pytest -m r2_smoke`. It stores a few bytes under fresh keys, reads the original back, checks that the original is not reachable through `MEDIA_PUBLIC_BASE_URL`, and fetches the public object through it with its `Content-Type` and immutable `Cache-Control`.
 
 ## Web
 

@@ -1,9 +1,8 @@
-import os
-import tempfile
 from pathlib import Path
 
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.errors import InfrastructureError
+from serendipeak.media.atomic_file import write_file_atomically
 
 PUBLIC_DIRECTORY = "public"
 ORIGINALS_DIRECTORY = "originals"
@@ -56,18 +55,4 @@ def _write(path: Path, data: bytes) -> None:
     if path.is_file():
         return
 
-    # Writing to a temporary file in the same directory and renaming it makes the object
-    # appear whole or not at all, even when the process dies half way through.
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".", suffix=".partial")
-    except OSError as error:
-        raise InfrastructureError(f"could not store {path.name}") from error
-
-    try:
-        with os.fdopen(descriptor, "wb") as file:
-            file.write(data)
-        os.replace(temporary, path)
-    except OSError as error:
-        Path(temporary).unlink(missing_ok=True)
-        raise InfrastructureError(f"could not store {path.name}") from error
+    write_file_atomically(path, data)

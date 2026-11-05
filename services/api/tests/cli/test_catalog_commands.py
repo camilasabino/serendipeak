@@ -11,8 +11,8 @@ from serendipeak.catalog.bootstrap.seed import content_sha256
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
 from serendipeak.cli.errors import command_error
 from serendipeak.errors import InfrastructureError
-from serendipeak.persistence.models import MountainRecord
-from tests.support.catalog import load_seed_document
+from serendipeak.persistence.models import MountainImageRecord, MountainRecord
+from tests.support.catalog import load_seed_document, photograph_media
 from tests.support.records import mountain_record
 
 pytestmark = pytest.mark.django_db
@@ -39,6 +39,23 @@ def test_bootstrap_loads_and_verifies_the_committed_seed():
         "Seed mismatches: 0.",
         "Frozen catalog: 73/73 mountains match.",
     ]
+    assert stderr == ""
+
+
+def test_verify_only_ignores_photograph_media_attached_after_the_bootstrap():
+    run("bootstrap_catalog")
+    media = photograph_media("c" * 64)
+    MountainImageRecord.objects.update(
+        original_key=media.original_key,
+        original_sha256=media.original_sha256,
+        page_key=media.page_key,
+        viewer_key=media.viewer_key,
+    )
+
+    stdout, stderr = run("bootstrap_catalog", "--verify-only")
+
+    assert "Seed mismatches: 0." in stdout
+    assert "Frozen catalog: 73/73 mountains match." in stdout
     assert stderr == ""
 
 

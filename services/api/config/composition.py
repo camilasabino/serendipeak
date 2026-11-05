@@ -5,26 +5,33 @@ from django.conf import settings
 
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
+from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotographMedia
+from serendipeak.catalog.bootstrap.materialize_photographs import MaterializePhotographs
+from serendipeak.catalog.bootstrap.photograph_manifest import PhotographManifest
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
-from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor
+from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
+from serendipeak.media.caching_source_fetcher import CachingSourceImageFetcher
 from serendipeak.media.filesystem_media_store import FilesystemMediaStore
+from serendipeak.media.http_source_fetcher import HttpSourceImageFetcher
 from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
+from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 SEED_PATH = SERVICE_ROOT / "seed" / "legacy-catalog-v1.json"
+PHOTOGRAPH_MANIFEST_PATH = SERVICE_ROOT / "seed" / "legacy-photographs-v1.json"
 FROZEN_CATALOG_PATH = SERVICE_ROOT.parents[1] / "contracts" / "v1" / "catalog.json"
 
 MEBIBYTE = 1024 * 1024
@@ -32,6 +39,14 @@ ADMIN_INGESTION_LIMITS = IngestionLimits(max_bytes=30 * MEBIBYTE)
 # Photographs of the existing catalog come from their sources at full resolution, some well
 # beyond an editor's upload limit, and every one of them must still be stored.
 LEGACY_SOURCE_INGESTION_LIMITS = IngestionLimits(max_bytes=150 * MEBIBYTE)
+# Wikimedia asks automated clients for a descriptive User-Agent that identifies the project.
+SOURCE_FETCH_USER_AGENT = (
+    "SerendiPeakPhotographMaterializer/1.0 (https://serendipeak.com) Python-urllib"
+)
+# Where the seed's photographs are published. A redirect elsewhere is refused.
+SOURCE_FETCH_ALLOWED_HOSTS = ("upload.wikimedia.org",)
+# Per socket operation: a slow but progressing download of a large original is not cut.
+SOURCE_FETCH_TIMEOUT_SECONDS = 60
 
 
 def build_bootstrap_catalog() -> BootstrapCatalog:
@@ -107,3 +122,29 @@ def build_legacy_photograph_ingestion() -> PhotographIngestion:
         build_media_store(),
         LEGACY_SOURCE_INGESTION_LIMITS,
     )
+
+
+def build_source_image_fetcher(cache_dir: Path | None = None) -> SourceImageFetcher:
+    fetcher = HttpSourceImageFetcher(
+        max_bytes=LEGACY_SOURCE_INGESTION_LIMITS.max_bytes,
+        user_agent=SOURCE_FETCH_USER_AGENT,
+        timeout_seconds=SOURCE_FETCH_TIMEOUT_SECONDS,
+        allowed_hosts=SOURCE_FETCH_ALLOWED_HOSTS,
+    )
+    if cache_dir is None:
+        return fetcher
+
+    return CachingSourceImageFetcher(fetcher, cache_dir)
+
+
+def build_materialize_photographs(cache_dir: Path | None = None) -> MaterializePhotographs:
+    return MaterializePhotographs(
+        DjangoCatalogStore(),
+        build_source_image_fetcher(cache_dir),
+        build_legacy_photograph_ingestion(),
+        DjangoPhotographMediaWriter(),
+    )
+
+
+def build_check_photograph_media(manifest: PhotographManifest) -> CheckPhotographMedia:
+    return CheckPhotographMedia(DjangoCatalogStore(), build_media_store(), manifest)

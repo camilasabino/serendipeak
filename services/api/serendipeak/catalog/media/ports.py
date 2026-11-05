@@ -57,3 +57,14 @@ class MediaStore(Protocol):
 
         Raises InfrastructureError when no original exists there.
         """
+
+
+class SourceImageFetcher(Protocol):
+    def fetch(self, url: str) -> bytes:
+        """Return the bytes of the image file published at url.
+
+        Only https is used, redirects included, and only on hosts the fetcher is authorized to
+        contact; the body is read up to the legacy-source byte limit. Raises
+        PhotographRejected(TOO_MANY_BYTES) beyond that limit and InfrastructureError when the
+        file cannot be downloaded or its host is not authorized.
+        """

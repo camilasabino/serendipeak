@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 
 from serendipeak.catalog.bootstrap.frozen_catalog import (
     FrozenComparison,
@@ -68,7 +68,10 @@ def _mountain_mismatches(
         label = f"mountain {entry.mountain.slug} ({entry.mountain.id})"
         if found is None:
             mismatches.append(f"{label} is missing")
-        elif found != entry:
+            continue
+
+        found = _without_media(found)
+        if found != entry:
             mismatches.append(f"{label} differs in {', '.join(_differing_fields(entry, found))}")
 
     mismatches.extend(
@@ -77,6 +80,18 @@ def _mountain_mismatches(
     )
 
     return mismatches
+
+
+def _without_media(entry: CatalogMountain) -> CatalogMountain:
+    # The seed predates owned media: photographs are materialized after the bootstrap, so
+    # their media is never part of the comparison.
+    image = entry.mountain.primary_image
+    if image is None or image.media is None:
+        return entry
+
+    return replace(
+        entry, mountain=replace(entry.mountain, primary_image=replace(image, media=None))
+    )
 
 
 def _differing_fields(expected: CatalogMountain, actual: CatalogMountain) -> list[str]:
