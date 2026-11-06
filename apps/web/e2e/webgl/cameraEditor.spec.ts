@@ -20,11 +20,27 @@ const TARGET = fixture<ContractTarget>('mountain-complete.json');
 const DESKTOP = { width: 1280, height: 800 };
 const ADMIN_PATH = `/admin/catalog/mountainrecord/${TARGET.id}`;
 
-// What the Admin confirmation receives. The saved precision is coarser than a reading, so the
-// legacy tolerances for a rendered canonical pose apply; they are tighter than the precision.
+// The legacy tolerances for a saved camera: the reading of a view opened on a camera, and the
+// values saved from it, must agree with that camera this closely. They are tighter than the
+// 0.5 degree, 0.5 percent and 0.01 that a rendered public pose is held to.
 const SAVE_TOLERANCE = { angleDegrees: 0.05, rangeMeters: 1, framing: 0.0005 } as const;
 
-function editorUrl(camera?: CanonicalCamera): string {
+// The reference aspect the editor frames its stage at, where the range needs no compensation.
+const REFERENCE_ASPECT = 1.35;
+
+// Viewports from a phone to an ultrawide screen: the editor frames the same aspect on all.
+const SCREENS = [
+	{ name: 'laptop', width: 1280, height: 800 },
+	{ name: 'full HD', width: 1920, height: 1080 },
+	{ name: 'ultrawide', width: 3440, height: 1440 },
+	{ name: 'tablet portrait', width: 768, height: 1024 },
+	{ name: 'phone', width: 390, height: 844 },
+	{ name: 'phone landscape', width: 844, height: 390 }
+] as const;
+
+type Reading = NonNullable<Awaited<ReturnType<typeof cameraReading>>>;
+
+function editorUrl(camera?: CanonicalCamera, { proposal = false } = {}): string {
 	const query = new URLSearchParams({
 		mountain: TARGET.id,
 		slug: ACONCAGUA.slug,
@@ -39,6 +55,9 @@ function editorUrl(camera?: CanonicalCamera): string {
 		query.set('range', String(camera.rangeMeters));
 		query.set('fx', String(camera.framing?.x));
 		query.set('fy', String(camera.framing?.y));
+		if (proposal) {
+			query.set('proposal', '1');
+		}
 	}
 
 	return `/editorial/camera?${query}`;
@@ -56,17 +75,65 @@ async function expectReadyStage(page: Page) {
 }
 
 // Stands in for the Admin: the editor only ever navigates there, and the test reads where.
-async function interceptAdmin(page: Page): Promise<() => URL | undefined> {
-	let reached: URL | undefined;
+async function interceptAdmin(page: Page): Promise<{ (): URL | undefined; all(): URL[] }> {
+	const requests: { url: URL; method: string }[] = [];
 	await page.route(`${STUB_API_URL}${ADMIN_PATH}/**`, async (route) => {
-		reached = new URL(route.request().url());
+		requests.push({ url: new URL(route.request().url()), method: route.request().method() });
 		await route.fulfill({
 			contentType: 'text/html',
 			body: '<title>Admin</title><p>confirmation</p>'
 		});
 	});
+	const reached = () => requests.at(-1)?.url;
+	// The editor writes nothing, so everything it sends the Admin is a read.
+	reached.all = () => {
+		expect(requests.map(({ method }) => method)).toEqual(requests.map(() => 'GET'));
+		return requests.map(({ url }) => url);
+	};
 
-	return () => reached;
+	return reached;
+}
+
+// Heading is circular, so it is compared around the wrap.
+function angleDelta(a: number, b: number): number {
+	return Math.abs(((((a - b) % 360) + 540) % 360) - 180);
+}
+
+function expectWithin(
+	actual: {
+		headingDegrees: number;
+		pitchDegrees: number;
+		rangeMeters: number;
+		framing?: { x: number; y: number };
+	},
+	expected: CanonicalCamera
+) {
+	expect(angleDelta(actual.headingDegrees, expected.headingDegrees)).toBeLessThanOrEqual(
+		SAVE_TOLERANCE.angleDegrees
+	);
+	expect(Math.abs(actual.pitchDegrees - expected.pitchDegrees)).toBeLessThanOrEqual(
+		SAVE_TOLERANCE.angleDegrees
+	);
+	expect(Math.abs(actual.rangeMeters - expected.rangeMeters)).toBeLessThanOrEqual(
+		SAVE_TOLERANCE.rangeMeters
+	);
+	expect(Math.abs(actual.framing!.x - expected.framing!.x)).toBeLessThanOrEqual(
+		SAVE_TOLERANCE.framing
+	);
+	expect(Math.abs(actual.framing!.y - expected.framing!.y)).toBeLessThanOrEqual(
+		SAVE_TOLERANCE.framing
+	);
+}
+
+function savedCamera(url: URL): CanonicalCamera {
+	const value = (name: string) => Number(url.searchParams.get(name));
+
+	return {
+		headingDegrees: value('heading'),
+		pitchDegrees: value('pitch'),
+		rangeMeters: value('range'),
+		framing: { x: value('fx'), y: value('fy') }
+	};
 }
 
 // Ctrl+drag rotates the view; a plain drag only pans.
@@ -95,21 +162,8 @@ async function untilStill(page: Page) {
 		.toBe(true);
 }
 
-function expectSaved(url: URL, reading: NonNullable<Awaited<ReturnType<typeof cameraReading>>>) {
-	const value = (name: string) => Number(url.searchParams.get(name));
-	const angle = (a: number, b: number) => Math.abs(((((a - b) % 360) + 540) % 360) - 180);
-
-	expect(angle(value('heading'), reading.headingDegrees)).toBeLessThanOrEqual(
-		SAVE_TOLERANCE.angleDegrees
-	);
-	expect(Math.abs(value('pitch') - reading.pitchDegrees)).toBeLessThanOrEqual(
-		SAVE_TOLERANCE.angleDegrees
-	);
-	expect(Math.abs(value('range') - reading.rangeMeters)).toBeLessThanOrEqual(
-		SAVE_TOLERANCE.rangeMeters
-	);
-	expect(Math.abs(value('fx') - reading.framing!.x)).toBeLessThanOrEqual(SAVE_TOLERANCE.framing);
-	expect(Math.abs(value('fy') - reading.framing!.y)).toBeLessThanOrEqual(SAVE_TOLERANCE.framing);
+function expectSaved(url: URL, reading: Reading) {
+	expectWithin(savedCamera(url), reading as CanonicalCamera);
 }
 
 test.describe('@webgl camera editor', () => {
@@ -122,6 +176,8 @@ test.describe('@webgl camera editor', () => {
 		await expectReadyStage(page);
 
 		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await untilStill(page);
+		expectWithin((await cameraReading(page))!, ACONCAGUA.camera);
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
 		await expect(page.getByText('Opened on the saved camera.')).toBeVisible();
 		await expect(page.getByText('Ready to save.')).toBeVisible();
@@ -170,23 +226,116 @@ test.describe('@webgl camera editor', () => {
 		await expectCanonicalPose(page, ACONCAGUA.camera);
 		await orbit(page);
 		await untilStill(page);
+		const beforeSaving = (await cameraReading(page))!;
 		await page.getByRole('button', { name: 'Save camera…' }).click();
 		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
-		const saved = reached()!.searchParams;
-		const camera: CanonicalCamera = {
-			headingDegrees: Number(saved.get('heading')),
-			pitchDegrees: Number(saved.get('pitch')),
-			rangeMeters: Number(saved.get('range')),
-			framing: { x: Number(saved.get('fx')), y: Number(saved.get('fy')) }
-		};
+		const camera = savedCamera(reached()!);
 
 		await page.goto(editorUrl(camera));
 		await expectReadyStage(page);
 
 		await expectCanonicalPose(page, camera);
+		await untilStill(page);
+		const reopened = (await cameraReading(page))!;
+		expectWithin(reopened, camera);
+		// The whole cycle, from the view the editor left to the view it reopens on.
+		expectWithin(reopened, beforeSaving as CanonicalCamera);
 		await expect(readout(page, 'Heading')).toHaveText(`${camera.headingDegrees}°`);
 		await expect(readout(page, 'Range')).toHaveText(`${camera.rangeMeters} m`);
 	});
+
+	test('saving without moving keeps the stored camera', async ({ page }) => {
+		const reached = await interceptAdmin(page);
+		await page.goto(editorUrl(ACONCAGUA.camera));
+		await expectReadyStage(page);
+		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await untilStill(page);
+
+		await page.getByRole('button', { name: 'Save camera…' }).click();
+
+		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		expectWithin(savedCamera(reached()!), ACONCAGUA.camera);
+	});
+
+	test('a double click on Save only reads the Admin confirmation, twice at most', async ({
+		page
+	}) => {
+		const reached = await interceptAdmin(page);
+		await page.goto(editorUrl(ACONCAGUA.camera));
+		await expectReadyStage(page);
+		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await untilStill(page);
+
+		await page.getByRole('button', { name: 'Save camera…' }).dblclick();
+
+		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect(page.getByText('confirmation')).toBeVisible();
+		const urls = reached.all().map(String);
+		expect(urls.length).toBeLessThanOrEqual(2);
+		expect(new Set(urls).size).toBe(1);
+	});
+
+	test('does not save a pose that is still returning to the presented camera', async ({ page }) => {
+		const reached = await interceptAdmin(page);
+		await page.goto(editorUrl(ACONCAGUA.camera));
+		await expectReadyStage(page);
+		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await orbit(page);
+		await untilStill(page);
+
+		// One task: the panel has not sampled the flight yet, so Save is still enabled when clicked.
+		await page.evaluate(() => {
+			const button = (name: string) =>
+				[...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
+			button('Restore saved camera').click();
+			button('Save camera…').click();
+		});
+
+		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await expect(page.getByText('Ready to save.')).toBeVisible();
+		expect(reached()).toBeUndefined();
+		expect(new URL(page.url()).pathname).toBe('/editorial/camera');
+
+		await page.getByRole('button', { name: 'Save camera…' }).click();
+		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+	});
+
+	test('opens on a proposal sent back by the Admin and says it is not saved', async ({ page }) => {
+		await page.goto(editorUrl(ACONCAGUA.camera, { proposal: true }));
+		await expectReadyStage(page);
+
+		await expectCanonicalPose(page, ACONCAGUA.camera);
+		await untilStill(page);
+		expectWithin((await cameraReading(page))!, ACONCAGUA.camera);
+		await expect(
+			page.getByText('Opened on the camera you proposed. It is not saved yet.')
+		).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Restore proposed camera' })).toBeEnabled();
+	});
+
+	for (const screen of SCREENS) {
+		test(`frames the stage at the reference aspect on a ${screen.name} screen`, async ({
+			page
+		}) => {
+			await page.setViewportSize(screen);
+			await page.goto(editorUrl(ACONCAGUA.camera));
+			await expectReadyStage(page);
+			await expectCanonicalPose(page, ACONCAGUA.camera);
+			await untilStill(page);
+
+			const reading = (await cameraReading(page))!;
+			const aspect = reading.stage.width / reading.stage.height;
+			expect(Math.abs(aspect - REFERENCE_ASPECT)).toBeLessThanOrEqual(0.01);
+			// At the reference aspect the displayed range is the saved range: nothing is compensated.
+			expect(Math.abs(reading.displayRangeMeters / reading.rangeMeters - 1)).toBeLessThanOrEqual(
+				0.01
+			);
+			expectWithin(reading, ACONCAGUA.camera);
+			const box = (await page.locator('canvas').first().boundingBox())!;
+			expect(box.width).toBeLessThanOrEqual(screen.width);
+			await expect(page.getByRole('button', { name: 'Save camera…' })).toBeEnabled();
+		});
+	}
 
 	test('restores the presented camera after the view was moved', async ({ page }) => {
 		await page.goto(editorUrl(ACONCAGUA.camera));

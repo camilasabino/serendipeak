@@ -4,6 +4,8 @@ const cesium = vi.hoisted(() => ({
 	viewer: undefined as unknown as FakeViewer,
 	releaseLayerListener: vi.fn(),
 	releaseFlight: vi.fn(),
+	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
+	holdInputs: vi.fn(),
 	destroyLayer: vi.fn(),
 	viewerError: undefined as Error | undefined,
 	Ion: { defaultAccessToken: '' },
@@ -34,16 +36,35 @@ vi.mock('./ViewSampler', () => ({
 		}
 	}
 }));
+// A flight that runs until a test completes it, so a test decides when the camera is moving.
 vi.mock('./ViewerCameraFlight', () => ({
 	ViewerCameraFlight: class {
 		release() {
 			cesium.releaseFlight();
+		}
+		glide(_glide: unknown, { onComplete }: { onComplete(): void }) {
+			cesium.flightCallbacks.push({ kind: 'glide', complete: onComplete });
+		}
+		fly(_move: unknown, { onComplete }: { onComplete(): void }) {
+			cesium.flightCallbacks.push({ kind: 'fly', complete: onComplete });
+		}
+		jump() {}
+		cancel() {}
+		look() {
+			return undefined;
+		}
+		holdInputs() {
+			cesium.holdInputs();
+		}
+		cameraReading() {
+			return { headingDegrees: 10, pitchDegrees: -20, rangeMeters: 5000, displayRangeMeters: 5000 };
 		}
 	}
 }));
 vi.mock('./SummitMarkers', () => ({
 	SummitMarkers: class {
 		hide() {}
+		show() {}
 	}
 }));
 vi.mock('./cesiumTerrain', () => ({ createCesiumTerrainSource: () => ({}) }));
@@ -51,6 +72,8 @@ vi.mock('./cesiumTerrain', () => ({ createCesiumTerrainSource: () => ({}) }));
 import { CesiumGlobeScene } from './CesiumGlobeScene';
 
 interface FakeViewer {
+	camera: { positionCartographic: { height: number } };
+	resize(): void;
 	scene: {
 		imageryLayers: { remove(): void };
 		preUpdate: { addEventListener(listener: () => void): () => void };
@@ -71,6 +94,8 @@ function fakeViewer(
 ): FakeViewer {
 	let destroyed = false;
 	return {
+		camera: { positionCartographic: { height: 5000 } },
+		resize: () => {},
 		scene: {
 			imageryLayers: { remove: () => {} },
 			preUpdate: { addEventListener: () => removeFrameListener }
@@ -379,5 +404,82 @@ describe('CesiumGlobeScene.destroy', () => {
 
 		expect(cesium.releaseFlight).toHaveBeenCalledOnce();
 		expect(cesium.viewer.destroy).toHaveBeenCalledOnce();
+	});
+});
+
+describe('CesiumGlobeScene.readCamera', () => {
+	const TARGET = {
+		slug: 'aconcagua',
+		name: 'Aconcagua',
+		latitude: -32.65,
+		longitude: -70.01,
+		elevationMeters: 6961,
+		camera: {
+			headingDegrees: 66.87,
+			pitchDegrees: -18,
+			rangeMeters: 4321,
+			framing: { x: 0.1, y: -0.2 }
+		}
+	};
+
+	beforeEach(() => {
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.flightCallbacks.length = 0;
+		cesium.holdInputs.mockReset();
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	async function sceneWithMountain(): Promise<CesiumGlobeScene> {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		const arrival = scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+		cesium.flightCallbacks.shift()!.complete();
+		await arrival;
+
+		return scene;
+	}
+
+	it('gives no pose while the reveal is still flying', async () => {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		const arrival = scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+
+		expect(scene.readCamera()).toBeUndefined();
+
+		cesium.flightCallbacks.shift()!.complete();
+		await arrival;
+		expect(scene.readCamera()).toBeDefined();
+	});
+
+	it('gives the pose once the mountain has been reached', async () => {
+		const scene = await sceneWithMountain();
+
+		expect(scene.readCamera()).toMatchObject({ headingDegrees: 10, rangeMeters: 5000 });
+	});
+
+	it('gives no pose while a restore is flying, and gives it again when the flight ends', async () => {
+		const scene = await sceneWithMountain();
+
+		expect(scene.resetView()).toBe('reset');
+		expect(cesium.flightCallbacks).toEqual([expect.objectContaining({ kind: 'fly' })]);
+		expect(scene.readCamera()).toBeUndefined();
+
+		cesium.flightCallbacks.shift()!.complete();
+		expect(scene.readCamera()).toBeDefined();
+	});
+
+	it('gives no pose once the scene is destroyed', async () => {
+		const scene = await sceneWithMountain();
+
+		scene.destroy();
+
+		expect(scene.readCamera()).toBeUndefined();
 	});
 });

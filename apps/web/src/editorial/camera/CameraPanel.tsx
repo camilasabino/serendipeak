@@ -1,4 +1,5 @@
 import type { CameraAssessment } from './canonicalCamera';
+import type { CameraOrigin } from './editorQuery';
 import {
 	BACK_LABEL,
 	EDITOR_TITLE,
@@ -18,7 +19,7 @@ export type PanelState =
 
 interface CameraPanelProps {
 	name: string;
-	hasSavedCamera: boolean;
+	cameraOrigin: CameraOrigin;
 	state: PanelState;
 	/** The view can be sent back to the presented pose. */
 	canRestore: boolean;
@@ -29,7 +30,7 @@ interface CameraPanelProps {
 
 export function CameraPanel({
 	name,
-	hasSavedCamera,
+	cameraOrigin,
 	state,
 	canRestore,
 	backHref,
@@ -44,7 +45,7 @@ export function CameraPanel({
 			<h1 id="camera-editor-name" className={styles.name}>
 				{name}
 			</h1>
-			<p className={styles.note}>{openedOnLabel(hasSavedCamera)}</p>
+			<p className={styles.note}>{openedOnLabel(cameraOrigin)}</p>
 
 			<dl className={styles.readout} aria-label="Live camera">
 				<Value label="Heading" value={assessment && `${assessment.camera.headingDegrees}°`} />
@@ -84,7 +85,7 @@ export function CameraPanel({
 					disabled={!canRestore}
 					onClick={onRestore}
 				>
-					{restoreLabel(hasSavedCamera)}
+					{restoreLabel(cameraOrigin)}
 				</button>
 				<a className={styles.back} href={backHref}>
 					{BACK_LABEL}

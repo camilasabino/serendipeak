@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { assessCamera } from './canonicalCamera';
 import { CameraPanel, type PanelState } from './CameraPanel';
+import type { CameraOrigin } from './editorQuery';
 
 const VALID = assessCamera({
 	headingDegrees: 123.456,
@@ -10,11 +11,14 @@ const VALID = assessCamera({
 	framing: { x: 0.125, y: -0.25 }
 });
 
-function render(state: PanelState, overrides: { saved?: boolean; canRestore?: boolean } = {}) {
+function render(
+	state: PanelState,
+	overrides: { origin?: CameraOrigin; canRestore?: boolean } = {}
+) {
 	return renderToStaticMarkup(
 		<CameraPanel
 			name="Aconcagua"
-			hasSavedCamera={overrides.saved ?? true}
+			cameraOrigin={overrides.origin ?? 'saved'}
 			state={state}
 			canRestore={overrides.canRestore ?? true}
 			backHref="http://localhost:8000/admin/catalog/mountainrecord/abc/change/"
@@ -92,12 +96,17 @@ describe('CameraPanel', () => {
 		expect(button(html, 'Save camera…')).toContain('disabled');
 	});
 
-	it('offers to restore the saved camera, or the automatic view when none is saved', () => {
-		const saved = render({ kind: 'ready', assessment: VALID }, { saved: true });
-		const automatic = render({ kind: 'ready', assessment: VALID }, { saved: false });
+	it('names what it opened on and what restoring returns to', () => {
+		const ready = { kind: 'ready', assessment: VALID } as const;
+		const saved = render(ready, { origin: 'saved' });
+		const proposed = render(ready, { origin: 'proposed' });
+		const automatic = render(ready, { origin: 'none' });
 
 		expect(saved).toContain('Restore saved camera');
 		expect(saved).toContain('Opened on the saved camera.');
+		expect(proposed).toContain('Restore proposed camera');
+		expect(proposed).toContain('It is not saved yet.');
+		expect(proposed).not.toContain('saved camera');
 		expect(automatic).toContain('Restore automatic view');
 		expect(automatic).toContain('opened on the automatic view');
 	});

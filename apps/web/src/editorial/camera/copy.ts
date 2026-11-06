@@ -1,5 +1,6 @@
 import { PITCH_MAX, PITCH_MIN, RANGE_MAX, RANGE_MIN } from '../../api/cameraBounds';
 import type { CameraProblem } from './canonicalCamera';
+import type { CameraOrigin } from './editorQuery';
 
 export const EDITOR_TITLE = 'Camera editor';
 export const SAVE_LABEL = 'Save camera…';
@@ -13,14 +14,24 @@ export const MISSING_CONFIG_MESSAGE =
 	'The Admin address is missing from this site’s configuration.';
 export const OPENING_LABEL = 'Opening the camera editor…';
 
-export function restoreLabel(hasSavedCamera: boolean): string {
-	return hasSavedCamera ? 'Restore saved camera' : 'Restore automatic view';
+const RESTORE_LABEL: Record<CameraOrigin, string> = {
+	saved: 'Restore saved camera',
+	proposed: 'Restore proposed camera',
+	none: 'Restore automatic view'
+};
+
+const OPENED_ON_LABEL: Record<CameraOrigin, string> = {
+	saved: 'Opened on the saved camera.',
+	proposed: 'Opened on the camera you proposed. It is not saved yet.',
+	none: 'No saved camera yet: opened on the automatic view.'
+};
+
+export function restoreLabel(origin: CameraOrigin): string {
+	return RESTORE_LABEL[origin];
 }
 
-export function openedOnLabel(hasSavedCamera: boolean): string {
-	return hasSavedCamera
-		? 'Opened on the saved camera.'
-		: 'No saved camera yet: opened on the automatic view.';
+export function openedOnLabel(origin: CameraOrigin): string {
+	return OPENED_ON_LABEL[origin];
 }
 
 export const STATE_COPY = {

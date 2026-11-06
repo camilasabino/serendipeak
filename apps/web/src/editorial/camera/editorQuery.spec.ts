@@ -30,7 +30,8 @@ describe('parseEditorQuery', () => {
 					latitude: -32.6532,
 					longitude: -70.0109,
 					elevationMeters: 6961
-				}
+				},
+				cameraOrigin: 'none'
 			}
 		});
 	});
@@ -41,6 +42,7 @@ describe('parseEditorQuery', () => {
 		expect(result).toMatchObject({
 			ok: true,
 			request: {
+				cameraOrigin: 'saved',
 				target: {
 					camera: {
 						headingDegrees: 123.45,
@@ -149,5 +151,37 @@ describe('parseEditorQuery', () => {
 		void fy;
 
 		expect(parseEditorQuery({ ...BASE, ...rest })).toEqual({ ok: false, invalid: 'fy' });
+	});
+
+	describe('a proposal sent back by the Admin confirmation', () => {
+		it('opens on the proposed camera and says so', () => {
+			const result = parseEditorQuery({ ...BASE, ...CAMERA, proposal: '1' });
+
+			expect(result).toMatchObject({
+				ok: true,
+				request: { cameraOrigin: 'proposed', target: { camera: { rangeMeters: 4321 } } }
+			});
+		});
+
+		it.each([['0'], ['true'], [''], [['1', '1']]])('rejects the marker %j', (marker) => {
+			expect(parseEditorQuery({ ...BASE, ...CAMERA, proposal: marker })).toEqual({
+				ok: false,
+				invalid: 'proposal'
+			});
+		});
+
+		it('rejects the marker when there is no camera to propose', () => {
+			expect(parseEditorQuery({ ...BASE, proposal: '1' })).toEqual({
+				ok: false,
+				invalid: 'proposal'
+			});
+		});
+
+		it('still bounds-checks the proposed camera', () => {
+			expect(parseEditorQuery({ ...BASE, ...CAMERA, range: '1999', proposal: '1' })).toEqual({
+				ok: false,
+				invalid: 'range'
+			});
+		});
 	});
 });

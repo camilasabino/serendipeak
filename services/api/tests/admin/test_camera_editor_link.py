@@ -254,6 +254,9 @@ class TestLink:
         assert LABEL not in response.content.decode()
 
 
+PROPOSAL = "heading=10&pitch=-10&range=5000&fx=0.5&fy=-0.5"
+
+
 class TestReturn:
     def test_the_confirmation_offers_the_way_back_to_the_editor(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -275,6 +278,68 @@ class TestReturn:
 
         assert response.status_code == 400
         assert len(editor_links(response.content.decode())) == 1
+
+    def test_the_confirmation_sends_the_proposal_back_marked_as_one(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
+
+        response = editor_client.get(f"{url}?{PROPOSAL}")
+
+        query = query_of(editor_links(response.content.decode())[0][0])
+        assert (query["heading"], query["pitch"], query["range"]) == ("10.0", "-10.0", "5000.0")
+        assert (query["fx"], query["fy"], query["proposal"]) == ("0.5", "-0.5", "1")
+        # Going back does not decide anything: saving compares with the camera stored at that
+        # moment, so a change made by someone else in the meantime is still detected.
+        stored = ACTIVE.mountain.camera
+        assert float(form_payload(response)["expected-heading"]) == stored.heading_degrees
+
+    def test_a_proposal_that_equals_the_stored_camera_is_not_marked_as_one(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
+        stored = ACTIVE.mountain.camera
+        same = (
+            f"heading={stored.heading_degrees!r}&pitch={stored.pitch_degrees!r}"
+            f"&range={stored.range_meters!r}&fx={stored.framing.x!r}&fy={stored.framing.y!r}"
+        )
+
+        response = editor_client.get(f"{url}?{same}")
+
+        query = query_of(editor_links(response.content.decode())[0][0])
+        assert "proposal" not in query
+        assert float(query["heading"]) == stored.heading_degrees
+
+    def test_a_proposal_out_of_bounds_leads_back_with_the_stored_camera(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
+
+        response = editor_client.get(f"{url}?heading=10&pitch=16&range=5000&fx=0&fy=0")
+
+        assert response.status_code == 400
+        query = query_of(editor_links(response.content.decode())[0][0])
+        assert "proposal" not in query
+        assert float(query["pitch"]) == ACTIVE.mountain.camera.pitch_degrees
+
+    def test_a_stale_save_returns_with_the_new_current_camera_and_still_offers_the_proposal(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
+        payload = form_payload(editor_client.get(f"{url}?{PROPOSAL}"))
+        MountainRecord.objects.filter(pk=ACTIVE.mountain.id).update(camera_heading_degrees=200.0)
+
+        again = editor_client.post(url, payload, follow=True)
+
+        html = again.content.decode()
+        assert "changed by someone else" in html
+        assert float(form_payload(again)["expected-heading"]) == 200.0
+        query = query_of(editor_links(html)[0][0])
+        assert (query["heading"], query["proposal"]) == ("10.0", "1")
 
     def test_after_saving_the_editor_reopens_on_the_camera_that_was_saved(
         self, editor_client, load_catalog

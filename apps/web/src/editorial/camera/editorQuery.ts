@@ -9,9 +9,13 @@ import type { SceneCamera, SceneTarget } from '../../stage/globe/camera';
 
 export type EditorQuery = Record<string, string | string[] | undefined>;
 
+/** Where the camera the editor opens on comes from. */
+export type CameraOrigin = 'none' | 'saved' | 'proposed';
+
 export interface EditorRequest {
 	mountainId: string;
 	target: SceneTarget;
+	cameraOrigin: CameraOrigin;
 }
 
 export type EditorQueryResult =
@@ -106,6 +110,11 @@ export function parseEditorQuery(query: EditorQuery): EditorQueryResult {
 	if ('invalid' in camera) {
 		return { ok: false, invalid: camera.invalid };
 	}
+	// Only the Admin confirmation sends it, to say the camera is a proposal and not what is stored.
+	const proposal = single(query, 'proposal');
+	if (query.proposal !== undefined && (proposal !== '1' || !camera.value)) {
+		return { ok: false, invalid: 'proposal' };
+	}
 
 	const target: SceneTarget = {
 		slug: slug as string,
@@ -118,5 +127,7 @@ export function parseEditorQuery(query: EditorQuery): EditorQueryResult {
 		target.camera = camera.value;
 	}
 
-	return { ok: true, request: { mountainId: mountainId.toLowerCase(), target } };
+	const cameraOrigin: CameraOrigin = !camera.value ? 'none' : proposal ? 'proposed' : 'saved';
+
+	return { ok: true, request: { mountainId: mountainId.toLowerCase(), target, cameraOrigin } };
 }

@@ -878,7 +878,7 @@ class MountainAdmin(admin.ModelAdmin):
             "opts": self.opts,
             "original": record,
             "change_url": self._url("change", record),
-            "editor_url": camera_editor_url(self.web_origin, record),
+            "editor_url": camera_editor_url(self.web_origin, record, proposed),
             "is_public": record.status in PUBLIC_STATUS_VALUES,
             "unreadable": proposed is None,
             "unreadable_message": CAMERA_UNREADABLE,

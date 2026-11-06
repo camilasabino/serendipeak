@@ -1,18 +1,19 @@
 .panel {
-	position: absolute;
-	z-index: 1;
-	top: 0.6rem;
-	left: 0.6rem;
 	box-sizing: border-box;
-	width: min(19rem, calc(100% - 1.2rem));
-	max-height: calc(100% - 1.2rem);
+	min-height: 0;
 	padding: var(--sp-space-4);
 	overflow-y: auto;
-	border: 1px solid var(--sp-rule);
-	border-radius: var(--sp-radius);
-	background: color-mix(in srgb, var(--sp-stage) 88%, transparent);
+	border-top: 1px solid var(--sp-rule);
+	background: var(--sp-stage);
 	color: var(--sp-paper);
 	font-size: var(--sp-text-ui);
+}
+
+@media (min-width: 56rem) {
+	.panel {
+		border-top: 0;
+		border-left: 1px solid var(--sp-rule);
+	}
 }
 
 .eyebrow {
@@ -138,12 +139,4 @@
 
 .back:hover {
 	color: var(--sp-link-on-stage-hover);
-}
-
-/* The stage toolbar keeps the top-right corner. */
-@media (max-width: 40rem) {
-	.panel {
-		width: calc(100% - 4.8rem);
-		max-height: 55%;
-	}
 }

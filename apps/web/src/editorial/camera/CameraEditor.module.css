@@ -1,12 +1,37 @@
+/* The editor lays out like the public page: the stage on one side and the sheet beside it on a
+   wide screen, stacked on a narrow one. */
 .editor {
-	display: flex;
+	display: grid;
 	flex: 1 1 auto;
-	flex-direction: column;
-	min-height: 28rem;
+	grid-template-columns: minmax(0, 1fr);
 	min-width: 0;
 }
 
-.stage {
-	flex: 1 1 auto;
-	min-height: 0;
+/* The camera is saved relative to the stage's aspect, so the stage is always framed at the
+   reference aspect, whatever the screen, and the saved view means the same on every page. */
+.workspace {
+	container-type: size;
+	display: grid;
+	place-items: center;
+	height: clamp(16rem, 52dvh, 34rem);
+	min-width: 0;
+	background: var(--sp-stage);
+}
+
+.frame {
+	width: min(100cqw, calc(100cqh * var(--frame-aspect)));
+	aspect-ratio: var(--frame-aspect);
+}
+
+@media (min-width: 56rem) {
+	.editor {
+		grid-template-columns: minmax(0, 1fr) clamp(21rem, 28vw, 28rem);
+		grid-template-rows: minmax(0, 1fr);
+		min-height: 28rem;
+	}
+
+	.workspace {
+		height: auto;
+		min-height: 0;
+	}
 }

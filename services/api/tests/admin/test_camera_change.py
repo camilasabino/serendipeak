@@ -269,6 +269,20 @@ class TestSave:
         assert again.status_code == 200
         assert float(form_payload(again)["expected-heading"]) == 10.0
 
+    def test_confirming_twice_writes_and_logs_once(self, editor_client, load_catalog):
+        load_catalog(ACTIVE)
+        payload = confirmation_payload(editor_client, ACTIVE)
+        first = editor_client.post(camera_url(ACTIVE, None), payload)
+        updated_at = MountainRecord.objects.get(pk=ACTIVE.mountain.id).updated_at
+
+        second = editor_client.post(camera_url(ACTIVE, None), payload)
+
+        assert first["Location"] == f"{change_url(ACTIVE)}#camera"
+        assert second.status_code == 302
+        assert stored_camera(ACTIVE) == PROPOSED_CAMERA
+        assert MountainRecord.objects.get(pk=ACTIVE.mountain.id).updated_at == updated_at
+        assert LogEntry.objects.count() == 1
+
     def test_a_forged_out_of_bounds_camera_is_refused_and_nothing_is_written(
         self, editor_client, load_catalog
     ):

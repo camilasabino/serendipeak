@@ -189,6 +189,10 @@ function baseRangeFromDrop(dropMeters: number): number {
 	return FAR_BASE_RANGE_METERS - t * RANGE_RELIEF_SPAN_METERS;
 }
 
+// The aspect at which the range needs no compensation (scale 1), inside the span where the
+// compensation is exact. A surface that authors a camera frames its stage at this aspect.
+export const STAGE_REFERENCE_ASPECT = ASPECT_NUMERATOR;
+
 export function stageAspectScale(stageWidth: number, stageHeight: number): number {
 	return clamp(ASPECT_NUMERATOR / (stageWidth / stageHeight), ASPECT_SCALE_MIN, ASPECT_SCALE_MAX);
 }
