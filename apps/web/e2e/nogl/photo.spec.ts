@@ -6,7 +6,7 @@ interface Photo {
 	thumbnailUrl: string;
 	width: number;
 	height: number;
-	attribution: string;
+	author: string;
 	license: string;
 	licenseUrl: string;
 	sourcePageUrl: string;
@@ -208,14 +208,15 @@ test.describe('@nogl Photograph reveal', () => {
 
 		await page.getByText('About this photo').click();
 
-		await expect(page.getByText(ACONCAGUA_PHOTO.attribution)).toBeVisible();
+		await expect(page.getByText(ACONCAGUA_PHOTO.author)).toBeVisible();
 		await expect(page.getByRole('link', { name: ACONCAGUA_PHOTO.license })).toHaveAttribute(
 			'href',
 			ACONCAGUA_PHOTO.licenseUrl
 		);
-		await expect(
-			page.getByRole('link', { name: 'View original on Wikimedia Commons' })
-		).toHaveAttribute('href', ACONCAGUA_PHOTO.sourcePageUrl);
+		await expect(page.getByRole('link', { name: ACONCAGUA_PHOTO.author })).toHaveAttribute(
+			'href',
+			ACONCAGUA_PHOTO.sourcePageUrl
+		);
 	});
 
 	test('renders nothing for a mountain without a photograph', async ({ page }) => {
@@ -285,9 +286,7 @@ test.describe('@nogl Photograph failure', () => {
 
 			await expect(page.locator('figure')).toHaveCount(0);
 			await expect(page.getByText('About this photo')).toHaveCount(0);
-			await expect(
-				page.getByRole('link', { name: 'View original on Wikimedia Commons' })
-			).toHaveCount(0);
+			await expect(page.getByRole('link', { name: ACONCAGUA_PHOTO.author })).toHaveCount(0);
 			await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
 			await expect(page.getByRole('link', { name: /Wikipedia/ })).toBeVisible();
 			expect(watched.pageErrors).toEqual([]);
@@ -328,8 +327,8 @@ test.describe('@nogl Stale photographs', () => {
 		await expect(photo(page)).toHaveAttribute('alt', `Photograph of ${OLYMPUS.name}`);
 		expect(await photo(page).evaluate((img: HTMLImageElement) => img.currentSrc)).toContain(B);
 		await page.getByText('About this photo').click();
-		await expect(page.getByText(OLYMPUS_PHOTO.attribution)).toBeVisible();
-		await expect(page.getByText(ACONCAGUA_PHOTO.attribution)).toHaveCount(0);
+		await expect(page.getByText(OLYMPUS_PHOTO.author)).toBeVisible();
+		await expect(page.getByText(ACONCAGUA_PHOTO.author)).toHaveCount(0);
 	});
 
 	test('stays hidden until the destination itself is ready, whatever the old one does', async ({
@@ -436,14 +435,15 @@ test.describe('@nogl Photograph viewer', () => {
 			'alt',
 			`Photograph of ${ACONCAGUA.name}`
 		);
-		await expect(viewer(page).getByText(ACONCAGUA_PHOTO.attribution)).toBeVisible();
+		await expect(viewer(page).getByText(ACONCAGUA_PHOTO.author)).toBeVisible();
 		await expect(viewer(page).getByRole('link', { name: ACONCAGUA_PHOTO.license })).toHaveAttribute(
 			'href',
 			ACONCAGUA_PHOTO.licenseUrl
 		);
-		await expect(
-			viewer(page).getByRole('link', { name: 'Source: Wikimedia Commons' })
-		).toHaveAttribute('href', ACONCAGUA_PHOTO.sourcePageUrl);
+		await expect(viewer(page).getByRole('link', { name: ACONCAGUA_PHOTO.author })).toHaveAttribute(
+			'href',
+			ACONCAGUA_PHOTO.sourcePageUrl
+		);
 		expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
 		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('hidden');
 		await expect.poll(() => watched.requested.some((request) => request.width === 1280)).toBe(true);
@@ -488,7 +488,7 @@ test.describe('@nogl Photograph viewer', () => {
 		await openButton(page).click();
 
 		await viewer(page).getByRole('img').click();
-		await viewer(page).getByText(ACONCAGUA_PHOTO.attribution).click();
+		await viewer(page).getByText(ACONCAGUA_PHOTO.author).click();
 
 		await expect(viewer(page)).toBeVisible();
 	});
@@ -540,7 +540,7 @@ test.describe('@nogl Photograph viewer', () => {
 
 		expect(visited.has('page')).toBe(false);
 		expect(visited).toContain(ACONCAGUA_PHOTO.license);
-		expect(visited).toContain('Source: Wikimedia Commons');
+		expect(visited).toContain(ACONCAGUA_PHOTO.author);
 		expect(visited).toContain('Close');
 
 		await page.keyboard.press('Escape');

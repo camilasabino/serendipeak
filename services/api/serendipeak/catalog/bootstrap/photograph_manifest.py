@@ -14,7 +14,6 @@ _MANIFEST_KEYS = {"format", "format_version", "photographs"}
 _ENTRY_KEYS = {
     "mountain_id",
     "slug",
-    "source_identifier",
     "file_url",
     "sha256",
     "bytes",
@@ -27,7 +26,6 @@ _ENTRY_KEYS = {
 class ManifestPhotograph:
     mountain_id: UUID
     slug: str
-    source_identifier: str
     file_url: str
     sha256: str
     bytes: int
@@ -35,7 +33,12 @@ class ManifestPhotograph:
 
 
 class PhotographManifest:
-    """The pinned identity of each legacy photograph: its source file, checksum and size."""
+    """The pinned identity of each imported photograph: its source file, checksum and size.
+
+    It belongs to the import of the v1 catalog and is not part of the catalog: the database holds
+    no trace of it, so a photograph an editor replaced is simply one the manifest no longer
+    describes.
+    """
 
     def __init__(self, photographs: Iterable[ManifestPhotograph]):
         self._by_mountain = {}
@@ -50,22 +53,11 @@ class PhotographManifest:
     def photographs(self) -> tuple[ManifestPhotograph, ...]:
         return tuple(sorted(self._by_mountain.values(), key=lambda photograph: photograph.slug))
 
-    def pin_for(self, mountain_id: UUID, legacy_file_url: str | None) -> ManifestPhotograph | None:
-        """The pin that applies to the current photograph of a mountain, if any.
-
-        A pin describes a legacy photograph, which always keeps its legacy file URL. Uploading
-        a replacement clears that URL with the rest of the legacy provenance, so a photograph
-        without one is an editorial replacement the manifest says nothing about.
-        """
-        if legacy_file_url is None:
-            return None
-
+    def pin_for(self, mountain_id: UUID) -> ManifestPhotograph | None:
         return self._by_mountain.get(mountain_id)
 
 
 class ManifestDifference(StrEnum):
-    FILE_URL = "the manifest pins another file URL"
-    SOURCE_IDENTIFIER = "the manifest pins another source identifier"
     DIMENSIONS = "the manifest pins other dimensions"
     CHECKSUM = "checksum_differs: the file is not the one in the manifest"
     SIZE = "the manifest pins another file size"
@@ -74,19 +66,15 @@ class ManifestDifference(StrEnum):
 def manifest_differences(
     pinned: ManifestPhotograph,
     *,
-    file_url: str,
-    source_identifier: str | None,
     sha256: str,
     dimensions: ImageDimensions | None,
     size: int | None = None,
 ) -> tuple[ManifestDifference, ...]:
-    """What a photograph's identity, checksum and dimensions have that the manifest does not pin.
+    """What a photograph's checksum, dimensions and size have that the manifest does not pin.
 
     The file size is compared only when known: a stored original is verified by its checksum.
     """
     differences = [
-        (pinned.file_url != file_url, ManifestDifference.FILE_URL),
-        (pinned.source_identifier != source_identifier, ManifestDifference.SOURCE_IDENTIFIER),
         (pinned.sha256 != sha256, ManifestDifference.CHECKSUM),
         (size is not None and pinned.bytes != size, ManifestDifference.SIZE),
         (pinned.dimensions != dimensions, ManifestDifference.DIMENSIONS),
@@ -122,7 +110,6 @@ def photograph_manifest_document(manifest: PhotographManifest) -> dict:
             {
                 "mountain_id": str(photograph.mountain_id),
                 "slug": photograph.slug,
-                "source_identifier": photograph.source_identifier,
                 "file_url": photograph.file_url,
                 "sha256": photograph.sha256,
                 "bytes": photograph.bytes,
@@ -149,7 +136,6 @@ def _photograph(raw: object, label: str) -> ManifestPhotograph:
     return ManifestPhotograph(
         mountain_id=mountain_id,
         slug=_text(fields["slug"], f"{label} slug"),
-        source_identifier=_text(fields["source_identifier"], f"{label} source_identifier"),
         file_url=_text(fields["file_url"], f"{label} file_url"),
         sha256=sha256,
         bytes=_positive_integer(fields["bytes"], f"{label} bytes"),

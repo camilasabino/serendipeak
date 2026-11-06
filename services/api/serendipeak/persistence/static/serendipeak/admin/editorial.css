@@ -10,9 +10,38 @@
   cursor: pointer;
 }
 
+.photograph-upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.photograph-upload input[type="file"] {
+  flex-basis: 100%;
+}
+
+.photograph-figure {
+  margin: 0;
+}
+
+.photograph-figure[hidden] {
+  display: none;
+}
+
+.photograph-figure figcaption {
+  margin-top: 4px;
+  max-width: 320px;
+  font-size: 0.8125rem;
+  color: var(--body-quiet-color);
+}
+
+.photograph-figure[data-photograph-selected] .photograph-preview {
+  outline: 2px solid var(--primary);
+}
+
 .photograph-upload .photograph-preview {
   display: block;
   max-width: 320px;
   max-height: 240px;
-  margin-bottom: 8px;
 }

@@ -1,10 +1,10 @@
 import pytest
 from django.db import IntegrityError, connection, transaction
 
-from serendipeak.persistence.mapping import image_record as image_record_of
 from serendipeak.persistence.mapping import mountain_record as mountain_record_of
 from tests.support.catalog import committed_seed, load_seed_document, media_of
 from tests.support.migrations import applied_head, historical_model, migrate_to, migrate_to_latest
+from tests.support.records import pre_minimal_photograph_columns
 
 BEFORE = ("catalog", "0006_photograph_media")
 AFTER = ("catalog", "0007_owned_photograph_delivery")
@@ -51,7 +51,7 @@ def load_committed_catalog_before_the_migration(*, with_media):
     images = []
     for entry in entries:
         slug = entry.mountain.slug
-        columns = columns_of(image_record_of(entry), image_model)
+        columns = pre_minimal_photograph_columns(entry, raw[slug], image_model)
         columns.update(url=raw[slug]["url"], thumbnail_url=raw[slug]["thumbnail_url"])
         if with_media:
             media = media_of(slug)

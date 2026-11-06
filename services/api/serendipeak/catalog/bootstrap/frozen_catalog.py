@@ -25,7 +25,6 @@ _WIKIDATA_URL = re.compile(r"https://www\.wikidata\.org/wiki/(Q[1-9][0-9]*)")
 
 @dataclass(frozen=True, slots=True)
 class FrozenImageIdentity:
-    source_identifier: str
     source_page_url: str
     dimensions: ImageDimensions
 
@@ -106,7 +105,6 @@ def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
 
     image = actual.primary_image
     if image is None or expected.image != FrozenImageIdentity(
-        source_identifier=image.source_identifier,
         source_page_url=image.source_page_url,
         dimensions=image.dimensions,
     ):
@@ -167,7 +165,6 @@ def _frozen_mountain(raw) -> FrozenMountain:
         osm=OsmReference(type=OsmType(osm.group(1)), id=int(osm.group(2))),
         wikidata_id=wikidata.group(1),
         image=FrozenImageIdentity(
-            source_identifier=image["sourceIdentifier"],
             source_page_url=image["sourcePageUrl"],
             dimensions=ImageDimensions(width=int(image["width"]), height=int(image["height"])),
         ),

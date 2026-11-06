@@ -11,7 +11,12 @@ interface Mountain {
 	slug: string;
 	name: string;
 	sources?: { wikipedia?: string };
-	primaryImage?: unknown;
+	primaryImage?: {
+		author: string;
+		sourcePageUrl?: string;
+		license?: string;
+		licenseUrl?: string;
+	};
 }
 
 const complete = fixture<Mountain>('mountain-complete.json');
@@ -69,6 +74,23 @@ for (const mountain of [complete, sparse, minimal]) {
 		});
 	});
 }
+
+test.describe('photograph credit', () => {
+	for (const mountain of [complete, sparse]) {
+		test(`credits the author of ${mountain.slug} with the license after it`, async ({
+			request
+		}) => {
+			const image = mountain.primaryImage!;
+			const html = await (await request.get(`/mountains/${mountain.slug}`)).text();
+			const anchors = anchorsOf(html);
+
+			expect(textsOf(html, 'p')).toContain(`Photo by ${image.author}·${image.license}`);
+			expect(anchors.find(({ text }) => text === image.author)?.href).toBe(image.sourcePageUrl);
+			expect(anchors.find(({ text }) => text === image.license)?.href).toBe(image.licenseUrl);
+			expect(html).not.toMatch(/Source:|View original|Wikimedia Commons/);
+		});
+	}
+});
 
 test.describe('minimal permalink', () => {
 	test('collapses to elevation and coordinates', async ({ request }) => {

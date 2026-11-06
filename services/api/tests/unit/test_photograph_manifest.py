@@ -15,13 +15,12 @@ from serendipeak.catalog.bootstrap.photograph_manifest import (
 )
 from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.catalog.errors import InvalidPhotographManifest
-from tests.support.catalog import committed_seed
+from tests.support.catalog import committed_seed, load_seed_document
 
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "seed" / "legacy-photographs-v1.json"
 PHOTOGRAPH = ManifestPhotograph(
     mountain_id=uuid.UUID("5f0b8f0e-6c1f-4f5e-9a51-3a3f0c3b8d11"),
     slug="aconcagua",
-    source_identifier="File:Aconcagua2016.jpg",
     file_url="https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
     sha256="a" * 64,
     bytes=4_120_000,
@@ -43,15 +42,8 @@ def test_a_document_round_trips():
 def test_photographs_are_looked_up_by_mountain_id():
     manifest = parse_photograph_manifest(DOCUMENT)
 
-    assert manifest.pin_for(PHOTOGRAPH.mountain_id, PHOTOGRAPH.file_url) == PHOTOGRAPH
-    assert manifest.pin_for(uuid.uuid4(), PHOTOGRAPH.file_url) is None
-
-
-def test_a_pin_applies_to_any_legacy_file_url_and_never_to_an_uploaded_replacement():
-    manifest = parse_photograph_manifest(DOCUMENT)
-
-    assert manifest.pin_for(PHOTOGRAPH.mountain_id, "https://example.com/other.jpg") == PHOTOGRAPH
-    assert manifest.pin_for(PHOTOGRAPH.mountain_id, None) is None
+    assert manifest.pin_for(PHOTOGRAPH.mountain_id) == PHOTOGRAPH
+    assert manifest.pin_for(uuid.uuid4()) is None
 
 
 def change(path, value):
@@ -82,7 +74,8 @@ def change(path, value):
         change(["photographs", 0, "slug"], ""),
         change(["photographs", 0, "file_url"], None),
         change(["photographs", 0, "extra"], "x"),
-        change(["photographs", 0, "source_identifier"], KeyError),
+        change(["photographs", 0, "source_identifier"], "File:Aconcagua2016.jpg"),
+        change(["photographs", 0, "file_url"], KeyError),
         change(["photographs"], DOCUMENT["photographs"] * 2),
     ],
 )
@@ -98,16 +91,24 @@ def test_the_committed_manifest_pins_every_photograph_of_the_seed():
         for entry in committed_seed().mountains
         if entry.mountain.primary_image is not None
     }
+    raw_images = {raw["slug"]: raw["image"] for raw in load_seed_document()["content"]["mountains"]}
 
     assert len(manifest.photographs) == 73
     assert {photograph.mountain_id for photograph in manifest.photographs} == set(images)
     for photograph in manifest.photographs:
         entry = images[photograph.mountain_id]
-        image = entry.mountain.primary_image
         assert photograph.slug == entry.mountain.slug
-        assert photograph.source_identifier == image.source_identifier
-        assert photograph.file_url == entry.image_provenance.legacy_file_url
-        assert photograph.dimensions == image.dimensions
+        assert photograph.file_url == raw_images[photograph.slug]["url"]
+        assert photograph.dimensions == entry.mountain.primary_image.dimensions
+
+
+def test_the_seed_keeps_the_rights_evidence_that_the_catalog_does_not():
+    raw_images = [raw["image"] for raw in load_seed_document()["content"]["mountains"]]
+
+    approved = [image for image in raw_images if image["approved_on"] is not None]
+
+    assert len(approved) == 27
+    assert all(image["license_name"] and image["license_url"] for image in raw_images)
 
 
 def test_the_committed_manifest_is_in_its_canonical_form():
@@ -120,8 +121,6 @@ def test_the_committed_manifest_is_in_its_canonical_form():
 
 def differences(**overrides):
     facts = {
-        "file_url": PHOTOGRAPH.file_url,
-        "source_identifier": PHOTOGRAPH.source_identifier,
         "sha256": PHOTOGRAPH.sha256,
         "dimensions": PHOTOGRAPH.dimensions,
     }
@@ -138,8 +137,6 @@ def test_a_photograph_that_is_the_pinned_one_has_no_difference():
 @pytest.mark.parametrize(
     ("overrides", "expected"),
     [
-        ({"file_url": "https://example.com/other.jpg"}, ManifestDifference.FILE_URL),
-        ({"source_identifier": "File:Other.jpg"}, ManifestDifference.SOURCE_IDENTIFIER),
         ({"sha256": "b" * 64}, ManifestDifference.CHECKSUM),
         ({"dimensions": ImageDimensions(10, 10)}, ManifestDifference.DIMENSIONS),
         ({"dimensions": None}, ManifestDifference.DIMENSIONS),
@@ -151,8 +148,8 @@ def test_each_pinned_fact_is_compared(overrides, expected):
 
 
 def test_every_difference_is_reported_in_a_fixed_order():
-    assert differences(file_url="x", sha256="b" * 64, dimensions=None) == (
-        ManifestDifference.FILE_URL,
+    assert differences(sha256="b" * 64, dimensions=None, size=1) == (
         ManifestDifference.CHECKSUM,
+        ManifestDifference.SIZE,
         ManifestDifference.DIMENSIONS,
     )

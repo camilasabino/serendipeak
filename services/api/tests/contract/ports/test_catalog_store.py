@@ -16,19 +16,15 @@ from tests.support.catalog import (
     catalog_mountain,
     catalog_seed,
     committed_seed,
-    image_provenance,
     primary_image,
 )
 from tests.support.fakes import InMemoryCatalogStore
 
 DAY = datetime.date(2026, 10, 3)
-ACONCAGUA = catalog_mountain(
-    "aconcagua",
-    provenance=image_provenance(
-        license_reported="Public domain",
-        license_election_basis_url="https://www.flickr.com/photos/example/1/",
-        approved_on=datetime.date(2026, 10, 6),
-    ),
+ACONCAGUA = catalog_mountain("aconcagua")
+UNSOURCED = catalog_mountain(
+    "unsourced-peak",
+    primary_image=primary_image(source_page_url=None, license_name=None, license_url=None),
 )
 MONT_BLANC = catalog_mountain(
     "mont-blanc", primary_image=primary_image(dimensions=None, media=None)
@@ -77,6 +73,7 @@ def test_load_preserves_every_row_and_orders_the_snapshot(store):
         INACTIVE_UNFRAMED,
         MONT_BLANC,
         ACONCAGUA,
+        UNSOURCED,
         discoveries=[catalog_discovery(later, MONTA), catalog_discovery(DAY, ACONCAGUA)],
     )
 
@@ -89,6 +86,7 @@ def test_load_preserves_every_row_and_orders_the_snapshot(store):
         "mont-blanc",
         "monta",
         "old-peak",
+        "unsourced-peak",
     ]
     assert set(snapshot.mountains) == set(seed.mountains)
     assert snapshot.discoveries == (

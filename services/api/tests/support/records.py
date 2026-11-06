@@ -29,11 +29,9 @@ def mountain_record(**overrides):
 def image_record(mountain, **overrides):
     fields = {
         "mountain": mountain,
-        "legacy_file_url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
-        "attribution": "Bjørn Christian Tørrissen",
+        "author": "Bjørn Christian Tørrissen",
         "license_name": "CC BY-SA 4.0",
         "source_page_url": "https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
-        "source_identifier": "File:Aconcagua2016.jpg",
     }
     fields.update(overrides)
 
@@ -58,8 +56,84 @@ def attach_committed_media():
     for image in MountainImageRecord.objects.select_related("mountain"):
         outcome = writer.attach_media(
             image.mountain_id,
-            image.legacy_file_url,
             ImageDimensions(image.width, image.height),
             media_of(image.mountain.slug),
         )
         assert outcome.value == "applied"
+
+
+def pre_minimal_photograph_columns(entry, raw_image, model):
+    """The columns of a seeded photograph as the schema before the minimal photograph kept it.
+
+    The seed's own image record supplies what the photograph row no longer holds, and the
+    columns the historical model does not have yet are left out.
+    """
+    image = entry.mountain.primary_image
+    dimensions = image.dimensions
+    columns = {
+        "mountain_id": entry.mountain.id,
+        "width": dimensions.width,
+        "height": dimensions.height,
+        "creator": raw_image["creator"],
+        "attribution": image.author,
+        "license_name": image.license_name,
+        "license_url": image.license_url,
+        "source_page_url": image.source_page_url,
+        "source_identifier": raw_image["source_identifier"],
+        "legacy_file_url": raw_image["url"],
+        "license_reported": raw_image["license_reported"],
+        "license_election_basis_url": raw_image["license_election_basis_url"],
+        "approved_on": raw_image["approved_on"],
+    }
+    names = {field.attname for field in model._meta.concrete_fields}
+
+    return {name: value for name, value in columns.items() if name in names}
+
+
+def _columns_of(record, model):
+    names = {field.attname for field in model._meta.concrete_fields}
+
+    return {
+        field.attname: getattr(record, field.attname)
+        for field in record._meta.concrete_fields
+        if field.attname in names
+    }
+
+
+def load_committed_catalog_at(target, *, with_media):
+    """Loads the committed seed into the schema as of a migration before the minimal photograph.
+
+    The schema is migrated to target first and the rows go in through the historical models, so
+    a migration test starts from the data that schema could hold instead of from the current
+    one. The seed's own image record fills the columns the photograph row no longer has.
+    """
+    from serendipeak.persistence.mapping import mountain_record as mountain_record_of
+    from tests.support.catalog import committed_seed, load_seed_document, media_of
+    from tests.support.migrations import historical_model, migrate_to
+
+    migrate_to(target)
+    mountain_model = historical_model(target, "MountainRecord")
+    image_model = historical_model(target, "MountainImageRecord")
+    raw = {raw["slug"]: raw["image"] for raw in load_seed_document()["content"]["mountains"]}
+    entries = committed_seed().mountains
+
+    mountain_model.objects.bulk_create(
+        mountain_model(**_columns_of(mountain_record_of(entry), mountain_model))
+        for entry in entries
+    )
+    images = []
+    for entry in entries:
+        slug = entry.mountain.slug
+        columns = pre_minimal_photograph_columns(entry, raw[slug], image_model)
+        if with_media:
+            media = media_of(slug)
+            columns.update(
+                original_key=media.original_key,
+                original_sha256=media.original_sha256,
+                page_key=media.page_key,
+                viewer_key=media.viewer_key,
+            )
+        images.append(image_model(**columns))
+    image_model.objects.bulk_create(images)
+
+    return image_model

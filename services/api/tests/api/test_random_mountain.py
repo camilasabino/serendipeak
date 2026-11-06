@@ -25,7 +25,7 @@ from tests.support.catalog import (
 from tests.support.contract_fixtures import (
     load_fixture,
     load_frozen_catalog,
-    served_with_owned_media,
+    served_by_serendipeak,
 )
 from tests.support.fakes import FixedClock
 
@@ -117,7 +117,7 @@ def test_a_random_mountain_matches_the_complete_fixture(
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)
-    assert body(response) == served_with_owned_media(
+    assert body(response) == served_by_serendipeak(
         load_fixture("mountain-complete.json"), MEDIA_BASE_URL, media_of
     )
 

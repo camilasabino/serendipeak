@@ -15,7 +15,6 @@ from serendipeak.catalog.bootstrap.ports import (
     CatalogDiscovery,
     CatalogMountain,
     CatalogSeed,
-    ImageProvenance,
 )
 from serendipeak.catalog.bootstrap.seed import parse_catalog_seed
 from serendipeak.catalog.entities import (
@@ -35,7 +34,6 @@ from tests.support.contract_fixtures import load_fixture
 SEED_PATH = Path(__file__).resolve().parents[2] / "seed" / "legacy-catalog-v1.json"
 CREATED_AT = datetime.datetime(2026, 10, 2, 2, 55, 52, 889902, tzinfo=datetime.UTC)
 UPDATED_AT = datetime.datetime(2026, 10, 12, 17, 59, 25, 645765, tzinfo=datetime.UTC)
-LEGACY_FILE_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg"
 
 
 def load_seed_document():
@@ -61,29 +59,14 @@ def photograph_media(sha256="0" * 64):
     )
 
 
-def image_provenance(**overrides):
-    fields = {
-        "legacy_file_url": LEGACY_FILE_URL,
-        "license_reported": None,
-        "license_election_basis_url": None,
-        "approved_on": None,
-    }
-    fields.update(overrides)
-
-    return ImageProvenance(**fields)
-
-
 def primary_image(**overrides):
     fields = {
         "media": photograph_media(),
         "dimensions": ImageDimensions(width=4994, height=2758),
-        "creator": "Bjørn Christian Tørrissen",
-        "creator_url": None,
-        "attribution": "Bjørn Christian Tørrissen",
+        "author": "Bjørn Christian Tørrissen",
         "license_name": "CC BY-SA 4.0",
         "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
         "source_page_url": "https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
-        "source_identifier": "File:Aconcagua2016.jpg",
     }
     fields.update(overrides)
 
@@ -118,15 +101,9 @@ def mountain(slug="aconcagua", **overrides):
     return Mountain(**fields)
 
 
-def catalog_mountain(slug="aconcagua", provenance=None, file_url=None, **overrides):
-    entry = mountain(slug, **overrides)
-
+def catalog_mountain(slug="aconcagua", **overrides):
     return CatalogMountain(
-        mountain=entry,
-        image_provenance=None
-        if entry.primary_image is None
-        else provenance
-        or image_provenance(**({} if file_url is None else {"legacy_file_url": file_url})),
+        mountain=mountain(slug, **overrides),
         created_at=CREATED_AT,
         updated_at=UPDATED_AT,
     )
@@ -164,7 +141,6 @@ def frozen_mountain(entry):
         osm=source.osm,
         wikidata_id=source.wikidata_id,
         image=FrozenImageIdentity(
-            source_identifier=image.source_identifier,
             source_page_url=image.source_page_url,
             dimensions=image.dimensions,
         ),
@@ -173,12 +149,6 @@ def frozen_mountain(entry):
 
 def with_mountain(entry, **overrides):
     return replace(entry, mountain=replace(entry.mountain, **overrides))
-
-
-def with_file_url(entry, legacy_file_url):
-    return replace(
-        entry, image_provenance=replace(entry.image_provenance, legacy_file_url=legacy_file_url)
-    )
 
 
 def media_of(slug):

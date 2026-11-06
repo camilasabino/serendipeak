@@ -146,5 +146,7 @@ def build_materialize_photographs(cache_dir: Path | None = None) -> MaterializeP
     )
 
 
-def build_check_photograph_media(manifest: PhotographManifest) -> CheckPhotographMedia:
+def build_check_photograph_media(
+    manifest: PhotographManifest | None = None,
+) -> CheckPhotographMedia:
     return CheckPhotographMedia(DjangoCatalogStore(), build_media_store(), manifest)

@@ -9,7 +9,6 @@ from serendipeak.catalog.bootstrap.ports import (
     CatalogDiscovery,
     CatalogMountain,
     CatalogSeed,
-    ImageProvenance,
 )
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import (
@@ -116,10 +115,12 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
     if digest != seed["content_sha256"]:
         raise InvalidCatalogSeed(f"content_sha256 does not match the content ({digest})")
 
-    mountains = tuple(
+    parsed = [
         _mountain(raw, f"content.mountains[{index}]")
         for index, raw in enumerate(_list(content["mountains"], "content.mountains"))
-    )
+    ]
+    mountains = tuple(entry for entry, _ in parsed)
+    approvals = sum(approved for _, approved in parsed)
     discoveries = tuple(
         _discovery(raw, f"content.daily_discoveries[{index}]")
         for index, raw in enumerate(
@@ -127,18 +128,17 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
         )
     )
 
-    _check_counts(_object(seed["counts"], _COUNT_KEYS, "counts"), mountains, discoveries)
+    _check_counts(_object(seed["counts"], _COUNT_KEYS, "counts"), mountains, approvals, discoveries)
     _check_references(mountains, discoveries)
 
     return CatalogSeed(mountains=mountains, discoveries=discoveries)
 
 
-def _check_counts(counts, mountains, discoveries):
-    images = [entry for entry in mountains if entry.image_provenance is not None]
+def _check_counts(counts, mountains, approvals, discoveries):
     actual = {
         "mountains": len(mountains),
-        "mountain_images": len(images),
-        "media_approvals": sum(entry.image_provenance.approved_on is not None for entry in images),
+        "mountain_images": sum(entry.mountain.primary_image is not None for entry in mountains),
+        "media_approvals": approvals,
         "daily_discoveries": len(discoveries),
     }
 
@@ -178,7 +178,7 @@ def _mountain(raw, label):
     if status is None:
         raise InvalidCatalogSeed(f"{label}: unknown status {fields['status']!r}")
 
-    image, provenance = (None, None) if fields["image"] is None else _image(fields["image"], label)
+    image, approved = (None, False) if fields["image"] is None else _image(fields["image"], label)
     mountain = Mountain(
         id=_uuid(fields["id"], f"{label} id"),
         slug=slug,
@@ -200,12 +200,13 @@ def _mountain(raw, label):
         wikipedia_url=_optional(_text, fields["wikipedia_url"], f"{label} wikipedia_url"),
     )
 
-    return CatalogMountain(
+    entry = CatalogMountain(
         mountain=mountain,
-        image_provenance=provenance,
         created_at=_timestamp(fields["created_at"], f"{label} created_at"),
         updated_at=_timestamp(fields["updated_at"], f"{label} updated_at"),
     )
+
+    return entry, approved
 
 
 def _camera(fields, label):
@@ -254,9 +255,15 @@ def _image(raw, label):
     if (width is None) != (height is None):
         raise InvalidCatalogSeed(f"{label}: incomplete dimensions")
 
-    # The seed's thumbnail is validated like the rest of the document and then dropped:
-    # delivery renditions are owned, so nothing consumes a Wikimedia thumbnail.
-    _optional(_text, fields["thumbnail_url"], f"{label} thumbnail_url")
+    # The v1 record of the photograph is validated like the rest of the document and then
+    # dropped: the catalog keeps the photograph, not how it was imported. The seed stays the
+    # record of the file URL, the license as reported, its election basis and the approval date,
+    # and the photograph manifest pins the file.
+    for name in ("source_identifier", "url", "thumbnail_url"):
+        _optional(_text, fields[name], f"{label} {name}")
+    for name in ("creator", "license_reported", "license_election_basis_url"):
+        _optional(_text, fields[name], f"{label} {name}")
+    approved = _optional(_date, fields["approved_on"], f"{label} approved_on") is not None
 
     image = PrimaryImage(
         media=None,
@@ -265,24 +272,13 @@ def _image(raw, label):
         else ImageDimensions(
             width=_integer(width, f"{label} width"), height=_integer(height, f"{label} height")
         ),
-        creator=_optional(_text, fields["creator"], f"{label} creator"),
-        creator_url=None,
-        attribution=_text(fields["attribution"], f"{label} attribution"),
+        author=_text(fields["attribution"], f"{label} attribution"),
         license_name=_optional(_text, fields["license_name"], f"{label} license_name"),
         license_url=_optional(_text, fields["license_url"], f"{label} license_url"),
         source_page_url=_text(fields["source_page_url"], f"{label} source_page_url"),
-        source_identifier=_text(fields["source_identifier"], f"{label} source_identifier"),
-    )
-    provenance = ImageProvenance(
-        legacy_file_url=_text(fields["url"], f"{label} url"),
-        license_reported=_optional(_text, fields["license_reported"], f"{label} license_reported"),
-        license_election_basis_url=_optional(
-            _text, fields["license_election_basis_url"], f"{label} license_election_basis_url"
-        ),
-        approved_on=_optional(_date, fields["approved_on"], f"{label} approved_on"),
     )
 
-    return image, provenance
+    return image, approved
 
 
 def _discovery(raw, label):

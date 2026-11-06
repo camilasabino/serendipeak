@@ -240,39 +240,20 @@ class MountainImageRecord(models.Model):
     mountain = models.OneToOneField(
         MountainRecord, primary_key=True, on_delete=models.PROTECT, related_name="image"
     )
-    legacy_file_url = models.TextField("legacy file URL", null=True)
     original_key = models.TextField(null=True)
     original_sha256 = models.TextField(null=True)
     page_key = models.TextField(null=True)
     viewer_key = models.TextField(null=True)
     width = models.IntegerField(null=True)
     height = models.IntegerField(null=True)
-    creator = models.TextField(null=True)
-    creator_url = models.TextField(null=True)
-    attribution = models.TextField()
+    author = models.TextField()
     license_name = models.TextField(null=True)
     license_url = models.TextField(null=True)
-    license_reported = models.TextField(null=True)
-    license_election_basis_url = models.TextField("license election basis URL", null=True)
-    source_page_url = models.TextField()
-    source_identifier = models.TextField(null=True)
-    approved_on = models.DateField(null=True)
+    source_page_url = models.TextField(null=True)
 
     class Meta:
         db_table = "mountain_image"
         constraints = [
-            CheckConstraint(
-                condition=_absent_or_has_text("legacy_file_url"),
-                name="mountain_image_legacy_file_url_not_blank",
-            ),
-            CheckConstraint(
-                condition=_absent_or_public_link("legacy_file_url"),
-                name="mountain_image_legacy_file_url_https",
-            ),
-            CheckConstraint(
-                condition=Q(legacy_file_url__isnull=False) | Q(original_key__isnull=False),
-                name="mountain_image_has_media_or_legacy_file_url",
-            ),
             CheckConstraint(
                 condition=_all_or_none("original_key", "original_sha256", "page_key", "viewer_key"),
                 name="mountain_image_media_complete",
@@ -328,20 +309,7 @@ class MountainImageRecord(models.Model):
                 condition=Q(height__isnull=True) | Q(height__gt=0),
                 name="mountain_image_height_positive",
             ),
-            CheckConstraint(
-                condition=_absent_or_has_text("creator"), name="mountain_image_creator_not_blank"
-            ),
-            CheckConstraint(
-                condition=_absent_or_has_text("creator_url"),
-                name="mountain_image_creator_url_not_blank",
-            ),
-            CheckConstraint(
-                condition=_absent_or_public_link("creator_url"),
-                name="mountain_image_creator_url_public_link",
-            ),
-            CheckConstraint(
-                condition=_has_text("attribution"), name="mountain_image_attribution_not_blank"
-            ),
+            CheckConstraint(condition=_has_text("author"), name="mountain_image_author_not_blank"),
             CheckConstraint(
                 condition=_absent_or_has_text("license_name"),
                 name="mountain_image_license_name_not_blank",
@@ -359,30 +327,16 @@ class MountainImageRecord(models.Model):
                 name="mountain_image_license_url_requires_license_name",
             ),
             CheckConstraint(
-                condition=_absent_or_has_text("license_reported"),
-                name="mountain_image_license_reported_not_blank",
-            ),
-            CheckConstraint(
-                condition=_absent_or_has_text("license_election_basis_url"),
-                name="mountain_image_license_election_basis_url_not_blank",
-            ),
-            CheckConstraint(
-                condition=_has_text("source_page_url"),
+                condition=_absent_or_has_text("source_page_url"),
                 name="mountain_image_source_page_url_not_blank",
             ),
             CheckConstraint(
-                condition=_is_public_link("source_page_url"),
+                condition=_absent_or_public_link("source_page_url"),
                 name="mountain_image_source_page_url_public_link",
-            ),
-            CheckConstraint(
-                condition=_absent_or_has_text("source_identifier"),
-                name="mountain_image_source_identifier_not_blank",
             ),
         ]
 
     def __str__(self):
-        if self.source_identifier is not None:
-            return self.source_identifier
         if self.original_sha256 is not None:
             return f"SHA-256 {self.original_sha256[:12]}"
 

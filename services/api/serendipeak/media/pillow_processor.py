@@ -63,7 +63,10 @@ class PillowPhotographProcessor:
         photograph_format = _inspect(data)
 
         with _open(data) as image:
-            transposed = _is_transposed(image)
+            try:
+                transposed = _is_transposed(image)
+            except _DECODE_ERRORS as error:
+                raise PhotographRejected(PhotographRejection.CORRUPT) from error
             dimensions = _oriented_dimensions(image.size, transposed)
             page_size = _page_size(dimensions)
             viewer_size = _viewer_size(dimensions)
@@ -146,6 +149,7 @@ def _is_unsupported_image(data: bytes) -> bool:
 
 
 def _is_transposed(image: Image.Image) -> bool:
+    # For a PNG, Pillow decodes the pixels to reach the metadata chunks that may follow them.
     return image.getexif().get(ExifTags.Base.Orientation) in _TRANSPOSED_ORIENTATIONS
 
 

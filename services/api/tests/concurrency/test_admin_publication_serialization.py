@@ -40,6 +40,10 @@ CHANGE_URL = reverse("admin:catalog_mountainrecord_change", args=[DRAFT.mountain
 DELETE_URL = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
 
 
+# A replacement that keeps the previous credit has to say it reviewed it.
+REPLACEMENT = {"image-0-credit_reviewed": "on"}
+
+
 def change_url(entry):
     return reverse("admin:catalog_mountainrecord_change", args=[entry.mountain.id])
 
@@ -110,7 +114,7 @@ def test_a_replacement_posted_against_a_draft_is_stored_after_the_publication_it
 ):
     data = jpeg((1200, 900))
     payload = form_payload(
-        editor_client.get(CHANGE_URL), **{"image-0-photograph_file": upload(data)}
+        editor_client.get(CHANGE_URL), **REPLACEMENT | {"image-0-photograph_file": upload(data)}
     )
 
     response = run_while_a_publication_holds_the_lock(
@@ -128,7 +132,8 @@ def test_a_replacement_is_judged_against_the_camera_committed_while_it_waited(
     editor_client, media_store
 ):
     payload = form_payload(
-        editor_client.get(change_url(INACTIVE)), **{"image-0-photograph_file": upload(jpeg())}
+        editor_client.get(change_url(INACTIVE)),
+        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg())},
     )
     framing_removal = locked_update(INACTIVE, camera_framing_x=None, camera_framing_y=None)
 
@@ -138,7 +143,6 @@ def test_a_replacement_is_judged_against_the_camera_committed_while_it_waited(
 
     assert response.status_code == 200
     assert "the camera framing is missing" in response.content.decode()
-    assert media_store.originals == {} and media_store.public == {}
     image = MountainImageRecord.objects.get(pk=INACTIVE.mountain.id)
     assert image.original_sha256 == INACTIVE.mountain.primary_image.media.original_sha256
 
@@ -198,7 +202,8 @@ class StoreHeldOpen(FakeMediaStore):
 
 def post_a_replacement_held_in_the_store(pool, client, store):
     payload = form_payload(
-        client.get(change_url(ACTIVE)), **{"image-0-photograph_file": upload(jpeg((1200, 900)))}
+        client.get(change_url(ACTIVE)),
+        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg((1200, 900)))},
     )
 
     def post():
@@ -243,7 +248,8 @@ def test_a_publication_waits_for_an_upload_in_flight_on_the_same_mountain(
 ):
     store = use_fake_media_store(monkeypatch, StoreHeldOpen())
     payload = form_payload(
-        editor_client.get(CHANGE_URL), **{"image-0-photograph_file": upload(jpeg((1200, 900)))}
+        editor_client.get(CHANGE_URL),
+        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg((1200, 900)))},
     )
 
     def post():

@@ -87,11 +87,10 @@ describe('isMountain', () => {
 
 	it.each([
 		['missing url', without(image, 'url')],
-		['missing attribution', without(image, 'attribution')],
-		['missing sourcePageUrl', without(image, 'sourcePageUrl')],
-		['blank sourceIdentifier', { ...image, sourceIdentifier: '' }],
-		['javascript creator url', { ...image, creatorUrl: 'javascript:alert(1)' }],
-		['blank creator url', { ...image, creatorUrl: '' }],
+		['missing author', without(image, 'author')],
+		['legacy attribution only', { ...without(image, 'author'), attribution: 'Someone' }],
+		['javascript sourcePageUrl', { ...image, sourcePageUrl: 'javascript:alert(1)' }],
+		['blank author', { ...image, author: '' }],
 		['javascript url', { ...image, url: 'javascript:alert(1)' }],
 		['relative url', { ...image, url: '/media/a.jpg' }],
 		['null thumbnail', { ...image, thumbnailUrl: null }],
@@ -103,20 +102,15 @@ describe('isMountain', () => {
 	});
 
 	it('accepts a primary image reduced to its required fields', () => {
-		const required = {
-			url: image.url,
-			attribution: image.attribution,
-			sourcePageUrl: image.sourcePageUrl
-		};
+		const required = { url: image.url, author: image.author };
 
 		expect(isMountain({ ...complete, primaryImage: required })).toBe(true);
 	});
 
-	it('accepts an uploaded photograph credited to its creator without a source identifier', () => {
+	it('accepts an uploaded photograph from another source', () => {
 		const uploaded = {
-			...without(image, 'sourceIdentifier'),
-			creator: 'Sébastien Goldberg',
-			creatorUrl: 'https://unsplash.com/@sebastiengoldberg',
+			...image,
+			author: 'Sébastien Goldberg',
 			license: 'Unsplash License',
 			licenseUrl: 'https://unsplash.com/license',
 			sourcePageUrl: 'https://unsplash.com/photos/a-mountain'

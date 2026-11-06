@@ -208,7 +208,7 @@ def test_rendered_artifact_is_accepted_by_the_seed_parser(denali, approvals):
     seed = parse_catalog_seed(json.loads(rendered))
 
     assert [entry.mountain.slug for entry in seed.mountains] == ["denali"]
-    assert seed.mountains[0].image_provenance.approved_on == datetime.date(2026, 10, 6)
+    assert seed.mountains[0].mountain.primary_image.author
 
 
 def test_snapshot_rejects_writes():

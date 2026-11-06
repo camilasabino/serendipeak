@@ -8,13 +8,10 @@ export interface MountainImage {
 	thumbnailUrl?: string;
 	width?: number;
 	height?: number;
-	creator?: string;
-	creatorUrl?: string;
-	attribution: string;
+	author: string;
 	license?: string;
 	licenseUrl?: string;
-	sourcePageUrl: string;
-	sourceIdentifier?: string;
+	sourcePageUrl?: string;
 }
 
 export interface MountainSources {

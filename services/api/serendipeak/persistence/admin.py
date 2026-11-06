@@ -69,17 +69,18 @@ VIOLATION_MESSAGES = {
     PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS: "the camera framing is out of bounds",
     PublicationViolation.PRIMARY_IMAGE_MISSING: "the photograph is missing",
     PublicationViolation.IMAGE_MEDIA_MISSING: "the photograph file is not stored yet",
-    PublicationViolation.IMAGE_ATTRIBUTION_MISSING: "the photograph attribution is missing",
-    PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING: "the photograph source page is missing",
+    PublicationViolation.IMAGE_AUTHOR_MISSING: "the photograph author is missing",
+    PublicationViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE: (
+        "the photograph license URL needs the license name"
+    ),
     PublicationViolation.IMAGE_DIMENSIONS_MISSING: "the photograph dimensions are missing",
     PublicationViolation.SUMMARY_INVALID: "the summary breaks the summary rules",
     PublicationViolation.LINK_NOT_HTTPS: "a public link does not use https://",
 }
 PUBLIC_LINK_LABELS = {
     PublicLinkField.WIKIPEDIA_URL: "the Wikipedia link",
-    PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photograph source page",
+    PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photo page URL",
     PublicLinkField.IMAGE_LICENSE_URL: "the photograph license URL",
-    PublicLinkField.IMAGE_CREATOR_URL: "the photograph creator URL",
 }
 PUBLIC_LINK_MESSAGE = "Use an https:// link."
 
@@ -93,8 +94,14 @@ REJECTION_MESSAGES = {
 }
 PHOTOGRAPH_REJECTED = "The photograph was rejected."
 PHOTOGRAPH_NOT_PROCESSED = "The photograph could not be processed. Try again or use another file."
-PHOTOGRAPH_NOT_STORED = "The photograph could not be stored. Nothing was changed."
+PHOTOGRAPH_NOT_STORED = "The photograph could not be stored. Nothing was saved; try again."
+PHOTOGRAPH_NOT_STORED_TAG = "photograph-not-stored"
+PHOTOGRAPH_REQUIRED = "Choose a photograph."
 LICENSE_NAME_FOR_URL = "Add the license name of this license URL."
+CREDIT_NOT_REVIEWED = (
+    "The author and license are those of the photograph being replaced. Update them, or confirm "
+    "that they also describe the new photograph."
+)
 
 OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
 CAMERA_FIELDS = (
@@ -104,24 +111,12 @@ CAMERA_FIELDS = (
     "camera_framing_x",
     "camera_framing_y",
 )
-IMAGE_CREDIT_FIELDS = (
-    "source_page_url",
-    "attribution",
-    "creator",
-    "creator_url",
-    "license_name",
-    "license_url",
-)
-IMAGE_OPTIONAL = ("creator", "creator_url", "license_name", "license_url")
-IMAGE_LINKS = ("source_page_url", "creator_url", "license_url")
+IMAGE_CREDIT_FIELDS = ("author", "source_page_url")
+IMAGE_LICENSE_FIELDS = ("license_name", "license_url")
+IMAGE_FIELDS = (*IMAGE_CREDIT_FIELDS, *IMAGE_LICENSE_FIELDS)
+IMAGE_OPTIONAL = ("source_page_url", *IMAGE_LICENSE_FIELDS)
+IMAGE_LINKS = ("source_page_url", "license_url")
 PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
-LEGACY_PROVENANCE_FIELDS = (
-    "source_identifier",
-    "legacy_file_url",
-    "license_reported",
-    "license_election_basis_url",
-    "approved_on",
-)
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
 EDITORIAL_FIELDS = ("summary", "range_name", "countries")
@@ -299,56 +294,87 @@ class MountainForm(forms.ModelForm):
 
 
 class PhotographFileInput(forms.FileInput):
-    """A file input shown with the stored page rendition and a local preview of the chosen file."""
+    """The file input with the saved photograph and the selected one side by side.
+
+    The selected photograph is previewed in the browser, from the chosen file, and the button
+    next to it drops the choice. The script behind it also keeps the file through a refused
+    submission, which a file input cannot do by itself.
+    """
 
     def __init__(self, attrs=None):
         super().__init__(
             attrs={"accept": ACCEPTED_PHOTOGRAPH_TYPES, "data-photograph-file": "", **(attrs or {})}
         )
-        self.stored_url = None
+        self.saved_url = None
 
     def render(self, name, value, attrs=None, renderer=None):
-        stored = (
+        saved = (
             format_html(
-                '<img class="photograph-preview" src="{}" alt="Current photograph">',
-                self.stored_url,
+                '<figure class="photograph-figure"><img class="photograph-preview" src="{}" '
+                'alt="Saved photograph"><figcaption>Saved photograph</figcaption></figure>',
+                self.saved_url,
             )
-            if self.stored_url
+            if self.saved_url
             else ""
+        )
+        caption = (
+            "Selected photograph, not saved yet. Saving replaces the saved one."
+            if self.saved_url
+            else "Selected photograph, not saved yet."
+        )
+        selected = format_html(
+            '<figure class="photograph-figure" data-photograph-selected hidden>'
+            '<img class="photograph-preview" alt="Selected photograph" data-photograph-preview>'
+            "<figcaption>{} "
+            '<button type="button" class="button" data-photograph-cancel>Cancel</button>'
+            "</figcaption></figure>",
+            caption,
         )
 
         return format_html(
-            '<div class="photograph-upload">{}<img class="photograph-preview" alt="Chosen '
-            'photograph" data-photograph-preview hidden>{}</div>',
-            stored,
+            '<div class="photograph-upload">{}{}{}</div>',
+            saved,
+            selected,
             super().render(name, value, attrs, renderer),
         )
 
 
 class MountainImageForm(forms.ModelForm):
     photograph_file = forms.FileField(
-        label="Photograph file",
+        label="Photograph",
         required=False,
         widget=PhotographFileInput,
         help_text=(
             "A JPEG, PNG or WebP file. Visitors get resized copies without the file's metadata."
         ),
     )
+    credit_reviewed = forms.BooleanField(
+        label="The author and license also describe the new photograph",
+        required=False,
+        help_text="Needed only when they have not changed.",
+    )
 
     class Meta:
         model = MountainImageRecord
-        fields = IMAGE_CREDIT_FIELDS
+        fields = IMAGE_FIELDS
         labels = {
-            "source_page_url": "Source page URL",
-            "creator_url": "Creator URL",
+            "author": "Author",
+            "source_page_url": "Photo page URL",
+            "license_name": "License",
             "license_url": "License URL",
         }
         help_texts = {
-            "source_page_url": "The page the photograph comes from.",
-            "attribution": "The credit shown to visitors.",
-            "creator_url": "Where the credit links to.",
+            "author": "The credit shown to visitors: the photographer or rights holder.",
+            "source_page_url": (
+                "Optional. The page where the photograph is published. The credit links to it."
+            ),
+            "license_name": (
+                "Optional. The license the photograph is used under. Publish only photographs "
+                "you have the right to use."
+            ),
+            "license_url": "Optional. Needs the license name.",
         }
-        widgets = _single_line(*IMAGE_CREDIT_FIELDS)
+        widgets = _single_line(*IMAGE_FIELDS)
 
     def __init__(self, *args, ingestion: PhotographIngestion, media_base_url: str, **kwargs):
         super().__init__(*args, **kwargs)
@@ -361,13 +387,14 @@ class MountainImageForm(forms.ModelForm):
         if self.instance._state.adding:
             photograph_file.required = True
         else:
-            photograph_file.label = "Replace photograph"
             photograph_file.help_text = (
-                "Leave empty to keep the current photograph. A new file replaces it and clears "
-                "its legacy provenance; update the credit to match."
+                "Leave it empty to keep the saved photograph. A new file replaces it, and its "
+                "author and license have to be reviewed."
             )
-        if self.instance.page_key is not None:
-            photograph_file.widget.stored_url = public_url(media_base_url, self.instance.page_key)
+            if self.instance.page_key is not None:
+                photograph_file.widget.saved_url = public_url(
+                    media_base_url, self.instance.page_key
+                )
 
     def clean_photograph_file(self):
         upload = self.cleaned_data.get("photograph_file")
@@ -402,8 +429,19 @@ class MountainImageForm(forms.ModelForm):
 
         if self.prepared_photograph is not None:
             _use_photograph(self.instance, self.prepared_photograph)
+            self._require_credit_review(cleaned)
 
         return cleaned
+
+    def _require_credit_review(self, cleaned):
+        if self.instance._state.adding or cleaned.get("credit_reviewed"):
+            return
+
+        unchanged = all(
+            (cleaned.get(name) or None) == (self.initial.get(name) or None) for name in IMAGE_FIELDS
+        )
+        if unchanged:
+            self.add_error("credit_reviewed", CREDIT_NOT_REVIEWED)
 
 
 def _too_many_bytes(max_bytes):
@@ -412,7 +450,7 @@ def _too_many_bytes(max_bytes):
 
 def _use_photograph(image, prepared):
     # The formset judges this prospective instance, and nothing is stored until every form is
-    # valid. The legacy provenance belongs to the photograph being replaced, so it goes too.
+    # valid.
     media = prepared.media
     image.original_key = media.original_key
     image.original_sha256 = media.original_sha256
@@ -420,8 +458,6 @@ def _use_photograph(image, prepared):
     image.viewer_key = media.viewer_key
     image.width = prepared.dimensions.width
     image.height = prepared.dimensions.height
-    for name in LEGACY_PROVENANCE_FIELDS:
-        setattr(image, name, None)
 
 
 class MountainImageFormSet(BaseInlineFormSet):
@@ -470,10 +506,6 @@ def _stored_image(mountain):
         return None
 
 
-def _present_legacy_fields(image):
-    return tuple(name for name in LEGACY_PROVENANCE_FIELDS if getattr(image, name) is not None)
-
-
 class _PhotographNotStored(Exception):
     pass
 
@@ -487,40 +519,29 @@ class MountainImageInline(admin.StackedInline):
     can_delete = True
 
     class Media:
-        js = ("serendipeak/admin/photograph-preview.js",)
+        js = ("serendipeak/admin/photograph-upload.js",)
 
     def get_fieldsets(self, request, obj=None):
-        photograph = (None, {"fields": ("photograph_file", *IMAGE_CREDIT_FIELDS)})
         image = _stored_image(obj)
-        if image is None:
-            return [photograph]
+        main = ["photograph_file", *IMAGE_CREDIT_FIELDS]
+        if image is not None:
+            main.append("credit_reviewed")
+        fieldsets = [
+            (None, {"fields": main}),
+            ("License", {"fields": IMAGE_LICENSE_FIELDS}),
+        ]
+        if image is not None:
+            fieldsets.append(
+                (
+                    "Technical details",
+                    {"fields": PHOTOGRAPH_DETAIL_FIELDS, "classes": ("collapse",)},
+                )
+            )
 
-        details = (
-            "Photograph details",
-            {"fields": PHOTOGRAPH_DETAIL_FIELDS, "classes": ("collapse",)},
-        )
-        legacy = _present_legacy_fields(image)
-        if not legacy:
-            return [photograph, details]
-
-        legacy_provenance = (
-            "Legacy provenance",
-            {
-                "fields": legacy,
-                "classes": ("collapse",),
-                "description": "Recorded for the photograph imported from the legacy catalog. "
-                "Replacing the photograph clears it.",
-            },
-        )
-
-        return [photograph, details, legacy_provenance]
+        return fieldsets
 
     def get_readonly_fields(self, request, obj=None):
-        image = _stored_image(obj)
-        if image is None:
-            return ()
-
-        return (*PHOTOGRAPH_DETAIL_FIELDS, *_present_legacy_fields(image))
+        return () if _stored_image(obj) is None else PHOTOGRAPH_DETAIL_FIELDS
 
     @admin.display(description="Dimensions")
     def photograph_dimensions(self, image):
@@ -677,12 +698,19 @@ class MountainAdmin(admin.ModelAdmin):
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         # Django runs a mutating change view inside one transaction. The exception leaves it,
-        # so the mountain update rolls back with the photograph that could not be stored.
+        # so the mountain update rolls back with the photograph that could not be stored. The
+        # tag lets the page's script give the chosen file back, since a redirect re-renders
+        # the form from the saved data.
         try:
             return super().changeform_view(request, object_id, form_url, extra_context)
         except _PhotographNotStored:
             logger.exception("An uploaded photograph could not be stored")
-            self.message_user(request, PHOTOGRAPH_NOT_STORED, messages.ERROR)
+            self.message_user(
+                request,
+                PHOTOGRAPH_NOT_STORED,
+                messages.ERROR,
+                extra_tags=PHOTOGRAPH_NOT_STORED_TAG,
+            )
 
             return HttpResponseRedirect(request.get_full_path())
 

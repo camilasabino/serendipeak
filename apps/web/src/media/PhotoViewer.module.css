@@ -75,11 +75,7 @@
 }
 
 .caption {
-	display: flex;
 	flex: none;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0.35rem 0.4rem;
 	width: 0;
 	min-width: 100%;
 	margin: 0.875rem 0 0;
@@ -102,15 +98,5 @@
 @media (max-width: 55.99rem) {
 	.viewer {
 		--available-height: calc(100dvh - 10.5rem);
-	}
-
-	.caption {
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 0.2rem;
-	}
-
-	.dot {
-		display: none;
 	}
 }

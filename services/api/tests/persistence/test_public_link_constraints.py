@@ -6,10 +6,8 @@ from tests.support.public_links import PUBLIC_LINK_CASES
 from tests.support.records import image_record, insert_error, mountain_record
 
 IMAGE_LINK_CONSTRAINTS = {
-    "legacy_file_url": "mountain_image_legacy_file_url_https",
     "source_page_url": "mountain_image_source_page_url_public_link",
     "license_url": "mountain_image_license_url_public_link",
-    "creator_url": "mountain_image_creator_url_public_link",
 }
 
 pytestmark = pytest.mark.django_db
@@ -59,12 +57,6 @@ def test_an_existing_row_cannot_be_updated_to_an_unsafe_link(mountain):
     record.source_page_url = "javascript:alert(1)"
 
     assert insert_error_on_update(record) == "mountain_image_source_page_url_public_link"
-
-
-def test_the_license_election_basis_url_is_not_a_public_link(mountain):
-    image_record(mountain, license_election_basis_url="http://legacy.example/provenance").save(
-        force_insert=True
-    )
 
 
 def insert_error_on_update(record):

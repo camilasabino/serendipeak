@@ -52,36 +52,43 @@ describe('MountainPhoto', () => {
 		expect(render(without(['width', 'height']))).toContain('aspect-ratio:1.5');
 	});
 
-	it('shows the attribution unchanged, the linked license and the source link', () => {
+	it('credits the author, linking only the name to the source page, with the license after it', () => {
 		const html = render(image);
 		const anchors = anchorsOf(html);
 
 		expect(textsOf(html, 'summary')).toEqual(['About this photo']);
-		expect(textsOf(html, 'p')[0]).toBe(image.attribution);
+		expect(textsOf(html, 'p')).toEqual([`Photo by ${image.author}·${image.license}`]);
+		expect(anchors.find(({ text }) => text === image.author)?.href).toBe(image.sourcePageUrl);
 		expect(anchors.find(({ text }) => text === image.license)?.href).toBe(image.licenseUrl);
-		expect(anchors.find(({ text }) => text === 'View original on Wikimedia Commons')?.href).toBe(
-			image.sourcePageUrl
-		);
+		expect(anchors).toHaveLength(2);
+		expect(html).not.toMatch(/Source|Wikimedia Commons/);
 	});
 
 	it('shows the license as plain text without a license url', () => {
 		const html = render(without(['licenseUrl']));
 
-		expect(textsOf(html, 'p')).toContain(image.license);
-		expect(anchorsOf(html).map(({ text }) => text)).toEqual(['View original on Wikimedia Commons']);
+		expect(textsOf(html, 'p')).toEqual([`Photo by ${image.author}·${image.license}`]);
+		expect(anchorsOf(html).map(({ text }) => text)).toEqual([image.author]);
 	});
 
-	it('omits the license row without a license', () => {
+	it('omits the license without one', () => {
 		const html = render(without(['license', 'licenseUrl']));
 
-		expect(textsOf(html, 'p')).toEqual([
-			image.attribution,
-			'Source: View original on Wikimedia Commons'
-		]);
+		expect(textsOf(html, 'p')).toEqual([`Photo by ${image.author}`]);
+		expect(anchorsOf(html).map(({ text }) => text)).toEqual([image.author]);
 	});
 
-	it('never displays the source identifier as copy', () => {
-		expect(render(image).replace(/<[^>]*>/g, ' ')).not.toContain(image.sourceIdentifier);
+	it('shows an own photograph as plain text without a source page or a license', () => {
+		const html = render(without(['sourcePageUrl', 'license', 'licenseUrl']));
+
+		expect(textsOf(html, 'p')).toEqual([`Photo by ${image.author}`]);
+		expect(anchorsOf(html)).toEqual([]);
+	});
+
+	it('leaves the author unlinked without a source page', () => {
+		const html = render(without(['sourcePageUrl']));
+
+		expect(anchorsOf(html).map(({ text }) => text)).toEqual([image.license]);
 	});
 
 	it('requests exactly the contract thumbnail, without synthesized candidates', () => {

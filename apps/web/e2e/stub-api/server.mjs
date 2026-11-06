@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { serendipeakDocument } from './serendipeak-contract.mjs';
 
 const contractsDirectory = new URL('../../../../contracts/v1/', import.meta.url);
 
@@ -13,7 +14,7 @@ const CONTROL_PREFIX = '/__control/';
 const CORS = { 'Access-Control-Allow-Origin': '*' };
 
 function fixture(name) {
-	return JSON.parse(readFileSync(new URL(name, contractsDirectory), 'utf8'));
+	return serendipeakDocument(JSON.parse(readFileSync(new URL(name, contractsDirectory), 'utf8')));
 }
 
 function buildRoutes() {

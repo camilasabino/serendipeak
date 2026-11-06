@@ -123,9 +123,8 @@ describe('prefetchPrimaryImage', () => {
 	it('does nothing outside a browser', () => {
 		const image: MountainImage = {
 			url: 'https://upload.wikimedia.org/a.jpg',
-			attribution: 'Someone',
-			sourcePageUrl: 'https://commons.wikimedia.org/wiki/File:A.jpg',
-			sourceIdentifier: 'File:A.jpg'
+			author: 'Someone',
+			sourcePageUrl: 'https://commons.wikimedia.org/wiki/File:A.jpg'
 		};
 
 		expect(() => prefetchPrimaryImage(new ImagePreloader(), image)).not.toThrow();

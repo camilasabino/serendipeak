@@ -24,14 +24,13 @@ ACONCAGUA_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua20
 FUJI_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1b/Fuji.jpg"
 ACONCAGUA = seeded_mountain(
     "aconcagua",
-    file_url=ACONCAGUA_URL,
     primary_image=primary_image(media=None, dimensions=ImageDimensions(64, 48)),
 )
 FUJI = seeded_mountain(
     "fuji",
-    file_url=FUJI_URL,
     primary_image=primary_image(media=None, dimensions=ImageDimensions(40, 30)),
 )
+URLS = {"aconcagua": ACONCAGUA_URL, "fuji": FUJI_URL}
 
 
 def jpeg(size, colour=(40, 90, 160)):
@@ -62,8 +61,7 @@ def pin(entry, data, **overrides):
     fields = {
         "mountain_id": entry.mountain.id,
         "slug": entry.mountain.slug,
-        "source_identifier": image.source_identifier,
-        "file_url": entry.image_provenance.legacy_file_url,
+        "file_url": URLS.get(entry.mountain.slug, "https://upload.wikimedia.org/other.jpg"),
         "sha256": hashlib.sha256(data).hexdigest(),
         "bytes": len(data),
         "dimensions": image.dimensions,
@@ -397,7 +395,22 @@ def test_the_checksum_check_reports_a_changed_original(media_root, cache):
     assert stderr == ["fuji: the original does not match its checksum"]
 
 
-def test_the_checks_compare_the_photographs_with_the_committed_manifest_without_any_flag(
+def test_the_checks_compare_nothing_with_a_manifest_unless_asked_to(
+    media_root, cache, committed_manifest
+):
+    run("materialize_photographs", "--cache-dir", str(cache))
+    write_manifest(
+        committed_manifest, pin(ACONCAGUA, ACONCAGUA_FILE), pin(FUJI, b"the file pinned first")
+    )
+
+    assert run("check_photograph_media", "--deep", "--checksums")[1] == []
+    message, _, stderr = failure("check_photograph_media", "--deep", "--checksums", "--manifest")
+
+    assert message == "1 of 2 photographs have media problems"
+    assert stderr == ["fuji: the stored original is not the one in the manifest"]
+
+
+def test_the_checks_compare_the_photographs_with_the_manifest_they_are_given(
     media_root, cache, tmp_path
 ):
     run("materialize_photographs", "--cache-dir", str(cache))
@@ -407,7 +420,6 @@ def test_the_checks_compare_the_photographs_with_the_committed_manifest_without_
         pin(FUJI, b"the file pinned first"),
     )
 
-    assert run("check_photograph_media", "--deep", "--checksums")[1] == []
     message, _, stderr = failure(
         "check_photograph_media", "--deep", "--checksums", "--manifest", str(revised)
     )
@@ -416,14 +428,23 @@ def test_the_checks_compare_the_photographs_with_the_committed_manifest_without_
     assert stderr == ["fuji: the stored original is not the one in the manifest"]
 
 
-def test_the_checks_report_a_pinned_photograph_the_catalog_does_not_have(
+def test_the_committed_manifest_is_the_default_of_the_manifest_check(media_root, cache):
+    run("materialize_photographs", "--cache-dir", str(cache))
+
+    assert run("check_photograph_media", "--deep", "--checksums", "--manifest")[0] == [
+        "2 photographs have complete media (checksums checked)."
+    ]
+
+
+def test_the_manifest_check_reports_a_pinned_photograph_the_catalog_does_not_have(
     media_root, cache, committed_manifest
 ):
     run("materialize_photographs", "--cache-dir", str(cache))
     extra = pin(seeded_mountain("k2"), b"k2", dimensions=ImageDimensions(10, 10))
     write_manifest(committed_manifest, pin(ACONCAGUA, ACONCAGUA_FILE), pin(FUJI, FUJI_FILE), extra)
 
-    message, _, stderr = failure("check_photograph_media")
+    assert run("check_photograph_media")[1] == []
+    message, _, stderr = failure("check_photograph_media", "--manifest")
 
     assert message == "1 of 2 photographs have media problems"
     assert stderr == ["k2: the manifest photograph is not in the catalog"]

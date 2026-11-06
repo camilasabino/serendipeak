@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { MountainImage } from '../api/contract';
-import { ExternalLink } from '../links/ExternalLink';
+import { PhotoCredit } from '../media/PhotoCredit';
 import { PhotoViewer, type ViewerStart } from '../media/PhotoViewer';
 import { photoAlt } from '../media/primaryPhoto';
 import { usePhotoReveal } from '../media/usePhotoReveal';
@@ -21,7 +21,6 @@ export function MountainPhoto({
 }) {
 	const { rendition, imageRef, bind, hidden, ready, ratio } = usePhotoReveal(image);
 	const [viewing, setViewing] = useState<OpenViewer>();
-	const { attribution, license, licenseUrl, sourcePageUrl } = image;
 
 	if (viewing && viewing.source !== rendition.src) {
 		setViewing(undefined);
@@ -88,13 +87,8 @@ export function MountainPhoto({
 			)}
 			<figcaption>
 				<Disclosure summary="About this photo">
-					<p>{attribution}</p>
-					{license && (
-						<p>{licenseUrl ? <ExternalLink href={licenseUrl}>{license}</ExternalLink> : license}</p>
-					)}
 					<p>
-						Source:{' '}
-						<ExternalLink href={sourcePageUrl}>View original on Wikimedia Commons</ExternalLink>
+						<PhotoCredit image={image} />
 					</p>
 				</Disclosure>
 			</figcaption>

@@ -7,9 +7,9 @@ import {
 	type SyntheticEvent
 } from 'react';
 import type { MountainImage } from '../api/contract';
-import { ExternalLink } from '../links/ExternalLink';
 import { intrinsicRatio, pageRatio } from './aspect';
 import { watchImage } from './imageReadiness';
+import { PhotoCredit } from './PhotoCredit';
 import styles from './PhotoViewer.module.css';
 import { photoAlt } from './primaryPhoto';
 import { intrinsicDimensions, pageRendition, viewerTarget, type ViewerTarget } from './renditions';
@@ -159,23 +159,7 @@ export function PhotoViewer({ image, mountainName, initial, onClose }: PhotoView
 					}
 				/>
 				<p className={styles.caption} data-viewer-caption="">
-					<span>{image.attribution}</span>
-					{image.license && (
-						<>
-							<span className={styles.dot} aria-hidden="true">
-								·
-							</span>
-							{image.licenseUrl ? (
-								<ExternalLink href={image.licenseUrl}>{image.license}</ExternalLink>
-							) : (
-								<span>{image.license}</span>
-							)}
-						</>
-					)}
-					<span className={styles.dot} aria-hidden="true">
-						·
-					</span>
-					<ExternalLink href={image.sourcePageUrl}>Source: Wikimedia Commons</ExternalLink>
+					<PhotoCredit image={image} />
 				</p>
 			</div>
 		</dialog>

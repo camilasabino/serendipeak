@@ -60,7 +60,8 @@ def test_committed_seed_parses_into_the_legacy_catalog():
     ]
     assert all(entry.mountain.status is MountainStatus.ACTIVE for entry in seed.mountains)
     assert all(entry.mountain.primary_image is not None for entry in seed.mountains)
-    assert sum(entry.image_provenance.approved_on is not None for entry in seed.mountains) == 27
+    raw_images = [raw["image"] for raw in document["content"]["mountains"]]
+    assert sum(image["approved_on"] is not None for image in raw_images) == 27
     assert [discovery.date.isoformat() for discovery in seed.discoveries] == [
         raw["date"] for raw in document["content"]["daily_discoveries"]
     ]
@@ -82,13 +83,13 @@ def test_parsed_values_keep_the_exported_precision():
     assert entry.mountain.id == uuid.UUID(raw["id"])
 
 
-def test_the_seed_file_url_becomes_the_legacy_file_url_of_every_photograph():
+def test_the_attribution_of_every_photograph_becomes_its_author():
     document = load_seed_document()
 
     seed = parse_catalog_seed(document)
 
-    assert [entry.image_provenance.legacy_file_url for entry in seed.mountains] == [
-        raw["image"]["url"] for raw in document["content"]["mountains"]
+    assert [entry.mountain.primary_image.author for entry in seed.mountains] == [
+        raw["image"]["attribution"] for raw in document["content"]["mountains"]
     ]
 
 
@@ -164,6 +165,14 @@ def orphan_discovery(document):
         (lambda document: first_mountain(document)["image"].update(width=None), "dimensions"),
         (lambda document: first_mountain(document)["image"].pop("approved_on"), "approved_on"),
         (lambda document: first_mountain(document)["image"].update(approved_on="soon"), "date"),
+        (
+            lambda document: first_mountain(document)["image"].update(source_identifier=7),
+            "source_identifier must be a string",
+        ),
+        (
+            lambda document: first_mountain(document)["image"].update(creator=7),
+            "creator must be a string",
+        ),
         (duplicate_slug, "slugs are not unique"),
         (orphan_discovery, "references unknown mountain"),
     ],

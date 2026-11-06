@@ -63,12 +63,20 @@ def test_a_committed_seed_mountain_only_lacks_the_media_that_materialization_add
         ({"primary_image": None}, PublicationViolation.PRIMARY_IMAGE_MISSING),
         ({"primary_image": primary_image(media=None)}, PublicationViolation.IMAGE_MEDIA_MISSING),
         (
-            {"primary_image": primary_image(attribution="")},
-            PublicationViolation.IMAGE_ATTRIBUTION_MISSING,
+            {"primary_image": primary_image(author="")},
+            PublicationViolation.IMAGE_AUTHOR_MISSING,
         ),
         (
-            {"primary_image": primary_image(source_page_url="")},
-            PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING,
+            {"primary_image": primary_image(author="  ")},
+            PublicationViolation.IMAGE_AUTHOR_MISSING,
+        ),
+        (
+            {"primary_image": primary_image(license_name=None)},
+            PublicationViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE,
+        ),
+        (
+            {"primary_image": primary_image(license_name=" ")},
+            PublicationViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE,
         ),
         (
             {"primary_image": primary_image(dimensions=None)},
@@ -94,15 +102,14 @@ def test_source_metadata_is_optional_for_publication():
 @pytest.mark.parametrize(
     "image",
     [
-        primary_image(source_identifier=None),
         primary_image(license_name=None, license_url=None),
         primary_image(license_url=None),
-        primary_image(license_name="Public domain", license_url=None, creator=None),
-        primary_image(creator=None, creator_url=None),
-        primary_image(creator_url="https://unsplash.com/@someone"),
+        primary_image(license_name="Public domain", license_url=None),
+        primary_image(source_page_url=None),
+        primary_image(source_page_url=None, license_name=None, license_url=None),
     ],
 )
-def test_the_license_creator_and_legacy_identifier_are_optional_for_publication(image):
+def test_the_license_and_the_source_page_are_optional_and_independent(image):
     assert publication_violations(mountain(primary_image=image)) == ()
 
 
@@ -148,10 +155,6 @@ UNSAFE_LINK = "http://example.com/page"
             {"primary_image": primary_image(license_url="https://user@example.com/license")},
             PublicLinkField.IMAGE_LICENSE_URL,
         ),
-        (
-            {"primary_image": primary_image(creator_url="javascript:alert(1)")},
-            PublicLinkField.IMAGE_CREATOR_URL,
-        ),
     ],
 )
 def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overrides, field):
@@ -164,9 +167,7 @@ def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overri
 def test_several_unsafe_links_are_one_violation_naming_every_field():
     candidate = mountain(
         wikipedia_url=UNSAFE_LINK,
-        primary_image=primary_image(
-            source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK, creator_url=UNSAFE_LINK
-        ),
+        primary_image=primary_image(source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK),
     )
 
     assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
@@ -174,7 +175,6 @@ def test_several_unsafe_links_are_one_violation_naming_every_field():
         PublicLinkField.WIKIPEDIA_URL,
         PublicLinkField.IMAGE_SOURCE_PAGE_URL,
         PublicLinkField.IMAGE_LICENSE_URL,
-        PublicLinkField.IMAGE_CREATOR_URL,
     )
 
 
@@ -187,10 +187,10 @@ def test_absent_optional_links_are_not_unsafe():
     assert unsafe_public_links(candidate) == ()
 
 
-def test_a_blank_required_link_is_missing_not_unsafe():
-    candidate = mountain(primary_image=primary_image(source_page_url=" "))
+def test_a_blank_source_page_is_not_an_unsafe_link():
+    candidate = mountain(
+        primary_image=primary_image(source_page_url=" ", license_name=None, license_url=None)
+    )
 
     assert unsafe_public_links(candidate) == ()
-    assert publication_violations(candidate) == (
-        PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING,
-    )
+    assert publication_violations(candidate) == ()

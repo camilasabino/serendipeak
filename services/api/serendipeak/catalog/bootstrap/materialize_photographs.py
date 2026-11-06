@@ -4,7 +4,6 @@ from enum import StrEnum
 from uuid import UUID
 
 from serendipeak.catalog.bootstrap.photograph_manifest import (
-    ManifestDifference,
     ManifestPhotograph,
     PhotographManifest,
     manifest_differences,
@@ -40,7 +39,6 @@ class SourcePhotograph:
 class PhotographResult:
     mountain_id: UUID
     slug: str
-    source_identifier: str | None
     file_url: str | None
     outcome: MaterializationOutcome
     detail: str | None = None
@@ -68,6 +66,7 @@ class MaterializationReport:
         download and verify all of them."""
         complete = self.covers_the_catalog and all(
             result.source is not None
+            and result.file_url is not None
             and result.outcome
             in (MaterializationOutcome.MATERIALIZED, MaterializationOutcome.VERIFIED)
             for result in self.results
@@ -79,7 +78,6 @@ class MaterializationReport:
             ManifestPhotograph(
                 mountain_id=result.mountain_id,
                 slug=result.slug,
-                source_identifier=result.source_identifier,
                 file_url=result.file_url,
                 sha256=result.source.sha256,
                 bytes=result.source.bytes,
@@ -97,9 +95,9 @@ class MaterializePhotographs:
     objects exist, so a rerun resumes where a failed run stopped.
 
     The manifest decides what is downloaded: only the pinned file URL of a pinned photograph,
-    since a draft's file URL is typed by an editor and the operator's network may reach hosts
-    the editor cannot. A photograph the manifest does not pin is materialized only from an
-    explicit file. An uploaded photograph already has its media and is left alone.
+    since the operator's network may reach hosts an editor's browser cannot. A photograph the
+    manifest does not pin is materialized only from an explicit file. A photograph that already
+    has media, an uploaded one included, is left alone and is not compared with the manifest.
     """
 
     def __init__(
@@ -152,13 +150,13 @@ class MaterializePhotographs:
     ) -> PhotographResult:
         mountain = entry.mountain
         image = mountain.primary_image
-        file_url = entry.image_provenance.legacy_file_url
+        pinned = manifest.pin_for(mountain.id)
+        file_url = None if pinned is None else pinned.file_url
 
         def result(outcome, detail=None, source=None):
             return PhotographResult(
                 mountain_id=mountain.id,
                 slug=mountain.slug,
-                source_identifier=image.source_identifier,
                 file_url=file_url,
                 outcome=outcome,
                 detail=detail,
@@ -168,25 +166,14 @@ class MaterializePhotographs:
         def failed(detail, source=None):
             return result(MaterializationOutcome.FAILED, detail, source)
 
-        pinned = manifest.pin_for(mountain.id, file_url)
-
         if image.media is not None:
-            if pinned is not None:
-                difference = _first_difference(
-                    pinned, entry, image.media.original_sha256, image.dimensions, None
-                )
-                if difference:
-                    return failed(difference)
             return result(MaterializationOutcome.ALREADY_ATTACHED)
 
         if image.dimensions is None:
             return failed("the photograph has no dimensions to verify the file against")
 
-        if file is None:
-            if pinned is None:
-                return failed("the manifest has no photograph for this mountain; pass its file")
-            if pinned.file_url != file_url:
-                return failed(ManifestDifference.FILE_URL.value)
+        if file is None and pinned is None:
+            return failed("the manifest has no photograph for this mountain; pass its file")
 
         try:
             data = file if file is not None else self._fetcher.fetch(file_url)
@@ -211,9 +198,7 @@ class MaterializePhotographs:
             )
 
         if pinned is not None:
-            difference = _first_difference(
-                pinned, entry, source.sha256, source.dimensions, source.bytes
-            )
+            difference = _first_difference(pinned, source)
             if difference:
                 return failed(difference, source)
 
@@ -226,7 +211,7 @@ class MaterializePhotographs:
             return failed(f"storage failed: {_describe(error)}", source)
 
         try:
-            outcome = self._writer.attach_media(mountain.id, file_url, image.dimensions, media)
+            outcome = self._writer.attach_media(mountain.id, image.dimensions, media)
         except InfrastructureError as error:
             return failed(f"stored but not attached: {_describe(error)}", source)
 
@@ -241,20 +226,9 @@ class MaterializePhotographs:
                 return failed("stored but not attached: the photograph is gone", source)
 
 
-def _first_difference(
-    pinned: ManifestPhotograph,
-    entry: CatalogMountain,
-    sha256: str,
-    dimensions: ImageDimensions | None,
-    size: int | None,
-) -> str | None:
+def _first_difference(pinned: ManifestPhotograph, source: SourcePhotograph) -> str | None:
     differences = manifest_differences(
-        pinned,
-        file_url=entry.image_provenance.legacy_file_url,
-        source_identifier=entry.mountain.primary_image.source_identifier,
-        sha256=sha256,
-        dimensions=dimensions,
-        size=size,
+        pinned, sha256=source.sha256, dimensions=source.dimensions, size=source.bytes
     )
 
     return differences[0].value if differences else None

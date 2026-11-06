@@ -9,9 +9,9 @@ from serendipeak.errors import InfrastructureError
 
 class Command(BaseCommand):
     help = (
-        "Check that every photograph of the catalog has owned media, and that the photographs"
-        " the manifest pins are the pinned ones. Without options only the catalog is read."
-        " Exits non-zero when any photograph has a problem."
+        "Check that every photograph of the catalog has complete owned media. With --manifest,"
+        " also that the photographs it pins are the pinned ones. Without options only the"
+        " catalog is read. Exits non-zero when any photograph has a problem."
     )
 
     def add_arguments(self, parser):
@@ -28,17 +28,26 @@ class Command(BaseCommand):
 
         parser.add_argument(
             "--manifest",
+            nargs="?",
+            const=True,
             type=Path,
             metavar="PATH",
-            help="the manifest the photographs must match (default: the committed one)",
+            help=(
+                "also check that the photographs the manifest pins are the pinned ones, which"
+                " proves the import and holds only until an editor replaces one (default"
+                " manifest: the committed one)"
+            ),
         )
 
     def handle(self, *args, **options):
         from config import composition
 
-        manifest = load_photograph_manifest(
-            options["manifest"] or composition.PHOTOGRAPH_MANIFEST_PATH
-        )
+        path = options["manifest"]
+        manifest = None
+        if path is not None:
+            manifest = load_photograph_manifest(
+                composition.PHOTOGRAPH_MANIFEST_PATH if path is True else path
+            )
 
         try:
             report = composition.build_check_photograph_media(manifest).execute(

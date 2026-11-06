@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import type { APIRequestContext } from '@playwright/test';
+import { serendipeakDocument } from '../stub-api/serendipeak-contract.mjs';
 
 export const STUB_API_URL = `http://127.0.0.1:${process.env.STUB_API_PORT ?? 8099}`;
 
 const CONTRACTS = new URL('../../../../contracts/v1/', import.meta.url);
 
+/** A vendored v1 document, as SerendiPeak serves it. */
 export function fixture<T>(name: string): T {
-	return JSON.parse(readFileSync(new URL(name, CONTRACTS), 'utf8')) as T;
+	return serendipeakDocument(JSON.parse(readFileSync(new URL(name, CONTRACTS), 'utf8')) as T);
 }
 
 export async function resetStub(request: APIRequestContext) {

@@ -12,7 +12,6 @@ pytestmark = pytest.mark.django_db
 
 FUJI = seeded_mountain("fuji")
 IMAGE = FUJI.mountain.primary_image
-FILE_URL = FUJI.image_provenance.legacy_file_url
 MEDIA = photograph_media("b" * 64)
 
 
@@ -23,7 +22,7 @@ def writer():
 
 
 def attach(writer, media=MEDIA):
-    return writer.attach_media(FUJI.mountain.id, FILE_URL, IMAGE.dimensions, media)
+    return writer.attach_media(FUJI.mountain.id, IMAGE.dimensions, media)
 
 
 def test_attaching_changes_only_the_media_columns(writer):

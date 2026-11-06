@@ -8,17 +8,8 @@ from serendipeak.catalog.entities import ImageDimensions, Mountain, PhotographMe
 
 
 @dataclass(frozen=True, slots=True)
-class ImageProvenance:
-    legacy_file_url: str | None
-    license_reported: str | None
-    license_election_basis_url: str | None
-    approved_on: date | None
-
-
-@dataclass(frozen=True, slots=True)
 class CatalogMountain:
     mountain: Mountain
-    image_provenance: ImageProvenance | None
     created_at: datetime
     updated_at: datetime
 
@@ -64,15 +55,13 @@ class PhotographMediaWriter(Protocol):
     def attach_media(
         self,
         mountain_id: UUID,
-        expected_file_url: str,
         expected_dimensions: ImageDimensions,
         media: PhotographMedia,
     ) -> AttachOutcome:
         """Atomically attach media to the photograph of a mountain that has none yet.
 
-        Applied only while the photograph still has expected_file_url and
-        expected_dimensions, the ones the media was verified against. ALREADY_ATTACHED when
-        it already holds exactly this media, STALE when it holds other media or its file URL
-        or dimensions changed, NOT_FOUND when the mountain or its photograph is gone. Nothing
-        else about the mountain changes, its updated_at included.
+        Applied only while the photograph still has expected_dimensions, the ones the media
+        was verified against. ALREADY_ATTACHED when it already holds exactly this media, STALE
+        when it holds other media or its dimensions changed, NOT_FOUND when the mountain or its
+        photograph is gone. Nothing else about the mountain changes, its updated_at included.
         """

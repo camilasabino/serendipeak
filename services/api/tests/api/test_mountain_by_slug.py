@@ -21,7 +21,7 @@ from tests.support.catalog import (
     committed_seed_with_media,
     media_of,
 )
-from tests.support.contract_fixtures import load_fixture, served_with_owned_media
+from tests.support.contract_fixtures import load_fixture, served_by_serendipeak
 
 CONTENT_TYPE = "application/json; charset=utf-8"
 NOT_FOUND = load_fixture("error-mountain-not-found.json")
@@ -32,7 +32,6 @@ INTERNAL = load_fixture("error-internal.json")
 def catalog(db):
     bare = CatalogMountain(
         mountain=bare_mountain(),
-        image_provenance=None,
         created_at=CREATED_AT,
         updated_at=UPDATED_AT,
     )
@@ -59,7 +58,7 @@ def test_a_public_mountain_matches_its_fixture(catalog, client, slug, fixture):
     assert response.status_code == 200
     assert response["Content-Type"] == CONTENT_TYPE
     assert "Cache-Control" not in response
-    assert body(response) == served_with_owned_media(
+    assert body(response) == served_by_serendipeak(
         load_fixture(fixture), settings.MEDIA_PUBLIC_BASE_URL, media_of
     )
 
@@ -132,7 +131,7 @@ def test_json_is_served_whatever_the_client_asks_for(catalog, client, accept, qu
 
     assert response.status_code == 200
     assert response["Content-Type"] == CONTENT_TYPE
-    assert body(response) == served_with_owned_media(
+    assert body(response) == served_by_serendipeak(
         load_fixture("mountain-complete.json"), settings.MEDIA_PUBLIC_BASE_URL, media_of
     )
 

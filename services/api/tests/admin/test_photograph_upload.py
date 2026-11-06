@@ -1,12 +1,12 @@
 import hashlib
 import io
+import re
 import struct
 import zlib
 
 import pytest
 from django.conf import settings
 from django.contrib.admin.models import LogEntry
-from django.contrib.messages import get_messages
 from django.urls import reverse
 from PIL import ExifTags, Image
 
@@ -21,7 +21,11 @@ from serendipeak.media.filesystem_media_store import (
     FilesystemMediaStore,
 )
 from serendipeak.media.pillow_processor import PillowPhotographProcessor
-from serendipeak.persistence.admin import PHOTOGRAPH_NOT_STORED
+from serendipeak.persistence.admin import (
+    CREDIT_NOT_REVIEWED,
+    PHOTOGRAPH_NOT_STORED,
+    PHOTOGRAPH_NOT_STORED_TAG,
+)
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.admin.support import form_payload, jpeg, upload, use_fake_media_store
 from tests.support.catalog import catalog_mountain, seeded_mountain
@@ -37,9 +41,7 @@ ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
 UNSPLASH_CREDIT = {
     "image-0-source_page_url": "https://unsplash.com/photos/a-mountain-at-dawn",
-    "image-0-attribution": "Sébastien Goldberg",
-    "image-0-creator": "Sébastien Goldberg",
-    "image-0-creator_url": "https://unsplash.com/@sebastiengoldberg",
+    "image-0-author": "Sébastien Goldberg",
     "image-0-license_name": "Unsplash License",
     "image-0-license_url": "https://unsplash.com/license",
 }
@@ -52,6 +54,18 @@ NEW_MOUNTAIN = {
 }
 
 
+def selected_figure(html):
+    return re.search(r"<figure[^>]*data-photograph-selected[^>]*>", html).group(0)
+
+
+def messages_of(response):
+    return [str(message) for message in response.context["messages"]]
+
+
+def puts(store):
+    return [call for call in store.calls if call[0].startswith("put")]
+
+
 def change_url(entry):
     return reverse("admin:catalog_mountainrecord_change", args=[entry.mountain.id])
 
@@ -62,10 +76,6 @@ def transition_url(entry, kind):
 
 def stored_image(entry):
     return MountainImageRecord.objects.get(pk=entry.mountain.id)
-
-
-def messages_of(response):
-    return [str(message) for message in get_messages(response.wsgi_request)]
 
 
 def image_errors_of(response):
@@ -113,13 +123,13 @@ def keys_of(data):
     )
 
 
-def replace_photograph(client, entry, data, **overrides):
+def replace_photograph(client, entry, data, *, reviewed=True, **overrides):
     page = client.get(change_url(entry))
+    fields = {"image-0-photograph_file": upload(data), **overrides}
+    if reviewed:
+        fields.setdefault("image-0-credit_reviewed", "on")
 
-    return client.post(
-        change_url(entry),
-        form_payload(page, **{"image-0-photograph_file": upload(data), **overrides}),
-    )
+    return client.post(change_url(entry), form_payload(page, **fields))
 
 
 class RowObservingStore(FakeMediaStore):
@@ -163,8 +173,6 @@ class TestUpload:
         assert (image.original_key, image.page_key, image.viewer_key) == keys_of(data)
         assert image.original_sha256 == hashlib.sha256(data).hexdigest()
         assert (image.width, image.height) == (1600, 1200)
-        assert image.creator_url == UNSPLASH_CREDIT["image-0-creator_url"]
-        assert (image.legacy_file_url, image.source_identifier) == (None, None)
         assert media_store.originals[original_key] == (data, "image/jpeg")
         for key in (page_key, viewer_key):
             rendition, content_type = media_store.public[key]
@@ -179,9 +187,10 @@ class TestUpload:
         served = publisher_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
         assert served["url"] == f"{MEDIA_BASE_URL}/{viewer_key}"
         assert served["thumbnailUrl"] == f"{MEDIA_BASE_URL}/{page_key}"
-        assert served["creatorUrl"] == UNSPLASH_CREDIT["image-0-creator_url"]
+        assert served["sourcePageUrl"] == UNSPLASH_CREDIT["image-0-source_page_url"]
         assert (served["width"], served["height"]) == (1600, 1200)
-        assert "sourceIdentifier" not in served
+        assert served["author"] == "Sébastien Goldberg"
+        assert not {"attribution", "creator", "creatorUrl", "sourceIdentifier"} & set(served)
 
     def test_a_new_mountain_is_created_with_an_uploaded_photograph(
         self, editor_client, media_store
@@ -200,7 +209,7 @@ class TestUpload:
         assert image.original_key == keys_of(data)[0]
         assert set(keys_of(data)) == set(media_store.originals) | set(media_store.public)
 
-    def test_the_change_page_previews_the_stored_page_rendition_and_accepts_only_images(
+    def test_the_change_page_shows_the_saved_photograph_and_asks_for_the_essentials(
         self, editor_client, load_catalog
     ):
         load_catalog(ACTIVE)
@@ -209,18 +218,58 @@ class TestUpload:
         html = editor_client.get(change_url(ACTIVE)).content.decode()
 
         assert f'src="{MEDIA_BASE_URL}/{page_key}"' in html
+        assert "Saved photograph" in html
         assert 'accept="image/jpeg,image/png,image/webp"' in html
         assert 'enctype="multipart/form-data"' in html
-        assert "serendipeak/admin/photograph-preview.js" in html
-        assert "Replace photograph" in html
+        assert "serendipeak/admin/photograph-upload.js" in html
+        assert "Author" in html and "Photo page URL" in html
+        assert "hidden" in selected_figure(html)
 
-    def test_a_photograph_without_media_offers_no_stored_preview(self, editor_client, load_catalog):
+    def test_the_form_asks_for_the_photograph_the_author_the_page_and_the_license(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        context = editor_client.get(change_url(ACTIVE)).context
+        form = next(iter(context["inline_admin_formsets"][0]))
+        fieldsets = list(form)
+
+        assert [(fieldset.name, fieldset.is_collapsible) for fieldset in fieldsets] == [
+            (None, False),
+            ("License", False),
+            ("Technical details", True),
+        ]
+        main, license = (
+            [
+                field.field.name if hasattr(field.field, "name") else field.field["name"]
+                for line in fieldset
+                for field in line
+            ]
+            for fieldset in fieldsets[:2]
+        )
+        assert main == ["photograph_file", "author", "source_page_url", "credit_reviewed"]
+        assert license == ["license_name", "license_url"]
+
+    def test_only_the_author_and_the_photograph_are_required(self, editor_client, load_catalog):
+        load_catalog(BARE_DRAFT)
+        fields = (
+            editor_client.get(change_url(BARE_DRAFT))
+            .context["inline_admin_formsets"][0]
+            .formset.forms[0]
+            .fields
+        )
+
+        assert {name for name, field in fields.items() if field.required} == {
+            "photograph_file",
+            "author",
+        }
+
+    def test_a_photograph_without_media_offers_no_saved_preview(self, editor_client, load_catalog):
         awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
         load_catalog(awaiting)
 
         html = editor_client.get(change_url(awaiting)).content.decode()
 
-        assert "Current photograph" not in html
+        assert "Saved photograph" not in html
         assert "Not stored yet" in html
 
     def test_a_license_url_needs_its_license_name(self, editor_client, load_catalog, media_store):
@@ -242,7 +291,101 @@ class TestUpload:
         assert response.status_code == 200
         assert "license_name" in image_errors_of(response)
         assert not MountainImageRecord.objects.filter(pk=BARE_DRAFT.mountain.id).exists()
-        assert media_store.originals == {} and media_store.public == {}
+
+
+class TestOptionalPageAndLicense:
+    OWN_PHOTOGRAPH = {
+        "image-0-author": "Camila Sabino",
+        "image-0-source_page_url": "",
+        "image-0-license_name": "",
+        "image-0-license_url": "",
+    }
+
+    def test_a_photograph_needs_neither_a_page_nor_a_license_to_be_saved_and_published(
+        self, publisher_client, load_catalog, media_store
+    ):
+        load_catalog(BARE_DRAFT)
+        page = publisher_client.get(change_url(BARE_DRAFT))
+
+        response = publisher_client.post(
+            change_url(BARE_DRAFT),
+            form_payload(
+                page, **{"image-0-photograph_file": upload(jpeg()), **self.OWN_PHOTOGRAPH}
+            ),
+        )
+
+        assert response.status_code == 302
+        image = stored_image(BARE_DRAFT)
+        assert (image.source_page_url, image.license_name, image.license_url) == (None, None, None)
+        assert publisher_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
+        served = publisher_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
+        assert served["author"] == "Camila Sabino"
+        assert not {"sourcePageUrl", "license", "licenseUrl"} & set(served)
+
+    def test_a_page_does_not_stand_in_for_a_license(
+        self, publisher_client, load_catalog, media_store
+    ):
+        load_catalog(BARE_DRAFT)
+        page = publisher_client.get(change_url(BARE_DRAFT))
+
+        response = publisher_client.post(
+            change_url(BARE_DRAFT),
+            form_payload(
+                page,
+                **{
+                    "image-0-photograph_file": upload(jpeg()),
+                    **self.OWN_PHOTOGRAPH,
+                    "image-0-source_page_url": "https://example.com/the-photograph",
+                },
+            ),
+        )
+
+        assert response.status_code == 302
+        image = stored_image(BARE_DRAFT)
+        assert image.license_name is None
+        assert publisher_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
+
+    def test_an_author_is_required(self, editor_client, load_catalog, media_store):
+        load_catalog(BARE_DRAFT)
+        page = editor_client.get(change_url(BARE_DRAFT))
+
+        response = editor_client.post(
+            change_url(BARE_DRAFT),
+            form_payload(
+                page,
+                **{
+                    "image-0-photograph_file": upload(jpeg()),
+                    **self.OWN_PHOTOGRAPH,
+                    "image-0-author": " ",
+                },
+            ),
+        )
+
+        assert response.status_code == 200
+        assert list(image_errors_of(response)) == ["author"]
+        assert media_store.calls == []
+
+    def test_a_published_photograph_may_drop_its_page_and_its_license(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+
+        response = editor_client.post(
+            change_url(ACTIVE),
+            form_payload(
+                page,
+                **{
+                    "image-0-source_page_url": "",
+                    "image-0-license_name": "",
+                    "image-0-license_url": "",
+                },
+            ),
+        )
+
+        assert response.status_code == 302
+        image = stored_image(ACTIVE)
+        assert (image.source_page_url, image.license_name, image.license_url) == (None, None, None)
 
 
 def test_an_upload_reaches_a_real_filesystem_store(
@@ -277,7 +420,7 @@ class TestReplacement:
         response = replace_photograph(editor_client, entry, data)
 
         assert response.status_code == 302
-        assert [operation for operation, _ in store.calls if operation.startswith("put")] == [
+        assert [operation for operation, _ in puts(store)] == [
             "put_original",
             "put_public",
             "put_public",
@@ -288,7 +431,7 @@ class TestReplacement:
         assert (image.width, image.height) == (3000, 2000)
         assert MountainRecord.objects.get(pk=entry.mountain.id).status == entry.mountain.status
 
-    def test_a_replacement_clears_the_legacy_provenance_and_keeps_the_posted_credit(
+    def test_a_replacement_saves_the_reviewed_author_page_and_license(
         self, editor_client, load_catalog
     ):
         load_catalog(ACTIVE)
@@ -297,31 +440,21 @@ class TestReplacement:
 
         assert response.status_code == 302
         image = stored_image(ACTIVE)
-        assert image.legacy_file_url is None
-        assert image.source_identifier is None
-        assert image.license_reported is None
-        assert image.license_election_basis_url is None
-        assert image.approved_on is None
-        assert image.attribution == UNSPLASH_CREDIT["image-0-attribution"]
+        assert image.author == UNSPLASH_CREDIT["image-0-author"]
         assert image.source_page_url == UNSPLASH_CREDIT["image-0-source_page_url"]
         assert image.license_name == UNSPLASH_CREDIT["image-0-license_name"]
-        html = editor_client.get(change_url(ACTIVE)).content.decode()
-        assert "Legacy provenance" not in html
+        assert image.license_url == UNSPLASH_CREDIT["image-0-license_url"]
 
     def test_a_replacement_bumps_updated_at_and_records_the_change(
         self, editor_client, load_catalog
     ):
         load_catalog(ACTIVE)
-        data = jpeg()
 
-        replace_photograph(editor_client, ACTIVE, data)
+        replace_photograph(editor_client, ACTIVE, jpeg())
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
         assert record.updated_at > ACTIVE.updated_at
-        short_checksum = hashlib.sha256(data).hexdigest()[:12]
-        assert LogEntry.objects.get().get_change_message() == (
-            f"Changed Replace photograph for mountain image record “SHA-256 {short_checksum}”."
-        )
+        assert "Photograph" in LogEntry.objects.get().get_change_message()
 
     def test_saving_without_a_file_keeps_the_current_photograph(
         self, editor_client, load_catalog, media_store
@@ -330,17 +463,16 @@ class TestReplacement:
         page = editor_client.get(change_url(ACTIVE))
 
         response = editor_client.post(
-            change_url(ACTIVE), form_payload(page, **{"image-0-attribution": "New credit"})
+            change_url(ACTIVE), form_payload(page, **{"image-0-author": "New credit"})
         )
 
         assert response.status_code == 302
         image = stored_image(ACTIVE)
         assert image.original_sha256 == ACTIVE.mountain.primary_image.media.original_sha256
-        assert image.source_identifier == ACTIVE.mountain.primary_image.source_identifier
-        assert image.attribution == "New credit"
+        assert image.author == "New credit"
         assert media_store.calls == []
 
-    def test_a_replacement_the_gate_refuses_stores_nothing(
+    def test_a_replacement_the_gate_refuses_changes_no_row(
         self, editor_client, load_catalog, media_store
     ):
         load_catalog(INACTIVE)
@@ -354,14 +486,152 @@ class TestReplacement:
         assert inline_errors_of(response) == [
             "Not allowed on a published mountain: the camera framing is missing."
         ]
-        assert media_store.originals == {} and media_store.public == {}
         image = stored_image(INACTIVE)
         assert image.original_sha256 == INACTIVE.mountain.primary_image.media.original_sha256
 
 
+class TestCreditReview:
+    def test_a_replacement_that_keeps_the_previous_credit_unreviewed_is_refused(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+
+        response = replace_photograph(editor_client, ACTIVE, jpeg(), reviewed=False)
+
+        assert response.status_code == 200
+        assert image_errors_of(response) == {"credit_reviewed": [CREDIT_NOT_REVIEWED]}
+        image = stored_image(ACTIVE)
+        assert image.original_sha256 == ACTIVE.mountain.primary_image.media.original_sha256
+
+    def test_confirming_that_the_credit_still_applies_saves_the_replacement(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        data = jpeg()
+
+        response = replace_photograph(editor_client, ACTIVE, data, reviewed=True)
+
+        assert response.status_code == 302
+        image = stored_image(ACTIVE)
+        assert image.original_sha256 == hashlib.sha256(data).hexdigest()
+        assert image.author == ACTIVE.mountain.primary_image.author
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"image-0-author": "Another photographer"},
+            {"image-0-source_page_url": "https://unsplash.com/photos/another"},
+            {"image-0-license_name": "CC BY 4.0"},
+            {"image-0-license_url": "https://creativecommons.org/licenses/by/4.0/"},
+        ],
+    )
+    def test_changing_any_credit_field_is_a_review(self, editor_client, load_catalog, change):
+        load_catalog(ACTIVE)
+
+        response = replace_photograph(editor_client, ACTIVE, jpeg(), reviewed=False, **change)
+
+        assert response.status_code == 302
+
+    def test_the_credit_alone_can_change_without_a_file_or_a_review(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+
+        response = editor_client.post(
+            change_url(ACTIVE), form_payload(page, **{"image-0-author": "Corrected credit"})
+        )
+
+        assert response.status_code == 302
+
+    def test_adding_a_photograph_asks_for_no_review(self, editor_client):
+        html = editor_client.get(ADD_URL).content.decode()
+
+        assert "credit_reviewed" not in html
+
+
+class TestARefusedSubmissionStoresNothing:
+    """The chosen file is kept by the page in the browser; the server keeps nothing for it."""
+
+    def test_a_refused_save_stores_no_object_and_keeps_what_was_typed(
+        self, editor_client, load_catalog, media_store
+    ):
+        load_catalog(ACTIVE)
+
+        response = replace_photograph(
+            editor_client, ACTIVE, jpeg((3000, 2000)), **{"image-0-author": "", "summary": "Typed."}
+        )
+
+        assert response.status_code == 200
+        assert "author" in image_errors_of(response)
+        html = response.content.decode()
+        assert "Typed." in html
+        assert "hidden" in selected_figure(html)
+        assert media_store.calls == []
+
+    def test_a_refusal_by_another_form_stores_no_object_either(
+        self, editor_client, load_catalog, media_store
+    ):
+        load_catalog(ACTIVE)
+
+        response = replace_photograph(editor_client, ACTIVE, jpeg(), slug="Not A Slug")
+
+        assert response.status_code == 200
+        assert media_store.calls == []
+        assert stored_image(ACTIVE).original_sha256 == (
+            ACTIVE.mountain.primary_image.media.original_sha256
+        )
+
+    def test_a_refusal_by_the_publication_gate_stores_no_object(
+        self, editor_client, load_catalog, media_store
+    ):
+        load_catalog(INACTIVE)
+        MountainRecord.objects.filter(pk=INACTIVE.mountain.id).update(
+            camera_framing_x=None, camera_framing_y=None
+        )
+
+        response = replace_photograph(editor_client, INACTIVE, jpeg())
+
+        assert response.status_code == 200
+        assert media_store.calls == []
+
+    def test_a_refused_new_mountain_stores_no_object(self, editor_client, media_store):
+        payload = form_payload(
+            editor_client.get(ADD_URL),
+            **{**NEW_MOUNTAIN, "slug": ""},
+            **{"image-0-photograph_file": upload(jpeg()), **UNSPLASH_CREDIT},
+        )
+
+        response = editor_client.post(ADD_URL, payload)
+
+        assert response.status_code == 200
+        assert media_store.calls == []
+        assert not MountainRecord.objects.exists()
+
+    def test_the_page_carries_the_script_that_keeps_the_chosen_file(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+
+        html = replace_photograph(editor_client, ACTIVE, jpeg(), slug="").content.decode()
+
+        assert "serendipeak/admin/photograph-upload.js" in html
+        assert "data-photograph-cancel" in html
+
+    def test_a_new_photograph_still_needs_a_file(self, editor_client):
+        response = editor_client.post(
+            ADD_URL,
+            form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN, **UNSPLASH_CREDIT),
+        )
+
+        assert response.status_code == 200
+        assert list(image_errors_of(response)) == ["photograph_file"]
+        assert image_errors_of(response)["photograph_file"] == ["This field is required."]
+
+
 class TestStorageFailure:
     @pytest.mark.parametrize("failing", ["original", "viewer"])
-    def test_a_failed_store_changes_nothing_and_reports_it(
+    def test_a_failed_store_changes_nothing_and_says_so(
         self, editor_client, load_catalog, media_store, failing
     ):
         load_catalog(ACTIVE)
@@ -372,13 +642,19 @@ class TestStorageFailure:
 
         response = editor_client.post(
             change_url(ACTIVE),
-            form_payload(page, summary="Edited.", **{"image-0-photograph_file": upload(data)}),
+            form_payload(
+                page,
+                summary="Edited.",
+                **{"image-0-photograph_file": upload(data), "image-0-credit_reviewed": "on"},
+            ),
             follow=True,
         )
 
         assert response.status_code == 200
         assert response.redirect_chain == [(change_url(ACTIVE), 302)]
         assert messages_of(response) == [PHOTOGRAPH_NOT_STORED]
+        tags = [message.tags for message in response.context["messages"]]
+        assert tags == [f"{PHOTOGRAPH_NOT_STORED_TAG} error"]
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
         assert (record.summary, record.updated_at) == (
             ACTIVE.mountain.summary,
@@ -386,7 +662,7 @@ class TestStorageFailure:
         )
         image = stored_image(ACTIVE)
         assert image.original_sha256 == ACTIVE.mountain.primary_image.media.original_sha256
-        assert image.source_identifier == ACTIVE.mountain.primary_image.source_identifier
+        assert image.author == ACTIVE.mountain.primary_image.author
         assert not LogEntry.objects.exists()
         if failing == "viewer":
             assert set(media_store.originals) == {original_key}
@@ -426,8 +702,20 @@ class TestRejectedFiles:
             ),
             (jpeg((400, 300))[:300], "The file is damaged or incomplete."),
             (png_claiming(10_000, 10_000), "The photograph has too many pixels to be processed."),
+            (
+                png_claiming(5_000, 5_000),
+                "The file is damaged or incomplete.",
+            ),
         ],
-        ids=["not-an-image", "gif", "tiff", "animated", "truncated", "too-many-pixels"],
+        ids=[
+            "not-an-image",
+            "gif",
+            "tiff",
+            "animated",
+            "truncated",
+            "too-many-pixels",
+            "fewer-pixels-than-declared",
+        ],
     )
     def test_each_rejected_file_is_a_field_error_and_nothing_is_stored(
         self, editor_client, load_catalog, media_store, data, message

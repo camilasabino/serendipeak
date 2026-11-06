@@ -8,9 +8,8 @@ const image: MountainImage = {
 		'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a0/Aconcagua.jpg/1280px-Aconcagua.jpg',
 	width: 4994,
 	height: 2758,
-	attribution: 'Someone',
-	sourcePageUrl: 'https://commons.wikimedia.org/wiki/File:Aconcagua.jpg',
-	sourceIdentifier: 'File:Aconcagua.jpg'
+	author: 'Someone',
+	sourcePageUrl: 'https://commons.wikimedia.org/wiki/File:Aconcagua.jpg'
 };
 
 const without = (patch: Partial<MountainImage>): MountainImage => ({ ...image, ...patch });

@@ -22,7 +22,6 @@ from tests.support.catalog import (
     catalog_seed,
     photograph_media,
     primary_image,
-    with_file_url,
     with_mountain,
 )
 from tests.support.fakes import (
@@ -36,18 +35,17 @@ ACONCAGUA_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua20
 FUJI_URL = "https://upload.wikimedia.org/wikipedia/commons/1/1b/Fuji.jpg"
 ACONCAGUA = catalog_mountain(
     "aconcagua",
-    file_url=ACONCAGUA_URL,
     primary_image=primary_image(media=None, dimensions=ImageDimensions(4994, 2758)),
 )
 FUJI = catalog_mountain(
     "fuji",
-    file_url=FUJI_URL,
     primary_image=primary_image(media=None, dimensions=ImageDimensions(3000, 2000)),
 )
 BARE = catalog_mountain("bare-peak", primary_image=None)
 ACONCAGUA_FILE = b"4994x2758:aconcagua"
 FUJI_FILE = b"3000x2000:fuji"
 FILES = {ACONCAGUA_URL: ACONCAGUA_FILE, FUJI_URL: FUJI_FILE}
+URLS = {"aconcagua": ACONCAGUA_URL, "fuji": FUJI_URL}
 
 
 KNOWN = (ACONCAGUA, FUJI)
@@ -74,11 +72,7 @@ class Arrangement:
         self.media_store = FakeMediaStore()
         self.writer = self.catalog
         self.manifest = manifest_for(
-            *(
-                (entry, FILES[entry.image_provenance.legacy_file_url])
-                for entry in entries
-                if entry in KNOWN
-            )
+            *((entry, FILES[URLS[entry.mountain.slug]]) for entry in entries if entry in KNOWN)
         )
         self.use_case = MaterializePhotographs(
             self.catalog,
@@ -110,8 +104,7 @@ def manifest_for(*pairs):
         ManifestPhotograph(
             mountain_id=entry.mountain.id,
             slug=entry.mountain.slug,
-            source_identifier=entry.mountain.primary_image.source_identifier,
-            file_url=entry.image_provenance.legacy_file_url,
+            file_url=URLS[entry.mountain.slug],
             sha256=sha256(data),
             bytes=len(data),
             dimensions=entry.mountain.primary_image.dimensions,
@@ -234,7 +227,9 @@ def test_a_partial_upload_attaches_nothing_and_a_rerun_uploads_only_what_is_miss
 
 def test_a_photograph_changed_during_the_run_is_stale_and_left_alone():
     arranged = Arrangement(FUJI)
-    changed = with_file_url(FUJI, "https://example.com/other.jpg")
+    changed = with_mountain(
+        FUJI, primary_image=replace(FUJI.mountain.primary_image, dimensions=ImageDimensions(10, 10))
+    )
 
     class ChangingFetcher(FakeSourceImageFetcher):
         def fetch(self, url):
@@ -272,9 +267,9 @@ def test_a_photograph_attached_concurrently_is_reported_as_already_attached():
     arranged = Arrangement(FUJI)
 
     class ConcurrentWriter:
-        def attach_media(self, mountain_id, url, dimensions, media):
-            arranged.catalog.attach_media(mountain_id, url, dimensions, media)
-            return arranged.catalog.attach_media(mountain_id, url, dimensions, media)
+        def attach_media(self, mountain_id, dimensions, media):
+            arranged.catalog.attach_media(mountain_id, dimensions, media)
+            return arranged.catalog.attach_media(mountain_id, dimensions, media)
 
     arranged.writer = ConcurrentWriter()
 
@@ -403,26 +398,6 @@ def test_an_empty_manifest_authorizes_no_download():
     assert arranged.stored() == set()
 
 
-def test_a_file_url_the_manifest_does_not_pin_is_never_fetched():
-    arranged = Arrangement(with_file_url(FUJI, "https://internal.example/fuji.jpg"))
-
-    report = arranged.run(manifest=manifest_for((FUJI, FUJI_FILE)))
-
-    assert report.failed[0].detail == "the manifest pins another file URL"
-    assert arranged.fetcher.fetched == []
-    assert arranged.stored() == set()
-
-
-def test_a_manifest_pinning_another_source_identifier_is_reported():
-    other = replace(FUJI.mountain.primary_image, source_identifier="File:Other.jpg")
-    arranged = Arrangement(with_mountain(FUJI, primary_image=other))
-
-    report = arranged.run(manifest=manifest_for((FUJI, FUJI_FILE)))
-
-    assert report.failed[0].detail == "the manifest pins another source identifier"
-    assert arranged.stored() == set()
-
-
 def test_the_file_of_a_pinned_photograph_is_checked_against_the_manifest():
     arranged = Arrangement(FUJI)
 
@@ -434,7 +409,7 @@ def test_the_file_of_a_pinned_photograph_is_checked_against_the_manifest():
     assert arranged.stored() == set()
 
 
-def test_attached_media_is_checked_against_the_manifest_without_downloading():
+def test_attached_media_is_left_alone_and_not_compared_with_the_manifest():
     attached = with_mountain(
         FUJI,
         primary_image=replace(FUJI.mountain.primary_image, media=photograph_media("a" * 64)),
@@ -443,20 +418,19 @@ def test_attached_media_is_checked_against_the_manifest_without_downloading():
 
     report = arranged.run(manifest=manifest_for((FUJI, FUJI_FILE)))
 
-    assert report.failed[0].detail.startswith("checksum_differs")
+    assert arranged.outcomes(report) == {"fuji": MaterializationOutcome.ALREADY_ATTACHED}
     assert arranged.fetcher.fetched == []
 
 
 def uploaded_replacement(entry):
-    """The photograph after an editor uploaded a replacement: new media, no legacy provenance."""
+    """The photograph after an editor uploaded a replacement: new media and dimensions."""
     image = replace(
         entry.mountain.primary_image,
         media=photograph_media("b" * 64),
         dimensions=ImageDimensions(4000, 3000),
-        source_identifier=None,
     )
 
-    return with_file_url(with_mountain(entry, primary_image=image), None)
+    return with_mountain(entry, primary_image=image)
 
 
 def test_an_uploaded_replacement_of_a_pinned_photograph_is_left_alone():

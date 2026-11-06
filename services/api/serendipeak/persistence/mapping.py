@@ -1,6 +1,6 @@
 from django.contrib.gis.geos import Point
 
-from serendipeak.catalog.bootstrap.ports import CatalogDiscovery, CatalogMountain, ImageProvenance
+from serendipeak.catalog.bootstrap.ports import CatalogDiscovery, CatalogMountain
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
@@ -52,18 +52,8 @@ def to_daily_mountain(record: DailyDiscoveryRecord) -> DailyMountain:
 
 
 def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:
-    image = _image_of(record)
-
     return CatalogMountain(
         mountain=to_mountain(record),
-        image_provenance=None
-        if image is None
-        else ImageProvenance(
-            legacy_file_url=image.legacy_file_url,
-            license_reported=image.license_reported,
-            license_election_basis_url=image.license_election_basis_url,
-            approved_on=image.approved_on,
-        ),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -111,31 +101,21 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
     image = entry.mountain.primary_image
     if image is None:
         return None
-    provenance = entry.image_provenance
-    if provenance is None:
-        raise ValueError(f"the photograph of {entry.mountain.slug} has no legacy file URL")
     dimensions = image.dimensions
     media = image.media
 
     return MountainImageRecord(
         mountain_id=entry.mountain.id,
-        legacy_file_url=provenance.legacy_file_url,
         original_key=None if media is None else media.original_key,
         original_sha256=None if media is None else media.original_sha256,
         page_key=None if media is None else media.page_key,
         viewer_key=None if media is None else media.viewer_key,
         width=None if dimensions is None else dimensions.width,
         height=None if dimensions is None else dimensions.height,
-        creator=image.creator,
-        creator_url=image.creator_url,
-        attribution=image.attribution,
+        author=image.author,
         license_name=image.license_name,
         license_url=image.license_url,
-        license_reported=provenance.license_reported,
-        license_election_basis_url=provenance.license_election_basis_url,
         source_page_url=image.source_page_url,
-        source_identifier=image.source_identifier,
-        approved_on=provenance.approved_on,
     )
 
 
@@ -174,13 +154,10 @@ def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
         dimensions=None
         if image.width is None
         else ImageDimensions(width=image.width, height=image.height),
-        creator=image.creator,
-        creator_url=image.creator_url,
-        attribution=image.attribution,
+        author=image.author,
         license_name=image.license_name,
         license_url=image.license_url,
         source_page_url=image.source_page_url,
-        source_identifier=image.source_identifier,
     )
 
 

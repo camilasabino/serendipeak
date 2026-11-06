@@ -11,7 +11,6 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 FUJI = seeded_mountain("fuji")
 IMAGE = FUJI.mountain.primary_image
-FILE_URL = FUJI.image_provenance.legacy_file_url
 MEDIA = photograph_media("b" * 64)
 
 
@@ -32,9 +31,7 @@ def admin_save(**image_columns):
 
 
 def attach():
-    return DjangoPhotographMediaWriter().attach_media(
-        FUJI.mountain.id, FILE_URL, IMAGE.dimensions, MEDIA
-    )
+    return DjangoPhotographMediaWriter().attach_media(FUJI.mountain.id, IMAGE.dimensions, MEDIA)
 
 
 def stored_image():
@@ -42,23 +39,30 @@ def stored_image():
 
 
 def test_an_attachment_waits_for_an_admin_save_and_applies_when_the_photograph_is_unchanged():
-    outcome = run_while_a_change_holds_the_lock(admin_save(creator="Another creator"), attach)
+    outcome = run_while_a_change_holds_the_lock(admin_save(author="Another author"), attach)
 
     assert outcome is AttachOutcome.APPLIED
     image = stored_image()
     assert image.original_key == MEDIA.original_key
-    assert image.creator == "Another creator"
+    assert image.author == "Another author"
 
 
-def test_an_attachment_that_waited_for_a_new_file_url_is_stale():
-    new_url = "https://upload.wikimedia.org/wikipedia/commons/9/99/Other.jpg"
+def test_an_attachment_that_waited_for_a_replacement_leaves_it_alone():
+    other = photograph_media("c" * 64)
 
-    outcome = run_while_a_change_holds_the_lock(admin_save(legacy_file_url=new_url), attach)
+    def replacement():
+        MountainRecord.objects.select_for_update().filter(pk=FUJI.mountain.id).get()
+        MountainImageRecord.objects.filter(pk=FUJI.mountain.id).update(
+            original_key=other.original_key,
+            original_sha256=other.original_sha256,
+            page_key=other.page_key,
+            viewer_key=other.viewer_key,
+        )
+
+    outcome = run_while_a_change_holds_the_lock(replacement, attach)
 
     assert outcome is AttachOutcome.STALE
-    image = stored_image()
-    assert image.original_key is None
-    assert image.legacy_file_url == new_url
+    assert stored_image().original_key == other.original_key
 
 
 def test_an_attachment_that_waited_for_new_dimensions_is_stale():

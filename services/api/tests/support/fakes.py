@@ -40,17 +40,14 @@ class InMemoryCatalogStore:
             discoveries=tuple(sorted(self._discoveries.values(), key=lambda item: item.date)),
         )
 
-    def attach_media(self, mountain_id, expected_file_url, expected_dimensions, media):
+    def attach_media(self, mountain_id, expected_dimensions, media):
         entry = self._mountains.get(mountain_id)
         image = None if entry is None else entry.mountain.primary_image
         if image is None:
             return AttachOutcome.NOT_FOUND
         if image.media is not None:
             return AttachOutcome.ALREADY_ATTACHED if image.media == media else AttachOutcome.STALE
-        if (
-            entry.image_provenance.legacy_file_url != expected_file_url
-            or image.dimensions != expected_dimensions
-        ):
+        if image.dimensions != expected_dimensions:
             return AttachOutcome.STALE
 
         self.replace(

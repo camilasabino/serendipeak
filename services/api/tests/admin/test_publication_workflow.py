@@ -291,7 +291,7 @@ class TestCommittedCatalogParity:
                 range_name="Edited range",
                 countries="Edited country",
                 prominence_meters="1",
-                **{"image-0-creator": "Edited creator", "image-0-attribution": "Edited credit"},
+                **{"image-0-author": "Edited credit"},
             )
 
             assert publisher_client.post(url, payload).status_code == 302

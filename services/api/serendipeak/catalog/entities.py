@@ -58,13 +58,10 @@ class PhotographMedia:
 class PrimaryImage:
     media: PhotographMedia | None
     dimensions: ImageDimensions | None
-    creator: str | None
-    creator_url: str | None
-    attribution: str
+    author: str
     license_name: str | None
     license_url: str | None
-    source_page_url: str
-    source_identifier: str | None
+    source_page_url: str | None
 
 
 @dataclass(frozen=True, slots=True)

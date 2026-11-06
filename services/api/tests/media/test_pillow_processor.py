@@ -257,6 +257,14 @@ def test_a_png_with_damaged_pixel_data_is_corrupt():
     assert rejection(bytes(data)) is PhotographRejection.CORRUPT
 
 
+def test_a_png_with_fewer_pixels_than_its_header_declares_is_corrupt():
+    # The chunks are valid, so verify() passes; reading the metadata is what decodes the pixels
+    # first, and it must be refused like any other damaged file instead of escaping as OSError.
+    data = with_png_size(encoded(photograph((1, 1)), "PNG"), 5_000, 5_000)
+
+    assert rejection(data) is PhotographRejection.CORRUPT
+
+
 @pytest.mark.parametrize(("width", "height"), [(10_000, 10_000), (5_001, 5_000)])
 def test_a_png_header_over_25_megapixels_is_rejected_before_decoding(width, height):
     data = with_png_size(encoded(photograph((1, 1)), "PNG"), width, height)

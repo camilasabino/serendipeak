@@ -147,7 +147,7 @@ jobs:
             sleep 1
           done
           # The CI database is discarded with the job, so persisting today's discovery is safe.
-          node ../../contracts/v1/verify-api.mjs "$API_BASE_URL" --include-stateful-today
+          node ../../scripts/verify-api.mjs "$API_BASE_URL" --include-stateful-today
 
       - name: Show the API server log
         if: failure() && steps.live-api.outcome == 'failure'

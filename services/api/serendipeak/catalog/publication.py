@@ -18,8 +18,8 @@ class PublicationViolation(StrEnum):
     CAMERA_FRAMING_OUT_OF_BOUNDS = "camera_framing_out_of_bounds"
     PRIMARY_IMAGE_MISSING = "primary_image_missing"
     IMAGE_MEDIA_MISSING = "image_media_missing"
-    IMAGE_ATTRIBUTION_MISSING = "image_attribution_missing"
-    IMAGE_SOURCE_PAGE_URL_MISSING = "image_source_page_url_missing"
+    IMAGE_AUTHOR_MISSING = "image_author_missing"
+    IMAGE_LICENSE_URL_WITHOUT_LICENSE = "image_license_url_without_license"
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
     SUMMARY_INVALID = "summary_invalid"
     LINK_NOT_HTTPS = "link_not_https"
@@ -29,7 +29,6 @@ class PublicLinkField(StrEnum):
     WIKIPEDIA_URL = "wikipedia_url"
     IMAGE_SOURCE_PAGE_URL = "image_source_page_url"
     IMAGE_LICENSE_URL = "image_license_url"
-    IMAGE_CREATOR_URL = "image_creator_url"
 
 
 def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ...]:
@@ -64,7 +63,6 @@ def unsafe_public_links(mountain: Mountain) -> tuple[PublicLinkField, ...]:
             [
                 (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
                 (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
-                (PublicLinkField.IMAGE_CREATOR_URL, image.creator_url),
             ]
         )
 
@@ -105,13 +103,14 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
 def image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
     if image is None:
         return [PublicationViolation.PRIMARY_IMAGE_MISSING]
-    # The license and the legacy source identifier are optional: a photograph from any source
-    # is publishable with its file, its credit and the page it comes from.
-    required = (
-        (image.attribution, PublicationViolation.IMAGE_ATTRIBUTION_MISSING),
-        (image.source_page_url, PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING),
-    )
-    violations = [violation for value, violation in required if _is_blank(value)]
+    # A photograph is publishable with its file and its author. The page it comes from does not
+    # stand in for the rights to use it, so neither the page nor the license is required; a
+    # license URL, though, has to say which license it is.
+    violations = []
+    if _is_blank(image.author):
+        violations.append(PublicationViolation.IMAGE_AUTHOR_MISSING)
+    if not _is_blank(image.license_url) and _is_blank(image.license_name):
+        violations.append(PublicationViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE)
 
     if image.media is None:
         violations.insert(0, PublicationViolation.IMAGE_MEDIA_MISSING)

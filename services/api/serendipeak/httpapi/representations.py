@@ -67,13 +67,10 @@ def _primary_image(image: PrimaryImage | None, media_base_url: str) -> dict[str,
             "thumbnailUrl": public_url(media_base_url, image.media.page_key),
             "width": None if dimensions is None else dimensions.width,
             "height": None if dimensions is None else dimensions.height,
-            "creator": image.creator,
-            "creatorUrl": image.creator_url,
-            "attribution": image.attribution,
+            "author": image.author,
             "license": image.license_name,
             "licenseUrl": image.license_url,
             "sourcePageUrl": image.source_page_url,
-            "sourceIdentifier": image.source_identifier,
         }
     )
 

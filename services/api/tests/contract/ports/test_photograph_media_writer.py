@@ -18,7 +18,6 @@ from tests.support.fakes import InMemoryCatalogStore
 
 FUJI = seeded_mountain("fuji")
 IMAGE = FUJI.mountain.primary_image
-FILE_URL = FUJI.image_provenance.legacy_file_url
 ATTACHED = with_mountain(
     catalog_mountain("aconcagua"),
     primary_image=replace(IMAGE, media=photograph_media("a" * 64)),
@@ -47,14 +46,9 @@ def media_of(store, entry):
     return by_id[entry.mountain.id].primary_image.media
 
 
-def attach(writer, entry, media=MEDIA, url=None, dimensions=None):
+def attach(writer, entry, media=MEDIA, dimensions=None):
     image = entry.mountain.primary_image
-    return writer.attach_media(
-        entry.mountain.id,
-        url or entry.image_provenance.legacy_file_url,
-        dimensions or image.dimensions,
-        media,
-    )
+    return writer.attach_media(entry.mountain.id, dimensions or image.dimensions, media)
 
 
 def test_media_is_attached_to_a_photograph_without_media(arranged):
@@ -79,28 +73,17 @@ def test_other_media_is_never_replaced(arranged):
     assert media_of(store, ATTACHED) == photograph_media("a" * 64)
 
 
-@pytest.mark.parametrize(
-    "expected",
-    [
-        {"url": "https://upload.wikimedia.org/wikipedia/commons/other.jpg"},
-        {"dimensions": ImageDimensions(width=1, height=1)},
-    ],
-)
-def test_a_photograph_that_differs_from_the_verified_one_is_stale(arranged, expected):
+def test_a_photograph_with_other_dimensions_than_the_verified_ones_is_stale(arranged):
     writer, store = arranged
 
-    assert attach(writer, FUJI, **expected) is AttachOutcome.STALE
+    assert attach(writer, FUJI, dimensions=ImageDimensions(width=1, height=1)) is (
+        AttachOutcome.STALE
+    )
     assert media_of(store, FUJI) is None
 
 
 def test_a_missing_mountain_or_photograph_is_not_found(arranged):
     writer, _ = arranged
 
-    assert (
-        writer.attach_media(uuid.uuid4(), FILE_URL, IMAGE.dimensions, MEDIA)
-        is AttachOutcome.NOT_FOUND
-    )
-    assert (
-        writer.attach_media(BARE.mountain.id, FILE_URL, IMAGE.dimensions, MEDIA)
-        is AttachOutcome.NOT_FOUND
-    )
+    assert writer.attach_media(uuid.uuid4(), IMAGE.dimensions, MEDIA) is AttachOutcome.NOT_FOUND
+    assert writer.attach_media(BARE.mountain.id, IMAGE.dimensions, MEDIA) is AttachOutcome.NOT_FOUND

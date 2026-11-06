@@ -17,9 +17,11 @@ from tests.support.catalog import (
     primary_image,
 )
 from tests.support.contract_fixtures import (
-    APPROVED_V1_DIVERGENCES,
+    DROPPED_IMAGE_MEMBERS,
+    OWNED_MEDIA_MEMBERS,
+    RENAMED_IMAGE_MEMBERS,
     load_fixture,
-    served_with_owned_media,
+    served_by_serendipeak,
 )
 
 MEDIA_BASE_URL = "https://media.example.test"
@@ -52,7 +54,7 @@ def test_the_representation_matches_the_frozen_fixture_except_the_approved_diver
         else with_media_of(entity)
     )
 
-    assert rendered(represent_mountain(owned, MEDIA_BASE_URL)) == served_with_owned_media(
+    assert rendered(represent_mountain(owned, MEDIA_BASE_URL)) == served_by_serendipeak(
         load_fixture(fixture), MEDIA_BASE_URL, media_of
     )
 
@@ -64,7 +66,7 @@ def test_the_daily_representation_matches_the_frozen_fixture():
 
     owned = replace(daily, mountain=with_media_of(daily.mountain))
 
-    assert rendered(represent_daily_mountain(owned, MEDIA_BASE_URL)) == served_with_owned_media(
+    assert rendered(represent_daily_mountain(owned, MEDIA_BASE_URL)) == served_by_serendipeak(
         load_fixture("daily-mountain.json"), MEDIA_BASE_URL, media_of
     )
 
@@ -108,14 +110,13 @@ def test_a_camera_without_framing_omits_the_framing():
 
 
 def test_an_image_without_dimensions_omits_width_and_height():
-    image = primary_image(dimensions=None, creator=None, license_name=None, license_url=None)
+    image = primary_image(dimensions=None, license_name=None, license_url=None)
 
     assert represent_mountain(mountain(primary_image=image), MEDIA_BASE_URL)["primaryImage"] == {
         "url": f"{MEDIA_BASE_URL}/{image.media.viewer_key}",
         "thumbnailUrl": f"{MEDIA_BASE_URL}/{image.media.page_key}",
-        "attribution": image.attribution,
+        "author": image.author,
         "sourcePageUrl": image.source_page_url,
-        "sourceIdentifier": image.source_identifier,
     }
 
 
@@ -145,31 +146,38 @@ def test_storage_details_are_never_exposed():
         "thumbnailUrl",
         "width",
         "height",
-        "creator",
-        "attribution",
+        "author",
         "license",
         "licenseUrl",
         "sourcePageUrl",
-        "sourceIdentifier",
     }
     assert "/original." not in json.dumps(image)
 
 
-def test_an_uploaded_photograph_has_its_credit_link_and_no_legacy_identifier():
+def test_a_photograph_from_another_source_is_represented_like_any_other():
     image = primary_image(
-        creator="Sébastien Goldberg",
-        creator_url="https://unsplash.com/@sebastiengoldberg",
+        author="Sébastien Goldberg",
         license_name="Unsplash License",
         license_url="https://unsplash.com/license",
         source_page_url="https://unsplash.com/photos/a-mountain",
-        source_identifier=None,
     )
 
     represented = represent_mountain(mountain(primary_image=image), MEDIA_BASE_URL)["primaryImage"]
 
-    assert represented["creatorUrl"] == "https://unsplash.com/@sebastiengoldberg"
     assert represented["sourcePageUrl"] == "https://unsplash.com/photos/a-mountain"
-    assert "sourceIdentifier" not in represented
+    assert represented["author"] == "Sébastien Goldberg"
+
+
+def test_a_photograph_without_a_source_page_omits_the_page():
+    image = primary_image(
+        source_page_url=None, license_name="All rights reserved", license_url=None
+    )
+
+    represented = represent_mountain(mountain(primary_image=image), MEDIA_BASE_URL)["primaryImage"]
+
+    assert "sourcePageUrl" not in represented
+    assert represented["author"] == image.author
+    assert represented["license"] == "All rights reserved"
 
 
 def test_a_photograph_without_media_is_represented_without_a_primary_image():
@@ -178,8 +186,10 @@ def test_a_photograph_without_media_is_represented_without_a_primary_image():
     assert "primaryImage" not in represent_mountain(entity, MEDIA_BASE_URL)
 
 
-def test_the_members_approved_to_differ_from_the_v1_fixtures_are_the_two_delivery_urls():
-    assert set(APPROVED_V1_DIVERGENCES) == {"url", "thumbnailUrl"}
+def test_the_members_that_differ_from_the_v1_fixtures_are_the_ones_serendipeak_owns():
+    assert set(OWNED_MEDIA_MEMBERS) == {"url", "thumbnailUrl"}
+    assert RENAMED_IMAGE_MEMBERS == {"attribution": "author"}
+    assert set(DROPPED_IMAGE_MEMBERS) == {"creator", "sourceIdentifier"}
 
 
 @pytest.mark.parametrize(

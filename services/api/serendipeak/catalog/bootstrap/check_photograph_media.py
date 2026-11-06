@@ -28,21 +28,21 @@ class CheckPhotographMedia:
     """Checks that every photograph of the catalog references complete owned media.
 
     The shallow check reads only the catalog. deep also asks the store for every object, and
-    checksums also rehashes every original, which reads all of them in full.
+    checksums also rehashes every original, which reads all of them in full. These checks hold
+    for any photograph, whoever uploaded it, for as long as the catalog lives.
 
-    Photographs the manifest pins must also be the pinned ones: same file URL, source
-    identifier, dimensions and checksum. Without that, the media would only agree with itself:
-    a source file replaced before its first materialization would pass every other check.
-    A pinned photograph that the catalog no longer has is a problem as well; photographs the
-    manifest does not pin, uploaded replacements of pinned ones included, are checked like the
-    rest and compared with nothing.
+    With a manifest, the check is also the one that proves the import: every photograph the
+    manifest pins must be the pinned one, with its checksum and dimensions, and a pinned
+    photograph the catalog no longer has is a problem. The catalog keeps no record of which
+    photographs are imported, so a pinned photograph that an editor replaced differs by
+    design: the manifest check is for the time between the import and the first replacement.
     """
 
     def __init__(
         self,
         catalog_store: CatalogStore,
         media_store: MediaStore,
-        manifest: PhotographManifest,
+        manifest: PhotographManifest | None = None,
     ):
         self._catalog_store = catalog_store
         self._media_store = media_store
@@ -60,12 +60,13 @@ class CheckPhotographMedia:
             for problem in self._problems(entry, deep or checksums, checksums)
         ]
 
-        present = {entry.mountain.id for entry in photographed}
-        problems.extend(
-            MediaProblem(pinned.slug, "the manifest photograph is not in the catalog")
-            for pinned in self._manifest.photographs
-            if pinned.mountain_id not in present
-        )
+        if self._manifest is not None:
+            present = {entry.mountain.id for entry in photographed}
+            problems.extend(
+                MediaProblem(pinned.slug, "the manifest photograph is not in the catalog")
+                for pinned in self._manifest.photographs
+                if pinned.mountain_id not in present
+            )
 
         return MediaCheckReport(checked=len(photographed), problems=tuple(problems))
 
@@ -77,7 +78,7 @@ class CheckPhotographMedia:
         if _keys_do_not_match(media):
             return ["the media keys do not match the original checksum"]
 
-        problems = self._manifest_problems(entry)
+        problems = [] if self._manifest is None else self._manifest_problems(entry)
         if not deep:
             return problems
 
@@ -97,18 +98,13 @@ class CheckPhotographMedia:
         return problems
 
     def _manifest_problems(self, entry: CatalogMountain) -> list[str]:
-        file_url = entry.image_provenance.legacy_file_url
-        pinned = self._manifest.pin_for(entry.mountain.id, file_url)
+        pinned = self._manifest.pin_for(entry.mountain.id)
         if pinned is None:
             return []
 
         image = entry.mountain.primary_image
         differences = manifest_differences(
-            pinned,
-            file_url=file_url,
-            source_identifier=image.source_identifier,
-            sha256=image.media.original_sha256,
-            dimensions=image.dimensions,
+            pinned, sha256=image.media.original_sha256, dimensions=image.dimensions
         )
 
         return [

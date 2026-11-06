@@ -29,7 +29,6 @@ def served_identity(record):
             "wikidata": f"https://www.wikidata.org/wiki/{record.wikidata_id}",
         },
         "primaryImage": {
-            "sourceIdentifier": image.source_identifier,
             "sourcePageUrl": image.source_page_url,
             "width": image.width,
             "height": image.height,
@@ -38,8 +37,12 @@ def served_identity(record):
 
 
 def frozen_identity(mountain):
+    # The Commons file title is v1's own member: SerendiPeak derives nothing from the source page,
+    # so the curated identity of a photograph is its source page and its dimensions.
+    image = mountain["primaryImage"]
+
     return {key: mountain[key] for key in ("slug", "name", "elevationMeters", "sources")} | {
-        "primaryImage": mountain["primaryImage"]
+        "primaryImage": {key: image[key] for key in ("sourcePageUrl", "width", "height")}
     }
 
 

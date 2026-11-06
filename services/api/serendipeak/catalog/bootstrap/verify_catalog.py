@@ -102,7 +102,7 @@ def _differing_fields(expected: CatalogMountain, actual: CatalogMountain) -> lis
     ]
     entry_fields = [
         name
-        for name in ("image_provenance", "created_at", "updated_at")
+        for name in ("created_at", "updated_at")
         if getattr(expected, name) != getattr(actual, name)
     ]
 

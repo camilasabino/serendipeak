@@ -6,12 +6,19 @@ from serendipeak.catalog.media.keys import public_url
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[4] / "contracts" / "v1"
 
-# The only approved divergence from the v1 documents: once photographs are owned, these members
-# hold owned media URLs. The fixtures are never edited; tests substitute exactly these members.
-APPROVED_V1_DIVERGENCES = {
+# How SerendiPeak's own contract differs from the v1 documents, which are never edited: tests
+# turn a v1 document into the one SerendiPeak serves by applying exactly these changes.
+#
+# Owned photographs: these members hold owned media URLs.
+OWNED_MEDIA_MEMBERS = {
     "url": "viewer_key",
     "thumbnailUrl": "page_key",
 }
+# One author replaces the v1 attribution and creator, which are two credits for one photograph.
+RENAMED_IMAGE_MEMBERS = {"attribution": "author"}
+# The Commons file title is derivable from a Commons source page and meaningless for any other
+# source, and the creator is absorbed into the author.
+DROPPED_IMAGE_MEMBERS = ("creator", "sourceIdentifier")
 
 
 def load_fixture(name):
@@ -22,8 +29,8 @@ def load_frozen_catalog():
     return load_fixture("catalog.json")["mountains"]
 
 
-def served_with_owned_media(document, media_base_url, media_of_slug):
-    """A v1 mountain or daily document with the approved divergent members replaced by owned URLs.
+def served_by_serendipeak(document, media_base_url, media_of_slug):
+    """A v1 mountain or daily document as SerendiPeak serves it: owned media, one author.
 
     A mountain without a primary image is returned as it is.
     """
@@ -32,7 +39,11 @@ def served_with_owned_media(document, media_base_url, media_of_slug):
     image = mountain.get("primaryImage")
     if image is not None:
         media = media_of_slug(mountain["slug"])
-        for member, key in APPROVED_V1_DIVERGENCES.items():
+        for member, key in OWNED_MEDIA_MEMBERS.items():
             image[member] = public_url(media_base_url, getattr(media, key))
+        for old, new in RENAMED_IMAGE_MEMBERS.items():
+            image[new] = image.pop(old)
+        for member in DROPPED_IMAGE_MEMBERS:
+            image.pop(member, None)
 
     return expected

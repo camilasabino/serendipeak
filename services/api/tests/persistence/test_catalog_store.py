@@ -20,6 +20,7 @@ from tests.support.catalog import (
     committed_seed,
     committed_seed_with_media,
     frozen_catalog,
+    primary_image,
 )
 
 DAY = datetime.date(2026, 10, 3)
@@ -110,7 +111,9 @@ def test_check_catalog_reads_the_catalog_in_two_queries(django_assert_num_querie
 @pytest.mark.django_db
 def test_a_constraint_violation_rolls_back_every_table():
     valid = catalog_mountain("aconcagua")
-    invalid_image = catalog_mountain("mont-blanc", file_url=" ")
+    invalid_image = catalog_mountain(
+        "mont-blanc", primary_image=primary_image(source_page_url="http://insecure.example")
+    )
     seed = catalog_seed(valid, invalid_image, discoveries=[catalog_discovery(DAY, valid)])
 
     with pytest.raises(InfrastructureError) as raised:
@@ -118,7 +121,7 @@ def test_a_constraint_violation_rolls_back_every_table():
 
     assert (
         raised.value.__cause__.__cause__.diag.constraint_name
-        == "mountain_image_legacy_file_url_https"
+        == "mountain_image_source_page_url_public_link"
     )
     assert not MountainRecord.objects.exists()
     assert not DailyDiscoveryRecord.objects.exists()

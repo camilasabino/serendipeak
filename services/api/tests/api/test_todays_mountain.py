@@ -23,7 +23,7 @@ from tests.support.catalog import (
     committed_seed_with_media,
     media_of,
 )
-from tests.support.contract_fixtures import load_fixture, served_with_owned_media
+from tests.support.contract_fixtures import load_fixture, served_by_serendipeak
 from tests.support.fakes import FixedClock
 
 CONTENT_TYPE = "application/json; charset=utf-8"
@@ -32,7 +32,7 @@ DAILY = load_fixture("daily-mountain.json")
 NO_ELIGIBLE = load_fixture("error-no-eligible-mountains.json")
 INTERNAL = load_fixture("error-internal.json")
 MEDIA_BASE_URL = "https://media.example.test"
-OWNED_DAILY = served_with_owned_media(DAILY, MEDIA_BASE_URL, media_of)
+OWNED_DAILY = served_by_serendipeak(DAILY, MEDIA_BASE_URL, media_of)
 FIXTURE_DAY = datetime.date.fromisoformat(DAILY["date"])
 NEW_DAY = datetime.date(2026, 10, 20)
 

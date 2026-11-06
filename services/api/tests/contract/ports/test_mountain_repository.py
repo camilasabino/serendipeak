@@ -27,7 +27,6 @@ INACTIVE_WITHOUT_IMAGE = catalog_mountain(
 )
 BARE = CatalogMountain(
     mountain=bare_mountain(),
-    image_provenance=None,
     created_at=CREATED_AT,
     updated_at=UPDATED_AT,
 )
