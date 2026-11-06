@@ -9,6 +9,7 @@ from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotograph
 from serendipeak.catalog.bootstrap.materialize_photographs import MaterializePhotographs
 from serendipeak.catalog.bootstrap.photograph_manifest import PhotographManifest
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
+from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
@@ -25,6 +26,7 @@ from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
+from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
@@ -89,6 +91,10 @@ def build_deactivate_mountain() -> DeactivateMountain:
 
 def build_reactivate_mountain() -> ReactivateMountain:
     return ReactivateMountain(DjangoMountainStatusStore())
+
+
+def build_change_mountain_camera() -> ChangeMountainCamera:
+    return ChangeMountainCamera(DjangoMountainCameraStore())
 
 
 def build_media_store() -> MediaStore:

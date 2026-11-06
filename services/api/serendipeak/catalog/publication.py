@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from serendipeak.catalog import camera as camera_bounds
+from serendipeak.catalog.camera import CameraViolation, camera_violations
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
 from serendipeak.catalog.public_link import is_public_link
@@ -23,6 +23,13 @@ class PublicationViolation(StrEnum):
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
     SUMMARY_INVALID = "summary_invalid"
     LINK_NOT_HTTPS = "link_not_https"
+
+
+_PUBLICATION_VIOLATION_OF_CAMERA = {
+    CameraViolation.OUT_OF_BOUNDS: PublicationViolation.CAMERA_OUT_OF_BOUNDS,
+    CameraViolation.FRAMING_MISSING: PublicationViolation.CAMERA_FRAMING_MISSING,
+    CameraViolation.FRAMING_OUT_OF_BOUNDS: PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS,
+}
 
 
 class PublicLinkField(StrEnum):
@@ -76,28 +83,7 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
     if camera is None:
         return [PublicationViolation.CAMERA_MISSING]
 
-    violations = []
-
-    if not (
-        camera_bounds.HEADING_MIN_DEGREES
-        <= camera.heading_degrees
-        < camera_bounds.HEADING_MAX_DEGREES_EXCLUSIVE
-        and camera_bounds.PITCH_MIN_DEGREES
-        <= camera.pitch_degrees
-        <= camera_bounds.PITCH_MAX_DEGREES
-        and camera_bounds.RANGE_MIN_METERS <= camera.range_meters <= camera_bounds.RANGE_MAX_METERS
-    ):
-        violations.append(PublicationViolation.CAMERA_OUT_OF_BOUNDS)
-
-    if camera.framing is None:
-        violations.append(PublicationViolation.CAMERA_FRAMING_MISSING)
-    elif not (
-        camera_bounds.FRAMING_MIN <= camera.framing.x <= camera_bounds.FRAMING_MAX
-        and camera_bounds.FRAMING_MIN <= camera.framing.y <= camera_bounds.FRAMING_MAX
-    ):
-        violations.append(PublicationViolation.CAMERA_FRAMING_OUT_OF_BOUNDS)
-
-    return violations
+    return [_PUBLICATION_VIOLATION_OF_CAMERA[violation] for violation in camera_violations(camera)]
 
 
 def image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:

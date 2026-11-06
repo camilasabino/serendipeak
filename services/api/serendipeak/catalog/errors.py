@@ -1,6 +1,7 @@
 from enum import StrEnum
 from uuid import UUID
 
+from serendipeak.catalog.camera import CameraViolation
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.errors import ApplicationError, DomainError
@@ -48,6 +49,18 @@ class InvalidStatusTransition(DomainError):
         super().__init__(f"a {current.value} mountain cannot become {target.value}")
         self.current = current
         self.target = target
+
+
+class CameraRejected(DomainError):
+    def __init__(self, violations: tuple[CameraViolation, ...]):
+        super().__init__(", ".join(violations))
+        self.violations = violations
+
+
+class CameraChanged(ApplicationError):
+    def __init__(self, mountain_id: UUID):
+        super().__init__(f"the camera of mountain {mountain_id} changed since it was read")
+        self.mountain_id = mountain_id
 
 
 class UnknownPhotographs(ApplicationError):

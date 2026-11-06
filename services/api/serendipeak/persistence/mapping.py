@@ -37,7 +37,7 @@ def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | 
         range_name=record.range_name,
         countries=tuple(record.countries),
         summary=record.summary,
-        camera=_camera(record),
+        camera=to_camera(record),
         primary_image=None if image is None else to_primary_image(image),
         osm=None
         if record.osm_type is None
@@ -69,8 +69,6 @@ def to_catalog_discovery(record: DailyDiscoveryRecord) -> CatalogDiscovery:
 
 def mountain_record(entry: CatalogMountain) -> MountainRecord:
     mountain = entry.mountain
-    camera = mountain.camera
-    framing = None if camera is None else camera.framing
 
     return MountainRecord(
         id=mountain.id,
@@ -82,11 +80,7 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
         range_name=mountain.range_name,
         countries=list(mountain.countries),
         summary=mountain.summary,
-        camera_heading_degrees=None if camera is None else camera.heading_degrees,
-        camera_pitch_degrees=None if camera is None else camera.pitch_degrees,
-        camera_range_meters=None if camera is None else camera.range_meters,
-        camera_framing_x=None if framing is None else framing.x,
-        camera_framing_y=None if framing is None else framing.y,
+        **camera_columns(mountain.camera),
         osm_type=None if mountain.osm is None else mountain.osm.type.value,
         osm_id=None if mountain.osm is None else mountain.osm.id,
         wikidata_id=mountain.wikidata_id,
@@ -134,7 +128,19 @@ def _image_of(record: MountainRecord) -> MountainImageRecord | None:
         return None
 
 
-def _camera(record: MountainRecord) -> CanonicalCamera | None:
+def camera_columns(camera: CanonicalCamera | None) -> dict[str, float | None]:
+    framing = None if camera is None else camera.framing
+
+    return {
+        "camera_heading_degrees": None if camera is None else camera.heading_degrees,
+        "camera_pitch_degrees": None if camera is None else camera.pitch_degrees,
+        "camera_range_meters": None if camera is None else camera.range_meters,
+        "camera_framing_x": None if framing is None else framing.x,
+        "camera_framing_y": None if framing is None else framing.y,
+    }
+
+
+def to_camera(record: MountainRecord) -> CanonicalCamera | None:
     if record.camera_heading_degrees is None:
         return None
 

@@ -15,7 +15,7 @@ from serendipeak.catalog.errors import (
 )
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
-from serendipeak.catalog.ports import StatusChange, StatusChangeOutcome
+from serendipeak.catalog.ports import CameraChange, StatusChange, StatusChangeOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 
@@ -109,6 +109,27 @@ class InMemoryMountainStatusStore:
 
     def status_of(self, mountain_id):
         return self._mountains[mountain_id].status
+
+
+class InMemoryMountainCameraStore:
+    def __init__(self, mountains=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+        self.calls = 0
+
+    def replace_camera(self, mountain_id, camera, expected):
+        self.calls += 1
+        mountain = self._mountains.get(mountain_id)
+        if mountain is None:
+            return CameraChange.NOT_FOUND
+        if mountain.camera != expected:
+            return CameraChange.STALE
+
+        self._mountains[mountain_id] = replace(mountain, camera=camera)
+
+        return CameraChange.APPLIED
+
+    def mountain(self, mountain_id):
+        return self._mountains[mountain_id]
 
 
 class InMemoryDailyDiscoveryRepository:

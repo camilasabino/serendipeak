@@ -4,21 +4,35 @@ import re
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.options import ActionLocation, ShowFacets
+from django.contrib.admin.utils import unquote
 from django.contrib.gis.geos import Point
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import router, transaction
 from django.forms.models import BaseInlineFormSet
 from django.http import Http404, HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
+from django.utils.http import urlencode
 from django.utils.text import capfirst
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
+from serendipeak.catalog import camera as camera_bounds
 from serendipeak.catalog import coordinates
+from serendipeak.catalog.camera import CameraViolation, camera_violations
+from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
-from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
+from serendipeak.catalog.entities import (
+    WIKIDATA_ID_PATTERN,
+    CameraFraming,
+    CanonicalCamera,
+    MountainStatus,
+    OsmType,
+)
 from serendipeak.catalog.errors import (
+    CameraChanged,
+    CameraRejected,
     InvalidStatusTransition,
     PhotographRejected,
     PhotographRejection,
@@ -39,7 +53,7 @@ from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
 from serendipeak.errors import InfrastructureError
-from serendipeak.persistence.mapping import to_mountain, to_mountain_with_image
+from serendipeak.persistence.mapping import to_camera, to_mountain, to_mountain_with_image
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 logger = logging.getLogger(__name__)
@@ -103,6 +117,30 @@ CREDIT_NOT_REVIEWED = (
     "that they also describe the new photograph."
 )
 
+CAMERA_VIOLATION_MESSAGES = {
+    CameraViolation.OUT_OF_BOUNDS: (
+        f"The heading is from {camera_bounds.HEADING_MIN_DEGREES:g} to below "
+        f"{camera_bounds.HEADING_MAX_DEGREES_EXCLUSIVE:g} degrees, the pitch from "
+        f"{camera_bounds.PITCH_MIN_DEGREES:g} to {camera_bounds.PITCH_MAX_DEGREES:g} degrees and "
+        f"the range from {camera_bounds.RANGE_MIN_METERS:g} to "
+        f"{camera_bounds.RANGE_MAX_METERS:g} meters."
+    ),
+    CameraViolation.FRAMING_MISSING: "The framing is missing.",
+    CameraViolation.FRAMING_OUT_OF_BOUNDS: (
+        f"The framing x and y are from {camera_bounds.FRAMING_MIN:g} to "
+        f"{camera_bounds.FRAMING_MAX:g}."
+    ),
+}
+CAMERA_UNREADABLE = (
+    "The camera to save could not be read. Open this page from the camera editor again."
+)
+CAMERA_CHANGED_MEANWHILE = (
+    "The camera was changed by someone else after this page was opened. Nothing was saved; "
+    "compare it with yours and confirm again."
+)
+CAMERA_LOG_MESSAGE = "Camera changed."
+CAMERA_ANCHOR = "camera"
+
 OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
 CAMERA_FIELDS = (
     "camera_heading_degrees",
@@ -116,6 +154,7 @@ IMAGE_LICENSE_FIELDS = ("license_name", "license_url")
 IMAGE_FIELDS = (*IMAGE_CREDIT_FIELDS, *IMAGE_LICENSE_FIELDS)
 IMAGE_OPTIONAL = ("source_page_url", *IMAGE_LICENSE_FIELDS)
 IMAGE_LINKS = ("source_page_url", "license_url")
+CAMERA_DIAGNOSTIC_FIELDS = (*CAMERA_FIELDS, "camera_check")
 PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
@@ -291,6 +330,84 @@ class MountainForm(forms.ModelForm):
             return
         if (cleaned.get("osm_type") is None) != (cleaned.get("osm_id") is None):
             self.add_error("osm_id", "The OpenStreetMap type and id go together.")
+
+
+class CameraForm(forms.Form):
+    """A camera carried by the confirmation page: the proposed one, or the current one that it
+    must still equal when the page is posted."""
+
+    heading = forms.FloatField(widget=forms.HiddenInput)
+    pitch = forms.FloatField(widget=forms.HiddenInput)
+    range = forms.FloatField(widget=forms.HiddenInput)
+    fx = forms.FloatField(widget=forms.HiddenInput)
+    fy = forms.FloatField(widget=forms.HiddenInput)
+
+    POSE = ("heading", "pitch", "range")
+    FRAMING = ("fx", "fy")
+
+    def __init__(self, *args, absent_allowed=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if absent_allowed:
+            for field in self.fields.values():
+                field.required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        present = {name for name in self.fields if cleaned.get(name) is not None}
+        if not self.errors and present not in ({*self.POSE, *self.FRAMING}, set(self.POSE), set()):
+            raise ValidationError("The camera is incomplete.", code="incomplete")
+
+        return cleaned
+
+    def camera(self) -> CanonicalCamera | None:
+        values = self.cleaned_data
+        if values.get("heading") is None:
+            return None
+
+        return CanonicalCamera(
+            heading_degrees=values["heading"],
+            pitch_degrees=values["pitch"],
+            range_meters=values["range"],
+            framing=None
+            if values.get("fx") is None
+            else CameraFraming(x=values["fx"], y=values["fy"]),
+        )
+
+
+def _camera_values(camera: CanonicalCamera | None) -> dict[str, float | None]:
+    framing = None if camera is None else camera.framing
+
+    return {
+        "heading": None if camera is None else camera.heading_degrees,
+        "pitch": None if camera is None else camera.pitch_degrees,
+        "range": None if camera is None else camera.range_meters,
+        "fx": None if framing is None else framing.x,
+        "fy": None if framing is None else framing.y,
+    }
+
+
+CAMERA_ROW_LABELS = {
+    "heading": "Heading (degrees)",
+    "pitch": "Pitch (degrees)",
+    "range": "Range (meters)",
+    "fx": "Framing x",
+    "fy": "Framing y",
+}
+
+
+def _camera_rows(current: CanonicalCamera | None, proposed: CanonicalCamera | None):
+    current_values = _camera_values(current)
+    proposed_values = _camera_values(proposed)
+
+    return [
+        {
+            "label": label,
+            "current": current_values[name],
+            "proposed": proposed_values[name],
+            "changed": current_values[name] != proposed_values[name],
+        }
+        for name, label in CAMERA_ROW_LABELS.items()
+    ]
 
 
 class PhotographFileInput(forms.FileInput):
@@ -580,6 +697,7 @@ class MountainAdmin(admin.ModelAdmin):
     publish_mountain: PublishMountain
     deactivate_mountain: DeactivateMountain
     reactivate_mountain: ReactivateMountain
+    change_mountain_camera: ChangeMountainCamera
     photograph_ingestion: PhotographIngestion
     media_base_url: str
 
@@ -599,7 +717,7 @@ class MountainAdmin(admin.ModelAdmin):
         if obj is None:
             return ()
 
-        return (*PUBLICATION_FIELDS, *CAMERA_FIELDS)
+        return (*PUBLICATION_FIELDS, *CAMERA_DIAGNOSTIC_FIELDS)
 
     def get_fieldsets(self, request, obj=None):
         mountain = ("Mountain", {"fields": MOUNTAIN_FIELDS})
@@ -612,8 +730,12 @@ class MountainAdmin(admin.ModelAdmin):
         camera_diagnostics = (
             "Camera",
             {
-                "fields": CAMERA_FIELDS,
-                "description": "Read-only. The mountain form never changes the camera.",
+                "fields": CAMERA_DIAGNOSTIC_FIELDS,
+                "description": format_html(
+                    '<span id="{}"></span>Read-only. The camera is changed only through its '
+                    "confirmation page, never by this form.",
+                    CAMERA_ANCHOR,
+                ),
             },
         )
 
@@ -637,14 +759,105 @@ class MountainAdmin(admin.ModelAdmin):
             "<p>Not ready to publish. {}</p><ul>{}</ul>", STORED_STATE_NOTICE, reasons
         )
 
+    @admin.display(description="Check")
+    def camera_check(self, obj):
+        camera = to_camera(obj)
+        if camera is None:
+            return "No camera yet. A mountain is published only with one."
+
+        violations = camera_violations(camera)
+        if not violations:
+            return "Complete and within bounds."
+
+        return format_html_join(
+            "", "<p>{}</p>", ((CAMERA_VIOLATION_MESSAGES[v],) for v in violations)
+        )
+
     def get_urls(self):
         transition = path(
             "<path:object_id>/transition/<str:kind>/",
             self.admin_site.admin_view(require_POST(self.transition_view)),
             name=f"{self.opts.app_label}_{self.opts.model_name}_transition",
         )
+        camera = path(
+            "<path:object_id>/camera/",
+            self.admin_site.admin_view(require_http_methods(["GET", "POST"])(self.camera_view)),
+            name=f"{self.opts.app_label}_{self.opts.model_name}_camera",
+        )
 
-        return [transition, *super().get_urls()]
+        return [transition, camera, *super().get_urls()]
+
+    def camera_view(self, request, object_id):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        record = self.get_object(request, unquote(object_id))
+        if record is None:
+            raise Http404
+
+        if request.method == "POST":
+            return self._save_camera(request, record)
+
+        # Showing the confirmation never writes: only its CSRF-protected POST does.
+        return self._camera_confirmation(request, record, CameraForm(request.GET))
+
+    def _save_camera(self, request, record):
+        proposed = CameraForm(request.POST)
+        expected = CameraForm(request.POST, prefix="expected", absent_allowed=True)
+        if not (proposed.is_valid() and expected.is_valid()):
+            return self._camera_confirmation(request, record, proposed, readable=False)
+
+        try:
+            self.change_mountain_camera.execute(record.pk, proposed.camera(), expected.camera())
+        except CameraRejected:
+            return self._camera_confirmation(request, record, proposed)
+        except CameraChanged:
+            self.message_user(request, CAMERA_CHANGED_MEANWHILE, messages.WARNING)
+            query = urlencode({name: repr(value) for name, value in proposed.cleaned_data.items()})
+            return HttpResponseRedirect(f"{self._url('camera', record)}?{query}")
+        except UnknownMountain as unknown:
+            raise Http404 from unknown
+
+        self.log_change(request, record, CAMERA_LOG_MESSAGE)
+        self.message_user(request, f"The camera of {record.name} was changed.", messages.SUCCESS)
+
+        return HttpResponseRedirect(f"{self._url('change', record)}#{CAMERA_ANCHOR}")
+
+    def _camera_confirmation(self, request, record, proposed_form, readable=True):
+        current = to_camera(record)
+        proposed = proposed_form.camera() if readable and proposed_form.is_valid() else None
+        violations = () if proposed is None else camera_violations(proposed)
+        savable = proposed is not None and not violations
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Change the camera of {record.name}",
+            "opts": self.opts,
+            "original": record,
+            "change_url": self._url("change", record),
+            "is_public": record.status in PUBLIC_STATUS_VALUES,
+            "unreadable": proposed is None,
+            "unreadable_message": CAMERA_UNREADABLE,
+            "rows": _camera_rows(current, proposed),
+            "problems": [CAMERA_VIOLATION_MESSAGES[violation] for violation in violations],
+            "proposed_form": CameraForm(initial=_camera_values(proposed)) if savable else None,
+            "expected_form": CameraForm(
+                prefix="expected", absent_allowed=True, initial=_camera_values(current)
+            )
+            if savable
+            else None,
+        }
+
+        return TemplateResponse(
+            request,
+            "admin/catalog/mountainrecord/camera_confirmation.html",
+            context,
+            status=200 if savable else 400,
+        )
+
+    def _url(self, view, record):
+        return reverse(
+            f"admin:{self.opts.app_label}_{self.opts.model_name}_{view}", args=[record.pk]
+        )
 
     def transition_view(self, request, object_id, kind):
         if not self.has_publish_permission(request):

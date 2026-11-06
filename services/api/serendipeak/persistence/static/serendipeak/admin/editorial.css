@@ -45,3 +45,15 @@
   max-width: 320px;
   max-height: 240px;
 }
+
+.camera-comparison {
+  margin-bottom: 16px;
+}
+
+.camera-comparison td {
+  font-variant-numeric: tabular-nums;
+}
+
+.camera-comparison .camera-changed td:last-child {
+  font-weight: 600;
+}
