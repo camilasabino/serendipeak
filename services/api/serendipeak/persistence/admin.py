@@ -53,6 +53,7 @@ from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
 from serendipeak.errors import InfrastructureError
+from serendipeak.persistence.camera_editor_url import camera_editor_url
 from serendipeak.persistence.mapping import to_camera, to_mountain, to_mountain_with_image
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
@@ -138,6 +139,7 @@ CAMERA_CHANGED_MEANWHILE = (
     "The camera was changed by someone else after this page was opened. Nothing was saved; "
     "compare it with yours and confirm again."
 )
+CAMERA_EDITOR_LABEL = "Edit camera visually"
 CAMERA_LOG_MESSAGE = "Camera changed."
 CAMERA_ANCHOR = "camera"
 
@@ -168,7 +170,9 @@ _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 
 def _make_optional(form, names):
     for name in names:
-        field = form.fields[name]
+        field = form.fields.get(name)
+        if field is None:
+            continue
         field.required = False
         if isinstance(field, forms.CharField):
             field.empty_value = None
@@ -640,9 +644,13 @@ class MountainImageInline(admin.StackedInline):
 
     def get_fieldsets(self, request, obj=None):
         image = _stored_image(obj)
-        main = ["photograph_file", *IMAGE_CREDIT_FIELDS]
-        if image is not None:
-            main.append("credit_reviewed")
+        if not self.has_change_permission(request, obj):
+            # The upload and review fields are form-only; a read-only user has no form fields.
+            main = ["saved_photograph", *IMAGE_CREDIT_FIELDS]
+        else:
+            main = ["photograph_file", *IMAGE_CREDIT_FIELDS]
+            if image is not None:
+                main.append("credit_reviewed")
         fieldsets = [
             (None, {"fields": main}),
             ("License", {"fields": IMAGE_LICENSE_FIELDS}),
@@ -658,7 +666,21 @@ class MountainImageInline(admin.StackedInline):
         return fieldsets
 
     def get_readonly_fields(self, request, obj=None):
-        return () if _stored_image(obj) is None else PHOTOGRAPH_DETAIL_FIELDS
+        if _stored_image(obj) is None:
+            return ()
+
+        return PHOTOGRAPH_DETAIL_FIELDS + ("saved_photograph",)
+
+    @admin.display(description="Photograph")
+    def saved_photograph(self, image):
+        if image.page_key is None:
+            return "No photograph stored"
+
+        return format_html(
+            '<figure class="photograph-figure"><img class="photograph-preview" src="{}" '
+            'alt="Saved photograph"></figure>',
+            public_url(self.media_base_url, image.page_key),
+        )
 
     @admin.display(description="Dimensions")
     def photograph_dimensions(self, image):
@@ -700,6 +722,7 @@ class MountainAdmin(admin.ModelAdmin):
     change_mountain_camera: ChangeMountainCamera
     photograph_ingestion: PhotographIngestion
     media_base_url: str
+    web_origin: str
 
     show_facets = ShowFacets.ALWAYS
     list_display = ("name", "slug", "status", "elevation_meters", "range_name", "updated_at")
@@ -731,15 +754,36 @@ class MountainAdmin(admin.ModelAdmin):
             "Camera",
             {
                 "fields": CAMERA_DIAGNOSTIC_FIELDS,
-                "description": format_html(
-                    '<span id="{}"></span>Read-only. The camera is changed only through its '
-                    "confirmation page, never by this form.",
-                    CAMERA_ANCHOR,
-                ),
+                "description": self._camera_description(request, obj),
             },
         )
 
         return [publication, mountain, editorial, camera_diagnostics, additional]
+
+    def _camera_editor_tool(self, request, obj):
+        if obj is None or not self.has_change_permission(request, obj):
+            return {}
+
+        return {
+            "camera_editor_url": camera_editor_url(self.web_origin, obj),
+            "camera_editor_label": CAMERA_EDITOR_LABEL,
+        }
+
+    def _camera_description(self, request, obj):
+        description = format_html(
+            '<span id="{}"></span>Read-only. The camera is changed only through its '
+            "confirmation page, never by this form.",
+            CAMERA_ANCHOR,
+        )
+        if not self.has_change_permission(request, obj):
+            return description
+
+        return format_html(
+            '{} <a href="{}" rel="noreferrer">{}</a>',
+            description,
+            camera_editor_url(self.web_origin, obj),
+            CAMERA_EDITOR_LABEL,
+        )
 
     @admin.display(description="Publication readiness")
     def publication_readiness(self, obj):
@@ -834,6 +878,7 @@ class MountainAdmin(admin.ModelAdmin):
             "opts": self.opts,
             "original": record,
             "change_url": self._url("change", record),
+            "editor_url": camera_editor_url(self.web_origin, record),
             "is_public": record.status in PUBLIC_STATUS_VALUES,
             "unreadable": proposed is None,
             "unreadable_message": CAMERA_UNREADABLE,
@@ -898,7 +943,16 @@ class MountainAdmin(admin.ModelAdmin):
                 ),
             }
 
+        context.update(self._camera_editor_tool(request, obj))
+
         return super().render_change_form(request, context, add, change, form_url, obj)
+
+    def get_inline_instances(self, request, obj=None):
+        instances = super().get_inline_instances(request, obj)
+        for inline in instances:
+            inline.media_base_url = self.media_base_url
+
+        return instances
 
     def get_formset_kwargs(self, request, obj, inline, prefix):
         return {

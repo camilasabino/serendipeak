@@ -1,8 +1,10 @@
-import { useRef } from 'react';
+import { useImperativeHandle, useRef, type Ref } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import { sceneCanRetry } from './experience';
 import type { SceneTarget } from './globe/camera';
+import type { CameraReading } from './globe/cameraReading';
+import type { ResetResult } from './globe/mountainCamera';
 import { StageControls } from './controls/StageControls';
 import styles from './MountainScene.module.css';
 import type { PresentationObserver } from './SceneSession';
@@ -22,20 +24,33 @@ const SCENE_FACTORY = cesiumSceneFactory({
 	imageryMode: CESIUM_CONFIG.imageryMode
 });
 
+/** What a surface laid over the stage may ask of the scene, without owning it. */
+export interface StageController {
+	readCamera(): CameraReading | undefined;
+	resetView(): ResetResult;
+}
+
 interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
 	observer: PresentationObserver;
+	controllerRef?: Ref<StageController>;
 }
 
-export default function MountainScene({ store, target, observer }: MountainSceneProps) {
-	const { viewportRef, snapshot, resetView, retry } = useStage({
+export default function MountainScene({
+	store,
+	target,
+	observer,
+	controllerRef
+}: MountainSceneProps) {
+	const { viewportRef, snapshot, resetView, readCamera, retry } = useStage({
 		store,
 		ionToken: ION_TOKEN,
 		sceneFactory: SCENE_FACTORY,
 		target,
 		observer
 	});
+	useImperativeHandle(controllerRef, () => ({ readCamera, resetView }), [readCamera, resetView]);
 	const stageRef = useRef<HTMLDivElement>(null);
 	const fullscreen = useStageFullscreen(stageRef);
 	const { state } = snapshot;

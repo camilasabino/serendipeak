@@ -1,31 +1,12 @@
-import dynamic from 'next/dynamic';
 import { useState, type ReactNode } from 'react';
 import { SceneStore } from '../stage/SceneStore';
-import { StageBoundary, StageChunkLoadError } from '../stage/StageBoundary';
+import { StageBoundary } from '../stage/StageBoundary';
 import { useTransitionCoordinator } from '../stage/TransitionCoordinatorContext';
+import { LazyMountainScene } from './LazyMountainScene';
 import styles from './MountainLayout.module.css';
 import { mountainOf, type MountainModel } from './pageModel';
 import { toSceneTarget } from './sceneTarget';
 import { StageShell } from './StageShell';
-
-interface LoadingProps {
-	error?: Error | null;
-	retry?: () => void;
-}
-
-// Hands a failed chunk to the stage boundary; otherwise the SSR loader would stay up forever.
-function MountainSceneLoading({ error, retry }: LoadingProps) {
-	if (error) {
-		throw new StageChunkLoadError(error, retry);
-	}
-
-	return null;
-}
-
-const MountainScene = dynamic(() => import('../stage/MountainScene'), {
-	ssr: false,
-	loading: MountainSceneLoading
-});
 
 interface MountainLayoutProps {
 	model: MountainModel;
@@ -41,7 +22,7 @@ export function MountainLayout({ model, children }: MountainLayoutProps) {
 			{children}
 			<StageShell store={store} daily={model.kind === 'daily'} className={styles.stage}>
 				<StageBoundary store={store}>
-					<MountainScene
+					<LazyMountainScene
 						store={store}
 						target={toSceneTarget(mountainOf(model))}
 						observer={coordinator}

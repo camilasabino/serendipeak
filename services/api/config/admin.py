@@ -66,6 +66,7 @@ def build_admin_site() -> EditorialAdminSite:
         change_mountain_camera=build_change_mountain_camera(),
         photograph_ingestion=build_admin_photograph_ingestion(),
         media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
+        web_origin=settings.WEB_ORIGIN,
     )
     site.register(DailyDiscoveryRecord, DailyDiscoveryAdmin)
     site.register(User, EditorialUserAdmin)

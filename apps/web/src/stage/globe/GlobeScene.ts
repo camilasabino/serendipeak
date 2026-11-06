@@ -1,5 +1,6 @@
 import type { Destroyable } from '../lifecycle';
 import type { SceneTarget } from './camera';
+import type { CameraReading } from './cameraReading';
 import type { CameraOutcome } from './choreography';
 import type { MountainPlacement, ResetResult } from './mountainCamera';
 import type { ViewOrientation } from './orientation';
@@ -19,6 +20,8 @@ export interface GlobeScene extends Destroyable {
 	/** A new subscription replaces the previous one. */
 	subscribeScale(listener: (reading: ScaleReading | undefined) => void): () => void;
 	resetView(): ResetResult;
+	/** The live canonical pose, or undefined while a flight runs or the view cannot be read. */
+	readCamera(): CameraReading | undefined;
 	/** Idempotent. After it returns the scene owns no listener, timer or Viewer. */
 	destroy(): void;
 }

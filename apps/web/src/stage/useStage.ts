@@ -7,6 +7,7 @@ import {
 	type RefObject
 } from 'react';
 import type { SceneTarget } from './globe/camera';
+import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
 import type { PresentationObserver } from './SceneSession';
 import type { SceneStore, SceneSnapshot } from './SceneStore';
@@ -25,6 +26,7 @@ export interface UseStageResult {
 	viewportRef: RefObject<HTMLDivElement | null>;
 	snapshot: SceneSnapshot;
 	resetView: () => ResetResult;
+	readCamera: () => CameraReading | undefined;
 	retry: () => void;
 }
 
@@ -75,7 +77,9 @@ export function useStage({
 
 	const resetView = useCallback(() => bindingRef.current?.resetView() ?? 'unavailable', []);
 
+	const readCamera = useCallback(() => bindingRef.current?.readCamera(), []);
+
 	const retry = useCallback(() => bindingRef.current?.retry(), []);
 
-	return { viewportRef, snapshot, resetView, retry };
+	return { viewportRef, snapshot, resetView, readCamera, retry };
 }

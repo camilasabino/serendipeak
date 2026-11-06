@@ -1,0 +1,12 @@
+.editor {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 28rem;
+	min-width: 0;
+}
+
+.stage {
+	flex: 1 1 auto;
+	min-height: 0;
+}

@@ -1,4 +1,5 @@
 import type { SceneTarget } from '../stage/globe/camera';
+import type { CameraReading } from '../stage/globe/cameraReading';
 import type { CameraOutcome } from '../stage/globe/choreography';
 import type { GlobeScene } from '../stage/globe/GlobeScene';
 import type { MountainPlacement, ResetResult } from '../stage/globe/mountainCamera';
@@ -94,6 +95,8 @@ export class FakeGlobeScene implements GlobeScene {
 	readonly stages: StageSize[] = [];
 	readonly pendingShows: PendingShow[] = [];
 	resetResult: ResetResult = 'reset';
+	reading: CameraReading | undefined;
+	reads = 0;
 	resets = 0;
 	destroyCount = 0;
 	cinematic: boolean;
@@ -196,6 +199,11 @@ export class FakeGlobeScene implements GlobeScene {
 		}
 		this.resets += 1;
 		return this.resetResult;
+	}
+
+	readCamera(): CameraReading | undefined {
+		this.reads += 1;
+		return this.destroyed ? undefined : this.reading;
 	}
 
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void {

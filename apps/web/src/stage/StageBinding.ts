@@ -1,4 +1,5 @@
 import type { SceneTarget } from './globe/camera';
+import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
 import { SceneSession, type PresentationObserver, type SceneSessionOptions } from './SceneSession';
@@ -53,6 +54,10 @@ export class StageBinding {
 
 	resetView(): ResetResult {
 		return this.disposed ? 'unavailable' : this.session.resetView();
+	}
+
+	readCamera(): CameraReading | undefined {
+		return this.disposed ? undefined : this.session.readCamera();
 	}
 
 	// The failed session is stopped before its replacement exists, so one binding never owns two.

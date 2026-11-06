@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FakeReleaseStep, FakeSetupStep } from '../test/FakeGlobeScene';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
 import type { SceneTarget } from './globe/camera';
+import type { CameraReading } from './globe/cameraReading';
 import {
 	SceneSession,
 	type PresentationObserver,
@@ -24,6 +25,15 @@ const FITZ_ROY: SceneTarget = {
 	latitude: -49.271,
 	longitude: -73.043,
 	elevationMeters: 3405
+};
+
+const READING: CameraReading = {
+	headingDegrees: 120,
+	pitchDegrees: -20,
+	rangeMeters: 12_000,
+	framing: { x: 0.1, y: -0.2 },
+	displayRangeMeters: 12_500,
+	stage: { width: 800, height: 600 }
 };
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -493,6 +503,33 @@ describe('SceneSession stage and reset', () => {
 		session.setTarget(FITZ_ROY);
 		expect(session.resetView()).toBe('unavailable');
 		expect(scene.resets).toBe(1);
+	});
+
+	it('reads the camera only while the presented mountain is settled', async () => {
+		const { session, scene } = await presenting({ holdShow: true });
+		scene.reading = READING;
+		expect(session.readCamera()).toBeUndefined();
+		expect(scene.reads).toBe(0);
+
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(session.readCamera()).toEqual(READING);
+
+		session.setTarget(FITZ_ROY);
+		expect(session.readCamera()).toBeUndefined();
+	});
+
+	it('reads no camera before the scene exists, once stopped, or when the scene has none', async () => {
+		const early = setup();
+		expect(early.session.readCamera()).toBeUndefined();
+
+		const { session, scene } = await presenting();
+		expect(session.readCamera()).toBeUndefined();
+
+		scene.reading = READING;
+		expect(session.readCamera()).toEqual(READING);
+		session.stop();
+		expect(session.readCamera()).toBeUndefined();
 	});
 
 	it('cannot reset when the scene failed to initialize', async () => {

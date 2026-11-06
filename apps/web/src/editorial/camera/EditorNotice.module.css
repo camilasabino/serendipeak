@@ -1,0 +1,31 @@
+.notice {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: flex-start;
+	box-sizing: border-box;
+	min-height: 0;
+	padding: clamp(2.5rem, 12vh, 6rem) clamp(1.5rem, 6vw, 4.5rem);
+}
+
+.content {
+	width: min(100%, 34rem);
+	overflow-wrap: anywhere;
+}
+
+.title {
+	margin: 0 0 var(--sp-space-3);
+	font-family: var(--sp-font-display);
+	font-size: clamp(2rem, 6vw, 3rem);
+	font-weight: 400;
+	letter-spacing: -0.012em;
+	line-height: 1.15;
+	text-wrap: balance;
+}
+
+.message {
+	max-width: 28rem;
+	margin: 0;
+	font-size: 1.125rem;
+	line-height: 1.5;
+	color: var(--sp-mist);
+}

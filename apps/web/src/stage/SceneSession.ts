@@ -1,4 +1,5 @@
 import type { SceneTarget } from './globe/camera';
+import type { CameraReading } from './globe/cameraReading';
 import type { CameraOutcome } from './globe/choreography';
 import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
@@ -99,6 +100,11 @@ export class SceneSession {
 
 	resetView(): ResetResult {
 		return this.scene && this.settled ? this.scene.resetView() : 'unavailable';
+	}
+
+	// Only a pose the current target arrived at is a pose someone chose to look at.
+	readCamera(): CameraReading | undefined {
+		return this.scene && this.settled ? this.scene.readCamera() : undefined;
 	}
 
 	stop(): void {

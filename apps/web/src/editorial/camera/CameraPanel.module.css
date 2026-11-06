@@ -1,0 +1,149 @@
+.panel {
+	position: absolute;
+	z-index: 1;
+	top: 0.6rem;
+	left: 0.6rem;
+	box-sizing: border-box;
+	width: min(19rem, calc(100% - 1.2rem));
+	max-height: calc(100% - 1.2rem);
+	padding: var(--sp-space-4);
+	overflow-y: auto;
+	border: 1px solid var(--sp-rule);
+	border-radius: var(--sp-radius);
+	background: color-mix(in srgb, var(--sp-stage) 88%, transparent);
+	color: var(--sp-paper);
+	font-size: var(--sp-text-ui);
+}
+
+.eyebrow {
+	margin: 0;
+	color: var(--sp-glacier-light);
+	font-size: 0.75rem;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.name {
+	margin: 0.15rem 0 var(--sp-space-2);
+	font-family: var(--sp-font-display);
+	font-size: 1.5rem;
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	line-height: 1.15;
+	overflow-wrap: anywhere;
+}
+
+.note {
+	margin: 0 0 var(--sp-space-3);
+	color: var(--sp-mist);
+}
+
+.readout {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--sp-space-2) var(--sp-space-3);
+	margin: 0 0 var(--sp-space-3);
+}
+
+.value {
+	min-width: 0;
+}
+
+.value dt {
+	color: var(--sp-mist);
+	font-size: 0.75rem;
+}
+
+.value dd {
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.status {
+	min-height: 2.6em;
+	margin-bottom: var(--sp-space-3);
+	color: var(--sp-mist);
+}
+
+.status p {
+	margin: 0 0 0.25rem;
+}
+
+.status[data-valid='true'] {
+	color: var(--sp-paper-bright);
+}
+
+.status[data-valid='false'] {
+	padding-left: var(--sp-space-2);
+	border-left: 2px solid var(--sp-glacier-light);
+	color: var(--sp-paper-bright);
+}
+
+.actions {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--sp-space-2);
+}
+
+.primary,
+.secondary {
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.5rem 1rem;
+	border: 1px solid transparent;
+	border-radius: var(--sp-radius);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+	line-height: 1.2;
+	cursor: pointer;
+}
+
+.primary {
+	background: var(--sp-accent);
+	color: var(--sp-paper-bright);
+}
+
+.primary:hover:not(:disabled) {
+	background: var(--sp-accent-hover);
+}
+
+.secondary {
+	border-color: color-mix(in srgb, var(--sp-mist) 42%, transparent);
+	background: transparent;
+	color: var(--sp-paper);
+}
+
+.secondary:hover:not(:disabled) {
+	border-color: var(--sp-glacier-light);
+}
+
+.primary:disabled,
+.secondary:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.back {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	color: var(--sp-link-on-stage);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.back:hover {
+	color: var(--sp-link-on-stage-hover);
+}
+
+/* The stage toolbar keeps the top-right corner. */
+@media (max-width: 40rem) {
+	.panel {
+		width: calc(100% - 4.8rem);
+		max-height: 55%;
+	}
+}

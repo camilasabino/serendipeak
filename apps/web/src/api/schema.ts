@@ -1,3 +1,9 @@
+import {
+	isFramingInBounds,
+	isHeadingInBounds,
+	isPitchInBounds,
+	isRangeInBounds
+} from './cameraBounds';
 import type {
 	CameraFraming,
 	Coordinates,
@@ -9,14 +15,6 @@ import type {
 } from './contract';
 
 type JsonRecord = Record<string, unknown>;
-
-// Mirrors services/api catalog/camera.py; the bounds belong to the frozen v1 contract.
-const HEADING_MAX_EXCLUSIVE = 360;
-const PITCH_MIN = -60;
-const PITCH_MAX = 15;
-const RANGE_MIN = 2_000;
-const RANGE_MAX = 80_000;
-const FRAMING_LIMIT = 1;
 
 // Mirrors services/api catalog/slug.py. The backend serves `today` and `random` as stateful
 // routes, so they are never valid mountain slugs even though they match the grammar.
@@ -78,8 +76,10 @@ function isCoordinates(value: unknown): value is Coordinates {
 function isCameraFraming(value: unknown): value is CameraFraming {
 	return (
 		isRecord(value) &&
-		isNumberWithin(value.x, -FRAMING_LIMIT, FRAMING_LIMIT) &&
-		isNumberWithin(value.y, -FRAMING_LIMIT, FRAMING_LIMIT)
+		isFiniteNumber(value.x) &&
+		isFramingInBounds(value.x) &&
+		isFiniteNumber(value.y) &&
+		isFramingInBounds(value.y)
 	);
 }
 
@@ -87,10 +87,11 @@ function isMountainCamera(value: unknown): value is MountainCamera {
 	return (
 		isRecord(value) &&
 		isFiniteNumber(value.headingDegrees) &&
-		value.headingDegrees >= 0 &&
-		value.headingDegrees < HEADING_MAX_EXCLUSIVE &&
-		isNumberWithin(value.pitchDegrees, PITCH_MIN, PITCH_MAX) &&
-		isNumberWithin(value.rangeMeters, RANGE_MIN, RANGE_MAX) &&
+		isHeadingInBounds(value.headingDegrees) &&
+		isFiniteNumber(value.pitchDegrees) &&
+		isPitchInBounds(value.pitchDegrees) &&
+		isFiniteNumber(value.rangeMeters) &&
+		isRangeInBounds(value.rangeMeters) &&
 		isOptional(value, 'framing', isCameraFraming)
 	);
 }

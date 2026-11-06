@@ -2,6 +2,9 @@
 
 {% block object-tools-items %}
   {{ block.super }}
+  {% if camera_editor_url %}
+    <li><a href="{{ camera_editor_url }}" rel="noreferrer">{{ camera_editor_label }}</a></li>
+  {% endif %}
   {% if publication_transition %}
     <li>
       <form method="post" action="{{ publication_transition.url }}" class="publication-transition">

@@ -69,6 +69,7 @@ jobs:
       DJANGO_SECRET_KEY: ci-only-insecure-secret-key
       ALLOWED_HOSTS: localhost,127.0.0.1
       CORS_ALLOWED_ORIGIN: http://localhost:3000
+      WEB_ORIGIN: http://localhost:3000
       MEDIA_STORE: filesystem
       MEDIA_ROOT: .media
       MEDIA_PUBLIC_BASE_URL: http://localhost:8000/media

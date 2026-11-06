@@ -34,6 +34,12 @@ def test_requests_run_in_autocommit_so_the_daily_insert_commits_on_its_own():
 SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
 
 
+@pytest.fixture(autouse=True)
+def production_safe_web_origin(monkeypatch):
+    """Loading the settings outside development also needs an https web origin."""
+    monkeypatch.setenv("WEB_ORIGIN", "https://web.example")
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -57,6 +63,76 @@ def test_a_single_explicit_origin_is_accepted(monkeypatch):
     loaded = run_path(str(SETTINGS_FILE))
 
     assert loaded["CORS_ALLOWED_ORIGINS"] == ["https://app.example"]
+
+
+VALID_WEB_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://serendipeak.example",
+]
+
+
+@pytest.mark.parametrize("value", VALID_WEB_ORIGINS)
+def test_the_web_origin_is_one_bare_origin(monkeypatch, value):
+    monkeypatch.setenv("WEB_ORIGIN", value)
+
+    assert run_path(str(SETTINGS_FILE))["WEB_ORIGIN"] == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "*",
+        "https://*.example",
+        "https://a.example,https://b.example",
+        "https://a.example,",
+        "localhost:3000",
+        "ftp://web.example",
+        "javascript:alert(1)",
+        "https://",
+        "https://web.example/",
+        "https://web.example/editorial",
+        "https://web.example?x=1",
+        "https://web.example#x",
+        "https://user:secret@web.example",
+        "https://web.example:notaport",
+        "https://web.example:99999",
+        " https://web.example",
+    ],
+)
+def test_the_web_origin_rejects_anything_but_a_bare_origin(monkeypatch, value):
+    monkeypatch.setenv("WEB_ORIGIN", value)
+
+    with pytest.raises(ImproperlyConfigured, match="WEB_ORIGIN"):
+        run_path(str(SETTINGS_FILE))
+
+
+def test_the_web_origin_is_required(monkeypatch):
+    monkeypatch.delenv("WEB_ORIGIN")
+
+    with pytest.raises(ImproperlyConfigured, match="WEB_ORIGIN"):
+        run_path(str(SETTINGS_FILE))
+
+
+def test_the_web_origin_must_be_https_outside_development(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("WEB_ORIGIN", "http://web.example")
+    monkeypatch.setenv("MEDIA_STORE", "s3")
+    monkeypatch.setenv("MEDIA_PUBLIC_BASE_URL", "https://media.example")
+
+    with pytest.raises(ImproperlyConfigured, match="WEB_ORIGIN"):
+        run_path(str(SETTINGS_FILE))
+
+
+def test_the_web_origin_does_not_depend_on_the_cors_origin(monkeypatch):
+    monkeypatch.setenv("CORS_ALLOWED_ORIGIN", "https://api-consumer.example")
+    monkeypatch.setenv("WEB_ORIGIN", "https://editors.example")
+
+    loaded = run_path(str(SETTINGS_FILE))
+
+    assert loaded["CORS_ALLOWED_ORIGINS"] == ["https://api-consumer.example"]
+    assert loaded["WEB_ORIGIN"] == "https://editors.example"
 
 
 S3_ENVIRONMENT = {

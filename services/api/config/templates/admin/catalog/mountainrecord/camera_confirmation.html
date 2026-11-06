@@ -57,10 +57,11 @@
       <div class="submit-row">
         <input type="submit" class="default" value="Save camera">
         <a href="{{ change_url }}" class="closelink">Cancel</a>
+        <a href="{{ editor_url }}" rel="noreferrer">Back to the editor</a>
       </div>
     </form>
   {% else %}
-    <p><a href="{{ change_url }}">Back to the mountain</a></p>
+    <p><a href="{{ change_url }}">Back to the mountain</a> · <a href="{{ editor_url }}" rel="noreferrer">Back to the editor</a></p>
   {% endif %}
 </div>
 {% endblock %}

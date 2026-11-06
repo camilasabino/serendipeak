@@ -64,6 +64,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly failedBaseLayer: FailedLayerRemoval<unknown> | undefined;
 	private readonly sampler: ViewSampler;
 	private readonly flight: ViewerCameraFlight;
+	private readonly director: CameraDirector;
 	private readonly camera: MountainCamera;
 	private readonly terrainSession: TerrainCameraSession;
 	private readonly reducedMotion: MediaQueryList;
@@ -149,7 +150,8 @@ export class CesiumGlobeScene implements GlobeScene {
 				container
 			});
 			scene = built;
-			built.releaseCameraReading = exposeCameraReading?.(() => built.readCamera()) ?? noop;
+			// The diagnostic reads mid-flight too: it observes the scene, it does not gate an edit.
+			built.releaseCameraReading = exposeCameraReading?.(() => built.sampleCamera()) ?? noop;
 		} catch (error) {
 			if (scene) {
 				scene.destroy();
@@ -187,7 +189,7 @@ export class CesiumGlobeScene implements GlobeScene {
 
 		const markers = new SummitMarkers(cesium, viewer);
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
-		const director = new CameraDirector(this.flight, markers, {
+		this.director = new CameraDirector(this.flight, markers, {
 			cameraHeight: () => viewer.camera.positionCartographic.height,
 			motion: () => this.motion()
 		});
@@ -206,7 +208,7 @@ export class CesiumGlobeScene implements GlobeScene {
 				}),
 			measure: () => this.measureStage(),
 			reducedMotion: () => this.reducedMotion.matches,
-			director,
+			director: this.director,
 			markers,
 			isAtPose: (target, offset) => {
 				const look = this.flight.look();
@@ -369,7 +371,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	}
 
 	readCamera(): CameraReading | undefined {
-		return this.destroyed ? undefined : this.flight.cameraReading();
+		return this.director.busy() ? undefined : this.sampleCamera();
 	}
 
 	destroy(): void {
@@ -404,6 +406,10 @@ export class CesiumGlobeScene implements GlobeScene {
 				}
 			]
 		]);
+	}
+
+	private sampleCamera(): CameraReading | undefined {
+		return this.destroyed ? undefined : this.flight.cameraReading();
 	}
 
 	private motion(): MotionPreference {

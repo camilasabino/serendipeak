@@ -109,6 +109,37 @@ if not CORS_ALLOWED_ORIGIN or "*" in CORS_ALLOWED_ORIGIN or "," in CORS_ALLOWED_
 CORS_ALLOWED_ORIGINS = [CORS_ALLOWED_ORIGIN]
 CORS_ALLOW_METHODS = ["GET", "OPTIONS"]
 
+
+def web_origin(name, *, allow_http):
+    value = os.environ.get(name, "")
+    schemes = ("https", "http") if allow_http else ("https",)
+    parts = urlsplit(value)
+    try:
+        parts.port  # noqa: B018 - reading it is what validates a malformed port
+    except ValueError:
+        parts = None
+    # Admin links are built by appending a path, so anything but a bare origin would corrupt them.
+    if (
+        parts is None
+        or parts.scheme not in schemes
+        or not parts.hostname
+        or parts.username is not None
+        or "*" in value
+        or "," in value
+        or value != f"{parts.scheme}://{parts.netloc}"
+    ):
+        raise ImproperlyConfigured(
+            f"{name} must be exactly one explicit {' or '.join(schemes)} origin "
+            "(scheme, host and optional port; no path, credentials, query or trailing slash)"
+        )
+    return value
+
+
+# Where the visual camera editor is served. Deliberately independent of CORS_ALLOWED_ORIGIN: the
+# two answer different questions (who may read the API, where the Admin sends editors) and may
+# diverge.
+WEB_ORIGIN = web_origin("WEB_ORIGIN", allow_http=DEBUG)
+
 MEDIA_STORES = ("filesystem", "s3")
 
 

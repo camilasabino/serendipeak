@@ -58,6 +58,7 @@ def test_cookies_are_http_only_and_same_site():
 @pytest.mark.parametrize(("app_env", "secure"), [("production", True), ("development", False)])
 def test_cookies_are_secure_outside_development(monkeypatch, app_env, secure):
     monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("WEB_ORIGIN", "https://web.example")
     for name, value in MEDIA_ENVIRONMENT.items():
         monkeypatch.setenv(name, value)
 
