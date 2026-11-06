@@ -50,7 +50,16 @@ class PhotographManifest:
     def photographs(self) -> tuple[ManifestPhotograph, ...]:
         return tuple(sorted(self._by_mountain.values(), key=lambda photograph: photograph.slug))
 
-    def photograph_of(self, mountain_id: UUID) -> ManifestPhotograph | None:
+    def pin_for(self, mountain_id: UUID, legacy_file_url: str | None) -> ManifestPhotograph | None:
+        """The pin that applies to the current photograph of a mountain, if any.
+
+        A pin describes a legacy photograph, which always keeps its legacy file URL. Uploading
+        a replacement clears that URL with the rest of the legacy provenance, so a photograph
+        without one is an editorial replacement the manifest says nothing about.
+        """
+        if legacy_file_url is None:
+            return None
+
         return self._by_mountain.get(mountain_id)
 
 
@@ -66,7 +75,7 @@ def manifest_differences(
     pinned: ManifestPhotograph,
     *,
     file_url: str,
-    source_identifier: str,
+    source_identifier: str | None,
     sha256: str,
     dimensions: ImageDimensions | None,
     size: int | None = None,

@@ -11,9 +11,19 @@ from serendipeak.catalog.media.keys import (
     VIEWER_MAX_LONG_EDGE,
 )
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
+from serendipeak.errors import InfrastructureError
 
 JPEG_MAX_PIXELS = 200_000_000
-PNG_WEBP_MAX_PIXELS = 50_000_000
+# PNG and WebP are always decoded in full and conversion keeps several copies alive, so memory
+# follows the pixel count: at this cap the worst case measured (an RGBA WebP with a colour
+# profile) peaked at about 0.8 GiB of resident memory, and at 50 megapixels it reached 1.4 GiB.
+PNG_WEBP_MAX_PIXELS = 25_000_000
+# The most pixels held by one decoded JPEG copy. A JPEG is decoded at a reduced scale (see
+# _decode) and rejected when even that scale exceeds it, which only a very long and narrow
+# photograph does.
+DECODE_MAX_PIXELS = 50_000_000
+# JPEG stores each side in 16 bits, so a longer rendition cannot be encoded at all.
+JPEG_MAX_SIDE = 65_535
 
 # Pillow warns above MAX_IMAGE_PIXELS and raises DecompressionBombError above twice that,
 # while reading the header. The per-format caps below reject everything over its cap right
@@ -53,19 +63,35 @@ class PillowPhotographProcessor:
         photograph_format = _inspect(data)
 
         with _open(data) as image:
+            transposed = _is_transposed(image)
+            dimensions = _oriented_dimensions(image.size, transposed)
+            page_size = _page_size(dimensions)
+            viewer_size = _viewer_size(dimensions)
+            if max(*page_size, *viewer_size) > JPEG_MAX_SIDE:
+                raise PhotographRejected(PhotographRejection.TOO_MANY_PIXELS)
+
             try:
-                dimensions = _oriented_dimensions(image)
-                working = _decode(image)
+                working = _decode(image, _covering(page_size, viewer_size), transposed)
             except Image.DecompressionBombError as error:
                 raise PhotographRejected(PhotographRejection.TOO_MANY_PIXELS) from error
             except _DECODE_ERRORS as error:
                 raise PhotographRejected(PhotographRejection.CORRUPT) from error
+            except MemoryError as error:
+                raise InfrastructureError("not enough memory to decode the photograph") from error
+
+        # The image decoded and its renditions fit JPEG, so a failure from here on says nothing
+        # about the file: it is reported as a processing failure, never as an unexpected error.
+        try:
+            page_jpeg = _encode(_fit(working, page_size))
+            viewer_jpeg = _encode(_fit(working, viewer_size))
+        except (*_DECODE_ERRORS, MemoryError) as error:
+            raise InfrastructureError("the photograph renditions could not be rendered") from error
 
         return ProcessedPhotograph(
             format=photograph_format,
             dimensions=dimensions,
-            page_jpeg=_encode(_fit(working, _page_size(dimensions))),
-            viewer_jpeg=_encode(_fit(working, _viewer_size(dimensions))),
+            page_jpeg=page_jpeg,
+            viewer_jpeg=viewer_jpeg,
         )
 
 
@@ -119,24 +145,42 @@ def _is_unsupported_image(data: bytes) -> bool:
         return False
 
 
-def _oriented_dimensions(image: Image.Image) -> ImageDimensions:
-    width, height = image.size
-    orientation = image.getexif().get(ExifTags.Base.Orientation)
-    if orientation in _TRANSPOSED_ORIENTATIONS:
+def _is_transposed(image: Image.Image) -> bool:
+    return image.getexif().get(ExifTags.Base.Orientation) in _TRANSPOSED_ORIENTATIONS
+
+
+def _oriented_dimensions(size: tuple[int, int], transposed: bool) -> ImageDimensions:
+    width, height = size
+    if transposed:
         width, height = height, width
 
     return ImageDimensions(width=width, height=height)
 
 
-def _decode(image: Image.Image) -> Image.Image:
-    if image.format in ("JPEG", "MPO"):
-        # DCT scaling decodes a large JPEG at 1/2, 1/4 or 1/8 of its size while both sides
-        # stay at least as large as the viewer rendition, so memory follows the rendition
-        # instead of the original (about 172 MP for the largest catalog photograph).
-        image.draft(None, (VIEWER_MAX_LONG_EDGE, VIEWER_MAX_LONG_EDGE))
-    image.load()
+def _covering(*sizes: tuple[int, int]) -> tuple[int, int]:
+    return max(width for width, _ in sizes), max(height for _, height in sizes)
 
-    return _to_srgb(ImageOps.exif_transpose(image))
+
+def _decode(image: Image.Image, oriented_cover: tuple[int, int], transposed: bool) -> Image.Image:
+    if image.format in ("JPEG", "MPO"):
+        # DCT scaling decodes a JPEG at 1/2, 1/4 or 1/8 of its size while both sides still
+        # cover both renditions, so memory follows the renditions instead of the original
+        # (about 172 MP for the largest catalog photograph). The request is the renditions'
+        # own shape, not a square: a 40000x5000 panorama decodes at 5000x625, where a
+        # 2560x2560 request would leave it at full size. The pixels are not turned yet.
+        width, height = oriented_cover
+        image.draft(None, (height, width) if transposed else (width, height))
+
+    width, height = image.size
+    if width * height > DECODE_MAX_PIXELS:
+        raise PhotographRejected(PhotographRejection.TOO_MANY_PIXELS)
+
+    image.load()
+    # In place, because the copy exif_transpose returns otherwise is one more full-size
+    # buffer, and it returns that copy even when the photograph needs no rotation.
+    ImageOps.exif_transpose(image, in_place=True)
+
+    return _to_srgb(image)
 
 
 def _to_srgb(image: Image.Image) -> Image.Image:
@@ -150,7 +194,9 @@ def _to_srgb(image: Image.Image) -> Image.Image:
     if icc_profile:
         image = _apply_icc_profile(image, icc_profile)
     if image.mode in ("RGBA", "LA"):
-        image = Image.alpha_composite(Image.new("RGBA", image.size, _WHITE), image.convert("RGBA"))
+        # convert() copies even when the mode already matches.
+        opaque_candidate = image if image.mode == "RGBA" else image.convert("RGBA")
+        image = Image.alpha_composite(Image.new("RGBA", image.size, _WHITE), opaque_candidate)
 
     return image.convert("RGB")
 

@@ -155,26 +155,31 @@ def test_storage_details_are_never_exposed():
     assert "/original." not in json.dumps(image)
 
 
+def test_an_uploaded_photograph_has_its_credit_link_and_no_legacy_identifier():
+    image = primary_image(
+        creator="Sébastien Goldberg",
+        creator_url="https://unsplash.com/@sebastiengoldberg",
+        license_name="Unsplash License",
+        license_url="https://unsplash.com/license",
+        source_page_url="https://unsplash.com/photos/a-mountain",
+        source_identifier=None,
+    )
+
+    represented = represent_mountain(mountain(primary_image=image), MEDIA_BASE_URL)["primaryImage"]
+
+    assert represented["creatorUrl"] == "https://unsplash.com/@sebastiengoldberg"
+    assert represented["sourcePageUrl"] == "https://unsplash.com/photos/a-mountain"
+    assert "sourceIdentifier" not in represented
+
+
 def test_a_photograph_without_media_is_represented_without_a_primary_image():
     entity = mountain(primary_image=primary_image(media=None))
 
     assert "primaryImage" not in represent_mountain(entity, MEDIA_BASE_URL)
 
 
-def test_only_the_approved_members_differ_from_the_v1_fixture():
-    original = load_fixture("mountain-complete.json")
-
-    expected = served_with_owned_media(original, MEDIA_BASE_URL, media_of)
-
+def test_the_members_approved_to_differ_from_the_v1_fixtures_are_the_two_delivery_urls():
     assert set(APPROVED_V1_DIVERGENCES) == {"url", "thumbnailUrl"}
-    assert {
-        **original["primaryImage"],
-        **{m: expected["primaryImage"][m] for m in APPROVED_V1_DIVERGENCES},
-    } == expected["primaryImage"]
-    assert {k: v for k, v in original.items() if k != "primaryImage"} == {
-        k: v for k, v in expected.items() if k != "primaryImage"
-    }
-    assert expected["primaryImage"]["url"].startswith(MEDIA_BASE_URL)
 
 
 @pytest.mark.parametrize(

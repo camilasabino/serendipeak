@@ -4,13 +4,14 @@ import struct
 import zlib
 
 import pytest
-from PIL import ExifTags, Image, ImageCms, ImageFile
+from PIL import ExifTags, Image, ImageCms, ImageFile, JpegImagePlugin
 
 from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.catalog.errors import PhotographRejected, PhotographRejection
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import PhotographFormat
-from serendipeak.media.pillow_processor import PillowPhotographProcessor
+from serendipeak.errors import InfrastructureError
+from serendipeak.media.pillow_processor import DECODE_MAX_PIXELS, PillowPhotographProcessor
 from tests.support.fakes import FakeMediaStore
 
 PROCESSOR = PillowPhotographProcessor()
@@ -256,8 +257,9 @@ def test_a_png_with_damaged_pixel_data_is_corrupt():
     assert rejection(bytes(data)) is PhotographRejection.CORRUPT
 
 
-def test_a_png_header_over_50_megapixels_is_rejected_before_decoding():
-    data = with_png_size(encoded(photograph((1, 1)), "PNG"), 10_000, 10_000)
+@pytest.mark.parametrize(("width", "height"), [(10_000, 10_000), (5_001, 5_000)])
+def test_a_png_header_over_25_megapixels_is_rejected_before_decoding(width, height):
+    data = with_png_size(encoded(photograph((1, 1)), "PNG"), width, height)
 
     assert rejection(data) is PhotographRejection.TOO_MANY_PIXELS
 
@@ -285,6 +287,87 @@ def test_a_large_jpeg_is_decoded_at_a_reduced_scale_into_full_size_renditions():
     assert processed.dimensions == ImageDimensions(width=5200, height=5200)
     assert decoded(processed.viewer_jpeg).size == (2560, 2560)
     assert decoded(processed.page_jpeg).size == (1280, 1280)
+
+
+@pytest.fixture
+def decoded_sizes(monkeypatch):
+    """The size each JPEG is decoded at, which is what bounds the decoding memory."""
+    sizes = []
+    load = JpegImagePlugin.JpegImageFile.load
+
+    def recording_load(image):
+        if image.tile:
+            sizes.append(image.size)
+        return load(image)
+
+    monkeypatch.setattr(JpegImagePlugin.JpegImageFile, "load", recording_load)
+
+    return sizes
+
+
+def oriented_jpeg(width, height, orientation=None):
+    exif = Image.Exif()
+    if orientation is not None:
+        exif[ExifTags.Base.Orientation] = orientation
+
+    return with_jpeg_size(encoded(photograph((16, 16)), "JPEG", exif=exif.tobytes()), width, height)
+
+
+@pytest.mark.parametrize(
+    ("stored", "orientation", "dimensions", "page", "viewer", "decoded_at"),
+    [
+        ((40_000, 5_000), None, (40_000, 5_000), (1280, 160), (2560, 320), (5_000, 625)),
+        ((5_000, 40_000), None, (5_000, 40_000), (1280, 10240), (320, 2560), (2_500, 20_000)),
+        ((40_000, 5_000), 6, (5_000, 40_000), (1280, 10240), (320, 2560), (20_000, 2_500)),
+    ],
+)
+def test_a_panorama_is_decoded_at_the_scale_its_renditions_need(
+    decoded_sizes, stored, orientation, dimensions, page, viewer, decoded_at
+):
+    processed = PROCESSOR.process(oriented_jpeg(*stored, orientation))
+
+    assert processed.dimensions == ImageDimensions(*dimensions)
+    assert set(decoded_sizes) == {decoded_at}
+    assert decoded_at[0] * decoded_at[1] <= DECODE_MAX_PIXELS
+    assert decoded(processed.page_jpeg).size == page
+    assert decoded(processed.viewer_jpeg).size == viewer
+
+
+def test_a_jpeg_that_cannot_be_decoded_small_enough_is_rejected_before_decoding(decoded_sizes):
+    # Its page rendition keeps the full 60000 pixels of height, so no DCT scale applies.
+    data = oriented_jpeg(1_500, 60_000)
+
+    assert rejection(data) is PhotographRejection.TOO_MANY_PIXELS
+    assert decoded_sizes == []
+
+
+def test_a_photograph_whose_rendition_jpeg_cannot_hold_is_rejected():
+    data = encoded(photograph((1, 70_000)), "PNG")
+
+    assert rejection(data) is PhotographRejection.TOO_MANY_PIXELS
+
+
+@pytest.mark.parametrize("failing", ["resize", "save"])
+def test_a_rendering_failure_is_a_processing_failure_not_a_pillow_error(monkeypatch, failing):
+    data = encoded(photograph((3000, 2000)), "PNG")
+
+    def fail(*args, **kwargs):
+        raise OSError("encoder error -2")
+
+    monkeypatch.setattr(Image.Image, failing, fail)
+
+    with pytest.raises(InfrastructureError):
+        PROCESSOR.process(data)
+
+
+def test_running_out_of_memory_while_decoding_is_a_processing_failure(monkeypatch):
+    def fail(image):
+        raise MemoryError
+
+    monkeypatch.setattr(JpegImagePlugin.JpegImageFile, "load", fail)
+
+    with pytest.raises(InfrastructureError):
+        PROCESSOR.process(encoded(photograph(), "JPEG"))
 
 
 @pytest.mark.parametrize(

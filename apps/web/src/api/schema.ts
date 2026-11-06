@@ -101,11 +101,12 @@ function isMountainImage(value: unknown): value is MountainImage {
 		isHttpUrl(value.url) &&
 		isNonEmptyString(value.attribution) &&
 		isHttpUrl(value.sourcePageUrl) &&
-		isNonEmptyString(value.sourceIdentifier) &&
+		isOptional(value, 'sourceIdentifier', isNonEmptyString) &&
 		isOptional(value, 'thumbnailUrl', isHttpUrl) &&
 		isOptional(value, 'width', isPositiveInteger) &&
 		isOptional(value, 'height', isPositiveInteger) &&
 		isOptional(value, 'creator', isNonEmptyString) &&
+		isOptional(value, 'creatorUrl', isHttpUrl) &&
 		isOptional(value, 'license', isNonEmptyString) &&
 		isOptional(value, 'licenseUrl', isHttpUrl)
 	);

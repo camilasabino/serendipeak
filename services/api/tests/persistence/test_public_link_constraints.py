@@ -9,6 +9,7 @@ IMAGE_LINK_CONSTRAINTS = {
     "legacy_file_url": "mountain_image_legacy_file_url_https",
     "source_page_url": "mountain_image_source_page_url_public_link",
     "license_url": "mountain_image_license_url_public_link",
+    "creator_url": "mountain_image_creator_url_public_link",
 }
 
 pytestmark = pytest.mark.django_db

@@ -9,10 +9,14 @@ KEY_PREFIX = "photographs/"
 ORIGINAL_NAME_PREFIX = "original."
 
 # Published renditions are cached forever under their key, so changing any rendition
-# parameter requires a new version instead of new bytes under an existing key.
-RENDITION_VERSION = "r1"
-PAGE_NAME = f"page-{RENDITION_VERSION}.jpg"
-VIEWER_NAME = f"viewer-{RENDITION_VERSION}.jpg"
+# parameter requires a new version instead of new bytes under an existing key. New
+# renditions use the latest version; rows and objects of earlier ones stay valid and are
+# never rewritten. r2 decodes large JPEGs at a reduced scale, which changes the bytes of
+# some photographs that r1 had already published.
+RENDITION_VERSION = "r2"
+RENDITION_VERSIONS = ("r1", RENDITION_VERSION)
+PAGE_NAMES = tuple(f"page-{version}.jpg" for version in RENDITION_VERSIONS)
+VIEWER_NAMES = tuple(f"viewer-{version}.jpg" for version in RENDITION_VERSIONS)
 PAGE_MAX_WIDTH = 1280
 VIEWER_MAX_LONG_EDGE = 2560
 RENDITION_JPEG_QUALITY = 85
@@ -52,11 +56,19 @@ def original_key_prefix(sha256: str) -> str:
 
 
 def page_key(sha256: str) -> str:
-    return f"{_directory(sha256)}/{PAGE_NAME}"
+    return f"{_directory(sha256)}/{PAGE_NAMES[-1]}"
 
 
 def viewer_key(sha256: str) -> str:
-    return f"{_directory(sha256)}/{VIEWER_NAME}"
+    return f"{_directory(sha256)}/{VIEWER_NAMES[-1]}"
+
+
+def page_keys(sha256: str) -> tuple[str, ...]:
+    return tuple(f"{_directory(sha256)}/{name}" for name in PAGE_NAMES)
+
+
+def viewer_keys(sha256: str) -> tuple[str, ...]:
+    return tuple(f"{_directory(sha256)}/{name}" for name in VIEWER_NAMES)
 
 
 def public_url(base_url: str, key: str) -> str:

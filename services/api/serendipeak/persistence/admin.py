@@ -1,3 +1,4 @@
+import logging
 import re
 
 from django import forms
@@ -17,7 +18,15 @@ from django.views.decorators.http import require_POST
 from serendipeak.catalog import coordinates
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
-from serendipeak.catalog.errors import InvalidStatusTransition, PublicationRejected, UnknownMountain
+from serendipeak.catalog.errors import (
+    InvalidStatusTransition,
+    PhotographRejected,
+    PhotographRejection,
+    PublicationRejected,
+    UnknownMountain,
+)
+from serendipeak.catalog.media.ingestion import PhotographIngestion, PreparedPhotograph
+from serendipeak.catalog.media.keys import public_url
 from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.publication import (
     PublicationViolation,
@@ -29,8 +38,11 @@ from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
+from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.mapping import to_mountain, to_mountain_with_image
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
+
+logger = logging.getLogger(__name__)
 
 PUBLISH_PERMISSION = "catalog.publish_mountain"
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS", "TRACE")
@@ -59,12 +71,6 @@ VIOLATION_MESSAGES = {
     PublicationViolation.IMAGE_MEDIA_MISSING: "the photograph file is not stored yet",
     PublicationViolation.IMAGE_ATTRIBUTION_MISSING: "the photograph attribution is missing",
     PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING: "the photograph source page is missing",
-    PublicationViolation.IMAGE_SOURCE_IDENTIFIER_MISSING: "the photograph identifier is missing",
-    PublicationViolation.IMAGE_LICENSE_NAME_MISSING: "the photograph license name is missing",
-    PublicationViolation.IMAGE_LICENSE_URL_MISSING: "the photograph license URL is missing",
-    PublicationViolation.IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING: (
-        "a public domain photograph needs its creator"
-    ),
     PublicationViolation.IMAGE_DIMENSIONS_MISSING: "the photograph dimensions are missing",
     PublicationViolation.SUMMARY_INVALID: "the summary breaks the summary rules",
     PublicationViolation.LINK_NOT_HTTPS: "a public link does not use https://",
@@ -73,8 +79,22 @@ PUBLIC_LINK_LABELS = {
     PublicLinkField.WIKIPEDIA_URL: "the Wikipedia link",
     PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photograph source page",
     PublicLinkField.IMAGE_LICENSE_URL: "the photograph license URL",
+    PublicLinkField.IMAGE_CREATOR_URL: "the photograph creator URL",
 }
 PUBLIC_LINK_MESSAGE = "Use an https:// link."
+
+ACCEPTED_PHOTOGRAPH_TYPES = "image/jpeg,image/png,image/webp"
+REJECTION_MESSAGES = {
+    PhotographRejection.TOO_MANY_PIXELS: "The photograph has too many pixels to be processed.",
+    PhotographRejection.UNSUPPORTED_FORMAT: "Use a JPEG, PNG or WebP file.",
+    PhotographRejection.NOT_AN_IMAGE: "The file is not an image. Use a JPEG, PNG or WebP file.",
+    PhotographRejection.CORRUPT: "The file is damaged or incomplete.",
+    PhotographRejection.ANIMATED: "Use a still photograph, not an animated image.",
+}
+PHOTOGRAPH_REJECTED = "The photograph was rejected."
+PHOTOGRAPH_NOT_PROCESSED = "The photograph could not be processed. Try again or use another file."
+PHOTOGRAPH_NOT_STORED = "The photograph could not be stored. Nothing was changed."
+LICENSE_NAME_FOR_URL = "Add the license name of this license URL."
 
 OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
 CAMERA_FIELDS = (
@@ -84,26 +104,25 @@ CAMERA_FIELDS = (
     "camera_framing_x",
     "camera_framing_y",
 )
-IMAGE_OPTIONAL = (
+IMAGE_CREDIT_FIELDS = (
+    "source_page_url",
+    "attribution",
     "creator",
+    "creator_url",
     "license_name",
     "license_url",
-    "license_reported",
-    "license_election_basis_url",
-    "approved_on",
 )
-IMAGE_LINKS = ("legacy_file_url", "source_page_url", "license_url")
-PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
-IMAGE_FROZEN = (
-    "legacy_file_url",
-    "width",
-    "height",
-    "source_page_url",
+IMAGE_OPTIONAL = ("creator", "creator_url", "license_name", "license_url")
+IMAGE_LINKS = ("source_page_url", "creator_url", "license_url")
+PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
+LEGACY_PROVENANCE_FIELDS = (
     "source_identifier",
+    "legacy_file_url",
     "license_reported",
     "license_election_basis_url",
     "approved_on",
 )
+PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
 EDITORIAL_FIELDS = ("summary", "range_name", "countries")
 ADDITIONAL_FIELDS = ("prominence_meters", "osm_type", "osm_id", "wikidata_id", "wikipedia_url")
@@ -279,57 +298,130 @@ class MountainForm(forms.ModelForm):
             self.add_error("osm_id", "The OpenStreetMap type and id go together.")
 
 
+class PhotographFileInput(forms.FileInput):
+    """A file input shown with the stored page rendition and a local preview of the chosen file."""
+
+    def __init__(self, attrs=None):
+        super().__init__(
+            attrs={"accept": ACCEPTED_PHOTOGRAPH_TYPES, "data-photograph-file": "", **(attrs or {})}
+        )
+        self.stored_url = None
+
+    def render(self, name, value, attrs=None, renderer=None):
+        stored = (
+            format_html(
+                '<img class="photograph-preview" src="{}" alt="Current photograph">',
+                self.stored_url,
+            )
+            if self.stored_url
+            else ""
+        )
+
+        return format_html(
+            '<div class="photograph-upload">{}<img class="photograph-preview" alt="Chosen '
+            'photograph" data-photograph-preview hidden>{}</div>',
+            stored,
+            super().render(name, value, attrs, renderer),
+        )
+
+
 class MountainImageForm(forms.ModelForm):
-    width = forms.IntegerField(required=False, min_value=1)
-    height = forms.IntegerField(required=False, min_value=1)
+    photograph_file = forms.FileField(
+        label="Photograph file",
+        required=False,
+        widget=PhotographFileInput,
+        help_text=(
+            "A JPEG, PNG or WebP file. Visitors get resized copies without the file's metadata."
+        ),
+    )
 
     class Meta:
         model = MountainImageRecord
-        fields = (
-            "legacy_file_url",
-            "width",
-            "height",
-            "source_page_url",
-            "source_identifier",
-            "creator",
-            "attribution",
-            "license_name",
-            "license_url",
-            "license_reported",
-            "license_election_basis_url",
-            "approved_on",
-        )
-        labels = {"legacy_file_url": "Source file URL"}
-        help_texts = {
-            "legacy_file_url": (
-                "Where the photograph file was downloaded from. It is never shown to visitors: "
-                "they get the stored copy once the file is materialized."
-            )
+        fields = IMAGE_CREDIT_FIELDS
+        labels = {
+            "source_page_url": "Source page URL",
+            "creator_url": "Creator URL",
+            "license_url": "License URL",
         }
-        widgets = _single_line(
-            "legacy_file_url",
-            "source_page_url",
-            "source_identifier",
-            "creator",
-            "attribution",
-            "license_name",
-            "license_url",
-            "license_reported",
-            "license_election_basis_url",
-        )
+        help_texts = {
+            "source_page_url": "The page the photograph comes from.",
+            "attribution": "The credit shown to visitors.",
+            "creator_url": "Where the credit links to.",
+        }
+        widgets = _single_line(*IMAGE_CREDIT_FIELDS)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, ingestion: PhotographIngestion, media_base_url: str, **kwargs):
         super().__init__(*args, **kwargs)
-        _make_optional(self, [name for name in IMAGE_OPTIONAL if name in self.fields])
+        self._ingestion = ingestion
+        self.prepared_photograph: PreparedPhotograph | None = None
+        _make_optional(self, IMAGE_OPTIONAL)
         _require_public_links(self, IMAGE_LINKS)
+
+        photograph_file = self.fields["photograph_file"]
+        if self.instance._state.adding:
+            photograph_file.required = True
+        else:
+            photograph_file.label = "Replace photograph"
+            photograph_file.help_text = (
+                "Leave empty to keep the current photograph. A new file replaces it and clears "
+                "its legacy provenance; update the credit to match."
+            )
+        if self.instance.page_key is not None:
+            photograph_file.widget.stored_url = public_url(media_base_url, self.instance.page_key)
+
+    def clean_photograph_file(self):
+        upload = self.cleaned_data.get("photograph_file")
+        if upload is None:
+            return None
+
+        # The size is known before reading: a large upload is streamed to a temporary file.
+        max_bytes = self._ingestion.limits.max_bytes
+        if upload.size > max_bytes:
+            raise ValidationError(_too_many_bytes(max_bytes), code="too_many_bytes")
+
+        try:
+            self.prepared_photograph = self._ingestion.prepare(upload.read())
+        except PhotographRejected as rejected:
+            message = (
+                _too_many_bytes(max_bytes)
+                if rejected.reason is PhotographRejection.TOO_MANY_BYTES
+                else REJECTION_MESSAGES.get(rejected.reason, PHOTOGRAPH_REJECTED)
+            )
+            raise ValidationError(message, code=rejected.reason.value) from rejected
+        except InfrastructureError as error:
+            logger.exception("An uploaded photograph could not be processed")
+            raise ValidationError(PHOTOGRAPH_NOT_PROCESSED, code="not_processed") from error
+
+        return upload
 
     def clean(self):
         cleaned = super().clean()
-        if "width" in self.fields and "height" in self.fields:
-            if (cleaned.get("width") is None) != (cleaned.get("height") is None):
-                self.add_error("height", "The width and height go together.")
+        if cleaned.get("license_url") is not None and cleaned.get("license_name") is None:
+            if "license_name" not in self.errors:
+                self.add_error("license_name", LICENSE_NAME_FOR_URL)
+
+        if self.prepared_photograph is not None:
+            _use_photograph(self.instance, self.prepared_photograph)
 
         return cleaned
+
+
+def _too_many_bytes(max_bytes):
+    return f"The file is larger than {max_bytes // (1024 * 1024)} MiB."
+
+
+def _use_photograph(image, prepared):
+    # The formset judges this prospective instance, and nothing is stored until every form is
+    # valid. The legacy provenance belongs to the photograph being replaced, so it goes too.
+    media = prepared.media
+    image.original_key = media.original_key
+    image.original_sha256 = media.original_sha256
+    image.page_key = media.page_key
+    image.viewer_key = media.viewer_key
+    image.width = prepared.dimensions.width
+    image.height = prepared.dimensions.height
+    for name in LEGACY_PROVENANCE_FIELDS:
+        setattr(image, name, None)
 
 
 class MountainImageFormSet(BaseInlineFormSet):
@@ -351,6 +443,13 @@ class MountainImageFormSet(BaseInlineFormSet):
                 ]
             )
 
+    def photographs_to_store(self) -> list[PreparedPhotograph]:
+        return [
+            form.prepared_photograph
+            for form in self.forms
+            if form.prepared_photograph is not None and not self._should_delete_form(form)
+        ]
+
     def _prospective_image(self):
         image = None
         for form in self.forms:
@@ -362,8 +461,21 @@ class MountainImageFormSet(BaseInlineFormSet):
         return image
 
 
-def _has_image(mountain):
-    return mountain is not None and hasattr(mountain, "image")
+def _stored_image(mountain):
+    if mountain is None:
+        return None
+    try:
+        return mountain.image
+    except MountainImageRecord.DoesNotExist:
+        return None
+
+
+def _present_legacy_fields(image):
+    return tuple(name for name in LEGACY_PROVENANCE_FIELDS if getattr(image, name) is not None)
+
+
+class _PhotographNotStored(Exception):
+    pass
 
 
 class MountainImageInline(admin.StackedInline):
@@ -374,12 +486,57 @@ class MountainImageInline(admin.StackedInline):
     max_num = 1
     can_delete = True
 
+    class Media:
+        js = ("serendipeak/admin/photograph-preview.js",)
+
+    def get_fieldsets(self, request, obj=None):
+        photograph = (None, {"fields": ("photograph_file", *IMAGE_CREDIT_FIELDS)})
+        image = _stored_image(obj)
+        if image is None:
+            return [photograph]
+
+        details = (
+            "Photograph details",
+            {"fields": PHOTOGRAPH_DETAIL_FIELDS, "classes": ("collapse",)},
+        )
+        legacy = _present_legacy_fields(image)
+        if not legacy:
+            return [photograph, details]
+
+        legacy_provenance = (
+            "Legacy provenance",
+            {
+                "fields": legacy,
+                "classes": ("collapse",),
+                "description": "Recorded for the photograph imported from the legacy catalog. "
+                "Replacing the photograph clears it.",
+            },
+        )
+
+        return [photograph, details, legacy_provenance]
+
     def get_readonly_fields(self, request, obj=None):
-        return (*IMAGE_FROZEN, "stored_original") if _has_image(obj) else ()
+        image = _stored_image(obj)
+        if image is None:
+            return ()
+
+        return (*PHOTOGRAPH_DETAIL_FIELDS, *_present_legacy_fields(image))
+
+    @admin.display(description="Dimensions")
+    def photograph_dimensions(self, image):
+        if image.width is None:
+            return "Unknown"
+
+        return f"{image.width} × {image.height} pixels"
 
     @admin.display(description="Stored original (SHA-256)")
     def stored_original(self, image):
-        return image.original_sha256 or "Not stored yet"
+        if image.original_sha256 is None:
+            return "Not stored yet"
+
+        return format_html(
+            '<code title="{}">{}…</code>', image.original_sha256, image.original_sha256[:12]
+        )
 
     def has_view_permission(self, request, obj=None):
         return request.user.has_perm("catalog.view_mountainrecord")
@@ -402,6 +559,8 @@ class MountainAdmin(admin.ModelAdmin):
     publish_mountain: PublishMountain
     deactivate_mountain: DeactivateMountain
     reactivate_mountain: ReactivateMountain
+    photograph_ingestion: PhotographIngestion
+    media_base_url: str
 
     show_facets = ShowFacets.ALWAYS
     list_display = ("name", "slug", "status", "elevation_meters", "range_name", "updated_at")
@@ -507,12 +666,47 @@ class MountainAdmin(admin.ModelAdmin):
 
         return super().render_change_form(request, context, add, change, form_url, obj)
 
+    def get_formset_kwargs(self, request, obj, inline, prefix):
+        return {
+            **super().get_formset_kwargs(request, obj, inline, prefix),
+            "form_kwargs": {
+                "ingestion": self.photograph_ingestion,
+                "media_base_url": self.media_base_url,
+            },
+        }
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        # Django runs a mutating change view inside one transaction. The exception leaves it,
+        # so the mountain update rolls back with the photograph that could not be stored.
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except _PhotographNotStored:
+            logger.exception("An uploaded photograph could not be stored")
+            self.message_user(request, PHOTOGRAPH_NOT_STORED, messages.ERROR)
+
+            return HttpResponseRedirect(request.get_full_path())
+
+    def save_formset(self, request, form, formset, change):
+        # PostgreSQL and the media store share no transaction. The objects go first, under new
+        # immutable keys, and the row references them only afterwards, so a committed row never
+        # points to a missing object; a failure leaves unreferenced objects at worst.
+        for prepared in formset.photographs_to_store():
+            try:
+                self.photograph_ingestion.store(prepared)
+            except InfrastructureError as error:
+                raise _PhotographNotStored from error
+
+        formset.save()
+
     def get_object(self, request, object_id, from_field=None):
         # Django opens the transaction of a mutating change or delete view before calling this,
         # and keeps it until the view returns. Locking here puts the row lock ahead of every
         # form, formset and permission decision and holds it through the image writes, which
         # is the order DjangoMountainStatusStore uses. A read-only request is not in a
-        # transaction, where FOR UPDATE is an error.
+        # transaction, where FOR UPDATE is an error. The lock is FOR NO KEY UPDATE: it still
+        # conflicts with publication's FOR UPDATE and with itself, but not with the FOR KEY
+        # SHARE a daily_discovery insert takes through its foreign key, so an upload that
+        # waits on object storage cannot stall the public API.
         connection = transaction.get_connection(router.db_for_write(self.model))
         if request.method in SAFE_METHODS or not connection.in_atomic_block:
             return super().get_object(request, object_id, from_field)
@@ -520,7 +714,7 @@ class MountainAdmin(admin.ModelAdmin):
         field = (
             self.model._meta.pk if from_field is None else self.model._meta.get_field(from_field)
         )
-        queryset = self.get_queryset(request).select_for_update(of=("self",))
+        queryset = self.get_queryset(request).select_for_update(of=("self",), no_key=True)
         try:
             return queryset.get(**{field.name: field.to_python(object_id)})
         except (MountainRecord.DoesNotExist, ValidationError, ValueError):

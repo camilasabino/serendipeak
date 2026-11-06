@@ -377,7 +377,7 @@ def test_media_checks_fail_until_the_catalog_is_materialized(media_root, cache):
 
 def test_the_deep_check_reports_a_missing_rendition(media_root, cache):
     run("materialize_photographs", "--cache-dir", str(cache))
-    (media_root / "public" / "photographs" / digest(FUJI_FILE) / "viewer-r1.jpg").unlink()
+    (media_root / "public" / "photographs" / digest(FUJI_FILE) / "viewer-r2.jpg").unlink()
 
     assert run("check_photograph_media")[1] == []
     message, _, stderr = failure("check_photograph_media", "--deep")

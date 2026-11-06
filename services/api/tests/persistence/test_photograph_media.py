@@ -43,8 +43,13 @@ REJECTED_MEDIA = [
         "mountain_image_page_key_matches_sha256",
         {"page_key": f"photographs/{OTHER_DIGEST}/page-r1.jpg"},
     ),
-    ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/page-r2.jpg"}),
+    ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/page-r3.jpg"}),
+    ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/page.jpg"}),
     ("mountain_image_page_key_matches_sha256", {"page_key": f"photographs/{DIGEST}/viewer-r1.jpg"}),
+    (
+        "mountain_image_viewer_key_matches_sha256",
+        {"viewer_key": f"photographs/{DIGEST}/viewer-r3.jpg"},
+    ),
     (
         "mountain_image_viewer_key_matches_sha256",
         {"viewer_key": f"photographs/{OTHER_DIGEST}/viewer-r1.jpg"},
@@ -70,7 +75,10 @@ def mountain(db):
 def test_rejects_invalid_photograph_media(mountain, constraint, overrides):
     error = insert_error(image_record(mountain, **{**MEDIA, **overrides}))
 
-    assert error.constraint_name == constraint
+    # A malformed viewer key also breaks the shared-version rule, and Postgres reports the
+    # first violated constraint by name.
+    reported = {constraint, "mountain_image_renditions_share_version"}
+    assert error.constraint_name in (reported if "viewer_key" in constraint else {constraint})
 
 
 def test_accepts_complete_photograph_media(mountain):
@@ -82,6 +90,34 @@ def test_accepts_the_original_key_of_every_accepted_format(mountain, photograph_
     original_key = keys.original_key(DIGEST, photograph_format)
 
     image_record(mountain, **{**MEDIA, "original_key": original_key}).save(force_insert=True)
+
+
+@pytest.mark.parametrize(("page", "viewer"), [("r1", "r2"), ("r2", "r1")])
+def test_rejects_renditions_of_different_versions(mountain, page, viewer):
+    error = insert_error(
+        image_record(
+            mountain,
+            **{
+                **MEDIA,
+                "page_key": f"photographs/{DIGEST}/page-{page}.jpg",
+                "viewer_key": f"photographs/{DIGEST}/viewer-{viewer}.jpg",
+            },
+        )
+    )
+
+    assert error.constraint_name == "mountain_image_renditions_share_version"
+
+
+@pytest.mark.parametrize("version", keys.RENDITION_VERSIONS)
+def test_accepts_the_renditions_of_every_published_version(mountain, version):
+    image_record(
+        mountain,
+        **{
+            **MEDIA,
+            "page_key": f"photographs/{DIGEST}/page-{version}.jpg",
+            "viewer_key": f"photographs/{DIGEST}/viewer-{version}.jpg",
+        },
+    ).save(force_insert=True)
 
 
 def test_the_constraints_accept_exactly_the_keys_the_key_builders_derive(mountain):

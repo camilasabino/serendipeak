@@ -89,7 +89,9 @@ describe('isMountain', () => {
 		['missing url', without(image, 'url')],
 		['missing attribution', without(image, 'attribution')],
 		['missing sourcePageUrl', without(image, 'sourcePageUrl')],
-		['missing sourceIdentifier', without(image, 'sourceIdentifier')],
+		['blank sourceIdentifier', { ...image, sourceIdentifier: '' }],
+		['javascript creator url', { ...image, creatorUrl: 'javascript:alert(1)' }],
+		['blank creator url', { ...image, creatorUrl: '' }],
 		['javascript url', { ...image, url: 'javascript:alert(1)' }],
 		['relative url', { ...image, url: '/media/a.jpg' }],
 		['null thumbnail', { ...image, thumbnailUrl: null }],
@@ -104,11 +106,23 @@ describe('isMountain', () => {
 		const required = {
 			url: image.url,
 			attribution: image.attribution,
-			sourcePageUrl: image.sourcePageUrl,
-			sourceIdentifier: image.sourceIdentifier
+			sourcePageUrl: image.sourcePageUrl
 		};
 
 		expect(isMountain({ ...complete, primaryImage: required })).toBe(true);
+	});
+
+	it('accepts an uploaded photograph credited to its creator without a source identifier', () => {
+		const uploaded = {
+			...without(image, 'sourceIdentifier'),
+			creator: 'Sébastien Goldberg',
+			creatorUrl: 'https://unsplash.com/@sebastiengoldberg',
+			license: 'Unsplash License',
+			licenseUrl: 'https://unsplash.com/license',
+			sourcePageUrl: 'https://unsplash.com/photos/a-mountain'
+		};
+
+		expect(isMountain({ ...complete, primaryImage: uploaded })).toBe(true);
 	});
 
 	it.each([

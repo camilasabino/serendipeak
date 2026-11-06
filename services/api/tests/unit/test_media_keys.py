@@ -5,8 +5,10 @@ from serendipeak.catalog.media.keys import (
     is_sha256,
     original_key,
     page_key,
+    page_keys,
     require_media_key,
     viewer_key,
+    viewer_keys,
 )
 from serendipeak.catalog.media.ports import PhotographFormat
 
@@ -37,9 +39,22 @@ def test_the_original_key_takes_its_extension_from_the_decoded_format(photograph
     assert original_key(DIGEST, photograph_format) == expected
 
 
-def test_rendition_keys_carry_the_digest_and_the_rendition_version():
-    assert page_key(DIGEST) == f"photographs/{DIGEST}/page-r1.jpg"
-    assert viewer_key(DIGEST) == f"photographs/{DIGEST}/viewer-r1.jpg"
+def test_rendition_keys_carry_the_digest_and_the_current_rendition_version():
+    assert page_key(DIGEST) == f"photographs/{DIGEST}/page-r2.jpg"
+    assert viewer_key(DIGEST) == f"photographs/{DIGEST}/viewer-r2.jpg"
+
+
+def test_the_keys_of_every_published_rendition_version_stay_accepted():
+    assert page_keys(DIGEST) == (
+        f"photographs/{DIGEST}/page-r1.jpg",
+        f"photographs/{DIGEST}/page-r2.jpg",
+    )
+    assert viewer_keys(DIGEST) == (
+        f"photographs/{DIGEST}/viewer-r1.jpg",
+        f"photographs/{DIGEST}/viewer-r2.jpg",
+    )
+    assert page_key(DIGEST) in page_keys(DIGEST)
+    assert viewer_key(DIGEST) in viewer_keys(DIGEST)
 
 
 def test_built_keys_are_deterministic_media_keys():
@@ -53,7 +68,7 @@ def test_built_keys_are_deterministic_media_keys():
     assert all(is_media_key(key) for key in built)
 
 
-@pytest.mark.parametrize("builder", [page_key, viewer_key])
+@pytest.mark.parametrize("builder", [page_key, viewer_key, page_keys, viewer_keys])
 def test_keys_are_only_built_from_a_valid_digest(builder):
     with pytest.raises(ValueError, match="SHA-256"):
         builder(DIGEST.upper())

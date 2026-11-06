@@ -12,8 +12,8 @@ from tests.support.fakes import FakeMediaStore, FakePhotographProcessor
 ORIGINAL = b"original photograph bytes"
 DIGEST = hashlib.sha256(ORIGINAL).hexdigest()
 ORIGINAL_KEY = f"photographs/{DIGEST}/original.png"
-PAGE_KEY = f"photographs/{DIGEST}/page-r1.jpg"
-VIEWER_KEY = f"photographs/{DIGEST}/viewer-r1.jpg"
+PAGE_KEY = f"photographs/{DIGEST}/page-r2.jpg"
+VIEWER_KEY = f"photographs/{DIGEST}/viewer-r2.jpg"
 PROCESSED = ProcessedPhotograph(
     format=PhotographFormat.PNG,
     dimensions=ImageDimensions(width=4000, height=3000),
@@ -130,6 +130,27 @@ def test_store_checks_each_object_before_writing_it():
         ("has_public", VIEWER_KEY),
         ("put_public", VIEWER_KEY),
     ]
+
+
+def test_a_photograph_published_under_an_earlier_version_keeps_its_objects():
+    earlier_page = f"photographs/{DIGEST}/page-r1.jpg"
+    earlier_viewer = f"photographs/{DIGEST}/viewer-r1.jpg"
+    store = FakeMediaStore()
+    store.put_original(ORIGINAL_KEY, ORIGINAL, "image/png")
+    store.put_public(earlier_page, b"earlier page", "image/jpeg")
+    store.put_public(earlier_viewer, b"earlier viewer", "image/jpeg")
+    store.calls.clear()
+    photographs = ingestion(store)
+
+    media = photographs.store(photographs.prepare(ORIGINAL))
+
+    assert media.page_key == PAGE_KEY
+    assert [call for call in store.calls if call[0].startswith("put")] == [
+        ("put_public", PAGE_KEY),
+        ("put_public", VIEWER_KEY),
+    ]
+    assert store.public[earlier_page] == (b"earlier page", "image/jpeg")
+    assert store.public[earlier_viewer] == (b"earlier viewer", "image/jpeg")
 
 
 def test_storing_again_writes_nothing():

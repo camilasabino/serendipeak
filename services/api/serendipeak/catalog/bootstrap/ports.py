@@ -9,7 +9,7 @@ from serendipeak.catalog.entities import ImageDimensions, Mountain, PhotographMe
 
 @dataclass(frozen=True, slots=True)
 class ImageProvenance:
-    legacy_file_url: str
+    legacy_file_url: str | None
     license_reported: str | None
     license_election_basis_url: str | None
     approved_on: date | None

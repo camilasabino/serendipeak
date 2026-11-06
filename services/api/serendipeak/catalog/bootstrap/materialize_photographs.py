@@ -40,8 +40,8 @@ class SourcePhotograph:
 class PhotographResult:
     mountain_id: UUID
     slug: str
-    source_identifier: str
-    file_url: str
+    source_identifier: str | None
+    file_url: str | None
     outcome: MaterializationOutcome
     detail: str | None = None
     source: SourcePhotograph | None = None
@@ -99,7 +99,7 @@ class MaterializePhotographs:
     The manifest decides what is downloaded: only the pinned file URL of a pinned photograph,
     since a draft's file URL is typed by an editor and the operator's network may reach hosts
     the editor cannot. A photograph the manifest does not pin is materialized only from an
-    explicit file.
+    explicit file. An uploaded photograph already has its media and is left alone.
     """
 
     def __init__(
@@ -168,7 +168,7 @@ class MaterializePhotographs:
         def failed(detail, source=None):
             return result(MaterializationOutcome.FAILED, detail, source)
 
-        pinned = manifest.photograph_of(mountain.id)
+        pinned = manifest.pin_for(mountain.id, file_url)
 
         if image.media is not None:
             if pinned is not None:
@@ -199,6 +199,8 @@ class MaterializePhotographs:
             prepared = self._ingestion.prepare(data)
         except PhotographRejected as error:
             return failed(f"file rejected: {error.reason}")
+        except InfrastructureError as error:
+            return failed(f"processing failed: {_describe(error)}")
 
         source = SourcePhotograph(prepared.original_sha256, len(data), prepared.dimensions)
         if prepared.dimensions != image.dimensions:

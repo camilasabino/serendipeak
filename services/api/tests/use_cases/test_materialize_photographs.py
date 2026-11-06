@@ -447,6 +447,62 @@ def test_attached_media_is_checked_against_the_manifest_without_downloading():
     assert arranged.fetcher.fetched == []
 
 
+def uploaded_replacement(entry):
+    """The photograph after an editor uploaded a replacement: new media, no legacy provenance."""
+    image = replace(
+        entry.mountain.primary_image,
+        media=photograph_media("b" * 64),
+        dimensions=ImageDimensions(4000, 3000),
+        source_identifier=None,
+    )
+
+    return with_file_url(with_mountain(entry, primary_image=image), None)
+
+
+def test_an_uploaded_replacement_of_a_pinned_photograph_is_left_alone():
+    arranged = Arrangement(uploaded_replacement(FUJI))
+
+    report = arranged.run(manifest=manifest_for((FUJI, FUJI_FILE)))
+
+    assert arranged.outcomes(report) == {"fuji": MaterializationOutcome.ALREADY_ATTACHED}
+    assert report.failed == ()
+    assert arranged.fetcher.fetched == []
+    assert arranged.stored() == set()
+
+
+def test_a_run_over_an_uploaded_replacement_yields_no_manifest():
+    arranged = Arrangement(ACONCAGUA, uploaded_replacement(FUJI))
+
+    report = arranged.run()
+
+    assert report.failed == ()
+    assert report.manifest() is None
+
+
+def test_a_processing_failure_is_reported_and_the_run_continues():
+    class FailingOnAconcagua(SyntheticPhotographProcessor):
+        def process(self, data):
+            if data == ACONCAGUA_FILE:
+                raise InfrastructureError("the photograph renditions could not be rendered")
+            return super().process(data)
+
+    arranged = Arrangement(ACONCAGUA, FUJI)
+    arranged.use_case = MaterializePhotographs(
+        arranged.catalog,
+        arranged.fetcher,
+        PhotographIngestion(
+            FailingOnAconcagua(), arranged.media_store, IngestionLimits(max_bytes=1000)
+        ),
+        arranged,
+    )
+
+    report = arranged.run()
+
+    assert [result.slug for result in report.failed] == ["aconcagua"]
+    assert report.failed[0].detail.startswith("processing failed")
+    assert arranged.stored() == stored_keys(FUJI_FILE)
+
+
 def test_a_complete_run_yields_the_manifest_of_every_photograph():
     arranged = Arrangement(ACONCAGUA, FUJI)
 

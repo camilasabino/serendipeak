@@ -7,8 +7,6 @@ from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.slug import is_valid_slug
 from serendipeak.catalog.summary import summary_violations
 
-_PUBLIC_DOMAIN_LICENSE_NAME = "Public domain"
-
 
 class PublicationViolation(StrEnum):
     SLUG_INVALID = "slug_invalid"
@@ -22,10 +20,6 @@ class PublicationViolation(StrEnum):
     IMAGE_MEDIA_MISSING = "image_media_missing"
     IMAGE_ATTRIBUTION_MISSING = "image_attribution_missing"
     IMAGE_SOURCE_PAGE_URL_MISSING = "image_source_page_url_missing"
-    IMAGE_SOURCE_IDENTIFIER_MISSING = "image_source_identifier_missing"
-    IMAGE_LICENSE_NAME_MISSING = "image_license_name_missing"
-    IMAGE_LICENSE_URL_MISSING = "image_license_url_missing"
-    IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING = "image_public_domain_creator_missing"
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
     SUMMARY_INVALID = "summary_invalid"
     LINK_NOT_HTTPS = "link_not_https"
@@ -35,6 +29,7 @@ class PublicLinkField(StrEnum):
     WIKIPEDIA_URL = "wikipedia_url"
     IMAGE_SOURCE_PAGE_URL = "image_source_page_url"
     IMAGE_LICENSE_URL = "image_license_url"
+    IMAGE_CREATOR_URL = "image_creator_url"
 
 
 def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ...]:
@@ -69,6 +64,7 @@ def unsafe_public_links(mountain: Mountain) -> tuple[PublicLinkField, ...]:
             [
                 (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
                 (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
+                (PublicLinkField.IMAGE_CREATOR_URL, image.creator_url),
             ]
         )
 
@@ -109,22 +105,16 @@ def _camera_violations(camera: CanonicalCamera | None) -> list[PublicationViolat
 def image_violations(image: PrimaryImage | None) -> list[PublicationViolation]:
     if image is None:
         return [PublicationViolation.PRIMARY_IMAGE_MISSING]
+    # The license and the legacy source identifier are optional: a photograph from any source
+    # is publishable with its file, its credit and the page it comes from.
     required = (
         (image.attribution, PublicationViolation.IMAGE_ATTRIBUTION_MISSING),
         (image.source_page_url, PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING),
-        (image.source_identifier, PublicationViolation.IMAGE_SOURCE_IDENTIFIER_MISSING),
-        (image.license_name, PublicationViolation.IMAGE_LICENSE_NAME_MISSING),
     )
     violations = [violation for value, violation in required if _is_blank(value)]
 
     if image.media is None:
         violations.insert(0, PublicationViolation.IMAGE_MEDIA_MISSING)
-
-    if not _is_blank(image.license_name) and _is_blank(image.license_url):
-        if image.license_name.casefold() != _PUBLIC_DOMAIN_LICENSE_NAME.casefold():
-            violations.append(PublicationViolation.IMAGE_LICENSE_URL_MISSING)
-        elif _is_blank(image.creator):
-            violations.append(PublicationViolation.IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING)
 
     if image.dimensions is None:
         violations.append(PublicationViolation.IMAGE_DIMENSIONS_MISSING)

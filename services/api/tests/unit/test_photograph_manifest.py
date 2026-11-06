@@ -43,8 +43,15 @@ def test_a_document_round_trips():
 def test_photographs_are_looked_up_by_mountain_id():
     manifest = parse_photograph_manifest(DOCUMENT)
 
-    assert manifest.photograph_of(PHOTOGRAPH.mountain_id) == PHOTOGRAPH
-    assert manifest.photograph_of(uuid.uuid4()) is None
+    assert manifest.pin_for(PHOTOGRAPH.mountain_id, PHOTOGRAPH.file_url) == PHOTOGRAPH
+    assert manifest.pin_for(uuid.uuid4(), PHOTOGRAPH.file_url) is None
+
+
+def test_a_pin_applies_to_any_legacy_file_url_and_never_to_an_uploaded_replacement():
+    manifest = parse_photograph_manifest(DOCUMENT)
+
+    assert manifest.pin_for(PHOTOGRAPH.mountain_id, "https://example.com/other.jpg") == PHOTOGRAPH
+    assert manifest.pin_for(PHOTOGRAPH.mountain_id, None) is None
 
 
 def change(path, value):

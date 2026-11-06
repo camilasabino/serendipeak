@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import Permission, User
 
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
+from tests.admin.support import use_fake_media_store
 from tests.support.catalog import catalog_mountain, catalog_seed
 
 
@@ -62,3 +63,9 @@ def load_catalog(db):
 @pytest.fixture
 def catalog_entry():
     return catalog_mountain
+
+
+@pytest.fixture(autouse=True)
+def media_store(monkeypatch):
+    """Every admin test stores photographs in memory, never in the configured store."""
+    return use_fake_media_store(monkeypatch)

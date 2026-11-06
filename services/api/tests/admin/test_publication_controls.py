@@ -13,7 +13,7 @@ INCOMPLETE_DRAFT = catalog_mountain(
     "incomplete-draft",
     status=MountainStatus.DRAFT,
     camera=None,
-    primary_image=primary_image(license_url=None),
+    primary_image=primary_image(media=None),
 )
 UNSOURCED_DRAFT = catalog_mountain(
     "unsourced-draft",
@@ -208,7 +208,7 @@ class TestPublicationSection:
 
         assert "Ready to publish" not in html
         assert "The camera is missing" in html
-        assert "The photograph license URL is missing" in html
+        assert "The photograph file is not stored yet" in html
 
     def test_the_section_shows_status_and_timestamps_first(self, publisher_client, load_catalog):
         load_catalog(COMPLETE_DRAFT)

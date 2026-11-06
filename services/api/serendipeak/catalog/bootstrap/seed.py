@@ -266,6 +266,7 @@ def _image(raw, label):
             width=_integer(width, f"{label} width"), height=_integer(height, f"{label} height")
         ),
         creator=_optional(_text, fields["creator"], f"{label} creator"),
+        creator_url=None,
         attribution=_text(fields["attribution"], f"{label} attribution"),
         license_name=_optional(_text, fields["license_name"], f"{label} license_name"),
         license_url=_optional(_text, fields["license_url"], f"{label} license_url"),

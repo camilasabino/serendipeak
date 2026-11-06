@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.admin import AdminSite
 from django.contrib.admin.options import ShowFacets
 from django.contrib.auth.admin import UserAdmin
@@ -6,6 +7,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_deny
 
 from config.composition import (
+    build_admin_photograph_ingestion,
     build_deactivate_mountain,
     build_publish_mountain,
     build_reactivate_mountain,
@@ -60,6 +62,8 @@ def build_admin_site() -> EditorialAdminSite:
         publish_mountain=build_publish_mountain(),
         deactivate_mountain=build_deactivate_mountain(),
         reactivate_mountain=build_reactivate_mountain(),
+        photograph_ingestion=build_admin_photograph_ingestion(),
+        media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
     )
     site.register(DailyDiscoveryRecord, DailyDiscoveryAdmin)
     site.register(User, EditorialUserAdmin)

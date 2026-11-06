@@ -28,7 +28,9 @@ class PhotographProcessor(Protocol):
         Renditions follow the current rendition version in keys: sRGB, 8-bit RGB, no metadata,
         aspect ratio kept and never upscaled.
 
-        Raises PhotographRejected for anything that is not an acceptable photograph.
+        Raises PhotographRejected for anything that is not an acceptable photograph, and
+        InfrastructureError when an acceptable one cannot be processed (for instance when
+        memory runs out or the encoder fails).
         """
 
 

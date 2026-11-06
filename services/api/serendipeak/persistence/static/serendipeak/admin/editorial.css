@@ -9,3 +9,10 @@
 .object-tools .publication-transition button {
   cursor: pointer;
 }
+
+.photograph-upload .photograph-preview {
+  display: block;
+  max-width: 320px;
+  max-height: 240px;
+  margin-bottom: 8px;
+}

@@ -1,6 +1,7 @@
 import re
 
 import pytest
+from django.conf import settings
 from django.contrib.admin.models import LogEntry
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -8,11 +9,13 @@ from django.urls import reverse
 
 from config.admin import build_admin_site
 from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.media.keys import public_url
 from serendipeak.persistence.admin import CAMERA_FIELDS, MountainForm
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
-from tests.admin.support import form_payload, input_names
+from tests.admin.support import form_payload, input_names, jpeg, upload
 from tests.support.catalog import catalog_mountain, primary_image, seeded_mountain
 
+MEDIA_BASE_URL = settings.MEDIA_PUBLIC_BASE_URL
 ADD_URL = reverse("admin:catalog_mountainrecord_add")
 CHANGELIST_URL = reverse("admin:catalog_mountainrecord_changelist")
 
@@ -247,26 +250,17 @@ class TestCreation:
         assert record.prominence_meters == 6962
         assert record.range_name == "Principal Cordillera"
 
-    def test_the_photograph_is_created_with_the_draft(self, editor_client):
-        page = editor_client.get(ADD_URL)
-        payload = form_payload(
-            page,
-            **NEW_MOUNTAIN,
-            **{
-                "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
-                "image-0-source_page_url": "https://commons.wikimedia.org/wiki/File:a.jpg",
-                "image-0-source_identifier": "File:a.jpg",
-                "image-0-attribution": "A. Photographer",
-                "image-0-width": "400",
-                "image-0-height": "300",
-            },
-        )
+    def test_the_photograph_is_created_with_the_draft(self, editor_client, media_store):
+        payload = form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN, **photograph())
 
         response = editor_client.post(ADD_URL, payload)
 
         assert response.status_code == 302
         image = MountainImageRecord.objects.get(mountain__slug="new-peak")
-        assert (image.width, image.height, image.creator) == (400, 300, None)
+        assert (image.width, image.height, image.creator) == (640, 480, None)
+        assert image.original_key in media_store.originals
+        assert {image.page_key, image.viewer_key} <= set(media_store.public)
+        assert (image.legacy_file_url, image.source_identifier) == (None, None)
 
     def test_creation_is_recorded_in_the_history(self, editor_client, editor):
         create_mountain(editor_client)
@@ -350,21 +344,28 @@ class TestCreation:
         assert "slug" in errors_of(response)
         assert MountainRecord.objects.count() == 1
 
-    def test_an_incomplete_photograph_is_a_form_error(self, editor_client):
-        payload = form_payload(
-            editor_client.get(ADD_URL),
-            **NEW_MOUNTAIN,
-            **{
-                "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
-                "image-0-width": "400",
-            },
-        )
+    @pytest.mark.parametrize(
+        ("missing", "field"),
+        [
+            ("image-0-photograph_file", "photograph_file"),
+            ("image-0-attribution", "attribution"),
+            ("image-0-source_page_url", "source_page_url"),
+        ],
+    )
+    def test_an_incomplete_photograph_is_a_form_error(
+        self, editor_client, media_store, missing, field
+    ):
+        fields = photograph()
+        del fields[missing]
+        payload = form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN, **fields)
 
         response = editor_client.post(ADD_URL, payload)
 
         assert response.status_code == 200
+        assert field in image_errors_of(response)
         assert not MountainRecord.objects.exists()
         assert not MountainImageRecord.objects.exists()
+        assert media_store.calls == []
 
 
 class TestEditing:
@@ -379,17 +380,16 @@ class TestEditing:
         assert {"slug", *EDITABLE} <= names
         never_inputs = {"status", "location", "created_at", "updated_at", *CAMERA_FIELDS}
         assert names & never_inputs == set()
-        legacy_photograph = {
+        derived_or_legacy = {
             "image-0-legacy_file_url",
             "image-0-width",
             "image-0-height",
-            "image-0-source_page_url",
             "image-0-source_identifier",
             "image-0-license_reported",
             "image-0-license_election_basis_url",
             "image-0-approved_on",
         }
-        assert names & legacy_photograph == set()
+        assert names & derived_or_legacy == set()
 
     def test_the_change_form_sections(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -411,7 +411,10 @@ class TestEditing:
         names = input_names(editor_client.get(change_url(ACTIVE)))
 
         assert {
+            "image-0-photograph_file",
+            "image-0-source_page_url",
             "image-0-creator",
+            "image-0-creator_url",
             "image-0-attribution",
             "image-0-license_name",
             "image-0-license_url",
@@ -810,9 +813,34 @@ class TestEditing:
         )
 
     @pytest.mark.parametrize("entry", [ACTIVE, INACTIVE])
+    @pytest.mark.parametrize(
+        "cleared", ["image-0-attribution", "image-0-source_page_url", "image-0-photograph_file"]
+    )
     def test_a_published_photograph_cannot_lose_what_publication_requires(
-        self, editor_client, load_catalog, entry
+        self, editor_client, load_catalog, entry, cleared
     ):
+        load_catalog(entry)
+        page = editor_client.get(change_url(entry))
+
+        response = editor_client.post(
+            change_url(entry),
+            form_payload(page, summary="Edited.", **{cleared: ""}),
+        )
+
+        image = MountainImageRecord.objects.get(pk=entry.mountain.id)
+        stored_image = entry.mountain.primary_image
+        assert (image.attribution, image.source_page_url) == (
+            stored_image.attribution,
+            stored_image.source_page_url,
+        )
+        assert image.original_sha256 == stored_image.media.original_sha256
+        if cleared == "image-0-photograph_file":
+            assert response.status_code == 302
+        else:
+            assert response.status_code == 200
+
+    @pytest.mark.parametrize("entry", [ACTIVE, INACTIVE])
+    def test_a_published_photograph_may_drop_its_license(self, editor_client, load_catalog, entry):
         load_catalog(entry)
         page = editor_client.get(change_url(entry))
 
@@ -821,9 +849,9 @@ class TestEditing:
             form_payload(page, **{"image-0-license_name": "", "image-0-license_url": ""}),
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 302
         image = MountainImageRecord.objects.get(pk=entry.mountain.id)
-        assert image.license_name == entry.mountain.primary_image.license_name
+        assert (image.license_name, image.license_url) == (None, None)
 
     def test_a_draft_photograph_credit_may_be_incomplete(self, editor_client, load_catalog):
         draft = catalog_mountain(
@@ -938,15 +966,17 @@ UNSAFE_LINKS = [
     "https://",
     "https://exa mple.com",
 ]
-PHOTOGRAPH = {
-    "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg",
-    "image-0-source_page_url": "https://commons.wikimedia.org/wiki/File:a.jpg",
-    "image-0-source_identifier": "File:a.jpg",
-    "image-0-attribution": "A. Photographer",
-    "image-0-width": "400",
-    "image-0-height": "300",
-}
 USE_HTTPS_LINK = "Use an https:// link."
+
+
+def photograph(**overrides):
+    """Inline fields of a new photograph, with a fresh upload each time it is called."""
+    return {
+        "image-0-photograph_file": upload(jpeg()),
+        "image-0-source_page_url": "https://unsplash.com/photos/a-mountain",
+        "image-0-attribution": "A. Photographer",
+        **overrides,
+    }
 
 
 def image_errors_of(response):
@@ -966,14 +996,14 @@ class TestPublicLinks:
         assert not MountainRecord.objects.exists()
 
     @pytest.mark.parametrize("value", UNSAFE_LINKS)
-    @pytest.mark.parametrize("field", ["legacy_file_url", "source_page_url", "license_url"])
+    @pytest.mark.parametrize("field", ["source_page_url", "creator_url", "license_url"])
     def test_an_unsafe_photograph_link_is_a_form_error_on_creation(
-        self, editor_client, field, value
+        self, editor_client, media_store, field, value
     ):
         payload = form_payload(
             editor_client.get(ADD_URL),
             **NEW_MOUNTAIN,
-            **{**PHOTOGRAPH, f"image-0-{field}": value},
+            **photograph(**{f"image-0-{field}": value, "image-0-license_name": "CC BY 4.0"}),
         )
 
         response = editor_client.post(ADD_URL, payload)
@@ -982,17 +1012,18 @@ class TestPublicLinks:
         assert image_errors_of(response) == {field: [USE_HTTPS_LINK]}
         assert not MountainRecord.objects.exists()
         assert not MountainImageRecord.objects.exists()
+        assert media_store.originals == {} and media_store.public == {}
 
     def test_safe_links_are_stored_unchanged(self, editor_client):
         links = {
-            "image-0-legacy_file_url": "https://upload.wikimedia.org/a.jpg?width=300#top",
             "image-0-source_page_url": "https://unsplash.com/photos/a?utm_source=app#top",
+            "image-0-creator_url": "https://unsplash.com/@user?utm_source=app",
             "image-0-license_url": "https://creativecommons.org/licenses/by-sa/4.0",
         }
         payload = form_payload(
             editor_client.get(ADD_URL),
             **{**NEW_MOUNTAIN, "wikipedia_url": "https://unsplash.com/@user"},
-            **{**PHOTOGRAPH, **links},
+            **photograph(**links, **{"image-0-license_name": "CC BY-SA 4.0"}),
         )
 
         response = editor_client.post(ADD_URL, payload)
@@ -1001,8 +1032,8 @@ class TestPublicLinks:
         record = MountainRecord.objects.get(slug="new-peak")
         image = record.image
         assert record.wikipedia_url == "https://unsplash.com/@user"
-        assert image.legacy_file_url == links["image-0-legacy_file_url"]
         assert image.source_page_url == links["image-0-source_page_url"]
+        assert image.creator_url == links["image-0-creator_url"]
         assert image.license_url == links["image-0-license_url"]
 
     def test_surrounding_whitespace_is_trimmed_before_the_rule_applies(self, editor_client):
@@ -1058,26 +1089,25 @@ class TestPublicLinks:
 
 @pytest.mark.django_db
 class TestPhotographInline:
-    def test_the_source_file_url_is_an_input_only_when_adding_a_photograph(
-        self, editor_client, load_catalog
-    ):
+    def test_the_legacy_file_url_is_never_an_input(self, editor_client, load_catalog):
         load_catalog(DRAFT)
 
         adding = input_names(editor_client.get(ADD_URL))
         changing = input_names(editor_client.get(change_url(DRAFT)))
 
-        assert "image-0-legacy_file_url" in adding
-        assert "image-0-legacy_file_url" not in changing
+        assert "image-0-photograph_file" in adding
+        assert "image-0-legacy_file_url" not in adding | changing
 
-    def test_the_source_file_url_of_an_existing_photograph_is_shown_read_only(
+    def test_the_legacy_provenance_is_shown_read_only_when_present(
         self, editor_client, load_catalog
     ):
         load_catalog(DRAFT)
 
         html = editor_client.get(change_url(DRAFT)).content.decode()
 
+        assert "Legacy provenance" in html
         assert DRAFT.image_provenance.legacy_file_url in html
-        assert "Source file URL" in html
+        assert DRAFT.mountain.primary_image.source_identifier in html
 
     def test_the_stored_original_is_identified_by_its_checksum_and_never_by_its_keys(
         self, editor_client, load_catalog
@@ -1088,8 +1118,9 @@ class TestPhotographInline:
         html = editor_client.get(change_url(DRAFT)).content.decode()
 
         assert media.original_sha256 in html
-        for key in (media.original_key, media.page_key, media.viewer_key):
+        for key in (media.original_key, media.viewer_key):
             assert key not in html
+        assert html.count(media.page_key) == html.count(public_url(MEDIA_BASE_URL, media.page_key))
 
     def test_a_photograph_awaiting_its_file_says_so(self, editor_client, load_catalog):
         awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
@@ -1120,15 +1151,12 @@ class TestPhotographInline:
         assert response.status_code == 302
         assert MountainImageRecord.objects.get(pk=awaiting.mountain.id).original_key is None
 
-    def test_a_photograph_added_by_file_url_has_no_media_and_blocks_publication(
-        self, publisher_client
+    def test_a_seeded_photograph_awaiting_its_file_blocks_publication(
+        self, publisher_client, load_catalog
     ):
-        payload = form_payload(publisher_client.get(ADD_URL), **NEW_MOUNTAIN, **PHOTOGRAPH)
-        assert publisher_client.post(ADD_URL, payload).status_code == 302
-        record = MountainRecord.objects.get(slug="new-peak")
+        awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
+        load_catalog(awaiting)
 
-        assert record.image.original_key is None
-        html = publisher_client.get(
-            reverse("admin:catalog_mountainrecord_change", args=[record.pk])
-        ).content.decode()
+        html = publisher_client.get(change_url(awaiting)).content.decode()
+
         assert "The photograph file is not stored yet" in html

@@ -127,6 +127,7 @@ def image_record(entry: CatalogMountain) -> MountainImageRecord | None:
         width=None if dimensions is None else dimensions.width,
         height=None if dimensions is None else dimensions.height,
         creator=image.creator,
+        creator_url=image.creator_url,
         attribution=image.attribution,
         license_name=image.license_name,
         license_url=image.license_url,
@@ -174,6 +175,7 @@ def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
         if image.width is None
         else ImageDimensions(width=image.width, height=image.height),
         creator=image.creator,
+        creator_url=image.creator_url,
         attribution=image.attribution,
         license_name=image.license_name,
         license_url=image.license_url,

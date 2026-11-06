@@ -31,6 +31,7 @@ def image_record(mountain, **overrides):
         "mountain": mountain,
         "legacy_file_url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
         "attribution": "Bjørn Christian Tørrissen",
+        "license_name": "CC BY-SA 4.0",
         "source_page_url": "https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
         "source_identifier": "File:Aconcagua2016.jpg",
     }

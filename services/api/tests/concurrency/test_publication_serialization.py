@@ -34,12 +34,12 @@ def test_a_publication_waits_for_an_edit_in_flight_and_judges_what_it_committed(
     edit_holds_the_row = threading.Event()
     commit_the_edit = threading.Event()
 
-    def edit_the_license():
+    def edit_the_photograph():
         try:
             with transaction.atomic():
                 MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(updated_at=Now())
                 MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).update(
-                    license_name=None, license_url=None
+                    original_key=None, original_sha256=None, page_key=None, viewer_key=None
                 )
                 edit_holds_the_row.set()
                 assert commit_the_edit.wait(WAIT_SECONDS)
@@ -55,7 +55,7 @@ def test_a_publication_waits_for_an_edit_in_flight_and_judges_what_it_committed(
             connection.close()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        edit = pool.submit(edit_the_license)
+        edit = pool.submit(edit_the_photograph)
         assert edit_holds_the_row.wait(WAIT_SECONDS)
         publication = pool.submit(publish)
 
@@ -67,7 +67,7 @@ def test_a_publication_waits_for_an_edit_in_flight_and_judges_what_it_committed(
         edit.result(WAIT_SECONDS)
 
     assert change.outcome is StatusChangeOutcome.REJECTED
-    assert change.violations == (PublicationViolation.IMAGE_LICENSE_NAME_MISSING,)
+    assert change.violations == (PublicationViolation.IMAGE_MEDIA_MISSING,)
     assert MountainRecord.objects.get(pk=DRAFT.mountain.id).status == "draft"
 
 

@@ -9,11 +9,12 @@ export interface MountainImage {
 	width?: number;
 	height?: number;
 	creator?: string;
+	creatorUrl?: string;
 	attribution: string;
 	license?: string;
 	licenseUrl?: string;
 	sourcePageUrl: string;
-	sourceIdentifier: string;
+	sourceIdentifier?: string;
 }
 
 export interface MountainSources {

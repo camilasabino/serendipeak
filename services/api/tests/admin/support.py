@@ -1,4 +1,14 @@
+import io
 from html.parser import HTMLParser
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import resolve, reverse
+from PIL import Image
+
+from config.composition import ADMIN_INGESTION_LIMITS
+from serendipeak.catalog.media.ingestion import PhotographIngestion
+from serendipeak.media.pillow_processor import PillowPhotographProcessor
+from tests.support.fakes import FakeMediaStore
 
 
 class _FormParser(HTMLParser):
@@ -66,3 +76,25 @@ def input_names(response):
     parser.feed(response.content.decode())
 
     return parser.names
+
+
+def use_fake_media_store(monkeypatch, store=None):
+    """Make the registered mountain admin store photographs in a fake instead of the configured
+    media store, with the real processor and the Admin limits."""
+    store = store or FakeMediaStore()
+    model_admin = resolve(reverse("admin:catalog_mountainrecord_add")).func.model_admin
+    ingestion = PhotographIngestion(PillowPhotographProcessor(), store, ADMIN_INGESTION_LIMITS)
+    monkeypatch.setattr(model_admin, "photograph_ingestion", ingestion)
+
+    return store
+
+
+def jpeg(size=(640, 480), colour=(40, 90, 160), **options):
+    buffer = io.BytesIO()
+    Image.new("RGB", size, colour).save(buffer, format="JPEG", **options)
+
+    return buffer.getvalue()
+
+
+def upload(data, name="photograph.jpg", content_type="image/jpeg"):
+    return SimpleUploadedFile(name, data, content_type=content_type)

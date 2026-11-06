@@ -20,6 +20,7 @@ from tests.support.catalog import (
     catalog_seed,
     photograph_media,
     seeded_mountain,
+    with_file_url,
     with_mountain,
 )
 from tests.support.fakes import FakeMediaStore, InMemoryCatalogStore
@@ -88,6 +89,43 @@ def test_media_keys_must_be_derived_from_the_checksum():
     arranged = Arrangement(with_media("aconcagua", foreign))
 
     report = arranged.use_case.execute()
+
+    assert report.problems == (
+        MediaProblem("aconcagua", "the media keys do not match the original checksum"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("page", "viewer"),
+    [
+        (keys.page_keys(DIGEST)[0], keys.viewer_keys(DIGEST)[0]),
+        (keys.page_key(DIGEST), keys.viewer_key(DIGEST)),
+    ],
+)
+def test_the_renditions_of_every_published_version_match_the_checksum(page, viewer):
+    media = replace(photograph_media(DIGEST), page_key=page, viewer_key=viewer)
+
+    assert Arrangement(with_media("aconcagua", media)).use_case.execute().problems == ()
+
+
+def test_renditions_of_different_versions_do_not_match_the_checksum():
+    mixed = replace(
+        photograph_media(DIGEST),
+        page_key=keys.page_keys(DIGEST)[0],
+        viewer_key=keys.viewer_keys(DIGEST)[1],
+    )
+
+    report = Arrangement(with_media("aconcagua", mixed)).use_case.execute()
+
+    assert report.problems == (
+        MediaProblem("aconcagua", "the media keys do not match the original checksum"),
+    )
+
+
+def test_a_rendition_of_an_unknown_version_does_not_match_the_checksum():
+    unknown = replace(photograph_media(DIGEST), page_key=f"photographs/{DIGEST}/page-r9.jpg")
+
+    report = Arrangement(with_media("aconcagua", unknown)).use_case.execute()
 
     assert report.problems == (
         MediaProblem("aconcagua", "the media keys do not match the original checksum"),
@@ -238,3 +276,26 @@ def test_a_photograph_outside_the_manifest_is_compared_with_nothing_but_still_ch
         "fuji",
         "fuji",
     ]
+
+
+def test_an_uploaded_replacement_of_a_pinned_photograph_is_checked_but_not_against_its_pin():
+    replaced = with_file_url(
+        with_mountain(
+            ATTACHED,
+            primary_image=replace(
+                ATTACHED.mountain.primary_image,
+                media=photograph_media("c" * 64),
+                dimensions=ImageDimensions(4000, 3000),
+                source_identifier=None,
+            ),
+        ),
+        None,
+    )
+    arranged = Arrangement(replaced, pinned=[pin(ATTACHED)])
+
+    assert arranged.use_case.execute().problems == ()
+    assert arranged.use_case.execute(deep=True).problems == (
+        MediaProblem("aconcagua", "the original is missing"),
+        MediaProblem("aconcagua", "the page rendition is missing"),
+        MediaProblem("aconcagua", "the viewer rendition is missing"),
+    )

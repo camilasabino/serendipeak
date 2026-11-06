@@ -2,7 +2,7 @@ from django.db import migrations, models
 from django.db.models import F, Value
 from django.db.models.functions import Concat
 
-# The rendition names below are the ones of rendition version r1. A new version needs a
+# The rendition names below are the ones of rendition version r1. A later version needs a
 # migration that replaces these constraints together with the code that builds the keys.
 PUBLIC_LINK = "^https://[^\\u0009-\\u000d\\u001c-\\u0020\\u0085-\\u0085\\u00a0-\\u00a0\\u1680-\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f-\\u202f\\u205f-\\u205f\\u3000-\\u3000/?#@]+([/?#][^\\u0009-\\u000d\\u001c-\\u0020\\u0085-\\u0085\\u00a0-\\u00a0\\u1680-\\u1680\\u2000-\\u200a\\u2028-\\u2029\\u202f-\\u202f\\u205f-\\u205f\\u3000-\\u3000]*)?$"
 

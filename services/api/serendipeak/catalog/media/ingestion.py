@@ -49,13 +49,19 @@ class PhotographIngestion:
     """Turns uploaded bytes into stored, content-addressed photograph media.
 
     prepare validates and renders without touching storage, so a caller can still refuse the
-    photograph (a form error, a dimension check) before store writes anything.
+    photograph (a form error, a dimension check) before store writes anything. It raises
+    PhotographRejected for a file that is not an acceptable photograph and InfrastructureError
+    when an acceptable one cannot be processed.
     """
 
     def __init__(self, processor: PhotographProcessor, store: MediaStore, limits: IngestionLimits):
         self._processor = processor
         self._store = store
         self._limits = limits
+
+    @property
+    def limits(self) -> IngestionLimits:
+        return self._limits
 
     def prepare(self, data: bytes) -> PreparedPhotograph:
         if len(data) > self._limits.max_bytes:

@@ -78,6 +78,7 @@ def primary_image(**overrides):
         "media": photograph_media(),
         "dimensions": ImageDimensions(width=4994, height=2758),
         "creator": "Bjørn Christian Tørrissen",
+        "creator_url": None,
         "attribution": "Bjørn Christian Tørrissen",
         "license_name": "CC BY-SA 4.0",
         "license_url": "https://creativecommons.org/licenses/by-sa/4.0",

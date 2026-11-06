@@ -34,7 +34,8 @@ class CheckPhotographMedia:
     identifier, dimensions and checksum. Without that, the media would only agree with itself:
     a source file replaced before its first materialization would pass every other check.
     A pinned photograph that the catalog no longer has is a problem as well; photographs the
-    manifest does not pin are checked like the rest and compared with nothing.
+    manifest does not pin, uploaded replacements of pinned ones included, are checked like the
+    rest and compared with nothing.
     """
 
     def __init__(
@@ -96,14 +97,15 @@ class CheckPhotographMedia:
         return problems
 
     def _manifest_problems(self, entry: CatalogMountain) -> list[str]:
-        pinned = self._manifest.photograph_of(entry.mountain.id)
+        file_url = entry.image_provenance.legacy_file_url
+        pinned = self._manifest.pin_for(entry.mountain.id, file_url)
         if pinned is None:
             return []
 
         image = entry.mountain.primary_image
         differences = manifest_differences(
             pinned,
-            file_url=entry.image_provenance.legacy_file_url,
+            file_url=file_url,
             source_identifier=image.source_identifier,
             sha256=image.media.original_sha256,
             dimensions=image.dimensions,
@@ -118,8 +120,11 @@ class CheckPhotographMedia:
 
 
 def _keys_do_not_match(media: PhotographMedia) -> bool:
-    return (
-        not media.original_key.startswith(keys.original_key_prefix(media.original_sha256))
-        or media.page_key != keys.page_key(media.original_sha256)
-        or media.viewer_key != keys.viewer_key(media.original_sha256)
+    return not media.original_key.startswith(keys.original_key_prefix(media.original_sha256)) or (
+        media.page_key,
+        media.viewer_key,
+    ) not in zip(
+        keys.page_keys(media.original_sha256),
+        keys.viewer_keys(media.original_sha256),
+        strict=True,
     )

@@ -71,26 +71,6 @@ def test_a_committed_seed_mountain_only_lacks_the_media_that_materialization_add
             PublicationViolation.IMAGE_SOURCE_PAGE_URL_MISSING,
         ),
         (
-            {"primary_image": primary_image(source_identifier="")},
-            PublicationViolation.IMAGE_SOURCE_IDENTIFIER_MISSING,
-        ),
-        (
-            {"primary_image": primary_image(license_name=None, license_url=None)},
-            PublicationViolation.IMAGE_LICENSE_NAME_MISSING,
-        ),
-        (
-            {"primary_image": primary_image(license_url=None)},
-            PublicationViolation.IMAGE_LICENSE_URL_MISSING,
-        ),
-        (
-            {
-                "primary_image": primary_image(
-                    license_name="Public domain", license_url=None, creator=None
-                )
-            },
-            PublicationViolation.IMAGE_PUBLIC_DOMAIN_CREATOR_MISSING,
-        ),
-        (
             {"primary_image": primary_image(dimensions=None)},
             PublicationViolation.IMAGE_DIMENSIONS_MISSING,
         ),
@@ -111,9 +91,18 @@ def test_source_metadata_is_optional_for_publication():
     assert publication_violations(mountain(osm=None, wikidata_id=None, wikipedia_url=None)) == ()
 
 
-def test_a_public_domain_image_with_a_creator_needs_no_license_url():
-    image = primary_image(license_name="public domain", license_url=None)
-
+@pytest.mark.parametrize(
+    "image",
+    [
+        primary_image(source_identifier=None),
+        primary_image(license_name=None, license_url=None),
+        primary_image(license_url=None),
+        primary_image(license_name="Public domain", license_url=None, creator=None),
+        primary_image(creator=None, creator_url=None),
+        primary_image(creator_url="https://unsplash.com/@someone"),
+    ],
+)
+def test_the_license_creator_and_legacy_identifier_are_optional_for_publication(image):
     assert publication_violations(mountain(primary_image=image)) == ()
 
 
@@ -159,6 +148,10 @@ UNSAFE_LINK = "http://example.com/page"
             {"primary_image": primary_image(license_url="https://user@example.com/license")},
             PublicLinkField.IMAGE_LICENSE_URL,
         ),
+        (
+            {"primary_image": primary_image(creator_url="javascript:alert(1)")},
+            PublicLinkField.IMAGE_CREATOR_URL,
+        ),
     ],
 )
 def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overrides, field):
@@ -171,7 +164,9 @@ def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overri
 def test_several_unsafe_links_are_one_violation_naming_every_field():
     candidate = mountain(
         wikipedia_url=UNSAFE_LINK,
-        primary_image=primary_image(source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK),
+        primary_image=primary_image(
+            source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK, creator_url=UNSAFE_LINK
+        ),
     )
 
     assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
@@ -179,6 +174,7 @@ def test_several_unsafe_links_are_one_violation_naming_every_field():
         PublicLinkField.WIKIPEDIA_URL,
         PublicLinkField.IMAGE_SOURCE_PAGE_URL,
         PublicLinkField.IMAGE_LICENSE_URL,
+        PublicLinkField.IMAGE_CREATOR_URL,
     )
 
 

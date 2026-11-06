@@ -26,7 +26,7 @@ INCOMPLETE_DRAFT = catalog_mountain(
     "incomplete-draft",
     status=MountainStatus.DRAFT,
     camera=None,
-    primary_image=primary_image(license_url=None),
+    primary_image=primary_image(media=None),
 )
 BAD_SUMMARY_DRAFT = catalog_mountain(
     "bad-summary-draft", status=MountainStatus.DRAFT, summary="not a sentence"
@@ -94,7 +94,7 @@ class TestPublishing:
         [message] = messages_of(response)
         assert message.startswith("incomplete-draft was not published:")
         assert "the camera is missing" in message
-        assert "the photograph license URL is missing" in message
+        assert "the photograph file is not stored yet" in message
         assert public_status(publisher_client, INCOMPLETE_DRAFT) == 404
         assert not LogEntry.objects.exists()
 
