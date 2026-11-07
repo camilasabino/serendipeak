@@ -9,7 +9,7 @@ from django.urls import NoReverseMatch, reverse
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.regions import region_id_for_slug
 from serendipeak.persistence.models import MountainRecord, MountainRegionRecord
-from tests.admin.support import form_payload, input_names
+from tests.admin.support import form_payload, input_names, photograph
 from tests.support.catalog import catalog_mountain
 from tests.support.regions import region_path
 
@@ -184,9 +184,14 @@ class TestSaving:
             "continent": "EU",
         }
 
-        with_region = form_payload(editor_client.get(ADD_URL), **base, region=str(target.pk))
+        with_region = form_payload(
+            editor_client.get(ADD_URL), **base, region=str(target.pk), **photograph()
+        )
         without = form_payload(
-            editor_client.get(ADD_URL), **{**base, "slug": "other-peak"}, region=""
+            editor_client.get(ADD_URL),
+            **{**base, "slug": "other-peak"},
+            region="",
+            **photograph(),
         )
 
         assert editor_client.post(ADD_URL, with_region).status_code == 302

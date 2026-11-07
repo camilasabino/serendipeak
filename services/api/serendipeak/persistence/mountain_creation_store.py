@@ -6,7 +6,13 @@ from serendipeak.catalog.new_mountain import NewMountain
 from serendipeak.catalog.regions import UnknownRegion
 from serendipeak.errors import ApplicationError
 from serendipeak.persistence.errors import translate_database_errors
-from serendipeak.persistence.mapping import camera_columns, to_mountain, to_point, with_geography
+from serendipeak.persistence.mapping import (
+    camera_columns,
+    image_columns,
+    to_mountain,
+    to_point,
+    with_geography,
+)
 from serendipeak.persistence.models import (
     ContinentRecord,
     CountryRecord,
@@ -18,7 +24,7 @@ from serendipeak.persistence.models import (
 
 
 class DjangoMountainCreationStore:
-    def create_draft(self, mountain: NewMountain, image: PrimaryImage) -> Mountain:
+    def create_draft(self, mountain: NewMountain, image: PrimaryImage | None) -> Mountain:
         # The translation encloses atomic() because deferred constraints fail when it commits.
         with translate_database_errors(), transaction.atomic():
             record = _mountain_record(mountain)
@@ -27,7 +33,8 @@ class DjangoMountainCreationStore:
                 # is then rolled back by the application error.
                 with transaction.atomic():
                     record.save(force_insert=True)
-                    _image_record(record, image).save(force_insert=True)
+                    if image is not None:
+                        _image_record(record, image).save(force_insert=True)
                     MountainCountryRecord.objects.bulk_create(
                         MountainCountryRecord(mountain=record, country_id=code)
                         for code in sorted(set(mountain.country_codes))
@@ -66,22 +73,7 @@ def _mountain_record(mountain: NewMountain) -> MountainRecord:
 
 
 def _image_record(record: MountainRecord, image: PrimaryImage) -> MountainImageRecord:
-    media = image.media
-    dimensions = image.dimensions
-
-    return MountainImageRecord(
-        mountain=record,
-        original_key=None if media is None else media.original_key,
-        original_sha256=None if media is None else media.original_sha256,
-        page_key=None if media is None else media.page_key,
-        viewer_key=None if media is None else media.viewer_key,
-        width=None if dimensions is None else dimensions.width,
-        height=None if dimensions is None else dimensions.height,
-        author=image.author,
-        license_name=image.license_name,
-        license_url=image.license_url,
-        source_page_url=image.source_page_url,
-    )
+    return MountainImageRecord(mountain=record, **image_columns(image))
 
 
 def _refusal(mountain: NewMountain) -> ApplicationError | None:

@@ -250,7 +250,7 @@ class TestUpload:
         assert main == ["photograph_file", "author", "source_page_url", "credit_reviewed"]
         assert license == ["license_name", "license_url"]
 
-    def test_only_the_author_and_the_photograph_are_required(self, editor_client, load_catalog):
+    def test_only_the_author_is_required(self, editor_client, load_catalog):
         load_catalog(BARE_DRAFT)
         fields = (
             editor_client.get(change_url(BARE_DRAFT))
@@ -259,10 +259,7 @@ class TestUpload:
             .fields
         )
 
-        assert {name for name, field in fields.items() if field.required} == {
-            "photograph_file",
-            "author",
-        }
+        assert {name for name, field in fields.items() if field.required} == {"author"}
 
     def test_a_photograph_without_media_offers_no_saved_preview(self, editor_client, load_catalog):
         awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
@@ -584,18 +581,27 @@ class TestARefusedSubmissionStoresNothing:
             ACTIVE.mountain.primary_image.media.original_sha256
         )
 
-    def test_a_refusal_by_the_publication_gate_stores_no_object(
+    def test_a_refusal_by_the_publication_gate_references_no_object(
         self, editor_client, load_catalog, media_store
     ):
         load_catalog(INACTIVE)
         MountainRecord.objects.filter(pk=INACTIVE.mountain.id).update(
             camera_framing_x=None, camera_framing_y=None
         )
+        data = jpeg()
 
-        response = replace_photograph(editor_client, INACTIVE, jpeg())
+        response = replace_photograph(editor_client, INACTIVE, data)
 
         assert response.status_code == 200
-        assert media_store.calls == []
+        assert inline_errors_of(response) == [
+            "Not allowed on a published mountain: the camera framing is missing."
+        ]
+        original_key, _, _ = keys_of(data)
+        assert original_key in media_store.originals
+        assert (
+            stored_image(INACTIVE).original_sha256
+            == INACTIVE.mountain.primary_image.media.original_sha256
+        )
 
     def test_a_refused_new_mountain_stores_no_object(self, editor_client, media_store):
         payload = form_payload(
@@ -620,7 +626,7 @@ class TestARefusedSubmissionStoresNothing:
         assert "serendipeak/admin/photograph-upload.js" in html
         assert "data-photograph-cancel" in html
 
-    def test_a_new_photograph_still_needs_a_file(self, editor_client):
+    def test_a_credit_on_a_new_mountain_still_needs_a_file(self, editor_client):
         response = editor_client.post(
             ADD_URL,
             form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN, **UNSPLASH_CREDIT),
@@ -628,7 +634,7 @@ class TestARefusedSubmissionStoresNothing:
 
         assert response.status_code == 200
         assert list(image_errors_of(response)) == ["photograph_file"]
-        assert image_errors_of(response)["photograph_file"] == ["This field is required."]
+        assert image_errors_of(response)["photograph_file"] == ["Choose a photograph."]
 
 
 class TestStorageFailure:

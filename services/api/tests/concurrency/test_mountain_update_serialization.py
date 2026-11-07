@@ -1,6 +1,6 @@
 import pytest
 
-from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.entities import ImageDimensions, MountainStatus
 from serendipeak.catalog.errors import SlugTaken
 from serendipeak.catalog.mountain_update import MountainUpdate, public_edit_violations
 from serendipeak.catalog.regions import UnknownRegion
@@ -8,12 +8,13 @@ from serendipeak.catalog.status_transitions import DEACTIVATE
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import (
     MountainCountryRecord,
+    MountainImageRecord,
     MountainRecord,
     MountainRegionRecord,
 )
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media, primary_image
 from tests.support.concurrency import run_while_a_change_holds_the_lock
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -120,3 +121,47 @@ def test_a_region_deleted_while_an_update_waits_for_it_is_refused_as_unknown():
 
     assert refusal.region_id == region_id
     assert MountainRecord.objects.get(pk=TARGET.mountain.id).region_id != region_id
+
+
+def replacement(author):
+    return primary_image(
+        media=photograph_media(("1" if author.startswith("F") else "2") * 64),
+        dimensions=ImageDimensions(width=640, height=480),
+        author=author,
+    )
+
+
+def test_two_photograph_replacements_run_one_after_the_other_and_the_second_wins():
+    def replace_with(author):
+        return lambda: DjangoMountainUpdateStore().update(
+            TARGET.mountain.id, update_of(), public_edit_violations, replacement(author)
+        )
+
+    run_while_a_change_holds_the_lock(replace_with("First Author"), replace_with("Second Author"))
+
+    image = MountainImageRecord.objects.get(pk=TARGET.mountain.id)
+    assert (image.author, image.original_sha256) == ("Second Author", "2" * 64)
+
+
+def test_a_replacement_waiting_for_a_status_change_is_judged_with_the_status_it_then_finds():
+    judged = []
+
+    def gate(prospective):
+        judged.append((prospective.status, prospective.primary_image.author))
+
+        return ()
+
+    def deactivate():
+        DjangoMountainStatusStore().change_status(
+            TARGET.mountain.id, DEACTIVATE, lambda mountain: ()
+        )
+
+    run_while_a_change_holds_the_lock(
+        deactivate,
+        lambda: DjangoMountainUpdateStore().update(
+            TARGET.mountain.id, update_of(), gate, replacement("New Author")
+        ),
+    )
+
+    assert judged == [(MountainStatus.INACTIVE, "New Author")]
+    assert MountainImageRecord.objects.get(pk=TARGET.mountain.id).author == "New Author"

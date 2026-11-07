@@ -1,19 +1,29 @@
+from dataclasses import replace
+
 import pytest
 from django.db import connection, transaction
 
-from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.entities import ImageDimensions, MountainStatus
 from serendipeak.catalog.errors import PublicationRejected, SlugTaken
 from serendipeak.catalog.mountain_update import MountainUpdate, public_edit_violations
+from serendipeak.catalog.new_mountain import PhotographCredit
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
+from serendipeak.persistence.mapping import to_primary_image
 from serendipeak.persistence.models import (
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
 )
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
-from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_seed
+from tests.support.catalog import (
+    UPDATED_AT,
+    catalog_mountain,
+    catalog_seed,
+    photograph_media,
+    primary_image,
+)
 from tests.support.regions import region_path
 
 pytestmark = pytest.mark.django_db
@@ -31,6 +41,15 @@ UPDATED_COLUMNS = {
     "osm_node_id",
     "wikidata_id",
     "updated_at",
+}
+
+
+NO_CAMERA = {
+    "camera_heading_degrees": None,
+    "camera_pitch_degrees": None,
+    "camera_range_meters": None,
+    "camera_framing_x": None,
+    "camera_framing_y": None,
 }
 
 
@@ -263,3 +282,257 @@ def test_the_connection_is_usable_after_a_refusal(store):
 
     assert not connection.needs_rollback
     assert save(store, name="After").name.en == "After"
+
+
+REPLACEMENT = primary_image(
+    media=photograph_media("d" * 64),
+    dimensions=ImageDimensions(width=640, height=480),
+    author="A. Photographer",
+    license_name=None,
+    license_url=None,
+    source_page_url=None,
+)
+
+
+def image_row(entry=TARGET):
+    return MountainImageRecord.objects.filter(pk=entry.mountain.id).values().get()
+
+
+def replace_photograph(store, image=REPLACEMENT, **overrides):
+    return store.update(TARGET.mountain.id, update_of(**overrides), public_edit_violations, image)
+
+
+def test_a_replacement_rewrites_every_photograph_column_and_clears_an_absent_credit(store):
+    before = image_row()
+
+    replace_photograph(store)
+
+    after = image_row()
+    assert (after["original_sha256"], after["page_key"], after["viewer_key"]) == (
+        "d" * 64,
+        REPLACEMENT.media.page_key,
+        REPLACEMENT.media.viewer_key,
+    )
+    assert (after["width"], after["height"]) == (640, 480)
+    assert after["author"] == "A. Photographer"
+    assert (after["license_name"], after["license_url"], after["source_page_url"]) == (
+        None,
+        None,
+        None,
+    )
+    assert before["license_name"] is not None
+    assert set(after) == set(before)
+
+
+def test_a_replacement_is_a_change_of_the_mountain_and_touches_no_other_column(store):
+    before = row(TARGET)
+    other = (row(OTHER), image_row(OTHER))
+
+    replace_photograph(store)
+
+    after = row(TARGET)
+    assert {column for column in after if after[column] != before[column]} == {"updated_at"}
+    assert after["updated_at"] > before["updated_at"]
+    assert (row(OTHER), image_row(OTHER)) == other
+
+
+def test_a_replacement_equal_to_the_stored_photograph_writes_nothing(store):
+    stored = to_primary_image(MountainImageRecord.objects.get(pk=TARGET.mountain.id))
+    before = (row(TARGET), image_row())
+
+    replace_photograph(store, stored)
+
+    assert (row(TARGET), image_row()) == before
+
+
+def test_only_the_photograph_columns_that_differ_are_written(store, django_assert_num_queries):
+    stored = to_primary_image(MountainImageRecord.objects.get(pk=TARGET.mountain.id))
+
+    update = update_of()
+
+    with django_assert_num_queries(14) as captured:
+        store.update(
+            TARGET.mountain.id,
+            update,
+            public_edit_violations,
+            replace(stored, author="Another Author"),
+        )
+
+    statements = [query["sql"] for query in captured.captured_queries]
+    update = next(sql for sql in statements if sql.startswith('UPDATE "mountain_image"'))
+    assert '"author"' in update
+    assert '"page_key"' not in update
+    assert image_row()["author"] == "Another Author"
+
+
+def test_a_replacement_for_a_mountain_without_a_photograph_row_creates_it(store):
+    MountainImageRecord.objects.filter(pk=TARGET.mountain.id).delete()
+
+    replace_photograph(store)
+
+    assert image_row()["original_sha256"] == "d" * 64
+
+
+def test_a_replacement_costs_one_read_and_one_write_more_than_the_content_alone(
+    store, django_assert_num_queries
+):
+    update = update_of(name="Changed", country_codes=("CL", "BO"))
+
+    with django_assert_num_queries(17) as captured:
+        store.update(TARGET.mountain.id, update, public_edit_violations, REPLACEMENT)
+
+    statements = [query["sql"] for query in captured.captured_queries]
+    assert sum(sql.startswith("UPDATE") for sql in statements) == 3
+    assert sum(sql.startswith("INSERT") for sql in statements) == 1
+
+
+def test_a_replacement_alone_is_one_image_read_one_image_write_and_the_touch(
+    store, django_assert_num_queries
+):
+    update = update_of()
+
+    with django_assert_num_queries(14) as captured:
+        store.update(TARGET.mountain.id, update, public_edit_violations, REPLACEMENT)
+
+    statements = [query["sql"] for query in captured.captured_queries]
+    assert sum(sql.startswith("UPDATE") for sql in statements) == 2
+
+
+def test_a_rejected_publication_restores_the_photograph_and_the_content(store):
+    before = (table_counts(), row(TARGET), image_row())
+
+    with pytest.raises(PublicationRejected):
+        store.update(
+            TARGET.mountain.id,
+            update_of(name="Changed", country_codes=("CL",)),
+            lambda prospective: (PublicationViolation.IMAGE_AUTHOR_MISSING,),
+            REPLACEMENT,
+        )
+
+    assert (table_counts(), row(TARGET), image_row()) == before
+
+
+def test_a_refusal_restores_the_photograph(store):
+    before = (table_counts(), row(TARGET), image_row())
+
+    with pytest.raises(SlugTaken):
+        replace_photograph(store, slug="other-peak")
+
+    assert (table_counts(), row(TARGET), image_row()) == before
+
+
+def test_a_refusal_rolls_back_only_the_replacement_inside_a_callers_transaction(store):
+    with transaction.atomic():
+        replace_photograph(store, name="Kept")
+        with pytest.raises(SlugTaken):
+            replace_photograph(store, replace(REPLACEMENT, author="Lost"), slug="other-peak")
+
+    assert image_row()["author"] == "A. Photographer"
+    assert row(TARGET)["name_en"] == "Kept"
+
+
+def test_a_photograph_the_database_refuses_is_an_infrastructure_error_and_changes_nothing(store):
+    before = (row(TARGET), image_row())
+
+    with pytest.raises(InfrastructureError):
+        replace_photograph(store, replace(REPLACEMENT, author="   "))
+
+    assert (row(TARGET), image_row()) == before
+
+
+def test_a_credit_writes_only_the_credit_columns_that_differ(store, django_assert_num_queries):
+    update = update_of(credit=PhotographCredit(author="Another Author"))
+
+    with django_assert_num_queries(14) as captured:
+        store.update(TARGET.mountain.id, update, public_edit_violations)
+
+    statements = [query["sql"] for query in captured.captured_queries]
+    image_update = next(sql for sql in statements if sql.startswith('UPDATE "mountain_image"'))
+    assert '"author"' in image_update
+    assert '"page_key"' not in image_update
+    assert '"width"' not in image_update
+    after = image_row()
+    assert (after["author"], after["license_name"], after["source_page_url"]) == (
+        "Another Author",
+        None,
+        None,
+    )
+    assert after["original_sha256"] == TARGET.mountain.primary_image.media.original_sha256
+
+
+def test_a_credit_equal_to_the_stored_one_writes_nothing(store):
+    stored = to_primary_image(MountainImageRecord.objects.get(pk=TARGET.mountain.id))
+    credit = PhotographCredit(
+        author=stored.author,
+        license_name=stored.license_name,
+        license_url=stored.license_url,
+        source_page_url=stored.source_page_url,
+    )
+    before = (row(TARGET), image_row())
+
+    store.update(TARGET.mountain.id, update_of(credit=credit), public_edit_violations)
+
+    assert (row(TARGET), image_row()) == before
+
+
+def test_a_rejected_credit_restores_it(store):
+    before = (table_counts(), row(TARGET), image_row())
+
+    with pytest.raises(PublicationRejected):
+        store.update(
+            TARGET.mountain.id,
+            update_of(name="Changed", credit=PhotographCredit(author="Lost")),
+            lambda prospective: (PublicationViolation.IMAGE_AUTHOR_MISSING,),
+        )
+
+    assert (table_counts(), row(TARGET), image_row()) == before
+
+
+def test_removing_the_photograph_deletes_its_record_and_changes_only_the_update_time(store):
+    draft = MountainRecord.objects.get(pk=OTHER.mountain.id)
+    MountainRecord.objects.filter(pk=draft.pk).update(status="draft", **NO_CAMERA)
+    before = row(OTHER)
+
+    store.update(
+        OTHER.mountain.id,
+        update_of(
+            slug="other-peak",
+            name=OTHER.mountain.name.en,
+            region_id=draft.region_id,
+            remove_photograph=True,
+        ),
+        public_edit_violations,
+    )
+
+    after = row(OTHER)
+    assert not MountainImageRecord.objects.filter(pk=OTHER.mountain.id).exists()
+    assert {column for column in after if after[column] != before[column]} == {"updated_at"}
+    assert image_row() is not None
+
+
+def test_a_rejected_removal_restores_the_photograph(store):
+    before = (table_counts(), row(TARGET), image_row())
+
+    with pytest.raises(PublicationRejected):
+        save(store, remove_photograph=True)
+
+    assert (table_counts(), row(TARGET), image_row()) == before
+
+
+def test_removing_a_photograph_that_is_not_there_writes_nothing(store):
+    MountainRecord.objects.filter(pk=OTHER.mountain.id).update(status="draft", **NO_CAMERA)
+    MountainImageRecord.objects.filter(pk=OTHER.mountain.id).delete()
+    before = row(OTHER)
+
+    store.update(
+        OTHER.mountain.id,
+        update_of(
+            slug="other-peak",
+            name=OTHER.mountain.name.en,
+            region_id=before["region_id"],
+            remove_photograph=True,
+        ),
+        public_edit_violations,
+    )
+
+    assert row(OTHER) == before

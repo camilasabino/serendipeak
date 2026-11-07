@@ -8,9 +8,12 @@ from config.composition import (
     build_change_mountain_camera,
     build_change_mountain_location,
     build_change_user_access,
+    build_create_mountain,
     build_deactivate_mountain,
+    build_delete_draft_mountain,
     build_publish_mountain,
     build_reactivate_mountain,
+    build_update_mountain,
 )
 from serendipeak.persistence.admin import DailyDiscoveryAdmin, MountainAdmin
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord, UserRecord
@@ -34,6 +37,7 @@ class EditorialAdminSite(AdminSite):
 
 def build_admin_site() -> EditorialAdminSite:
     site = EditorialAdminSite()
+    ingestion = build_admin_photograph_ingestion()
     site.register(
         MountainRecord,
         MountainAdmin,
@@ -42,7 +46,10 @@ def build_admin_site() -> EditorialAdminSite:
         reactivate_mountain=build_reactivate_mountain(),
         change_mountain_camera=build_change_mountain_camera(),
         change_mountain_location=build_change_mountain_location(),
-        photograph_ingestion=build_admin_photograph_ingestion(),
+        create_mountain=build_create_mountain(ingestion),
+        update_mountain=build_update_mountain(ingestion),
+        delete_draft_mountain=build_delete_draft_mountain(),
+        photograph_ingestion=ingestion,
         media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
         web_origin=settings.WEB_ORIGIN,
     )

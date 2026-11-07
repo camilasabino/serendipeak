@@ -86,10 +86,10 @@ def media_store(monkeypatch):
     return use_fake_media_store(monkeypatch)
 
 
-def test_a_photograph_removal_posted_against_a_draft_is_ignored_once_it_is_published(
+def test_a_credit_edit_posted_against_a_draft_is_saved_after_the_publication_it_waited_for(
     editor_client,
 ):
-    payload = form_payload(editor_client.get(CHANGE_URL), **{"image-0-DELETE": "on"})
+    payload = form_payload(editor_client.get(CHANGE_URL), **{"image-0-author": "New Author"})
 
     response = run_while_a_publication_holds_the_lock(
         lambda: editor_client.post(CHANGE_URL, payload)
@@ -97,7 +97,9 @@ def test_a_photograph_removal_posted_against_a_draft_is_ignored_once_it_is_publi
 
     assert response.status_code == 302
     assert MountainRecord.objects.get(pk=DRAFT.mountain.id).status == "active"
-    assert MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+    image = MountainImageRecord.objects.get(pk=DRAFT.mountain.id)
+    assert image.author == "New Author"
+    assert image.original_sha256 == DRAFT.mountain.primary_image.media.original_sha256
 
 
 def test_a_replacement_posted_against_a_draft_is_stored_after_the_publication_it_waited_for(

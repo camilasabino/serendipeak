@@ -3,7 +3,7 @@ import hashlib
 import pytest
 
 from serendipeak.catalog.entities import ImageDimensions, PhotographMedia
-from serendipeak.catalog.errors import PhotographRejected, PhotographRejection
+from serendipeak.catalog.errors import PhotographNotStored, PhotographRejected, PhotographRejection
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
 from serendipeak.errors import InfrastructureError
@@ -191,11 +191,14 @@ def test_store_never_replaces_an_existing_object():
     assert store.public[PAGE_KEY] == (b"earlier page rendition", "image/jpeg")
 
 
-def test_a_storage_failure_propagates_as_an_infrastructure_error():
+def test_a_storage_failure_is_raised_as_a_photograph_not_stored_error():
     store = FakeMediaStore()
     photographs = ingestion(store)
     prepared = photographs.prepare(ORIGINAL)
     store.failing = True
 
-    with pytest.raises(InfrastructureError):
+    with pytest.raises(PhotographNotStored) as failure:
         photographs.store(prepared)
+
+    assert isinstance(failure.value, InfrastructureError)
+    assert isinstance(failure.value.__context__, InfrastructureError)

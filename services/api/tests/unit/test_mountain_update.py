@@ -8,7 +8,11 @@ from serendipeak.catalog.mountain_update import (
     mountain_update_violations,
     public_edit_violations,
 )
-from serendipeak.catalog.new_mountain import NewMountainViolation
+from serendipeak.catalog.new_mountain import (
+    NewMountainViolation,
+    NewPhotograph,
+    PhotographCredit,
+)
 from serendipeak.catalog.publication import PublicationViolation
 from tests.support.catalog import mountain
 
@@ -43,6 +47,58 @@ def test_a_complete_update_has_no_violation():
 )
 def test_each_rule_of_the_content_is_judged(overrides, violation):
     assert mountain_update_violations(replace(VALID, **overrides)) == (violation,)
+
+
+def with_photograph(**credit):
+    credit.setdefault("author", "A. Photographer")
+
+    return replace(VALID, photograph=NewPhotograph(data=b"file", **credit))
+
+
+def test_an_update_without_a_photograph_judges_no_credit():
+    assert mountain_update_violations(VALID) == ()
+
+
+def test_a_complete_credit_has_no_violation():
+    complete = with_photograph(
+        license_name="CC BY 4.0",
+        license_url="https://creativecommons.org/licenses/by/4.0",
+        source_page_url="https://example.org/photo",
+    )
+
+    assert mountain_update_violations(complete) == ()
+
+
+@pytest.mark.parametrize(
+    ("credit", "violation"),
+    [
+        ({"author": " "}, NewMountainViolation.IMAGE_AUTHOR_MISSING),
+        ({"license_name": " "}, NewMountainViolation.IMAGE_LICENSE_NAME_BLANK),
+        (
+            {"license_url": "https://example.org/license"},
+            NewMountainViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE,
+        ),
+        (
+            {"license_name": "CC", "license_url": "http://example.org/license"},
+            NewMountainViolation.IMAGE_LICENSE_URL_NOT_PUBLIC_LINK,
+        ),
+        (
+            {"source_page_url": "javascript:alert(1)"},
+            NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK,
+        ),
+    ],
+)
+def test_each_rule_of_the_credit_is_judged(credit, violation):
+    assert mountain_update_violations(with_photograph(**credit)) == (violation,)
+
+
+def test_content_violations_precede_credit_violations():
+    broken = replace(with_photograph(author=""), name=" ")
+
+    assert mountain_update_violations(broken) == (
+        NewMountainViolation.NAME_BLANK,
+        NewMountainViolation.IMAGE_AUTHOR_MISSING,
+    )
 
 
 def test_every_violation_is_reported_at_once():
@@ -80,3 +136,46 @@ def test_an_inactive_mountain_may_lack_its_camera_but_nothing_else():
 
 def test_an_active_mountain_without_a_camera_is_not_allowed():
     assert public_edit_violations(mountain(camera=None)) == (PublicationViolation.CAMERA_MISSING,)
+
+
+def test_a_credit_alone_is_judged_by_the_credit_rules():
+    with_credit = replace(
+        VALID, credit=PhotographCredit(author=" ", source_page_url="http://x.org")
+    )
+
+    assert mountain_update_violations(with_credit) == (
+        NewMountainViolation.IMAGE_AUTHOR_MISSING,
+        NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK,
+    )
+
+
+def test_a_complete_credit_alone_has_no_violation():
+    credit = PhotographCredit(
+        author="A. Photographer",
+        license_name="CC BY 4.0",
+        license_url="https://creativecommons.org/licenses/by/4.0/",
+    )
+
+    assert mountain_update_violations(replace(VALID, credit=credit)) == ()
+
+
+def test_a_photograph_and_a_credit_cannot_be_given_together():
+    with pytest.raises(ValueError, match="not several"):
+        replace(
+            with_photograph(),
+            credit=PhotographCredit(author="Someone else"),
+        )
+
+
+def test_removing_the_photograph_excludes_replacing_or_re_crediting_it():
+    removal = replace(VALID, remove_photograph=True)
+
+    assert mountain_update_violations(removal) == ()
+    with pytest.raises(ValueError, match="not several"):
+        replace(removal, photograph=NewPhotograph(data=b"file", author="A. Photographer"))
+    with pytest.raises(ValueError, match="not several"):
+        replace(removal, credit=PhotographCredit(author="Someone else"))
+
+
+def test_leaving_the_photograph_alone_is_not_removing_it():
+    assert VALID.remove_photograph is False

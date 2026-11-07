@@ -3,8 +3,9 @@ from uuid import UUID
 from django.db import IntegrityError, connection, transaction
 from django.db.models.functions import Now
 
-from serendipeak.catalog.entities import Mountain
+from serendipeak.catalog.entities import Mountain, PrimaryImage
 from serendipeak.catalog.errors import (
+    MountainHasNoPhotograph,
     PublicationRejected,
     SlugTaken,
     UnknownContinent,
@@ -12,27 +13,35 @@ from serendipeak.catalog.errors import (
     UnknownMountain,
 )
 from serendipeak.catalog.mountain_update import MountainUpdate
+from serendipeak.catalog.new_mountain import PhotographCredit
 from serendipeak.catalog.regions import UnknownRegion
 from serendipeak.catalog.status_transitions import Gate
 from serendipeak.errors import ApplicationError
 from serendipeak.persistence.errors import translate_database_errors
-from serendipeak.persistence.mapping import to_mountain, with_geography
+from serendipeak.persistence.mapping import image_columns, to_mountain, with_geography
 from serendipeak.persistence.models import (
     ContinentRecord,
     CountryRecord,
     MountainCountryRecord,
+    MountainImageRecord,
     MountainRecord,
     MountainRegionRecord,
 )
 
 
 class DjangoMountainUpdateStore:
-    def update(self, mountain_id: UUID, update: MountainUpdate, gate: Gate) -> Mountain:
+    def update(
+        self,
+        mountain_id: UUID,
+        update: MountainUpdate,
+        gate: Gate,
+        image: PrimaryImage | None = None,
+    ) -> Mountain:
         # The translation encloses atomic() because deferred constraints fail when it commits.
         with translate_database_errors(), transaction.atomic():
             # The first lock of every writer of the mountain row: the Admin, the status, camera
-            # and location stores. The image is not locked or joined here: it is read after the
-            # lock is held, so the gate never judges a photograph from before the wait.
+            # and location stores. The image is not joined here: it is read after the lock is
+            # held, so the gate never judges a photograph from before the wait.
             record = (
                 MountainRecord.objects.select_for_update(of=("self",), no_key=True)
                 .filter(pk=mountain_id)
@@ -47,6 +56,12 @@ class DjangoMountainUpdateStore:
                 with transaction.atomic():
                     changed = _write_columns(record, update)
                     changed |= _write_country_links(mountain_id, update)
+                    if image is not None:
+                        changed |= _write_image(mountain_id, image)
+                    elif update.credit is not None:
+                        changed |= _write_credit(mountain_id, update.credit)
+                    elif update.remove_photograph:
+                        changed |= _remove_image(mountain_id)
                     if changed:
                         MountainRecord.objects.filter(pk=mountain_id).update(updated_at=Now())
                     # The foreign keys are deferred. Checking them here, while the savepoint is
@@ -121,6 +136,60 @@ def _write_country_links(mountain_id: UUID, update: MountainUpdate) -> bool:
         )
 
     return bool(removed or added)
+
+
+def _write_image(mountain_id: UUID, image: PrimaryImage) -> bool:
+    """Replace the photograph record, creating it when the mountain has none; whether it changed.
+
+    The mountain row is locked, which is how every writer of the image row is serialized.
+    """
+    wanted = image_columns(image)
+    record = MountainImageRecord.objects.filter(pk=mountain_id).first()
+    if record is None:
+        MountainImageRecord.objects.create(mountain_id=mountain_id, **wanted)
+
+        return True
+
+    differing = {
+        column: value for column, value in wanted.items() if getattr(record, column) != value
+    }
+    if not differing:
+        return False
+
+    MountainImageRecord.objects.filter(pk=mountain_id).update(**differing)
+
+    return True
+
+
+def _write_credit(mountain_id: UUID, credit: PhotographCredit) -> bool:
+    """Change the credit columns of the stored photograph and leave its file alone; whether
+    any differed."""
+    record = MountainImageRecord.objects.filter(pk=mountain_id).first()
+    if record is None:
+        raise MountainHasNoPhotograph(mountain_id)
+
+    wanted = {
+        "author": credit.author,
+        "license_name": credit.license_name,
+        "license_url": credit.license_url,
+        "source_page_url": credit.source_page_url,
+    }
+    differing = {
+        column: value for column, value in wanted.items() if getattr(record, column) != value
+    }
+    if not differing:
+        return False
+
+    MountainImageRecord.objects.filter(pk=mountain_id).update(**differing)
+
+    return True
+
+
+def _remove_image(mountain_id: UUID) -> bool:
+    """Delete the photograph record; whether there was one. The stored objects stay."""
+    deleted, _ = MountainImageRecord.objects.filter(pk=mountain_id).delete()
+
+    return deleted > 0
 
 
 def _refusal(mountain_id: UUID, update: MountainUpdate) -> ApplicationError | None:

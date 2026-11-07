@@ -275,3 +275,12 @@ def test_a_store_refusal_leaves_the_stored_objects_in_place_for_a_retry(
         {created.primary_image.media.original_key},
         {created.primary_image.media.page_key, created.primary_image.media.viewer_key},
     )
+
+
+def test_a_draft_may_be_created_without_a_photograph(create_mountain, store, media):
+    created = create_mountain.execute(new_mountain(photograph=None))
+
+    assert created.status is MountainStatus.DRAFT
+    assert created.primary_image is None
+    assert store.mountain("new-peak") == created
+    assert (media.originals, media.public) == ({}, {})

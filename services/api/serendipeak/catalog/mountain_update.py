@@ -2,7 +2,14 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from serendipeak.catalog.entities import PUBLIC_STATUSES, Mountain, MountainStatus
-from serendipeak.catalog.new_mountain import NewMountainViolation, content_violations
+from serendipeak.catalog.new_mountain import (
+    NewMountainViolation,
+    NewPhotograph,
+    PhotographCredit,
+    content_violations,
+    credit_violations,
+    photograph_violations,
+)
 from serendipeak.catalog.publication import PublicationViolation, publication_violations
 
 
@@ -12,7 +19,11 @@ class MountainUpdate:
 
     Every field is written, so an optional one left as None is cleared. The name and summary are
     English only (translations are not written before the localization milestone). The status,
-    the coordinates, the camera and the photograph are not part of an update.
+    the coordinates and the camera are not part of an update. A photograph replaces the stored
+    one with its credit. A credit alone changes the credit of the stored photograph and keeps
+    its file. Removing the photograph deletes the record with its credit. These three are
+    exclusive, since each contradicts the others; with none, the stored photograph and its
+    credit are kept.
     """
 
     slug: str
@@ -24,6 +35,14 @@ class MountainUpdate:
     summary: str | None = None
     osm_node_id: int | None = None
     wikidata_id: str | None = None
+    photograph: NewPhotograph | None = None
+    credit: PhotographCredit | None = None
+    remove_photograph: bool = False
+
+    def __post_init__(self):
+        changes = (self.photograph is not None, self.credit is not None, self.remove_photograph)
+        if sum(changes) > 1:
+            raise ValueError("a photograph is replaced, re-credited or removed, not several")
 
 
 def mountain_update_violations(update: MountainUpdate) -> tuple[NewMountainViolation, ...]:
@@ -33,7 +52,7 @@ def mountain_update_violations(update: MountainUpdate) -> tuple[NewMountainViola
     continent, countries and region exist, and whether the slug is free, is decided when the
     update is written.
     """
-    return content_violations(
+    violations = content_violations(
         slug=update.slug,
         name=update.name,
         elevation_meters=update.elevation_meters,
@@ -41,6 +60,12 @@ def mountain_update_violations(update: MountainUpdate) -> tuple[NewMountainViola
         osm_node_id=update.osm_node_id,
         wikidata_id=update.wikidata_id,
     )
+    if update.photograph is not None:
+        return violations + tuple(photograph_violations(update.photograph))
+    if update.credit is not None:
+        return violations + tuple(credit_violations(update.credit))
+
+    return violations
 
 
 def public_edit_violations(prospective: Mountain) -> tuple[PublicationViolation, ...]:

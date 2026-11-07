@@ -117,10 +117,11 @@ class MountainLocationStore(Protocol):
 
 
 class MountainCreationStore(Protocol):
-    def create_draft(self, mountain: NewMountain, image: PrimaryImage) -> Mountain:
+    def create_draft(self, mountain: NewMountain, image: PrimaryImage | None) -> Mountain:
         """Store mountain as a draft with image as its photograph, atomically, and return it.
 
         The mountain, its photograph and its country links are written together or not at all.
+        With no image the draft has no photograph record.
         The status is draft, the camera is absent and both timestamps are the store's. The
         photograph's own file is not part of mountain: image already describes it. Repeated
         country codes are one link. The returned mountain is what was stored, with its
@@ -134,19 +135,45 @@ class MountainCreationStore(Protocol):
 
 
 class MountainUpdateStore(Protocol):
-    def update(self, mountain_id: UUID, update: MountainUpdate, gate: Gate) -> Mountain:
+    def update(
+        self,
+        mountain_id: UUID,
+        update: MountainUpdate,
+        gate: Gate,
+        image: PrimaryImage | None = None,
+    ) -> Mountain:
         """Write the content and geography of the mountain, atomically, and return it as stored.
 
         The mountain is locked first, so concurrent changes to the same mountain run one at a
         time, and the state the gate judges is exactly the one written. The columns of update
         and the country links change together or not at all; repeated country codes are one
         link, and a mountain whose state already equals update is not written. The status, the
-        coordinates, the camera, the photograph and the translated texts are never touched. The
+        coordinates, the camera and the translated texts are never touched. When image is
+        given it replaces the stored photograph, whose row is created for a mountain that has
+        none, in the same write; its objects are already in storage and update.photograph
+        (the uploaded file) is not read here. When image is None and update.credit is given, the
+        credit columns of the stored photograph change and its file does not. When
+        update.remove_photograph is set, the photograph record is deleted, with its credit, and
+        the objects it pointed to are left alone. Otherwise the photograph is untouched. The
         gate receives the mountain as it would be stored, whatever its status, and a non-empty
         answer rejects the update.
 
         Raises UnknownMountain, SlugTaken (the slug of another mountain), UnknownContinent,
         UnknownRegion and UnknownCountries for references that reference data does not hold,
-        and PublicationRejected with the gate's answer, and writes nothing. When several apply,
+        MountainHasNoPhotograph for a credit given to a mountain without a photograph row, and
+        PublicationRejected with the gate's answer, and writes nothing. When several apply,
         the first of them in this order is raised.
+        """
+
+
+class DraftMountainDeletionStore(Protocol):
+    def delete_draft(self, mountain_id: UUID) -> None:
+        """Delete the mountain with its photograph record and country links, atomically.
+
+        The mountain is locked first and its status is judged under that lock, so a concurrent
+        publication either finishes before the check or finds the mountain gone. The stored
+        photograph objects are not touched.
+
+        Raises UnknownMountain, MountainNotDraft for a mountain that is not a draft and
+        MountainReferenced for a mountain that a daily discovery refers to, and deletes nothing.
         """

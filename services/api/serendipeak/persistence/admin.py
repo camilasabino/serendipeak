@@ -1,12 +1,12 @@
 import logging
 import re
+from dataclasses import dataclass, field
 
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.options import ActionLocation, ShowFacets
 from django.contrib.admin.utils import unquote
 from django.contrib.admin.widgets import FilteredSelectMultiple
-from django.contrib.gis.geos import Point
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import router, transaction
 from django.db.models.functions import Collate
@@ -14,7 +14,6 @@ from django.forms.models import BaseInlineFormSet
 from django.http import Http404, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils import timezone
 from django.utils.functional import cached_property
 from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
@@ -26,7 +25,9 @@ from serendipeak.catalog import coordinates
 from serendipeak.catalog.camera import CameraViolation, camera_violations
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
+from serendipeak.catalog.create_mountain import CreateMountain
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
+from serendipeak.catalog.delete_draft_mountain import DeleteDraftMountain
 from serendipeak.catalog.entities import (
     WIKIDATA_ID_PATTERN,
     CameraFraming,
@@ -37,15 +38,30 @@ from serendipeak.catalog.entities import (
 from serendipeak.catalog.errors import (
     CameraChanged,
     CameraRejected,
+    InvalidMountain,
     InvalidStatusTransition,
     LocationChanged,
+    MountainHasNoPhotograph,
+    MountainNotDraft,
+    MountainReferenced,
+    PhotographNotStored,
     PhotographRejected,
     PhotographRejection,
     PublicationRejected,
+    SlugTaken,
+    UnknownContinent,
+    UnknownCountries,
     UnknownMountain,
 )
-from serendipeak.catalog.media.ingestion import PhotographIngestion, PreparedPhotograph
+from serendipeak.catalog.media.ingestion import PhotographIngestion
 from serendipeak.catalog.media.keys import public_url
+from serendipeak.catalog.mountain_update import MountainUpdate
+from serendipeak.catalog.new_mountain import (
+    NewMountain,
+    NewMountainViolation,
+    NewPhotograph,
+    PhotographCredit,
+)
 from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.publication import (
     PublicationViolation,
@@ -55,18 +71,18 @@ from serendipeak.catalog.publication import (
 )
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
-from serendipeak.catalog.regions import PATH_SEPARATOR, regions_in_tree_order
+from serendipeak.catalog.regions import PATH_SEPARATOR, UnknownRegion, regions_in_tree_order
 from serendipeak.catalog.relocation import RelocationOutcome, judge_relocation
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
-from serendipeak.errors import InfrastructureError
+from serendipeak.catalog.update_mountain import UpdateMountain
+from serendipeak.errors import ApplicationError, InfrastructureError
 from serendipeak.persistence.camera_editor_url import camera_editor_url
 from serendipeak.persistence.mapping import (
     load_region_paths,
     to_camera,
     to_coordinates,
     to_mountain,
-    to_mountain_with_image,
     to_region,
     with_geography,
 )
@@ -82,6 +98,7 @@ from serendipeak.persistence.models import (
 logger = logging.getLogger(__name__)
 
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS", "TRACE")
+REFUSAL_ATTRIBUTE = "_save_refusal"
 
 SUMMARY_MESSAGES = {
     SummaryViolation.BLANK: "Leave the summary empty instead of blank.",
@@ -133,6 +150,45 @@ PHOTOGRAPH_NOT_STORED = "The photograph could not be stored. Nothing was saved; 
 PHOTOGRAPH_NOT_STORED_TAG = "photograph-not-stored"
 PHOTOGRAPH_REQUIRED = "Choose a photograph."
 LICENSE_NAME_FOR_URL = "Add the license name of this license URL."
+LICENSE_NAME_BLANK = "Leave the license empty instead of blank."
+AUTHOR_REQUIRED = "Enter the author of the photograph."
+NAME_REQUIRED = "Enter the name."
+SLUG_MESSAGE = (
+    "Use lowercase letters and digits separated by single hyphens; "
+    f"{', '.join(sorted(RESERVED_SLUGS))} are reserved."
+)
+WIKIDATA_MESSAGE = "Use the Wikidata item id, such as Q39739."
+COORDINATES_MESSAGE = "The coordinates are out of range."
+ELEVATION_MESSAGE = "Enter a whole number of meters above zero."
+SUMMARY_MESSAGE = "The summary breaks the summary rules."
+OSM_NODE_ID_MESSAGE = "Enter a positive OpenStreetMap node id."
+SLUG_TAKEN = "Another mountain already uses this slug."
+CONTINENT_UNKNOWN = "This continent is not in the reference data. Reload the page and choose again."
+REGION_UNKNOWN = "This region no longer exists. Reload the page and choose again."
+COUNTRIES_UNKNOWN = "A selected country is not in the reference data: {}."
+NO_PHOTOGRAPH_TO_REVIEW = "This mountain has no photograph yet. Choose a file."
+MOUNTAIN_GONE = "{} no longer exists, so nothing was saved."
+NOT_A_DRAFT = "{} is {} and only a draft can be deleted. Nothing was deleted."
+DRAFT_REFERENCED = "{} was shown as the mountain of a day, so it cannot be deleted."
+MOUNTAIN_REFERENCES = {
+    NewMountainViolation.SLUG_INVALID: ("slug", SLUG_MESSAGE),
+    NewMountainViolation.NAME_BLANK: ("name_en", NAME_REQUIRED),
+    NewMountainViolation.COORDINATES_OUT_OF_RANGE: ("latitude", COORDINATES_MESSAGE),
+    NewMountainViolation.ELEVATION_NOT_POSITIVE: ("elevation_meters", ELEVATION_MESSAGE),
+    NewMountainViolation.SUMMARY_INVALID: ("summary_en", SUMMARY_MESSAGE),
+    NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE: ("osm_node_id", OSM_NODE_ID_MESSAGE),
+    NewMountainViolation.WIKIDATA_ID_INVALID: ("wikidata_id", WIKIDATA_MESSAGE),
+}
+PHOTOGRAPH_REFERENCES = {
+    NewMountainViolation.IMAGE_AUTHOR_MISSING: ("author", AUTHOR_REQUIRED),
+    NewMountainViolation.IMAGE_LICENSE_NAME_BLANK: ("license_name", LICENSE_NAME_BLANK),
+    NewMountainViolation.IMAGE_LICENSE_URL_WITHOUT_LICENSE: ("license_name", LICENSE_NAME_FOR_URL),
+    NewMountainViolation.IMAGE_LICENSE_URL_NOT_PUBLIC_LINK: ("license_url", PUBLIC_LINK_MESSAGE),
+    NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK: (
+        "source_page_url",
+        PUBLIC_LINK_MESSAGE,
+    ),
+}
 CREDIT_NOT_REVIEWED = (
     "The author and license are those of the photograph being replaced. Update them, or confirm "
     "that they also describe the new photograph."
@@ -219,12 +275,6 @@ READ_ONLY_GEOGRAPHY_FIELDS = ("continent", "countries", "region_path")
 EDITORIAL_FIELDS = ("summary_en",)
 ADDITIONAL_FIELDS = ("osm_node_id", "wikidata_id")
 PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
-COLUMN_OF_FORM_FIELD = {"latitude": "location", "longitude": "location"}
-# The countries are links in a table of their own, written by save_related; the camera reset is
-# a confirmation, not a column.
-FORM_ONLY_FIELDS = frozenset({"countries", CAMERA_RESET_FIELD})
-# The location moves only through ChangeMountainLocation, which clears the camera with it.
-NEVER_FORM_WRITTEN = frozenset({"status", "location", *CAMERA_FIELDS, *FORM_ONLY_FIELDS})
 _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 
 
@@ -267,10 +317,10 @@ def _require_public_links(form, names):
             form.fields[name].validators.append(_validate_public_link)
 
 
-def violation_reasons(violations, mountain):
+def violation_reasons(violations, mountain=None):
     reasons = []
     for violation in violations:
-        if violation == PublicationViolation.LINK_NOT_HTTPS:
+        if violation == PublicationViolation.LINK_NOT_HTTPS and mountain is not None:
             reasons.extend(
                 f"{PUBLIC_LINK_LABELS[field]} does not use https://"
                 for field in unsafe_public_links(mountain)
@@ -304,6 +354,94 @@ def _clean_summary(value):
     return value
 
 
+@dataclass
+class SaveRefusal:
+    """What the write use cases refused when the form was saved, in the form's own words.
+
+    Keys are field names; None is an error of the whole form (the mountain's) or of the whole
+    photograph formset.
+    """
+
+    mountain: dict[str | None, list[str]] = field(default_factory=dict)
+    photograph: dict[str | None, list[str]] = field(default_factory=dict)
+
+    def apply_to_mountain(self, form):
+        for name, messages_ in self.mountain.items():
+            form.add_error(name, messages_)
+
+    def apply_to_photograph(self, formset, form):
+        for name, messages_ in self.photograph.items():
+            if name is not None and form is not None:
+                form.add_error(name, messages_)
+        if None in self.photograph:
+            raise ValidationError(self.photograph[None])
+
+
+class _SaveRefused(Exception):
+    def __init__(self, refusal: SaveRefusal):
+        super().__init__("the write use case refused the form")
+        self.refusal = refusal
+
+
+class _SaveAbandoned(Exception):
+    """A save that cannot be shown as form errors: the page is left with a message instead."""
+
+    def __init__(self, message, *, level=messages.ERROR, tag="", to_changelist=False):
+        super().__init__(message)
+        self.message = message
+        self.level = level
+        self.tag = tag
+        self.to_changelist = to_changelist
+
+
+class _DeleteRefused(Exception):
+    def __init__(self, message, *, to_changelist=False):
+        super().__init__(message)
+        self.message = message
+        self.to_changelist = to_changelist
+
+
+def _refusal_of(error) -> SaveRefusal | None:
+    """The form errors that say why a use case refused a save; None for any other exception."""
+    refusal = SaveRefusal()
+
+    def refuse(target, name, message):
+        target.setdefault(name, []).append(message)
+
+    match error:
+        case InvalidMountain():
+            for violation in error.violations:
+                if violation in MOUNTAIN_REFERENCES:
+                    name, message = MOUNTAIN_REFERENCES[violation]
+                    refuse(refusal.mountain, name, message)
+                else:
+                    name, message = PHOTOGRAPH_REFERENCES[violation]
+                    refuse(refusal.photograph, name, message)
+        case PublicationRejected():
+            for reason in violation_reasons(error.violations):
+                refuse(refusal.photograph, None, f"Not allowed on a published mountain: {reason}.")
+        case SlugTaken():
+            refuse(refusal.mountain, "slug", SLUG_TAKEN)
+        case UnknownContinent():
+            refuse(refusal.mountain, "continent", CONTINENT_UNKNOWN)
+        case UnknownRegion():
+            refuse(refusal.mountain, "region", REGION_UNKNOWN)
+        case UnknownCountries():
+            refuse(refusal.mountain, "countries", COUNTRIES_UNKNOWN.format(", ".join(error.codes)))
+        case PhotographRejected():
+            refuse(
+                refusal.photograph,
+                "photograph_file",
+                REJECTION_MESSAGES.get(error.reason, PHOTOGRAPH_REJECTED),
+            )
+        case MountainHasNoPhotograph():
+            refuse(refusal.photograph, "photograph_file", NO_PHOTOGRAPH_TO_REVIEW)
+        case _:
+            return None
+
+    return refusal
+
+
 class MountainForm(forms.ModelForm):
     latitude = forms.FloatField(
         help_text=f"Degrees, {coordinates.LATITUDE_MIN_DEGREES:g} to "
@@ -325,6 +463,8 @@ class MountainForm(forms.ModelForm):
         widget=FilteredSelectMultiple("countries", is_stacked=False),
         help_text="A mountain may have none, for example while it is a new draft.",
     )
+
+    refusal: "SaveRefusal | None" = None
 
     class Meta:
         model = MountainRecord
@@ -388,11 +528,7 @@ class MountainForm(forms.ModelForm):
     def clean_slug(self):
         slug = self.cleaned_data["slug"]
         if not is_valid_slug(slug):
-            reserved = ", ".join(sorted(RESERVED_SLUGS))
-            raise ValidationError(
-                f"Use lowercase letters and digits separated by single hyphens; {reserved} "
-                "are reserved."
-            )
+            raise ValidationError(SLUG_MESSAGE)
 
         return slug
 
@@ -402,7 +538,7 @@ class MountainForm(forms.ModelForm):
     def clean_wikidata_id(self):
         wikidata_id = self.cleaned_data.get("wikidata_id")
         if wikidata_id is not None and not _WIKIDATA_ID.fullmatch(wikidata_id):
-            raise ValidationError("Use the Wikidata item id, such as Q39739.")
+            raise ValidationError(WIKIDATA_MESSAGE)
 
         return wikidata_id
 
@@ -428,22 +564,23 @@ class MountainForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if self.refusal is not None:
+            self.refusal.apply_to_mountain(self)
 
         if "latitude" not in cleaned or "longitude" not in cleaned:
             return cleaned
 
         requested = Coordinates(latitude=cleaned["latitude"], longitude=cleaned["longitude"])
-        if self._relocation_allowed(requested, cleaned):
-            self.instance.location = Point(requested.longitude, requested.latitude, srid=4326)
+        self._judge_relocation(requested, cleaned)
 
         return cleaned
 
-    def _relocation_allowed(self, requested, cleaned):
+    def _judge_relocation(self, requested, cleaned):
         # The change view holds the row lock from before this form is built, so the stored
         # coordinates and status are the ones the save is then judged on. The use case judges
         # them again under its own lock for callers that hold none.
         if self.stored_coordinates is None:
-            return True
+            return
 
         outcome = judge_relocation(
             MountainStatus(self.instance.status),
@@ -459,12 +596,8 @@ class MountainForm(forms.ModelForm):
                 ):
                     if cleaned[field] != stored:
                         self.add_error(field, ACTIVE_LOCATION_LOCKED)
-                return False
             case RelocationOutcome.CONFIRMATION_REQUIRED:
                 self.add_error(CAMERA_RESET_FIELD, CAMERA_RESET_REQUIRED)
-                return False
-            case _:
-                return True
 
 
 class CameraForm(forms.Form):
@@ -650,14 +783,12 @@ class MountainImageForm(forms.ModelForm):
     def __init__(self, *args, ingestion: PhotographIngestion, media_base_url: str, **kwargs):
         super().__init__(*args, **kwargs)
         self._ingestion = ingestion
-        self.prepared_photograph: PreparedPhotograph | None = None
+        self.photograph_data: bytes | None = None
         _make_optional(self, IMAGE_OPTIONAL)
         _require_public_links(self, IMAGE_LINKS)
 
         photograph_file = self.fields["photograph_file"]
-        if self.instance._state.adding:
-            photograph_file.required = True
-        else:
+        if not self.instance._state.adding:
             photograph_file.help_text = (
                 "Leave it empty to keep the saved photograph. A new file replaces it, and its "
                 "author and license have to be reviewed."
@@ -677,8 +808,14 @@ class MountainImageForm(forms.ModelForm):
         if upload.size > max_bytes:
             raise ValidationError(_too_many_bytes(max_bytes), code="too_many_bytes")
 
+        # A save the use case then refuses validates the same request a second time.
+        upload.seek(0)
+        data = upload.read()
         try:
-            self.prepared_photograph = self._ingestion.prepare(upload.read())
+            # Only the verdict is wanted: the use case prepares the file again when it saves.
+            # Asking here keeps a rejected or unreadable file a field error, shown together with
+            # the other fields' errors.
+            self._ingestion.prepare(data)
         except PhotographRejected as rejected:
             message = (
                 _too_many_bytes(max_bytes)
@@ -690,6 +827,8 @@ class MountainImageForm(forms.ModelForm):
             logger.exception("An uploaded photograph could not be processed")
             raise ValidationError(PHOTOGRAPH_NOT_PROCESSED, code="not_processed") from error
 
+        self.photograph_data = data
+
         return upload
 
     def clean(self):
@@ -698,8 +837,7 @@ class MountainImageForm(forms.ModelForm):
             if "license_name" not in self.errors:
                 self.add_error("license_name", LICENSE_NAME_FOR_URL)
 
-        if self.prepared_photograph is not None:
-            _use_photograph(self.instance, self.prepared_photograph)
+        if self.photograph_data is not None:
             self._require_credit_review(cleaned)
 
         return cleaned
@@ -719,59 +857,61 @@ def _too_many_bytes(max_bytes):
     return f"The file is larger than {max_bytes // (1024 * 1024)} MiB."
 
 
-def _use_photograph(image, prepared):
-    # The formset judges this prospective instance, and nothing is stored until every form is
-    # valid.
-    media = prepared.media
-    image.original_key = media.original_key
-    image.original_sha256 = media.original_sha256
-    image.page_key = media.page_key
-    image.viewer_key = media.viewer_key
-    image.width = prepared.dimensions.width
-    image.height = prepared.dimensions.height
-
-
 class MountainImageFormSet(BaseInlineFormSet):
+    """Reads the photograph an editor chose or the credit an editor changed. It writes nothing:
+    the mountain use cases own the photograph record."""
+
+    def __init__(self, *args, refusal: SaveRefusal | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._refusal = refusal
+
     def clean(self):
-        # The admin validates inline formsets after the mountain form has applied its cleaned
-        # values to the locked instance, so this is the one point that sees the whole
-        # prospective mountain: stored row, form changes and photograph.
         super().clean()
-        if any(self.errors) or self.instance.status not in PUBLIC_STATUS_VALUES:
-            return
+        if self._refusal is not None:
+            self._refusal.apply_to_photograph(self, self.forms[0] if self.forms else None)
 
-        prospective = to_mountain_with_image(self.instance, self._prospective_image())
-        violations = publication_violations(prospective)
-        if self.instance.status == MountainStatus.INACTIVE.value:
-            # Moving an inactive mountain clears its camera, and only the camera editor can give
-            # it one back. Reactivation is what requires a camera, not every other edit.
-            violations = tuple(
-                v for v in violations if v is not PublicationViolation.CAMERA_MISSING
-            )
-        if violations:
-            raise ValidationError(
-                [
-                    f"Not allowed on a published mountain: {reason}."
-                    for reason in violation_reasons(violations, prospective)
-                ]
-            )
+    def removes_photograph(self) -> bool:
+        return bool(self.deleted_forms)
 
-    def photographs_to_store(self) -> list[PreparedPhotograph]:
-        return [
-            form.prepared_photograph
-            for form in self.forms
-            if form.prepared_photograph is not None and not self._should_delete_form(form)
-        ]
-
-    def _prospective_image(self):
-        image = None
+    def change(self) -> NewPhotograph | PhotographCredit | None:
+        """The upload with its credit, the credit alone, or None when the photograph stays."""
         for form in self.forms:
-            if self._should_delete_form(form):
+            if form in self.deleted_forms or not form.has_changed():
                 continue
-            if form in self.initial_forms or form.has_changed():
-                image = form.instance
 
-        return image
+            cleaned = form.cleaned_data
+            credit = PhotographCredit(
+                author=cleaned["author"],
+                license_name=cleaned.get("license_name"),
+                license_url=cleaned.get("license_url"),
+                source_page_url=cleaned.get("source_page_url"),
+            )
+            if form.photograph_data is None:
+                return credit
+
+            return NewPhotograph(
+                data=form.photograph_data,
+                author=credit.author,
+                license_name=credit.license_name,
+                license_url=credit.license_url,
+                source_page_url=credit.source_page_url,
+            )
+
+        return None
+
+    def note_saved(self):
+        """Fill in what the admin's history message reads from a saved formset."""
+        self.new_objects, self.changed_objects, self.deleted_objects = [], [], []
+        for form in self.forms:
+            if form in self.deleted_forms:
+                self.deleted_objects.append(form.instance)
+                continue
+            if not form.has_changed():
+                continue
+            if form in self.initial_forms:
+                self.changed_objects.append((form.instance, form.changed_data))
+            else:
+                self.new_objects.append(form.instance)
 
 
 def _stored_image(mountain):
@@ -781,10 +921,6 @@ def _stored_image(mountain):
         return mountain.image
     except MountainImageRecord.DoesNotExist:
         return None
-
-
-class _PhotographNotStored(Exception):
-    pass
 
 
 class MountainImageInline(admin.StackedInline):
@@ -864,25 +1000,12 @@ class MountainImageInline(admin.StackedInline):
         return request.user.has_perm("catalog.change_mountainrecord")
 
     def has_delete_permission(self, request, obj=None):
+        # Only a draft can lose its photograph: a published mountain has to keep one.
         return (
             obj is not None
             and obj.status == MountainStatus.DRAFT.value
             and request.user.has_perm("catalog.delete_mountainrecord")
         )
-
-
-def _write_country_links(mountain, countries):
-    # Runs in the change view's transaction, after the mountain row is locked and written, and
-    # touches only the links that differ.
-    wanted = {country.pk for country in countries}
-    held = set(
-        MountainCountryRecord.objects.filter(mountain=mountain).values_list("country_id", flat=True)
-    )
-
-    MountainCountryRecord.objects.filter(mountain=mountain, country_id__in=held - wanted).delete()
-    MountainCountryRecord.objects.bulk_create(
-        MountainCountryRecord(mountain=mountain, country_id=code) for code in sorted(wanted - held)
-    )
 
 
 class MountainAdmin(admin.ModelAdmin):
@@ -891,6 +1014,9 @@ class MountainAdmin(admin.ModelAdmin):
     reactivate_mountain: ReactivateMountain
     change_mountain_camera: ChangeMountainCamera
     change_mountain_location: ChangeMountainLocation
+    create_mountain: CreateMountain
+    update_mountain: UpdateMountain
+    delete_draft_mountain: DeleteDraftMountain
     photograph_ingestion: PhotographIngestion
     media_base_url: str
     web_origin: str
@@ -1248,41 +1374,123 @@ class MountainAdmin(admin.ModelAdmin):
                 "ingestion": self.photograph_ingestion,
                 "media_base_url": self.media_base_url,
             },
+            "refusal": getattr(request, REFUSAL_ATTRIBUTE, None),
         }
 
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form = super().get_form(request, obj, change=change, **kwargs)
+        refusal = getattr(request, REFUSAL_ATTRIBUTE, None)
+        if refusal is None:
+            return form
+
+        return type(form.__name__, (form,), {"refusal": refusal})
+
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
-        # Django runs a mutating change view inside one transaction. The exception leaves it,
-        # so the mountain update rolls back with the photograph that could not be stored. The
-        # tag lets the page's script give the chosen file back, since a redirect re-renders
-        # the form from the saved data.
+        # Django runs a mutating change view inside one transaction, and the use cases join it.
+        # An exception leaves it, so whatever an earlier step wrote rolls back with the step
+        # that failed.
         try:
             return super().changeform_view(request, object_id, form_url, extra_context)
-        except _PhotographNotStored:
-            logger.exception("An uploaded photograph could not be stored")
-            self.message_user(
-                request,
-                PHOTOGRAPH_NOT_STORED,
-                messages.ERROR,
-                extra_tags=PHOTOGRAPH_NOT_STORED_TAG,
+        except _SaveRefused as refused:
+            # The use case judged the saved state, which no form check could. The page is shown
+            # again from the same request with the refusal as form errors, so what was typed is
+            # kept.
+            setattr(request, REFUSAL_ATTRIBUTE, refused.refusal)
+
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except _SaveAbandoned as abandoned:
+            # The tag lets the page's script give the chosen file back, since a redirect
+            # re-renders the form from the saved data.
+            self.message_user(request, abandoned.message, abandoned.level, extra_tags=abandoned.tag)
+            target = (
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_changelist")
+                if abandoned.to_changelist
+                else request.get_full_path()
             )
 
-            return HttpResponseRedirect(request.get_full_path())
+            return HttpResponseRedirect(target)
 
-    def save_formset(self, request, form, formset, change):
-        # PostgreSQL and the media store share no transaction. The objects go first, under new
-        # immutable keys, and the row references them only afterwards, so a committed row never
-        # points to a missing object; a failure leaves unreferenced objects at worst.
-        for prepared in formset.photographs_to_store():
-            try:
-                self.photograph_ingestion.store(prepared)
-            except InfrastructureError as error:
-                raise _PhotographNotStored from error
-
-        formset.save()
+    def save_model(self, request, obj, form, change):
+        # Nothing is written here: the mountain row, its countries and its photograph are one
+        # write of one use case, and save_related is the first hook that sees the photograph form.
+        pass
 
     def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        _write_country_links(form.instance, form.cleaned_data["countries"])
+        (images,) = formsets
+        try:
+            if change:
+                self._update(request, form, images)
+            else:
+                self._create(form, images)
+        except PhotographNotStored as error:
+            logger.exception("An uploaded photograph could not be stored")
+            raise _SaveAbandoned(PHOTOGRAPH_NOT_STORED, tag=PHOTOGRAPH_NOT_STORED_TAG) from error
+        except UnknownMountain as error:
+            raise _SaveAbandoned(
+                MOUNTAIN_GONE.format(form.instance.slug), to_changelist=True
+            ) from error
+        except ApplicationError as error:
+            refusal = _refusal_of(error)
+            if refusal is None:
+                raise
+            raise _SaveRefused(refusal) from error
+
+        images.note_saved()
+
+    def _create(self, form, images):
+        cleaned = form.cleaned_data
+        photograph = images.change()
+        if isinstance(photograph, PhotographCredit):
+            # A credit describes a file; without one there is nothing to credit.
+            raise _SaveRefused(SaveRefusal(photograph={"photograph_file": [PHOTOGRAPH_REQUIRED]}))
+
+        created = self.create_mountain.execute(
+            NewMountain(
+                slug=cleaned["slug"],
+                name=cleaned["name_en"],
+                coordinates=Coordinates(
+                    latitude=cleaned["latitude"], longitude=cleaned["longitude"]
+                ),
+                elevation_meters=cleaned["elevation_meters"],
+                continent_code=cleaned["continent"].pk,
+                photograph=photograph,
+                country_codes=tuple(country.pk for country in cleaned["countries"]),
+                region_id=cleaned["region"].pk if cleaned["region"] else None,
+                summary=cleaned["summary_en"],
+                osm_node_id=cleaned["osm_node_id"],
+                wikidata_id=cleaned["wikidata_id"],
+            )
+        )
+
+        # The admin goes on to log and redirect with the instance it built, which now has its
+        # identity.
+        form.instance.pk = created.id
+        form.instance._state.adding = False
+
+    def _update(self, request, form, images):
+        cleaned = form.cleaned_data
+        obj = form.instance
+        change = images.change()
+
+        self.update_mountain.execute(
+            obj.pk,
+            MountainUpdate(
+                slug=cleaned["slug"],
+                name=cleaned["name_en"],
+                elevation_meters=cleaned["elevation_meters"],
+                continent_code=cleaned["continent"].pk,
+                country_codes=tuple(country.pk for country in cleaned["countries"]),
+                region_id=cleaned["region"].pk if cleaned["region"] else None,
+                summary=cleaned["summary_en"],
+                osm_node_id=cleaned["osm_node_id"],
+                wikidata_id=cleaned["wikidata_id"],
+                photograph=change if isinstance(change, NewPhotograph) else None,
+                credit=change if isinstance(change, PhotographCredit) else None,
+                remove_photograph=images.removes_photograph(),
+            ),
+        )
+
+        self._move(request, obj, cleaned)
 
     def get_object(self, request, object_id, from_field=None):
         # Django opens the transaction of a mutating change or delete view before calling this,
@@ -1305,23 +1513,6 @@ class MountainAdmin(admin.ModelAdmin):
             return queryset.get(**{field.name: field.to_python(object_id)})
         except (MountainRecord.DoesNotExist, ValidationError, ValueError):
             return None
-
-    def save_model(self, request, obj, form, change):
-        if not change:
-            obj.status = MountainStatus.DRAFT.value
-            super().save_model(request, obj, form, change)
-            return
-
-        # Fields are written selectively so the whole row is not rewritten from the form's
-        # copy; the status, the camera and anything else outside the form are never part of
-        # this UPDATE.
-        columns = dict.fromkeys(COLUMN_OF_FORM_FIELD.get(name, name) for name in form.fields)
-        owned = [column for column in columns if column not in NEVER_FORM_WRITTEN]
-
-        obj.updated_at = timezone.now()
-        obj.save(update_fields=[*owned, "updated_at"])
-
-        self._move(request, obj, form.cleaned_data)
 
     def _move(self, request, obj, cleaned):
         # Inside the change view's transaction: a failure later in the same save, such as the
@@ -1346,6 +1537,46 @@ class MountainAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj) and (
             obj is None or obj.status == MountainStatus.DRAFT.value
         )
+
+    def get_deleted_objects(self, objs, request):
+        # DeleteDraftMountain removes the photograph record and the country links with the
+        # draft, so the collector, which would report them as protected, is not asked.
+        (mountain,) = objs
+        dependents = []
+        if MountainImageRecord.objects.filter(pk=mountain.pk).exists():
+            dependents.append("The record of its photograph")
+        codes = sorted(
+            MountainCountryRecord.objects.filter(mountain=mountain).values_list(
+                "country_id", flat=True
+            )
+        )
+        if codes:
+            dependents.append(f"Its links to the countries {', '.join(codes)}")
+        listed = [f"Mountain: {mountain}", dependents] if dependents else [f"Mountain: {mountain}"]
+
+        return listed, {"mountains": 1}, set(), []
+
+    def delete_view(self, request, object_id, extra_context=None):
+        try:
+            return super().delete_view(request, object_id, extra_context)
+        except _DeleteRefused as refused:
+            self.message_user(request, refused.message, messages.ERROR)
+            name = "changelist" if refused.to_changelist else "change"
+            args = [] if refused.to_changelist else [unquote(object_id)]
+
+            return HttpResponseRedirect(
+                reverse(f"admin:{self.opts.app_label}_{self.opts.model_name}_{name}", args=args)
+            )
+
+    def delete_model(self, request, obj):
+        try:
+            self.delete_draft_mountain.execute(obj.pk)
+        except UnknownMountain as error:
+            raise _DeleteRefused(MOUNTAIN_GONE.format(obj.slug), to_changelist=True) from error
+        except MountainNotDraft as error:
+            raise _DeleteRefused(NOT_A_DRAFT.format(obj.slug, error.status.value)) from error
+        except MountainReferenced as error:
+            raise _DeleteRefused(DRAFT_REFERENCED.format(obj.slug)) from error
 
     def has_publish_permission(self, request):
         return self.has_change_permission(request)

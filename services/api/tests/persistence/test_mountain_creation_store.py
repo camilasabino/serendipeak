@@ -161,3 +161,16 @@ def test_a_database_refusal_that_is_no_reference_is_an_infrastructure_error(stor
         store.create_draft(new_mountain(), blank_author)
 
     assert table_counts()[0] == 1
+
+
+def test_a_creation_without_a_photograph_writes_no_photograph_record(
+    store, django_assert_num_queries
+):
+    with django_assert_num_queries(9) as captured:
+        created = store.create_draft(new_mountain(photograph=None), None)
+
+    assert not any(
+        query["sql"].startswith('INSERT INTO "mountain_image"')
+        for query in captured.captured_queries
+    )
+    assert not MountainImageRecord.objects.filter(pk=created.id).exists()

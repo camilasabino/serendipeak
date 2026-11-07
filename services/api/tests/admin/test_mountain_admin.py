@@ -1,4 +1,5 @@
 import re
+import uuid
 
 import pytest
 from django.conf import settings
@@ -9,15 +10,31 @@ from django.urls import reverse
 
 from config.admin import build_admin_site
 from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.errors import (
+    InvalidMountain,
+    MountainHasNoPhotograph,
+    PhotographRejected,
+    PhotographRejection,
+    PublicationRejected,
+    SlugTaken,
+    UnknownContinent,
+    UnknownCountries,
+    UnknownMountain,
+)
 from serendipeak.catalog.media.keys import public_url
-from serendipeak.persistence.admin import CAMERA_FIELDS, MountainForm
+from serendipeak.catalog.new_mountain import NewMountainViolation
+from serendipeak.catalog.publication import PublicationViolation
+from serendipeak.catalog.regions import UnknownRegion
+from serendipeak.errors import InfrastructureError
+from serendipeak.persistence.admin import CAMERA_FIELDS, MountainImageInline
 from serendipeak.persistence.models import (
+    DailyDiscoveryRecord,
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
     MountainRegionRecord,
 )
-from tests.admin.support import form_payload, input_names, jpeg, upload
+from tests.admin.support import form_payload, input_names, photograph
 from tests.support.catalog import catalog_mountain, primary_image, seeded_mountain
 
 MEDIA_BASE_URL = settings.MEDIA_PUBLIC_BASE_URL
@@ -59,7 +76,7 @@ def new_mountain_payload(client, **overrides):
     page = client.get(ADD_URL)
     assert page.status_code == 200
 
-    return form_payload(page, **{**NEW_MOUNTAIN, **overrides})
+    return form_payload(page, **{**NEW_MOUNTAIN, **photograph(), **overrides})
 
 
 def create_mountain(client, **overrides):
@@ -319,7 +336,7 @@ class TestCreation:
         assert field in errors_of(response)
         assert not MountainRecord.objects.exists()
 
-    def test_a_draft_may_be_saved_without_camera_provenance_or_photograph(self, editor_client):
+    def test_a_draft_may_be_saved_without_camera_or_provenance(self, editor_client):
         response = create_mountain(editor_client, osm_node_id="", wikidata_id="")
 
         assert response.status_code == 302
@@ -330,14 +347,70 @@ class TestCreation:
             None,
         )
 
-    def test_a_duplicate_slug_is_a_form_error(self, editor_client, load_catalog):
-        load_catalog(ACTIVE)
+    def test_a_draft_is_created_without_a_photograph(self, editor_client, media_store):
+        payload = form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN)
 
-        response = create_mountain(editor_client, slug="aconcagua")
+        response = editor_client.post(ADD_URL, payload)
+
+        assert response.status_code == 302
+        record = MountainRecord.objects.get(slug="new-peak")
+        assert record.status == "draft"
+        assert not MountainImageRecord.objects.filter(pk=record.pk).exists()
+        assert media_store.calls == []
+
+    def test_a_credit_without_a_file_is_a_form_error_and_creates_nothing(
+        self, editor_client, media_store
+    ):
+        payload = form_payload(
+            editor_client.get(ADD_URL), **NEW_MOUNTAIN, **{"image-0-author": "A. Photographer"}
+        )
+
+        response = editor_client.post(ADD_URL, payload)
 
         assert response.status_code == 200
-        assert "slug" in errors_of(response)
-        assert MountainRecord.objects.count() == 1
+        assert image_errors_of(response)["photograph_file"] == ["Choose a photograph."]
+        assert not MountainRecord.objects.exists()
+        assert media_store.calls == []
+
+    def test_the_geography_and_photograph_are_created_together(self, editor_client, media_store):
+        region = MountainRegionRecord.objects.create(slug="test-range", name_en="Test Range")
+
+        response = create_mountain(
+            editor_client,
+            continent="SA",
+            countries=["CL", "AR"],
+            region=str(region.pk),
+            **{"image-0-license_name": "CC BY 4.0"},
+        )
+
+        assert response.status_code == 302
+        record = MountainRecord.objects.get(slug="new-peak")
+        assert (record.status, record.continent_id, record.region_id) == ("draft", "SA", region.pk)
+        assert linked_codes(record) == ["AR", "CL"]
+        image = MountainImageRecord.objects.get(pk=record.pk)
+        assert (image.author, image.license_name) == ("A. Photographer", "CC BY 4.0")
+        assert image.original_key in media_store.originals
+        assert LogEntry.objects.get().object_id == str(record.pk)
+
+    def test_a_refusal_after_the_form_was_checked_is_a_form_error_that_keeps_what_was_typed(
+        self, editor_client, monkeypatch
+    ):
+        payload = new_mountain_payload(editor_client, name_en="Typed Peak")
+        model_admin = editor_client.get(ADD_URL).resolver_match.func.model_admin
+
+        class Racing:
+            def execute(self, new):
+                raise SlugTaken(new.slug)
+
+        monkeypatch.setattr(model_admin, "create_mountain", Racing())
+
+        response = editor_client.post(ADD_URL, payload)
+
+        assert response.status_code == 200
+        assert errors_of(response)["slug"] == ["Another mountain already uses this slug."]
+        assert "Typed Peak" in response.content.decode()
+        assert not MountainRecord.objects.exists()
+        assert not LogEntry.objects.exists()
 
     @pytest.mark.parametrize(
         ("missing", "field"),
@@ -512,19 +585,12 @@ class TestEditing:
             editor_client.post(change_url(ACTIVE), form_payload(page, name_en="Cerro Aconcagua"))
 
         updates = [q["sql"] for q in queries if q["sql"].startswith('UPDATE "mountain" SET')]
-        assert len(updates) == 1
-        assigned = set(re.findall(r'"(\w+)" = ', updates[0].split(" WHERE ")[0]))
-        assert assigned == {
-            "name_en",
-            "slug",
-            "elevation_meters",
-            "continent_code",
-            "region_id",
-            "summary_en",
-            "osm_node_id",
-            "wikidata_id",
-            "updated_at",
+        assigned = {
+            column
+            for sql in updates
+            for column in re.findall(r'"(\w+)" = ', sql.split(" WHERE ")[0])
         }
+        assert assigned == {"name_en", "updated_at"}
 
     def test_a_stale_form_cannot_rewrite_a_camera_changed_after_it_was_rendered(
         self, editor_client, load_catalog
@@ -618,6 +684,7 @@ class TestEditing:
             "Not allowed on a published mountain: the camera framing is missing."
         ]
         assert stored(INACTIVE) == before
+        assert not LogEntry.objects.exists()
 
     def test_a_public_mountain_whose_photograph_awaits_its_file_cannot_be_saved(
         self, editor_client, load_catalog
@@ -724,33 +791,168 @@ class TestEditing:
         assert MountainRecord.objects.get(pk=ACTIVE.mountain.id).updated_at > before
 
     def test_saving_does_not_overwrite_a_status_changed_after_the_row_was_read(
-        self, editor, load_catalog, rf
+        self, editor_client, load_catalog
     ):
         load_catalog(DRAFT)
-        stale = MountainRecord.objects.get(pk=DRAFT.mountain.id)
+        page = editor_client.get(change_url(DRAFT))
         MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(status="active")
-        model_admin = admin_site().get_model_admin(MountainRecord)
-        form = MountainForm(
-            {
-                "name_en": stale.name_en,
-                "slug": stale.slug,
-                "latitude": "-32.6531487",
-                "longitude": "-70.0119607",
-                "elevation_meters": "6961",
-                "continent": "SA",
-                "summary_en": "Highest in the Andes.",
-                "countries": ["AR"],
-            },
-            instance=stale,
+
+        response = editor_client.post(
+            change_url(DRAFT), form_payload(page, summary_en="Highest in the Andes.")
         )
-        assert form.is_valid(), form.errors
-        request = rf.post("/")
-        request.user = editor
 
-        model_admin.save_model(request, form.save(commit=False), form, change=True)
-
+        assert response.status_code == 302
         saved = MountainRecord.objects.get(pk=DRAFT.mountain.id)
         assert (saved.status, saved.summary_en) == ("active", "Highest in the Andes.")
+
+    @pytest.mark.parametrize(
+        ("refusal", "location", "message"),
+        [
+            (SlugTaken("aconcagua"), ("form", "slug"), "Another mountain already uses this slug."),
+            (UnknownContinent("ZZ"), ("form", "continent"), "This continent is not in the"),
+            (UnknownRegion(uuid.uuid4()), ("form", "region"), "This region no longer exists."),
+            (UnknownCountries(("ZZ",)), ("form", "countries"), "not in the reference data: ZZ."),
+            (
+                InvalidMountain((NewMountainViolation.SLUG_INVALID,)),
+                ("form", "slug"),
+                "Use lowercase letters",
+            ),
+            (
+                InvalidMountain((NewMountainViolation.IMAGE_AUTHOR_MISSING,)),
+                ("image", "author"),
+                "Enter the author",
+            ),
+            (
+                PublicationRejected((PublicationViolation.CAMERA_MISSING,)),
+                ("inline", None),
+                "Not allowed on a published mountain: the camera is missing.",
+            ),
+            (
+                PhotographRejected(PhotographRejection.CORRUPT),
+                ("image", "photograph_file"),
+                "The file is damaged or incomplete.",
+            ),
+            (
+                MountainHasNoPhotograph(uuid.uuid4()),
+                ("image", "photograph_file"),
+                "no photograph yet",
+            ),
+        ],
+    )
+    def test_what_a_use_case_refuses_at_save_is_shown_as_form_errors_without_internals(
+        self, editor_client, load_catalog, monkeypatch, refusal, location, message
+    ):
+        load_catalog(ACTIVE)
+        before = stored(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        model_admin = page.resolver_match.func.model_admin
+
+        class Refusing:
+            def execute(self, mountain_id, update):
+                raise refusal
+
+        monkeypatch.setattr(model_admin, "update_mountain", Refusing())
+
+        response = editor_client.post(
+            change_url(ACTIVE), form_payload(page, summary_en="Typed summary.")
+        )
+
+        assert response.status_code == 200
+        kind, name = location
+        errors = {
+            "form": lambda: errors_of(response),
+            "image": lambda: image_errors_of(response),
+            "inline": lambda: {None: inline_errors_of(response)},
+        }[kind]()
+        assert any(message in text for text in errors[name])
+        html = response.content.decode()
+        assert "Typed summary." in html
+        assert type(refusal).__name__ not in html
+        assert stored(ACTIVE) == before
+        assert not LogEntry.objects.exists()
+
+    def test_a_mountain_deleted_while_the_form_was_open_is_a_message_and_the_changelist(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        model_admin = page.resolver_match.func.model_admin
+
+        class Gone:
+            def execute(self, mountain_id, update):
+                raise UnknownMountain(mountain_id)
+
+        monkeypatch.setattr(model_admin, "update_mountain", Gone())
+
+        response = editor_client.post(change_url(ACTIVE), form_payload(page), follow=True)
+
+        assert response.redirect_chain == [(CHANGELIST_URL, 302)]
+        assert [str(m) for m in response.context["messages"]] == [
+            "aconcagua no longer exists, so nothing was saved."
+        ]
+
+    def test_an_unexpected_failure_of_the_use_case_is_not_hidden(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        model_admin = page.resolver_match.func.model_admin
+
+        class Failing:
+            def execute(self, mountain_id, update):
+                raise InfrastructureError("the database is down")
+
+        monkeypatch.setattr(model_admin, "update_mountain", Failing())
+        editor_client.raise_request_exception = False
+
+        response = editor_client.post(change_url(ACTIVE), form_payload(page))
+
+        assert response.status_code == 500
+
+    def test_a_credit_edit_without_a_file_reaches_the_use_case_as_a_credit_alone(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        model_admin = page.resolver_match.func.model_admin
+        received = []
+        real = model_admin.update_mountain
+
+        class Recording:
+            def execute(self, mountain_id, update):
+                received.append(update)
+
+                return real.execute(mountain_id, update)
+
+        monkeypatch.setattr(model_admin, "update_mountain", Recording())
+
+        editor_client.post(change_url(ACTIVE), form_payload(page, **{"image-0-author": "Someone"}))
+
+        (update,) = received
+        assert update.photograph is None
+        assert update.credit.author == "Someone"
+
+    def test_a_save_that_changes_no_photograph_sends_none(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(ACTIVE)
+        page = editor_client.get(change_url(ACTIVE))
+        model_admin = page.resolver_match.func.model_admin
+        received = []
+        real = model_admin.update_mountain
+
+        class Recording:
+            def execute(self, mountain_id, update):
+                received.append(update)
+
+                return real.execute(mountain_id, update)
+
+        monkeypatch.setattr(model_admin, "update_mountain", Recording())
+
+        editor_client.post(change_url(ACTIVE), form_payload(page, name_en="Renamed"))
+
+        (update,) = received
+        assert (update.photograph, update.credit) == (None, None)
 
     @pytest.mark.parametrize(
         "summary",
@@ -868,48 +1070,240 @@ class TestDeletion:
         assert "deletelink" in editor_client.get(change_url(NO_IMAGE_DRAFT)).content.decode()
         assert "deletelink" not in editor_client.get(change_url(ACTIVE)).content.decode()
 
-    def test_a_draft_with_a_photograph_needs_the_photograph_removed_first(
-        self, editor_client, load_catalog
+    def test_a_draft_is_deleted_with_its_photograph_and_countries(
+        self, editor_client, load_catalog, media_store
     ):
-        draft = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, countries=())
-        load_catalog(draft)
-        delete_url = reverse("admin:catalog_mountainrecord_delete", args=[draft.mountain.id])
-
-        blocked = editor_client.post(delete_url, {"post": "yes"})
-        assert blocked.status_code == 200
-        assert MountainRecord.objects.filter(pk=draft.mountain.id).exists()
-
-        page = editor_client.get(change_url(draft))
-        editor_client.post(change_url(draft), form_payload(page, **{"image-0-DELETE": "on"}))
-        assert not MountainImageRecord.objects.exists()
-
-        assert editor_client.post(delete_url, {"post": "yes"}).status_code == 302
-        assert not MountainRecord.objects.exists()
-
-    def test_a_draft_with_countries_needs_them_removed_first(self, editor_client, load_catalog):
         load_catalog(DRAFT)
         delete_url = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
+        stored_objects = (set(media_store.originals), set(media_store.public))
 
-        blocked = editor_client.post(delete_url, {"post": "yes"})
-        assert blocked.status_code == 200
-        assert MountainRecord.objects.filter(pk=DRAFT.mountain.id).exists()
-        assert MountainCountryRecord.objects.filter(mountain_id=DRAFT.mountain.id).exists()
+        page = editor_client.get(delete_url)
+        assert page.status_code == 200
+        html = page.content.decode()
+        assert "The record of its photograph" in html
+        assert "Its links to the countries" in html
+        assert "Cannot delete" not in html
 
-        page = editor_client.get(change_url(DRAFT))
-        editor_client.post(
-            change_url(DRAFT), form_payload(page, countries=[], **{"image-0-DELETE": "on"})
-        )
+        response = editor_client.post(delete_url, {"post": "yes"})
+
+        assert response.status_code == 302
+        assert not MountainRecord.objects.exists()
+        assert not MountainImageRecord.objects.exists()
         assert not MountainCountryRecord.objects.exists()
+        assert (set(media_store.originals), set(media_store.public)) == stored_objects
 
+    def test_a_draft_without_a_photograph_or_countries_is_deleted(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(NO_IMAGE_DRAFT)
+        delete_url = reverse(
+            "admin:catalog_mountainrecord_delete", args=[NO_IMAGE_DRAFT.mountain.id]
+        )
+
+        page = editor_client.get(delete_url)
+
+        assert "The record of its photograph" not in page.content.decode()
         assert editor_client.post(delete_url, {"post": "yes"}).status_code == 302
         assert not MountainRecord.objects.exists()
 
-    def test_a_published_photograph_cannot_be_removed(self, editor_client, load_catalog):
+    def test_other_mountains_survive_a_deletion(self, editor_client, load_catalog):
+        load_catalog(DRAFT, ACTIVE)
+
+        editor_client.post(
+            reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id]),
+            {"post": "yes"},
+        )
+
+        assert list(MountainRecord.objects.values_list("slug", flat=True)) == ["aconcagua"]
+        assert MountainImageRecord.objects.filter(pk=ACTIVE.mountain.id).exists()
+        assert MountainCountryRecord.objects.filter(mountain_id=ACTIVE.mountain.id).exists()
+
+    def test_the_deletion_is_recorded_in_the_history(self, editor_client, editor, load_catalog):
+        load_catalog(DRAFT)
+
+        editor_client.post(
+            reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id]),
+            {"post": "yes"},
+        )
+
+        entry = LogEntry.objects.get()
+        assert (entry.user, entry.object_repr) == (editor, "draft-peak")
+
+    def test_a_draft_a_discovery_refers_to_is_kept_with_a_message(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        DailyDiscoveryRecord.objects.create(date="2026-01-01", mountain_id=DRAFT.mountain.id)
+
+        response = editor_client.post(
+            reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id]),
+            {"post": "yes"},
+            follow=True,
+        )
+
+        assert response.redirect_chain == [(change_url(DRAFT), 302)]
+        assert [str(m) for m in response.context["messages"]] == [
+            "draft-peak was shown as the mountain of a day, so it cannot be deleted."
+        ]
+        assert MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+        assert MountainCountryRecord.objects.filter(mountain_id=DRAFT.mountain.id).exists()
+        assert not LogEntry.objects.exists()
+
+    def test_a_mountain_published_after_the_confirmation_page_was_shown_is_kept(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        delete_url = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
+        editor_client.get(delete_url)
+        MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(status="active")
+
+        response = editor_client.post(delete_url, {"post": "yes"})
+
+        assert response.status_code == 403
+        assert MountainRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+
+    def test_a_mountain_deleted_meanwhile_is_a_not_found_redirect(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(DRAFT)
+        delete_url = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
+        model_admin = editor_client.get(delete_url).resolver_match.func.model_admin
+
+        class Gone:
+            def execute(self, mountain_id):
+                raise UnknownMountain(mountain_id)
+
+        monkeypatch.setattr(model_admin, "delete_draft_mountain", Gone())
+
+        response = editor_client.post(delete_url, {"post": "yes"}, follow=True)
+
+        assert response.redirect_chain == [(CHANGELIST_URL, 302)]
+        assert [str(m) for m in response.context["messages"]] == [
+            "draft-peak no longer exists, so nothing was saved."
+        ]
+        assert not LogEntry.objects.exists()
+
+
+@pytest.mark.django_db
+class TestPhotographRemoval:
+    def remove(self, client, entry, **overrides):
+        page = client.get(change_url(entry))
+
+        return client.post(
+            change_url(entry), form_payload(page, **{"image-0-DELETE": "on", **overrides})
+        )
+
+    def test_a_draft_offers_the_removal_and_a_published_mountain_does_not(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT, ACTIVE, INACTIVE)
+
+        assert "image-0-DELETE" in input_names(editor_client.get(change_url(DRAFT)))
+        assert "image-0-DELETE" not in input_names(editor_client.get(change_url(ACTIVE)))
+        assert "image-0-DELETE" not in input_names(editor_client.get(change_url(INACTIVE)))
+
+    def test_a_draft_loses_its_photograph_record_and_keeps_the_stored_objects(
+        self, editor_client, editor, load_catalog, media_store
+    ):
+        load_catalog(DRAFT)
+        stored_objects = (set(media_store.originals), set(media_store.public))
+        before = stored(DRAFT)
+
+        response = self.remove(editor_client, DRAFT)
+
+        assert response.status_code == 302
+        assert not MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+        assert (set(media_store.originals), set(media_store.public)) == stored_objects
+        after = stored(DRAFT)
+        assert {k: v for k, v in after.items() if k != "updated_at"} == {
+            k: v for k, v in before.items() if k != "updated_at"
+        }
+        assert LogEntry.objects.get().user == editor
+
+    def test_the_removal_goes_through_the_update_use_case(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(DRAFT)
+        page = editor_client.get(change_url(DRAFT))
+        model_admin = page.resolver_match.func.model_admin
+        updates = []
+        real = model_admin.update_mountain
+
+        class Recording:
+            def execute(self, mountain_id, update):
+                updates.append(update)
+
+                return real.execute(mountain_id, update)
+
+        monkeypatch.setattr(model_admin, "update_mountain", Recording())
+
+        editor_client.post(change_url(DRAFT), form_payload(page, **{"image-0-DELETE": "on"}))
+
+        (update,) = updates
+        assert (update.remove_photograph, update.photograph, update.credit) == (True, None, None)
+
+    def test_a_draft_without_its_photograph_cannot_be_published_until_it_has_one(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        self.remove(editor_client, DRAFT)
+
+        def publish():
+            return editor_client.post(
+                CHANGELIST_URL,
+                {"action": "publish_selected", "_selected_action": [str(DRAFT.mountain.id)]},
+                follow=True,
+            )
+
+        rejected = publish()
+
+        assert stored(DRAFT)["status"] == "draft"
+        assert any("photograph is missing" in str(m) for m in rejected.context["messages"])
+
+        page = editor_client.get(change_url(DRAFT))
+        assert (
+            editor_client.post(change_url(DRAFT), form_payload(page, **photograph())).status_code
+            == 302
+        )
+        publish()
+
+        assert stored(DRAFT)["status"] == "active"
+
+    def test_a_removal_the_use_case_judges_unpublishable_is_a_form_error_and_keeps_the_photograph(
+        self, editor_client, load_catalog, monkeypatch
+    ):
         load_catalog(ACTIVE)
+        monkeypatch.setattr(
+            MountainImageInline, "has_delete_permission", lambda self, request, obj=None: True
+        )
+        before = (
+            stored(ACTIVE),
+            MountainImageRecord.objects.filter(pk=ACTIVE.mountain.id).values().get(),
+        )
 
-        names = input_names(editor_client.get(change_url(ACTIVE)))
+        response = self.remove(editor_client, ACTIVE)
 
-        assert "image-0-DELETE" not in names
+        assert response.status_code == 200
+        assert any(
+            "Not allowed on a published mountain: the photograph is missing." in text
+            for text in inline_errors_of(response)
+        )
+        assert before == (
+            stored(ACTIVE),
+            MountainImageRecord.objects.filter(pk=ACTIVE.mountain.id).values().get(),
+        )
+        assert not LogEntry.objects.exists()
+
+    def test_a_mountain_published_after_the_form_was_shown_keeps_its_photograph(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        page = editor_client.get(change_url(DRAFT))
+        MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(status="active")
+
+        editor_client.post(change_url(DRAFT), form_payload(page, **{"image-0-DELETE": "on"}))
+
+        assert MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).exists()
 
 
 class TestDiscoveries:
@@ -945,16 +1339,6 @@ UNSAFE_LINKS = [
     "https://exa mple.com",
 ]
 USE_HTTPS_LINK = "Use an https:// link."
-
-
-def photograph(**overrides):
-    """Inline fields of a new photograph, with a fresh upload each time it is called."""
-    return {
-        "image-0-photograph_file": upload(jpeg()),
-        "image-0-source_page_url": "https://unsplash.com/photos/a-mountain",
-        "image-0-author": "A. Photographer",
-        **overrides,
-    }
 
 
 def image_errors_of(response):

@@ -2,9 +2,10 @@ import hashlib
 from dataclasses import dataclass
 
 from serendipeak.catalog.entities import ImageDimensions, PhotographMedia
-from serendipeak.catalog.errors import PhotographRejected, PhotographRejection
+from serendipeak.catalog.errors import PhotographNotStored, PhotographRejected, PhotographRejection
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.ports import MediaStore, PhotographFormat, PhotographProcessor
+from serendipeak.errors import InfrastructureError
 
 RENDITION_CONTENT_TYPE = "image/jpeg"
 
@@ -94,8 +95,19 @@ class PhotographIngestion:
         """Store the original, then both renditions, skipping objects that already exist.
 
         The original goes first so a public rendition never exists without its source. A
-        retry after a partial failure uploads only the missing objects.
+        retry after a partial failure uploads only the missing objects. A store failure is raised
+        as PhotographNotStored, an InfrastructureError that callers can tell from a database one.
         """
+        try:
+            self._write(prepared)
+        except InfrastructureError as error:
+            # The store's own cause stays the cause, so callers that describe a failure by its
+            # message and cause read the same text as before.
+            raise PhotographNotStored(str(error)) from error.__cause__
+
+        return prepared.media
+
+    def _write(self, prepared: PreparedPhotograph) -> None:
         original = prepared.original
         if not self._store.has_original(original.key):
             self._store.put_original(original.key, original.data, original.content_type)
@@ -103,5 +115,3 @@ class PhotographIngestion:
         for rendition in (prepared.page, prepared.viewer):
             if not self._store.has_public(rendition.key):
                 self._store.put_public(rendition.key, rendition.data, rendition.content_type)
-
-        return prepared.media

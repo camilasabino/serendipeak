@@ -5,7 +5,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import resolve, reverse
 from PIL import Image
 
-from config.composition import ADMIN_INGESTION_LIMITS
+from config.composition import (
+    ADMIN_INGESTION_LIMITS,
+    build_create_mountain,
+    build_update_mountain,
+)
 from serendipeak.catalog.media.ingestion import PhotographIngestion
 from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from tests.support.fakes import FakeMediaStore
@@ -90,6 +94,8 @@ def use_fake_media_store(monkeypatch, store=None):
     model_admin = resolve(reverse("admin:catalog_mountainrecord_add")).func.model_admin
     ingestion = PhotographIngestion(PillowPhotographProcessor(), store, ADMIN_INGESTION_LIMITS)
     monkeypatch.setattr(model_admin, "photograph_ingestion", ingestion)
+    monkeypatch.setattr(model_admin, "create_mountain", build_create_mountain(ingestion))
+    monkeypatch.setattr(model_admin, "update_mountain", build_update_mountain(ingestion))
 
     return store
 
@@ -103,3 +109,13 @@ def jpeg(size=(640, 480), colour=(40, 90, 160), **options):
 
 def upload(data, name="photograph.jpg", content_type="image/jpeg"):
     return SimpleUploadedFile(name, data, content_type=content_type)
+
+
+def photograph(**overrides):
+    """Inline fields of a new photograph, with a fresh upload each time it is called."""
+    return {
+        "image-0-photograph_file": upload(jpeg()),
+        "image-0-source_page_url": "https://unsplash.com/photos/a-mountain",
+        "image-0-author": "A. Photographer",
+        **overrides,
+    }

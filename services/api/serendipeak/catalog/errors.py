@@ -5,7 +5,7 @@ from serendipeak.catalog.camera import CameraViolation
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.new_mountain import NewMountainViolation
 from serendipeak.catalog.publication import PublicationViolation
-from serendipeak.errors import ApplicationError, DomainError
+from serendipeak.errors import ApplicationError, DomainError, InfrastructureError
 
 
 class InvalidCatalogSeed(ApplicationError):
@@ -54,6 +54,25 @@ class MountainNotFound(ApplicationError):
 class UnknownMountain(ApplicationError):
     def __init__(self, mountain_id: UUID):
         super().__init__(f"no mountain has the id {mountain_id}")
+        self.mountain_id = mountain_id
+
+
+class MountainHasNoPhotograph(ApplicationError):
+    def __init__(self, mountain_id: UUID):
+        super().__init__(f"mountain {mountain_id} has no photograph whose credit could change")
+        self.mountain_id = mountain_id
+
+
+class MountainNotDraft(DomainError):
+    def __init__(self, mountain_id: UUID, status: MountainStatus):
+        super().__init__(f"mountain {mountain_id} is {status.value}, and only a draft is deleted")
+        self.mountain_id = mountain_id
+        self.status = status
+
+
+class MountainReferenced(ApplicationError):
+    def __init__(self, mountain_id: UUID):
+        super().__init__(f"mountain {mountain_id} is referenced by a daily discovery")
         self.mountain_id = mountain_id
 
 
@@ -121,6 +140,10 @@ class PhotographRejection(StrEnum):
     ANIMATED = "animated"
     DIMENSIONS_DIFFER = "dimensions_differ"
     CHECKSUM_DIFFERS = "checksum_differs"
+
+
+class PhotographNotStored(InfrastructureError):
+    """The media store failed while the objects of an accepted photograph were being written."""
 
 
 class PhotographRejected(ApplicationError):

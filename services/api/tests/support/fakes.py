@@ -16,6 +16,9 @@ from serendipeak.catalog.entities import (
 )
 from serendipeak.catalog.errors import (
     CatalogAlreadyPopulated,
+    MountainHasNoPhotograph,
+    MountainNotDraft,
+    MountainReferenced,
     PhotographRejected,
     PhotographRejection,
     PublicationRejected,
@@ -347,6 +350,25 @@ class InMemoryMountainCreationStore:
         return self._mountains.get(slug)
 
 
+def _prospective_image(current, image, update):
+    if image is not None:
+        return image
+    if update.remove_photograph:
+        return None
+    if update.credit is None:
+        return current.primary_image
+    if current.primary_image is None:
+        raise MountainHasNoPhotograph(current.id)
+
+    return replace(
+        current.primary_image,
+        author=update.credit.author,
+        license_name=update.credit.license_name,
+        license_url=update.credit.license_url,
+        source_page_url=update.credit.source_page_url,
+    )
+
+
 class InMemoryMountainUpdateStore:
     """Holds the reference data of tests.support.geography and the given regions."""
 
@@ -355,7 +377,7 @@ class InMemoryMountainUpdateStore:
         self._regions = {region.id: region for region in regions}
         self.calls = 0
 
-    def update(self, mountain_id, update, gate):
+    def update(self, mountain_id, update, gate, image=None):
         self.calls += 1
         current = self._mountains.get(mountain_id)
         if current is None:
@@ -391,6 +413,7 @@ class InMemoryMountainUpdateStore:
             summary=None if update.summary is None else replace(stored_summary, en=update.summary),
             osm_node_id=update.osm_node_id,
             wikidata_id=update.wikidata_id,
+            primary_image=_prospective_image(current, image, update),
         )
         violations = tuple(gate(prospective))
         if violations:
@@ -402,6 +425,28 @@ class InMemoryMountainUpdateStore:
 
     def mountain(self, mountain_id):
         return self._mountains[mountain_id]
+
+
+class InMemoryDraftMountainDeletionStore:
+    def __init__(self, mountains=(), referenced_ids=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+        self._referenced_ids = set(referenced_ids)
+        self.calls = 0
+
+    def delete_draft(self, mountain_id):
+        self.calls += 1
+        current = self._mountains.get(mountain_id)
+        if current is None:
+            raise UnknownMountain(mountain_id)
+        if current.status is not MountainStatus.DRAFT:
+            raise MountainNotDraft(mountain_id, current.status)
+        if mountain_id in self._referenced_ids:
+            raise MountainReferenced(mountain_id)
+
+        del self._mountains[mountain_id]
+
+    def mountain(self, mountain_id):
+        return self._mountains.get(mountain_id)
 
 
 class InMemoryDailyDiscoveryRepository:

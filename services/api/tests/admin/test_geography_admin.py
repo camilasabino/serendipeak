@@ -6,8 +6,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
 
 from serendipeak.catalog.entities import MountainStatus
-from serendipeak.persistence.models import MountainCountryRecord, MountainRecord
-from tests.admin.support import form_payload, input_names
+from serendipeak.persistence.models import CountryRecord, MountainCountryRecord, MountainRecord
+from tests.admin.support import form_payload, input_names, photograph
 from tests.support.catalog import catalog_mountain
 from tests.support.geography import continent, countries
 
@@ -125,6 +125,7 @@ class TestSaving:
             elevation_meters="3500",
             continent="OC",
             countries=["US", "CH"],
+            **photograph(),
         )
 
         assert editor_client.post(ADD_URL, payload).status_code == 302
@@ -326,7 +327,7 @@ class TestViewOnly:
 
 
 class TestDraftDeletion:
-    def test_a_draft_with_countries_cannot_be_deleted_until_they_are_removed(
+    def test_the_confirmation_lists_the_countries_that_go_with_the_draft(
         self, editor_client, load_catalog
     ):
         load_catalog(DRAFT)
@@ -335,6 +336,16 @@ class TestDraftDeletion:
         page = editor_client.get(url)
 
         assert page.status_code == 200
-        assert "link to NP" in page.content.decode()
-        assert editor_client.post(url, {"post": "yes"}).status_code == 200
-        assert MountainRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+        assert "Its links to the countries NP" in page.content.decode()
+
+    def test_a_draft_with_countries_is_deleted_with_its_links_and_the_countries_stay(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        url = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
+
+        assert editor_client.post(url, {"post": "yes"}).status_code == 302
+
+        assert not MountainRecord.objects.exists()
+        assert not MountainCountryRecord.objects.exists()
+        assert CountryRecord.objects.filter(code="NP").exists()

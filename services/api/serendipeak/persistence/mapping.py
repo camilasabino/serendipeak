@@ -328,6 +328,24 @@ def to_primary_image(image: MountainImageRecord) -> PrimaryImage:
     )
 
 
+def image_columns(image: PrimaryImage) -> dict[str, object]:
+    media = image.media
+    dimensions = image.dimensions
+
+    return {
+        "original_key": None if media is None else media.original_key,
+        "original_sha256": None if media is None else media.original_sha256,
+        "page_key": None if media is None else media.page_key,
+        "viewer_key": None if media is None else media.viewer_key,
+        "width": None if dimensions is None else dimensions.width,
+        "height": None if dimensions is None else dimensions.height,
+        "author": image.author,
+        "license_name": image.license_name,
+        "license_url": image.license_url,
+        "source_page_url": image.source_page_url,
+    }
+
+
 def _photograph_media(image: MountainImageRecord) -> PhotographMedia | None:
     if image.original_key is None:
         return None

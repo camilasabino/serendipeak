@@ -12,7 +12,7 @@ from serendipeak.catalog.entities import CameraFraming, CanonicalCamera, Mountai
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.admin import ACTIVE_LOCATION_LOCKED, CAMERA_RESET_REQUIRED
 from serendipeak.persistence.mapping import to_camera
-from serendipeak.persistence.models import MountainRecord
+from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.admin.support import form_payload, input_names, jpeg, upload
 from tests.support.catalog import catalog_mountain
 
@@ -463,3 +463,32 @@ class TestAtomicity:
 
         assert response.status_code == 500
         assert stored(DRAFT) == before
+
+    def test_a_failure_of_the_move_rolls_back_a_credit_written_before_it(
+        self, editor_client, load_catalog, monkeypatch
+    ):
+        load_catalog(DRAFT)
+        before = stored(DRAFT)
+        image_before = MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).values().get()
+        model_admin = resolve(reverse("admin:catalog_mountainrecord_add")).func.model_admin
+
+        class Failing:
+            def execute(self, *args, **kwargs):
+                raise InfrastructureError("the move failed")
+
+        monkeypatch.setattr(model_admin, "change_mountain_location", Failing())
+        editor_client.raise_request_exception = False
+
+        response = submit(
+            editor_client,
+            DRAFT,
+            **MOVES["both"],
+            **CONFIRM,
+            **{"image-0-author": "Someone Else"},
+        )
+
+        assert response.status_code == 500
+        assert stored(DRAFT) == before
+        assert (
+            MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).values().get() == image_before
+        )

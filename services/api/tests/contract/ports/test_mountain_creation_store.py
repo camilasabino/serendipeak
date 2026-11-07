@@ -191,3 +191,11 @@ def test_the_first_applicable_refusal_in_the_documented_order_is_raised(arranged
         arranged.store.create_draft(
             new_mountain(region_id=ABSENT_REGION_ID, country_codes=("ZZ",)), IMAGE
         )
+
+
+def test_a_draft_may_be_stored_without_a_photograph(arranged):
+    created = arranged.store.create_draft(new_mountain(photograph=None), None)
+
+    assert created.status is MountainStatus.DRAFT
+    assert created.primary_image is None
+    assert arranged.mountain_of("new-peak") == created

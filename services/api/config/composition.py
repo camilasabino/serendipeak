@@ -17,6 +17,7 @@ from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
 from serendipeak.catalog.create_mountain import CreateMountain
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
+from serendipeak.catalog.delete_draft_mountain import DeleteDraftMountain
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
@@ -34,6 +35,7 @@ from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
+from serendipeak.persistence.draft_mountain_deletion_store import DjangoDraftMountainDeletionStore
 from serendipeak.persistence.geography_backfill_store import (
     DjangoGeographyBackfillStore,
     DjangoGeographyDraftReader,
@@ -131,12 +133,20 @@ def build_change_mountain_location() -> ChangeMountainLocation:
     return ChangeMountainLocation(DjangoMountainLocationStore())
 
 
-def build_create_mountain() -> CreateMountain:
-    return CreateMountain(DjangoMountainCreationStore(), build_admin_photograph_ingestion())
+def build_create_mountain(ingestion: PhotographIngestion | None = None) -> CreateMountain:
+    return CreateMountain(
+        DjangoMountainCreationStore(), ingestion or build_admin_photograph_ingestion()
+    )
 
 
-def build_update_mountain() -> UpdateMountain:
-    return UpdateMountain(DjangoMountainUpdateStore())
+def build_update_mountain(ingestion: PhotographIngestion | None = None) -> UpdateMountain:
+    return UpdateMountain(
+        DjangoMountainUpdateStore(), ingestion or build_admin_photograph_ingestion()
+    )
+
+
+def build_delete_draft_mountain() -> DeleteDraftMountain:
+    return DeleteDraftMountain(DjangoDraftMountainDeletionStore())
 
 
 def build_create_user() -> CreateUser:

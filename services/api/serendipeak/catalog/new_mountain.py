@@ -4,7 +4,13 @@ from enum import StrEnum
 from uuid import UUID
 
 from serendipeak.catalog.coordinates import coordinates_in_range
-from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, Coordinates, PrimaryImage
+from serendipeak.catalog.entities import (
+    WIKIDATA_ID_PATTERN,
+    Coordinates,
+    ImageDimensions,
+    PhotographMedia,
+    PrimaryImage,
+)
 from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.publication import PublicationViolation, image_violations
 from serendipeak.catalog.slug import is_valid_slug
@@ -29,6 +35,17 @@ class NewMountainViolation(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class PhotographCredit:
+    """Who made a photograph and under which terms it is shown. Optional texts are None when
+    absent, never blank."""
+
+    author: str
+    license_name: str | None = None
+    license_url: str | None = None
+    source_page_url: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class NewPhotograph:
     """The uploaded file and its credit. Optional texts are None when absent, never blank."""
 
@@ -38,24 +55,34 @@ class NewPhotograph:
     license_url: str | None = None
     source_page_url: str | None = None
 
+    @property
+    def credit(self) -> PhotographCredit:
+        return PhotographCredit(
+            author=self.author,
+            license_name=self.license_name,
+            license_url=self.license_url,
+            source_page_url=self.source_page_url,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class NewMountain:
     """What an editor supplies to create a draft. The name and summary are English only
     (translations are not written before the localization milestone); the status, the camera
-    and the timestamps are never supplied."""
+    and the timestamps are never supplied. A draft may have no photograph yet; publishing it
+    requires one."""
 
     slug: str
     name: str
     coordinates: Coordinates
     elevation_meters: int
     continent_code: str
-    photograph: NewPhotograph
     country_codes: tuple[str, ...] = ()
     region_id: UUID | None = None
     summary: str | None = None
     osm_node_id: int | None = None
     wikidata_id: str | None = None
+    photograph: NewPhotograph | None = None
 
 
 _VIOLATION_OF_IMAGE = {
@@ -123,33 +150,57 @@ def new_mountain_violations(mountain: NewMountain) -> tuple[NewMountainViolation
         )
     )
 
-    violations.extend(_photograph_violations(mountain.photograph))
+    if mountain.photograph is not None:
+        violations.extend(photograph_violations(mountain.photograph))
 
     return tuple(violations)
 
 
-def _photograph_violations(photograph: NewPhotograph) -> list[NewMountainViolation]:
+def photograph_violations(photograph: NewPhotograph) -> list[NewMountainViolation]:
+    """Why the credit of an uploaded photograph cannot be stored; empty means it can.
+
+    The file itself is judged when it is processed.
+    """
+    return credit_violations(photograph.credit)
+
+
+def credit_violations(credit: PhotographCredit) -> list[NewMountainViolation]:
+    """Why a photograph credit cannot be stored; empty means it can."""
     # The media and its dimensions exist only once the file is processed, so the credit rules
     # are judged on an image without them and only the credit's own violations are kept.
-    credit = PrimaryImage(
+    image = PrimaryImage(
         media=None,
         dimensions=None,
+        author=credit.author,
+        license_name=credit.license_name,
+        license_url=credit.license_url,
+        source_page_url=credit.source_page_url,
+    )
+    violations = [
+        _VIOLATION_OF_IMAGE[violation]
+        for violation in image_violations(image)
+        if violation in _VIOLATION_OF_IMAGE
+    ]
+
+    if credit.license_name is not None and not credit.license_name.strip():
+        violations.append(NewMountainViolation.IMAGE_LICENSE_NAME_BLANK)
+    if credit.license_url is not None and not is_public_link(credit.license_url):
+        violations.append(NewMountainViolation.IMAGE_LICENSE_URL_NOT_PUBLIC_LINK)
+    if credit.source_page_url is not None and not is_public_link(credit.source_page_url):
+        violations.append(NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK)
+
+    return violations
+
+
+def stored_photograph(
+    photograph: NewPhotograph, media: PhotographMedia, dimensions: ImageDimensions
+) -> PrimaryImage:
+    """The photograph record for an uploaded file whose objects are already in storage."""
+    return PrimaryImage(
+        media=media,
+        dimensions=dimensions,
         author=photograph.author,
         license_name=photograph.license_name,
         license_url=photograph.license_url,
         source_page_url=photograph.source_page_url,
     )
-    violations = [
-        _VIOLATION_OF_IMAGE[violation]
-        for violation in image_violations(credit)
-        if violation in _VIOLATION_OF_IMAGE
-    ]
-
-    if photograph.license_name is not None and not photograph.license_name.strip():
-        violations.append(NewMountainViolation.IMAGE_LICENSE_NAME_BLANK)
-    if photograph.license_url is not None and not is_public_link(photograph.license_url):
-        violations.append(NewMountainViolation.IMAGE_LICENSE_URL_NOT_PUBLIC_LINK)
-    if photograph.source_page_url is not None and not is_public_link(photograph.source_page_url):
-        violations.append(NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK)
-
-    return violations
