@@ -18,8 +18,6 @@ from serendipeak.catalog.entities import (
     ImageDimensions,
     Mountain,
     MountainStatus,
-    OsmReference,
-    OsmType,
     PrimaryImage,
 )
 from serendipeak.catalog.errors import InvalidCatalogSeed
@@ -28,6 +26,8 @@ SEED_FORMAT = "serendipeak.legacy-catalog"
 SEED_FORMAT_VERSION = 1
 LEGACY_TAG = "v1-behavioral-freeze"
 LEGACY_COMMIT = "f9a66deb2c0591a9c574fb4751b938b5863e6a1e"
+
+_OSM_NODE = "node"
 
 _LEGACY_STATUSES = {
     "active": MountainStatus.ACTIVE,
@@ -178,6 +178,11 @@ def _mountain(raw, label):
     if status is None:
         raise InvalidCatalogSeed(f"{label}: unknown status {fields['status']!r}")
 
+    # The seed stays the immutable v1 record. These members are validated with the rest of the
+    # document and then dropped: the catalog no longer holds them.
+    _optional(_integer, fields["prominence_meters"], f"{label} prominence_meters")
+    _optional(_text, fields["wikipedia_url"], f"{label} wikipedia_url")
+
     image, approved = (None, False) if fields["image"] is None else _image(fields["image"], label)
     mountain = Mountain(
         id=_uuid(fields["id"], f"{label} id"),
@@ -186,7 +191,6 @@ def _mountain(raw, label):
         status=status,
         coordinates=Coordinates(latitude=latitude, longitude=longitude),
         elevation_meters=_integer(fields["elevation_meters"], f"{label} elevation_meters"),
-        prominence_meters=_optional(_integer, fields["prominence_meters"], f"{label} prominence"),
         range_name=_optional(_text, fields["range_name"], f"{label} range_name"),
         countries=tuple(
             _text(country, f"{label} countries")
@@ -195,9 +199,8 @@ def _mountain(raw, label):
         summary=_optional(_text, fields["summary"], f"{label} summary"),
         camera=_camera(fields, label),
         primary_image=image,
-        osm=_osm(fields, label),
+        osm_node_id=_osm_node_id(fields, label),
         wikidata_id=_optional(_text, fields["wikidata_id"], f"{label} wikidata_id"),
-        wikipedia_url=_optional(_text, fields["wikipedia_url"], f"{label} wikipedia_url"),
     )
 
     entry = CatalogMountain(
@@ -236,15 +239,15 @@ def _camera(fields, label):
     )
 
 
-def _osm(fields, label):
+def _osm_node_id(fields, label):
     osm_type, osm_id = fields["osm_type"], fields["osm_id"]
     if osm_type is None and osm_id is None:
         return None
 
-    if osm_type not in tuple(OsmType):
-        raise InvalidCatalogSeed(f"{label}: invalid OpenStreetMap reference")
+    if osm_type != _OSM_NODE:
+        raise InvalidCatalogSeed(f"{label}: OpenStreetMap reference is not a node")
 
-    return OsmReference(type=OsmType(osm_type), id=_integer(osm_id, f"{label} osm_id"))
+    return _integer(osm_id, f"{label} osm_id")
 
 
 def _image(raw, label):

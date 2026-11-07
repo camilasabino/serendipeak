@@ -1,8 +1,8 @@
 // SerendiPeak's live-API verifier. It descends from the vendored contracts/v1/verify-api.mjs,
 // which stays untouched and describes the v1 API, and differs from it exactly where SerendiPeak's
 // own contract does: a photograph has one `author` instead of `attribution` and `creator`, and
-// no `sourceIdentifier`. The curated identity of each of the 73 photographs is its source page
-// and its dimensions.
+// no `sourceIdentifier`; a mountain serves no `prominenceMeters` and no `sources.wikipedia`. The
+// curated identity of each of the 73 photographs is its source page and its dimensions.
 import { readFileSync } from "node:fs";
 
 const COORDINATE_TOLERANCE = 1e-7;
@@ -187,6 +187,12 @@ async function checkCatalog() {
       if (image?.[field] !== undefined) {
         fail(scope, `primaryImage.${field} is served; SerendiPeak has no such member`);
       }
+    }
+    if (served.prominenceMeters !== undefined) {
+      fail(scope, "prominenceMeters is served; SerendiPeak has no such member");
+    }
+    if (served.sources?.wikipedia !== undefined) {
+      fail(scope, "sources.wikipedia is served; SerendiPeak has no such member");
     }
   }
 }

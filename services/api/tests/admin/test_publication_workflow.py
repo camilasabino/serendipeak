@@ -290,7 +290,6 @@ class TestCommittedCatalogParity:
                 summary="Edited through the admin.",
                 range_name="Edited range",
                 countries="Edited country",
-                prominence_meters="1",
                 **{"image-0-author": "Edited credit"},
             )
 

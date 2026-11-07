@@ -30,8 +30,7 @@ describe('DataSources', () => {
 
 	it.each([
 		['absent sources', undefined],
-		['empty sources', {}],
-		['a Wikipedia link alone', { wikipedia: 'https://en.wikipedia.org/wiki/X' }]
+		['empty sources', {}]
 	])('renders nothing for %s', (_name, sources) => {
 		expect(render(sources)).toBe('');
 	});

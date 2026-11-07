@@ -10,8 +10,6 @@ from serendipeak.catalog.entities import (
     Coordinates,
     ImageDimensions,
     Mountain,
-    OsmReference,
-    OsmType,
 )
 from serendipeak.catalog.errors import InvalidFrozenCatalog
 
@@ -19,7 +17,7 @@ FROZEN_CATALOG_VERSION = "v1"
 COORDINATE_TOLERANCE_DEGREES = 1e-7
 CAMERA_TOLERANCE = 1e-9
 
-_OSM_URL = re.compile(r"https://www\.openstreetmap\.org/(node|way|relation)/([1-9][0-9]*)")
+_OSM_NODE_URL = re.compile(r"https://www\.openstreetmap\.org/node/([1-9][0-9]*)")
 _WIKIDATA_URL = re.compile(r"https://www\.wikidata\.org/wiki/(Q[1-9][0-9]*)")
 
 
@@ -36,7 +34,7 @@ class FrozenMountain:
     coordinates: Coordinates
     elevation_meters: int
     camera: CanonicalCamera
-    osm: OsmReference
+    osm_node_id: int
     wikidata_id: str
     image: FrozenImageIdentity
 
@@ -98,8 +96,8 @@ def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
         differences.append("elevation differs")
     if actual.camera is None or not _camera_matches(expected.camera, actual.camera):
         differences.append("camera differs")
-    if actual.osm != expected.osm:
-        differences.append("OpenStreetMap reference differs")
+    if actual.osm_node_id != expected.osm_node_id:
+        differences.append("OpenStreetMap node differs")
     if actual.wikidata_id != expected.wikidata_id:
         differences.append("Wikidata id differs")
 
@@ -140,7 +138,7 @@ def _close(expected: float, actual: float, tolerance: float) -> bool:
 
 def _frozen_mountain(raw) -> FrozenMountain:
     slug = raw["slug"]
-    osm = _OSM_URL.fullmatch(raw["sources"]["osm"])
+    osm = _OSM_NODE_URL.fullmatch(raw["sources"]["osm"])
     wikidata = _WIKIDATA_URL.fullmatch(raw["sources"]["wikidata"])
     if osm is None or wikidata is None:
         raise InvalidFrozenCatalog(f"{slug}: unexpected source URLs")
@@ -162,7 +160,7 @@ def _frozen_mountain(raw) -> FrozenMountain:
             range_meters=float(pose["rangeMeters"]),
             framing=CameraFraming(x=float(pose["framing"]["x"]), y=float(pose["framing"]["y"])),
         ),
-        osm=OsmReference(type=OsmType(osm.group(1)), id=int(osm.group(2))),
+        osm_node_id=int(osm.group(1)),
         wikidata_id=wikidata.group(1),
         image=FrozenImageIdentity(
             source_page_url=image["sourcePageUrl"],

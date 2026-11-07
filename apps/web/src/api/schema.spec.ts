@@ -29,7 +29,7 @@ describe('isMountain', () => {
 		}
 	);
 
-	it.each(['prominenceMeters', 'rangeName', 'summary', 'camera', 'primaryImage', 'sources'])(
+	it.each(['rangeName', 'summary', 'camera', 'primaryImage', 'sources'])(
 		'rejects %s when present as null',
 		(key) => {
 			expect(isMountain({ ...complete, [key]: null })).toBe(false);
@@ -44,7 +44,6 @@ describe('isMountain', () => {
 		['fractional elevation', { elevationMeters: 6961.5 }],
 		['zero elevation', { elevationMeters: 0 }],
 		['string elevation', { elevationMeters: '6961' }],
-		['fractional prominence', { prominenceMeters: 1.5 }],
 		['non-array countries', { countries: 'Argentina' }],
 		['non-string country', { countries: ['Argentina', 1] }],
 		['blank country', { countries: [''] }],
@@ -120,7 +119,7 @@ describe('isMountain', () => {
 	});
 
 	it.each([
-		['javascript wikipedia link', { wikipedia: 'javascript:alert(1)' }],
+		['javascript osm link', { osm: 'javascript:alert(1)' }],
 		['null osm link', { osm: null }],
 		['blank wikidata link', { wikidata: '' }]
 	])('rejects sources with a %s', (_label, override) => {

@@ -18,9 +18,8 @@ INCOMPLETE_DRAFT = catalog_mountain(
 UNSOURCED_DRAFT = catalog_mountain(
     "unsourced-draft",
     status=MountainStatus.DRAFT,
-    osm=None,
+    osm_node_id=None,
     wikidata_id=None,
-    wikipedia_url=None,
 )
 ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)

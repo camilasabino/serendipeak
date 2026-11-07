@@ -17,7 +17,7 @@ from django.db.models.functions import Concat, Now, Replace
 from django.db.models.lookups import Range
 
 from serendipeak.catalog import camera, coordinates
-from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus, OsmType
+from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.keys import MEDIA_KEY_PATTERN, SHA256_PATTERN
 from serendipeak.catalog.public_link import PUBLIC_LINK_PATTERN
@@ -26,7 +26,6 @@ from serendipeak.catalog.slug import RESERVED_SLUGS, SLUG_PATTERN
 # Plain strings keep the deconstructed constraints equal to the migration.
 MOUNTAIN_STATUSES = tuple(status.value for status in MountainStatus)
 ACTIVE_STATUS = MountainStatus.ACTIVE.value
-OSM_TYPES = tuple(osm_type.value for osm_type in OsmType)
 
 
 def _has_text(field):
@@ -96,7 +95,6 @@ class MountainRecord(models.Model):
     # geography would silently wrap out-of-range coordinates before any CHECK could see them.
     location = gis_models.PointField(srid=4326, spatial_index=False)
     elevation_meters = models.IntegerField()
-    prominence_meters = models.IntegerField(null=True)
     range_name = models.TextField(null=True)
     countries = ArrayField(models.TextField(), default=list)
     summary = models.TextField(null=True)
@@ -105,10 +103,8 @@ class MountainRecord(models.Model):
     camera_range_meters = models.FloatField(null=True)
     camera_framing_x = models.FloatField(null=True)
     camera_framing_y = models.FloatField(null=True)
-    osm_type = models.TextField(null=True)
-    osm_id = models.BigIntegerField(null=True)
+    osm_node_id = models.BigIntegerField(null=True)
     wikidata_id = models.TextField(null=True)
-    wikipedia_url = models.TextField(null=True)
     status = models.TextField()
     created_at = models.DateTimeField(db_default=Now())
     updated_at = models.DateTimeField(db_default=Now())
@@ -147,14 +143,6 @@ class MountainRecord(models.Model):
             ),
             CheckConstraint(
                 condition=_absent_or_has_text("summary"), name="mountain_summary_not_blank"
-            ),
-            CheckConstraint(
-                condition=_absent_or_has_text("wikipedia_url"),
-                name="mountain_wikipedia_url_not_blank",
-            ),
-            CheckConstraint(
-                condition=_absent_or_public_link("wikipedia_url"),
-                name="mountain_wikipedia_url_public_link",
             ),
             CheckConstraint(
                 condition=Q(status__in=MOUNTAIN_STATUSES), name="mountain_status_valid"
@@ -207,16 +195,8 @@ class MountainRecord(models.Model):
                 name="mountain_camera_framing_requires_camera",
             ),
             CheckConstraint(
-                condition=Q(osm_type__isnull=True) | Q(osm_type__in=OSM_TYPES),
-                name="mountain_osm_type_valid",
-            ),
-            CheckConstraint(
-                condition=Q(osm_id__isnull=True) | Q(osm_id__gt=0),
-                name="mountain_osm_id_positive",
-            ),
-            CheckConstraint(
-                condition=_all_or_none("osm_type", "osm_id"),
-                name="mountain_osm_reference_complete",
+                condition=Q(osm_node_id__isnull=True) | Q(osm_node_id__gt=0),
+                name="mountain_osm_node_id_positive",
             ),
             CheckConstraint(
                 condition=Q(wikidata_id__isnull=True) | Q(wikidata_id__regex=WIKIDATA_ID_PATTERN),

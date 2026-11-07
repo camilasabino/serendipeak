@@ -8,8 +8,6 @@ from serendipeak.catalog.entities import (
     ImageDimensions,
     Mountain,
     MountainStatus,
-    OsmReference,
-    OsmType,
     PhotographMedia,
     PrimaryImage,
 )
@@ -33,17 +31,13 @@ def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | 
         status=MountainStatus(record.status),
         coordinates=Coordinates(latitude=record.location.y, longitude=record.location.x),
         elevation_meters=record.elevation_meters,
-        prominence_meters=record.prominence_meters,
         range_name=record.range_name,
         countries=tuple(record.countries),
         summary=record.summary,
         camera=to_camera(record),
         primary_image=None if image is None else to_primary_image(image),
-        osm=None
-        if record.osm_type is None
-        else OsmReference(type=OsmType(record.osm_type), id=record.osm_id),
+        osm_node_id=record.osm_node_id,
         wikidata_id=record.wikidata_id,
-        wikipedia_url=record.wikipedia_url,
     )
 
 
@@ -76,15 +70,12 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
         name=mountain.name,
         location=Point(mountain.coordinates.longitude, mountain.coordinates.latitude, srid=4326),
         elevation_meters=mountain.elevation_meters,
-        prominence_meters=mountain.prominence_meters,
         range_name=mountain.range_name,
         countries=list(mountain.countries),
         summary=mountain.summary,
         **camera_columns(mountain.camera),
-        osm_type=None if mountain.osm is None else mountain.osm.type.value,
-        osm_id=None if mountain.osm is None else mountain.osm.id,
+        osm_node_id=mountain.osm_node_id,
         wikidata_id=mountain.wikidata_id,
-        wikipedia_url=mountain.wikipedia_url,
         status=mountain.status.value,
         created_at=entry.created_at,
         updated_at=entry.updated_at,

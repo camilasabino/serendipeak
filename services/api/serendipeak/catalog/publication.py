@@ -33,7 +33,6 @@ _PUBLICATION_VIOLATION_OF_CAMERA = {
 
 
 class PublicLinkField(StrEnum):
-    WIKIPEDIA_URL = "wikipedia_url"
     IMAGE_SOURCE_PAGE_URL = "image_source_page_url"
     IMAGE_LICENSE_URL = "image_license_url"
 
@@ -62,16 +61,14 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
 
 
 def unsafe_public_links(mountain: Mountain) -> tuple[PublicLinkField, ...]:
-    links = [(PublicLinkField.WIKIPEDIA_URL, mountain.wikipedia_url)]
-
     image = mountain.primary_image
-    if image is not None:
-        links.extend(
-            [
-                (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
-                (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
-            ]
-        )
+    if image is None:
+        return ()
+
+    links = (
+        (PublicLinkField.IMAGE_SOURCE_PAGE_URL, image.source_page_url),
+        (PublicLinkField.IMAGE_LICENSE_URL, image.license_url),
+    )
 
     # A blank link is reported as missing (or rejected as blank), not as unsafe.
     return tuple(

@@ -20,17 +20,6 @@ def mountain():
     return record
 
 
-@pytest.mark.parametrize(("value", "accepted"), PUBLIC_LINK_CASES)
-def test_the_wikipedia_url_constraint_agrees_with_the_python_rule(value, accepted):
-    assert is_public_link(value) is accepted
-
-    record = mountain_record(wikipedia_url=value)
-    if accepted:
-        record.save(force_insert=True)
-    else:
-        assert insert_error(record).constraint_name == "mountain_wikipedia_url_public_link"
-
-
 @pytest.mark.parametrize("column", IMAGE_LINK_CONSTRAINTS)
 @pytest.mark.parametrize(("value", "accepted"), PUBLIC_LINK_CASES)
 def test_each_image_link_constraint_agrees_with_the_python_rule(mountain, column, value, accepted):
@@ -44,9 +33,6 @@ def test_each_image_link_constraint_agrees_with_the_python_rule(mountain, column
 
 
 def test_optional_links_may_be_absent(mountain):
-    mountain.wikipedia_url = None
-    mountain.save()
-
     image_record(mountain, license_url=None).save(force_insert=True)
 
 

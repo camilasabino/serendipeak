@@ -34,15 +34,13 @@ SPARSE_DRAFT = catalog_mountain(
     "draft-peak",
     status=MountainStatus.DRAFT,
     coordinates=Coordinates(latitude=90.0, longitude=-180.0),
-    prominence_meters=None,
     range_name=None,
     countries=(),
     summary=None,
     camera=None,
     primary_image=None,
-    osm=None,
+    osm_node_id=None,
     wikidata_id=None,
-    wikipedia_url=None,
 )
 INACTIVE_UNFRAMED = catalog_mountain(
     "old-peak",

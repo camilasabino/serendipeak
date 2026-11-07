@@ -24,8 +24,6 @@ from serendipeak.catalog.entities import (
     ImageDimensions,
     Mountain,
     MountainStatus,
-    OsmReference,
-    OsmType,
     PhotographMedia,
     PrimaryImage,
 )
@@ -81,7 +79,6 @@ def mountain(slug="aconcagua", **overrides):
         "status": MountainStatus.ACTIVE,
         "coordinates": Coordinates(latitude=-32.6531487, longitude=-70.0119607),
         "elevation_meters": 6961,
-        "prominence_meters": 6962,
         "range_name": "Principal Cordillera",
         "countries": ("Argentina",),
         "summary": "Highest mountain outside Asia.",
@@ -92,9 +89,8 @@ def mountain(slug="aconcagua", **overrides):
             framing=CameraFraming(x=-0.0587, y=0.3857),
         ),
         "primary_image": primary_image(),
-        "osm": OsmReference(type=OsmType.NODE, id=1504741757),
+        "osm_node_id": 1504741757,
         "wikidata_id": "Q39739",
-        "wikipedia_url": "https://en.wikipedia.org/wiki/Aconcagua",
     }
     fields.update(overrides)
 
@@ -138,7 +134,7 @@ def frozen_mountain(entry):
         coordinates=source.coordinates,
         elevation_meters=source.elevation_meters,
         camera=source.camera,
-        osm=source.osm,
+        osm_node_id=source.osm_node_id,
         wikidata_id=source.wikidata_id,
         image=FrozenImageIdentity(
             source_page_url=image.source_page_url,
@@ -185,13 +181,11 @@ def bare_mountain(status=MountainStatus.INACTIVE):
         status=status,
         coordinates=Coordinates(latitude=45.0, longitude=10.0),
         elevation_meters=2000,
-        prominence_meters=None,
         range_name=None,
         countries=(),
         summary=None,
         camera=None,
         primary_image=None,
-        osm=None,
+        osm_node_id=None,
         wikidata_id=None,
-        wikipedia_url=None,
     )

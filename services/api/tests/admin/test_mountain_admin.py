@@ -42,13 +42,10 @@ NEW_MOUNTAIN = {
     "latitude": "46.5",
     "longitude": "8.5",
     "elevation_meters": "3500",
-    "prominence_meters": "",
     "range_name": "",
     "countries": "",
     "summary": "",
-    "wikipedia_url": "",
-    "osm_type": "node",
-    "osm_id": "1504741757",
+    "osm_node_id": "1504741757",
     "wikidata_id": "Q39739",
 }
 
@@ -72,19 +69,15 @@ EDITABLE = (
     "summary",
     "range_name",
     "countries",
-    "prominence_meters",
-    "osm_type",
-    "osm_id",
+    "osm_node_id",
     "wikidata_id",
-    "wikipedia_url",
 )
 CORRECTIONS = {
     "name": "Cerro Aconcagua",
     "latitude": "-32.65",
     "longitude": "-70.01",
     "elevation_meters": "6960",
-    "osm_type": "way",
-    "osm_id": "42",
+    "osm_node_id": "42",
     "wikidata_id": "Q1",
 }
 
@@ -190,10 +183,9 @@ class TestCreation:
         assert record.status == "draft"
         assert (record.location.y, record.location.x) == (46.5, 8.5)
         assert record.location.srid == 4326
-        assert record.osm_id == 1504741757
+        assert record.osm_node_id == 1504741757
         assert all(getattr(record, name) is None for name in CAMERA_FIELDS)
         assert record.countries == []
-        assert record.prominence_meters is None
         assert record.summary is None
 
     def test_the_add_form_offers_no_status_no_camera_and_no_map_widget(self, editor_client):
@@ -202,7 +194,7 @@ class TestCreation:
         assert "status" not in names
         assert "location" not in names
         assert names & set(CAMERA_FIELDS) == set()
-        assert {"latitude", "longitude", "slug", "osm_type", "wikidata_id"} <= names
+        assert {"latitude", "longitude", "slug", "osm_node_id", "wikidata_id"} <= names
 
     def test_a_posted_camera_is_ignored_on_creation(self, editor_client):
         payload = new_mountain_payload(editor_client) | {
@@ -223,11 +215,7 @@ class TestCreation:
         assert fieldsets == [
             ("Mountain", ["name", "slug", "latitude", "longitude", "elevation_meters"], ""),
             ("Editorial", ["summary", "range_name", "countries"], ""),
-            (
-                "Additional data",
-                ["prominence_meters", "osm_type", "osm_id", "wikidata_id", "wikipedia_url"],
-                "collapse",
-            ),
+            ("Additional data", ["osm_node_id", "wikidata_id"], "collapse"),
         ]
 
     def test_a_posted_status_is_ignored(self, editor_client):
@@ -237,20 +225,17 @@ class TestCreation:
 
         assert MountainRecord.objects.get(slug="new-peak").status == "draft"
 
-    def test_countries_summary_and_numbers_are_stored_as_entered(self, editor_client):
+    def test_countries_and_summary_are_stored_as_entered(self, editor_client):
         create_mountain(
             editor_client,
             countries="Argentina, Chile",
             summary="Highest mountain outside Asia.",
-            prominence_meters="6962",
             range_name=" Principal Cordillera ",
-            wikipedia_url="https://en.wikipedia.org/wiki/Aconcagua",
         )
 
         record = MountainRecord.objects.get(slug="new-peak")
         assert record.countries == ["Argentina", "Chile"]
         assert record.summary == "Highest mountain outside Asia."
-        assert record.prominence_meters == 6962
         assert record.range_name == "Principal Cordillera"
 
     def test_the_photograph_is_created_with_the_draft(self, editor_client, media_store):
@@ -305,13 +290,12 @@ class TestCreation:
             ({"elevation_meters": "0"}, "elevation_meters"),
             ({"elevation_meters": "-5"}, "elevation_meters"),
             ({"elevation_meters": ""}, "elevation_meters"),
-            ({"osm_id": ""}, "osm_id"),
-            ({"osm_type": ""}, "osm_id"),
-            ({"osm_id": "0"}, "osm_id"),
+            ({"osm_node_id": "0"}, "osm_node_id"),
+            ({"osm_node_id": "-5"}, "osm_node_id"),
+            ({"osm_node_id": "node/1"}, "osm_node_id"),
             ({"wikidata_id": "39739"}, "wikidata_id"),
             ({"wikidata_id": "Q0"}, "wikidata_id"),
             ({"summary": "highest mountain."}, "summary"),
-            ({"wikipedia_url": "  "}, None),
         ],
     )
     def test_each_frozen_rule_gives_authoring_feedback_on_its_field(
@@ -319,19 +303,16 @@ class TestCreation:
     ):
         response = create_mountain(editor_client, **overrides)
 
-        if field is None:
-            assert response.status_code == 302
-            return
         assert response.status_code == 200
         assert field in errors_of(response)
         assert not MountainRecord.objects.exists()
 
     def test_a_draft_may_be_saved_without_camera_provenance_or_photograph(self, editor_client):
-        response = create_mountain(editor_client, osm_type="", osm_id="", wikidata_id="")
+        response = create_mountain(editor_client, osm_node_id="", wikidata_id="")
 
         assert response.status_code == 302
         record = MountainRecord.objects.get(slug="new-peak")
-        assert (record.camera_heading_degrees, record.osm_type, record.wikidata_id) == (
+        assert (record.camera_heading_degrees, record.osm_node_id, record.wikidata_id) == (
             None,
             None,
             None,
@@ -438,15 +419,14 @@ class TestEditing:
             "name",
             "location",
             "elevation_meters",
-            "osm_type",
-            "osm_id",
+            "osm_node_id",
             "wikidata_id",
             "updated_at",
         }
         assert (after["location"].y, after["location"].x) == (-32.65, -70.01)
         assert after["location"].srid == 4326
         assert (after["name"], after["elevation_meters"]) == ("Cerro Aconcagua", 6960)
-        assert (after["osm_type"], after["osm_id"], after["wikidata_id"]) == ("way", 42, "Q1")
+        assert (after["osm_node_id"], after["wikidata_id"]) == (42, "Q1")
         assert after["status"] == entry.mountain.status.value
 
     def test_unchanged_coordinates_keep_the_stored_point(self, editor_client, load_catalog):
@@ -529,13 +509,10 @@ class TestEditing:
             "slug",
             "location",
             "elevation_meters",
-            "prominence_meters",
             "range_name",
             "countries",
             "summary",
-            "wikipedia_url",
-            "osm_type",
-            "osm_id",
+            "osm_node_id",
             "wikidata_id",
             "updated_at",
         }
@@ -564,19 +541,17 @@ class TestEditing:
 
         response = editor_client.post(
             change_url(ACTIVE),
-            form_payload(page, osm_type="", osm_id="", wikidata_id="", wikipedia_url=""),
+            form_payload(page, osm_node_id="", wikidata_id=""),
         )
 
         assert response.status_code == 302
         after = stored(ACTIVE)
-        assert (after["osm_type"], after["osm_id"], after["wikidata_id"]) == (None, None, None)
+        assert (after["osm_node_id"], after["wikidata_id"]) == (None, None)
 
     @pytest.mark.parametrize(
         ("overrides", "field"),
         [
-            ({"osm_id": ""}, "osm_id"),
-            ({"osm_type": ""}, "osm_id"),
-            ({"osm_id": "0"}, "osm_id"),
+            ({"osm_node_id": "0"}, "osm_node_id"),
             ({"wikidata_id": "39739"}, "wikidata_id"),
         ],
     )
@@ -590,7 +565,7 @@ class TestEditing:
 
         assert response.status_code == 200
         assert field in errors_of(response)
-        assert stored(ACTIVE)["osm_id"] == 1504741757
+        assert stored(ACTIVE)["osm_node_id"] == 1504741757
 
     @pytest.mark.parametrize("entry", [ACTIVE, INACTIVE])
     @pytest.mark.parametrize(
@@ -659,7 +634,7 @@ class TestEditing:
             status=MountainStatus.DRAFT,
             camera=None,
             primary_image=None,
-            osm=None,
+            osm_node_id=None,
             wikidata_id=None,
         )
         load_catalog(draft)
@@ -670,24 +645,17 @@ class TestEditing:
         assert response.status_code == 302
         assert stored(draft)["name"] == "Bare Draft"
 
-    def test_countries_prominence_and_wikipedia_url_are_editable(self, editor_client, load_catalog):
+    def test_countries_are_editable(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
         page = editor_client.get(change_url(ACTIVE))
 
         editor_client.post(
             change_url(ACTIVE),
-            form_payload(
-                page,
-                countries="Argentina, Chile",
-                prominence_meters="0",
-                wikipedia_url="https://en.wikipedia.org/wiki/Aconcagua_(mountain)",
-            ),
+            form_payload(page, countries="Argentina, Chile"),
         )
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
         assert record.countries == ["Argentina", "Chile"]
-        assert record.prominence_meters == 0
-        assert record.wikipedia_url.endswith("Aconcagua_(mountain)")
 
     def test_optional_fields_can_be_cleared(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -695,19 +663,11 @@ class TestEditing:
 
         editor_client.post(
             change_url(ACTIVE),
-            form_payload(
-                page,
-                summary="",
-                range_name="",
-                prominence_meters="",
-                countries="",
-                wikipedia_url="",
-            ),
+            form_payload(page, summary="", range_name="", countries=""),
         )
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert (record.summary, record.range_name, record.prominence_meters) == (None, None, None)
-        assert (record.countries, record.wikipedia_url) == ([], None)
+        assert (record.summary, record.range_name, record.countries) == (None, None, [])
 
     def test_the_photograph_credit_is_saved(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -982,14 +942,6 @@ def image_errors_of(response):
 @pytest.mark.django_db
 class TestPublicLinks:
     @pytest.mark.parametrize("value", UNSAFE_LINKS)
-    def test_an_unsafe_wikipedia_url_is_a_form_error_on_creation(self, editor_client, value):
-        response = create_mountain(editor_client, wikipedia_url=value)
-
-        assert response.status_code == 200
-        assert errors_of(response) == {"wikipedia_url": [USE_HTTPS_LINK]}
-        assert not MountainRecord.objects.exists()
-
-    @pytest.mark.parametrize("value", UNSAFE_LINKS)
     @pytest.mark.parametrize("field", ["source_page_url", "license_url"])
     def test_an_unsafe_photograph_link_is_a_form_error_on_creation(
         self, editor_client, media_store, field, value
@@ -1014,7 +966,7 @@ class TestPublicLinks:
         }
         payload = form_payload(
             editor_client.get(ADD_URL),
-            **{**NEW_MOUNTAIN, "wikipedia_url": "https://unsplash.com/@user"},
+            **NEW_MOUNTAIN,
             **photograph(**links, **{"image-0-license_name": "CC BY-SA 4.0"}),
         )
 
@@ -1023,30 +975,22 @@ class TestPublicLinks:
         assert response.status_code == 302
         record = MountainRecord.objects.get(slug="new-peak")
         image = record.image
-        assert record.wikipedia_url == "https://unsplash.com/@user"
         assert image.source_page_url == links["image-0-source_page_url"]
         assert image.license_url == links["image-0-license_url"]
 
-    def test_surrounding_whitespace_is_trimmed_before_the_rule_applies(self, editor_client):
-        response = create_mountain(editor_client, wikipedia_url="  https://example.com/a  ")
+    def test_surrounding_whitespace_is_trimmed_before_the_rule_applies(
+        self, editor_client, media_store
+    ):
+        payload = form_payload(
+            editor_client.get(ADD_URL),
+            **NEW_MOUNTAIN,
+            **photograph(**{"image-0-source_page_url": "  https://example.com/a  "}),
+        )
+
+        response = editor_client.post(ADD_URL, payload)
 
         assert response.status_code == 302
-        assert MountainRecord.objects.get().wikipedia_url == "https://example.com/a"
-
-    @pytest.mark.parametrize("entry", [DRAFT, ACTIVE, INACTIVE])
-    @pytest.mark.parametrize("value", ["http://example.com/page", "javascript:alert(1)"])
-    def test_an_unsafe_wikipedia_url_is_a_form_error_on_any_mountain(
-        self, editor_client, load_catalog, entry, value
-    ):
-        load_catalog(entry)
-        page = editor_client.get(change_url(entry))
-
-        response = editor_client.post(change_url(entry), form_payload(page, wikipedia_url=value))
-
-        assert response.status_code == 200
-        assert errors_of(response) == {"wikipedia_url": [USE_HTTPS_LINK]}
-        stored = MountainRecord.objects.get(pk=entry.mountain.id).wikipedia_url
-        assert stored == entry.mountain.wikipedia_url
+        assert MountainRecord.objects.get().image.source_page_url == "https://example.com/a"
 
     @pytest.mark.parametrize("entry", [DRAFT, ACTIVE])
     def test_an_unsafe_license_url_is_a_form_error_on_the_editable_photograph(
@@ -1071,11 +1015,11 @@ class TestPublicLinks:
 
         response = editor_client.post(
             change_url(DRAFT),
-            form_payload(page, wikipedia_url="", **{"image-0-license_url": ""}),
+            form_payload(page, **{"image-0-license_url": ""}),
         )
 
         assert response.status_code == 302
-        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).wikipedia_url is None
+        assert MountainImageRecord.objects.get(pk=DRAFT.mountain.id).license_url is None
 
 
 @pytest.mark.django_db

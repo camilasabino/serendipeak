@@ -14,12 +14,6 @@ class MountainStatus(StrEnum):
 PUBLIC_STATUSES = frozenset({MountainStatus.ACTIVE, MountainStatus.INACTIVE})
 
 
-class OsmType(StrEnum):
-    NODE = "node"
-    WAY = "way"
-    RELATION = "relation"
-
-
 @dataclass(frozen=True, slots=True)
 class Coordinates:
     latitude: float
@@ -65,12 +59,6 @@ class PrimaryImage:
 
 
 @dataclass(frozen=True, slots=True)
-class OsmReference:
-    type: OsmType
-    id: int
-
-
-@dataclass(frozen=True, slots=True)
 class Mountain:
     id: UUID
     slug: str
@@ -78,15 +66,13 @@ class Mountain:
     status: MountainStatus
     coordinates: Coordinates
     elevation_meters: int
-    prominence_meters: int | None
     range_name: str | None
     countries: tuple[str, ...]
     summary: str | None
     camera: CanonicalCamera | None
     primary_image: PrimaryImage | None
-    osm: OsmReference | None
+    osm_node_id: int | None
     wikidata_id: str | None
-    wikipedia_url: str | None
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,8 +13,6 @@ from serendipeak.catalog.entities import (
     CameraFraming,
     Coordinates,
     MountainStatus,
-    OsmReference,
-    OsmType,
 )
 from serendipeak.catalog.errors import InvalidFrozenCatalog
 from tests.support.catalog import (
@@ -37,7 +35,7 @@ def test_frozen_catalog_parses_every_mountain():
 
     assert len(frozen) == 73
     aconcagua = next(entry for entry in frozen if entry.slug == "aconcagua")
-    assert aconcagua.osm == OsmReference(type=OsmType.NODE, id=1504741757)
+    assert aconcagua.osm_node_id == 1504741757
     assert aconcagua.wikidata_id == "Q39739"
     assert aconcagua.camera.framing == CameraFraming(x=-0.0587, y=0.3857)
 
@@ -47,6 +45,9 @@ def test_frozen_catalog_parses_every_mountain():
     [
         lambda document: document.update(version="v2"),
         lambda document: document["mountains"][0]["sources"].update(osm="https://example.org/1"),
+        lambda document: document["mountains"][0]["sources"].update(
+            osm="https://www.openstreetmap.org/way/1504741757"
+        ),
         lambda document: document["mountains"][0].pop("camera"),
     ],
 )
@@ -98,7 +99,7 @@ def test_camera_within_the_contract_tolerance_matches():
         ({"camera": None}, "camera differs"),
         ({"camera": replace(mountain().camera, range_meters=17132.000001)}, "camera differs"),
         ({"camera": replace(mountain().camera, framing=None)}, "camera differs"),
-        ({"osm": OsmReference(type=OsmType.WAY, id=1504741757)}, "OpenStreetMap"),
+        ({"osm_node_id": 1504741758}, "OpenStreetMap node differs"),
         ({"wikidata_id": "Q1"}, "Wikidata id differs"),
         ({"primary_image": None}, "primary image identity differs"),
         ({"primary_image": primary_image(dimensions=None)}, "primary image identity differs"),

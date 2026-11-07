@@ -133,7 +133,7 @@ def test_the_constraints_accept_exactly_the_keys_the_key_builders_derive(mountai
 
 
 def test_two_images_may_share_the_same_photograph(mountain, db):
-    other = mountain_record(slug="other-peak", name="Other Peak", osm_id=1, wikidata_id="Q1")
+    other = mountain_record(slug="other-peak", name="Other Peak", osm_node_id=1, wikidata_id="Q1")
     other.save()
 
     image_record(mountain, **MEDIA).save(force_insert=True)

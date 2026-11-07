@@ -28,7 +28,6 @@ from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
     MountainStatus,
-    OsmType,
 )
 from serendipeak.catalog.errors import (
     CameraChanged,
@@ -93,7 +92,6 @@ VIOLATION_MESSAGES = {
     PublicationViolation.LINK_NOT_HTTPS: "a public link does not use https://",
 }
 PUBLIC_LINK_LABELS = {
-    PublicLinkField.WIKIPEDIA_URL: "the Wikipedia link",
     PublicLinkField.IMAGE_SOURCE_PAGE_URL: "the photo page URL",
     PublicLinkField.IMAGE_LICENSE_URL: "the photograph license URL",
 }
@@ -143,7 +141,7 @@ CAMERA_EDITOR_LABEL = "Edit camera visually"
 CAMERA_LOG_MESSAGE = "Camera changed."
 CAMERA_ANCHOR = "camera"
 
-OPTIONAL_TEXT = ("range_name", "summary", "wikipedia_url")
+OPTIONAL_TEXT = ("range_name", "summary")
 CAMERA_FIELDS = (
     "camera_heading_degrees",
     "camera_pitch_degrees",
@@ -161,7 +159,7 @@ PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
 EDITORIAL_FIELDS = ("summary", "range_name", "countries")
-ADDITIONAL_FIELDS = ("prominence_meters", "osm_type", "osm_id", "wikidata_id", "wikipedia_url")
+ADDITIONAL_FIELDS = ("osm_node_id", "wikidata_id")
 PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
 COLUMN_OF_FORM_FIELD = {"latitude": "location", "longitude": "location"}
 NEVER_FORM_WRITTEN = frozenset({"status", *CAMERA_FIELDS})
@@ -241,12 +239,7 @@ class MountainForm(forms.ModelForm):
         f"{coordinates.LONGITUDE_MAX_DEGREES:g}."
     )
     elevation_meters = forms.IntegerField(min_value=1)
-    osm_type = forms.TypedChoiceField(
-        required=False,
-        empty_value=None,
-        choices=[("", "---------"), *((osm.value, osm.value) for osm in OsmType)],
-    )
-    osm_id = forms.IntegerField(required=False, min_value=1)
+    osm_node_id = forms.IntegerField(required=False, min_value=1)
     wikidata_id = forms.CharField(required=False, empty_value=None)
 
     class Meta:
@@ -255,24 +248,20 @@ class MountainForm(forms.ModelForm):
             "slug",
             "name",
             "elevation_meters",
-            "prominence_meters",
             "range_name",
             "countries",
             "summary",
-            "wikipedia_url",
-            "osm_type",
-            "osm_id",
+            "osm_node_id",
             "wikidata_id",
         )
         widgets = {
-            **_single_line("slug", "name", "range_name", "wikipedia_url"),
+            **_single_line("slug", "name", "range_name"),
             "summary": _summary_textarea(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        _make_optional(self, (*OPTIONAL_TEXT, "prominence_meters", "countries"))
-        _require_public_links(self, ("wikipedia_url",))
+        _make_optional(self, (*OPTIONAL_TEXT, "countries"))
 
         location = self.instance.location
         if location is not None:
@@ -322,18 +311,11 @@ class MountainForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        self._check_osm_reference(cleaned)
 
         if "latitude" in cleaned and "longitude" in cleaned:
             self.instance.location = Point(cleaned["longitude"], cleaned["latitude"], srid=4326)
 
         return cleaned
-
-    def _check_osm_reference(self, cleaned):
-        if "osm_type" in self.errors or "osm_id" in self.errors:
-            return
-        if (cleaned.get("osm_type") is None) != (cleaned.get("osm_id") is None):
-            self.add_error("osm_id", "The OpenStreetMap type and id go together.")
 
 
 class CameraForm(forms.Form):

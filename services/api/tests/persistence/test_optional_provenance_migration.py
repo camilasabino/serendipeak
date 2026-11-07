@@ -27,7 +27,7 @@ def test_reversing_and_reapplying_succeeds_while_every_active_mountain_has_its_r
 
 
 def test_reversing_fails_once_an_active_mountain_lacks_source_references():
-    mountain_record(osm_type=None, osm_id=None, wikidata_id=None).save()
+    mountain_record(osm_node_id=None, wikidata_id=None).save()
 
     with pytest.raises(IntegrityError):
         migrate_to(BEFORE)

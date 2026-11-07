@@ -61,7 +61,7 @@ describe.each([
 describe('complete fixture', () => {
 	const html = render(complete);
 
-	it('renders summary, country, elevation, range, coordinates and Wikipedia in editorial order', () => {
+	it('renders summary, country, elevation, range and coordinates in editorial order', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Country', 'Elevation', 'Range', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual([
 			'Argentina',
@@ -69,26 +69,20 @@ describe('complete fixture', () => {
 			'Principal Cordillera',
 			'32.6531° S, 70.0120° W'
 		]);
-		const order = [
-			complete.summary,
-			'Elevation',
-			'Learn more on Wikipedia',
-			'<figure',
-			'Data sources'
-		].map((fragment) => html.indexOf(fragment ?? ''));
+		const order = [complete.summary, 'Elevation', '<figure', 'Data sources'].map((fragment) =>
+			html.indexOf(fragment ?? '')
+		);
 		expect(order.every((position) => position > -1)).toBe(true);
 		expect(order).toEqual([...order].sort((a, b) => a - b));
 	});
 
-	it('links coordinates to a map search and Wikipedia to the source field', () => {
+	it('links coordinates to a map search', () => {
 		const anchors = anchorsOf(html);
 
 		expect(anchors.find(({ text }) => text.startsWith('32.6531'))?.href).toBe(
 			'https://www.google.com/maps/search/?api=1&query=-32.6531487%2C-70.0119607'
 		);
-		expect(anchors.find(({ text }) => text.includes('Wikipedia'))?.href).toBe(
-			complete.sources?.wikipedia
-		);
+		expect(anchors.some(({ text }) => text.includes('Wikipedia'))).toBe(false);
 	});
 
 	it('renders both data sources inside the disclosure', () => {
@@ -101,11 +95,6 @@ describe('complete fixture', () => {
 
 describe('sparse fixture', () => {
 	const html = render(sparse);
-
-	it('has no Wikipedia link because the source field is absent', () => {
-		expect(html).not.toContain('Wikipedia');
-		expect(html).not.toContain('Continue exploring');
-	});
 
 	it('keeps the range, the photograph and the data sources', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Country', 'Elevation', 'Range', 'Coordinates']);
@@ -123,7 +112,7 @@ describe('minimal fixture', () => {
 		expect(textsOf(html, 'p')).toEqual(["Today's mountain"]);
 	});
 
-	it.each(['Country', 'Range', 'Wikipedia', 'Data sources', '<figure', 'About this photo'])(
+	it.each(['Country', 'Range', 'Data sources', '<figure', 'About this photo'])(
 		'renders no %s',
 		(fragment) => {
 			expect(html).not.toContain(fragment);

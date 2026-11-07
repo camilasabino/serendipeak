@@ -20,7 +20,7 @@ INCOMPLETE_DRAFT = catalog_mountain(
     status=MountainStatus.DRAFT,
     camera=None,
     primary_image=None,
-    osm=None,
+    osm_node_id=None,
     wikidata_id=None,
 )
 CATALOG = (DRAFT, ACTIVE, INACTIVE, INCOMPLETE_DRAFT)

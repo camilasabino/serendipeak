@@ -114,8 +114,7 @@ function isMountainSources(value: unknown): value is MountainSources {
 	return (
 		isRecord(value) &&
 		isOptional(value, 'osm', isHttpUrl) &&
-		isOptional(value, 'wikidata', isHttpUrl) &&
-		isOptional(value, 'wikipedia', isHttpUrl)
+		isOptional(value, 'wikidata', isHttpUrl)
 	);
 }
 
@@ -129,7 +128,6 @@ export function isMountain(value: unknown): value is Mountain {
 		isPositiveInteger(value.elevationMeters) &&
 		Array.isArray(value.countries) &&
 		value.countries.every(isNonEmptyString) &&
-		isOptional(value, 'prominenceMeters', Number.isInteger) &&
 		isOptional(value, 'rangeName', isNonEmptyString) &&
 		isOptional(value, 'summary', isNonEmptyString) &&
 		isOptional(value, 'camera', isMountainCamera) &&

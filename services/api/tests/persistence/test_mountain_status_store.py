@@ -16,7 +16,7 @@ pytestmark = pytest.mark.django_db
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 ACTIVE = catalog_mountain("aconcagua")
 INCOMPLETE_DRAFT = catalog_mountain(
-    "incomplete-peak", status=MountainStatus.DRAFT, camera=None, osm=None, wikidata_id=None
+    "incomplete-peak", status=MountainStatus.DRAFT, camera=None, osm_node_id=None, wikidata_id=None
 )
 
 

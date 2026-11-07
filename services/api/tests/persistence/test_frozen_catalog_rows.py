@@ -13,6 +13,7 @@ FIXTURE_FILES = ["mountain-complete.json", "mountain-sparse.json", "mountain-min
 def frozen_row(mountain):
     pose = mountain["camera"]
     osm_type, osm_id = mountain["sources"]["osm"].rsplit("/", 2)[-2:]
+    assert osm_type == "node"
     return MountainRecord(
         slug=mountain["slug"],
         name=mountain["name"],
@@ -25,8 +26,7 @@ def frozen_row(mountain):
         camera_range_meters=pose["rangeMeters"],
         camera_framing_x=pose["framing"]["x"],
         camera_framing_y=pose["framing"]["y"],
-        osm_type=osm_type,
-        osm_id=int(osm_id),
+        osm_node_id=int(osm_id),
         wikidata_id=mountain["sources"]["wikidata"].rsplit("/", 1)[-1],
         status="active",
     )

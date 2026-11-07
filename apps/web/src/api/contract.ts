@@ -17,7 +17,6 @@ export interface MountainImage {
 export interface MountainSources {
 	osm?: string;
 	wikidata?: string;
-	wikipedia?: string;
 }
 
 export interface CameraFraming {
@@ -38,7 +37,6 @@ export interface Mountain {
 	name: string;
 	coordinates: Coordinates;
 	elevationMeters: number;
-	prominenceMeters?: number;
 	rangeName?: string;
 	countries: string[];
 	summary?: string;

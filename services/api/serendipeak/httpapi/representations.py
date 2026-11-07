@@ -2,7 +2,7 @@ from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
 from serendipeak.catalog.media.keys import public_url
 from serendipeak.discovery.entities import DailyMountain
 
-OSM_URL = "https://www.openstreetmap.org/{type}/{id}"
+OSM_NODE_URL = "https://www.openstreetmap.org/node/{id}"
 WIKIDATA_URL = "https://www.wikidata.org/wiki/{id}"
 
 
@@ -19,7 +19,6 @@ def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, obj
                 "longitude": coordinates.longitude,
             },
             "elevationMeters": mountain.elevation_meters,
-            "prominenceMeters": mountain.prominence_meters,
             "rangeName": mountain.range_name,
             "countries": list(mountain.countries),
             "summary": mountain.summary,
@@ -76,14 +75,14 @@ def _primary_image(image: PrimaryImage | None, media_base_url: str) -> dict[str,
 
 
 def _sources(mountain: Mountain) -> dict[str, object] | None:
-    osm = mountain.osm
     sources = _present(
         {
-            "osm": None if osm is None else OSM_URL.format(type=osm.type.value, id=osm.id),
+            "osm": None
+            if mountain.osm_node_id is None
+            else OSM_NODE_URL.format(id=mountain.osm_node_id),
             "wikidata": None
             if mountain.wikidata_id is None
             else WIKIDATA_URL.format(id=mountain.wikidata_id),
-            "wikipedia": mountain.wikipedia_url,
         }
     )
 

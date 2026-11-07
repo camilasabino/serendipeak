@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from serendipeak.catalog.entities import CanonicalCamera, OsmReference, OsmType
+from serendipeak.catalog.entities import CanonicalCamera
 from serendipeak.discovery.entities import DailyMountain
 from serendipeak.httpapi.renderers import ContractJSONRenderer
 from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
@@ -91,10 +91,11 @@ def test_members_without_a_value_are_omitted_never_null():
     assert representation["countries"] == []
 
 
-def test_a_zero_prominence_is_kept():
-    assert (
-        represent_mountain(mountain(prominence_meters=0), MEDIA_BASE_URL)["prominenceMeters"] == 0
-    )
+def test_the_dropped_members_are_never_served():
+    representation = represent_mountain(mountain(), MEDIA_BASE_URL)
+
+    assert "prominenceMeters" not in representation
+    assert "wikipedia" not in representation["sources"]
 
 
 def test_a_camera_without_framing_omits_the_framing():
@@ -196,22 +197,22 @@ def test_the_members_that_differ_from_the_v1_fixtures_are_the_ones_serendipeak_o
     ("references", "sources"),
     [
         (
-            {"osm": OsmReference(type=OsmType.RELATION, id=7), "wikidata_id": None},
-            {"osm": "https://www.openstreetmap.org/relation/7"},
+            {"osm_node_id": 7, "wikidata_id": None},
+            {"osm": "https://www.openstreetmap.org/node/7"},
         ),
         (
-            {"osm": None, "wikidata_id": "Q1"},
+            {"osm_node_id": None, "wikidata_id": "Q1"},
             {"wikidata": "https://www.wikidata.org/wiki/Q1"},
         ),
     ],
 )
 def test_sources_hold_only_the_stored_references(references, sources):
-    entity = mountain(wikipedia_url=None, **references)
+    entity = mountain(**references)
 
     assert represent_mountain(entity, MEDIA_BASE_URL)["sources"] == sources
 
 
 def test_sources_are_omitted_without_any_reference():
-    entity = mountain(osm=None, wikidata_id=None, wikipedia_url=None)
+    entity = mountain(osm_node_id=None, wikidata_id=None)
 
     assert "sources" not in represent_mountain(entity, MEDIA_BASE_URL)

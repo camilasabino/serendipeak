@@ -43,7 +43,6 @@ REJECTED_DRAFTS = [
     ("mountain_elevation_positive", {"elevation_meters": -1}),
     ("mountain_range_name_not_blank", {"range_name": " "}),
     ("mountain_summary_not_blank", {"summary": ""}),
-    ("mountain_wikipedia_url_not_blank", {"wikipedia_url": " "}),
     ("mountain_status_valid", {"status": "pending_media"}),
     ("mountain_status_valid", {"status": ""}),
     (
@@ -68,10 +67,8 @@ REJECTED_DRAFTS = [
         "mountain_camera_framing_requires_camera",
         {**NO_CAMERA, "camera_framing_x": 0.0, "camera_framing_y": 0.0},
     ),
-    ("mountain_osm_type_valid", {"osm_type": "area"}),
-    ("mountain_osm_id_positive", {"osm_id": 0}),
-    ("mountain_osm_reference_complete", {"osm_id": None}),
-    ("mountain_osm_reference_complete", {"osm_type": None}),
+    ("mountain_osm_node_id_positive", {"osm_node_id": 0}),
+    ("mountain_osm_node_id_positive", {"osm_node_id": -1}),
     ("mountain_wikidata_id_format", {"wikidata_id": "Q0"}),
     ("mountain_wikidata_id_format", {"wikidata_id": "q39739"}),
     ("mountain_wikidata_id_format", {"wikidata_id": "Q39739a"}),
@@ -118,9 +115,9 @@ def test_rejects_a_duplicate_slug():
         {"camera_range_meters": 80000.0, "camera_framing_x": 1.0, "camera_framing_y": -1.0},
         {"location": Point(-180.0, -90.0, srid=4326)},
         {"location": Point(180.0, 90.0, srid=4326)},
-        {"prominence_meters": 0},
-        {"prominence_meters": None, "range_name": None, "summary": None, "wikipedia_url": None},
-        {"osm_type": None, "osm_id": None, "wikidata_id": None},
+        {"range_name": None, "summary": None},
+        {"osm_node_id": 1},
+        {"osm_node_id": None, "wikidata_id": None},
     ],
 )
 def test_accepts_active_mountains_at_the_bounds(overrides):
@@ -130,7 +127,7 @@ def test_accepts_active_mountains_at_the_bounds(overrides):
 @pytest.mark.django_db
 @pytest.mark.parametrize("status", ["draft", "inactive"])
 def test_unpublished_statuses_need_only_identity_fields(status):
-    mountain_record(status=status, osm_type=None, osm_id=None, wikidata_id=None, **NO_CAMERA).save()
+    mountain_record(status=status, osm_node_id=None, wikidata_id=None, **NO_CAMERA).save()
 
 
 @pytest.mark.django_db
@@ -157,4 +154,4 @@ def test_the_database_holds_exactly_the_declared_mountain_constraints():
 
 @pytest.mark.django_db
 def test_an_active_mountain_may_lack_every_source_reference():
-    mountain_record(osm_type=None, osm_id=None, wikidata_id=None, wikipedia_url=None).save()
+    mountain_record(osm_node_id=None, wikidata_id=None).save()

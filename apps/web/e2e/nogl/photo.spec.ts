@@ -288,7 +288,7 @@ test.describe('@nogl Photograph failure', () => {
 			await expect(page.getByText('About this photo')).toHaveCount(0);
 			await expect(page.getByRole('link', { name: ACONCAGUA_PHOTO.author })).toHaveCount(0);
 			await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
-			await expect(page.getByRole('link', { name: /Wikipedia/ })).toBeVisible();
+			await expect(page.getByText('Data sources')).toBeVisible();
 			expect(watched.pageErrors).toEqual([]);
 		});
 	}

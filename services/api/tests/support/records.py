@@ -16,8 +16,7 @@ def mountain_record(**overrides):
         "camera_range_meters": 17132.0,
         "camera_framing_x": -0.0587,
         "camera_framing_y": 0.3857,
-        "osm_type": "node",
-        "osm_id": 1504741757,
+        "osm_node_id": 1504741757,
         "wikidata_id": "Q39739",
         "status": "active",
     }

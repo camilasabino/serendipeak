@@ -19,6 +19,10 @@ RENAMED_IMAGE_MEMBERS = {"attribution": "author"}
 # The Commons file title is derivable from a Commons source page and meaningless for any other
 # source, and the creator is absorbed into the author.
 DROPPED_IMAGE_MEMBERS = ("creator", "sourceIdentifier")
+# Nothing renders the prominence, and the Wikipedia link is not served: the Wikidata item is
+# the language-independent reference that stays.
+DROPPED_MOUNTAIN_MEMBERS = ("prominenceMeters",)
+DROPPED_SOURCE_MEMBERS = ("wikipedia",)
 
 
 def load_fixture(name):
@@ -30,12 +34,22 @@ def load_frozen_catalog():
 
 
 def served_by_serendipeak(document, media_base_url, media_of_slug):
-    """A v1 mountain or daily document as SerendiPeak serves it: owned media, one author.
+    """A v1 mountain or daily document as SerendiPeak serves it: owned media, one author, and
+    neither the prominence nor the Wikipedia link.
 
     A mountain without a primary image is returned as it is.
     """
     expected = copy.deepcopy(document)
     mountain = expected.get("mountain", expected)
+    for member in DROPPED_MOUNTAIN_MEMBERS:
+        mountain.pop(member, None)
+    sources = mountain.get("sources")
+    if sources is not None:
+        for member in DROPPED_SOURCE_MEMBERS:
+            sources.pop(member, None)
+        if not sources:
+            del mountain["sources"]
+
     image = mountain.get("primaryImage")
     if image is not None:
         media = media_of_slug(mountain["slug"])

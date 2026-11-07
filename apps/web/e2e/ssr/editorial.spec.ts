@@ -10,7 +10,7 @@ import { fixture, headingsOf, resetStub } from './support';
 interface Mountain {
 	slug: string;
 	name: string;
-	sources?: { wikipedia?: string };
+	sources?: object;
 	primaryImage?: {
 		author: string;
 		sourcePageUrl?: string;
@@ -65,9 +65,7 @@ for (const mountain of [complete, sparse, minimal]) {
 		test('renders links only for the fields the mountain has', () => {
 			const labels = anchorsOf(html).map(({ text }) => text);
 
-			expect(labels.some((text) => text.includes('Wikipedia'))).toBe(
-				mountain.sources?.wikipedia !== undefined
-			);
+			expect(labels.some((text) => text.includes('Wikipedia'))).toBe(false);
 			expect(html.includes('Data sources')).toBe(mountain.sources !== undefined);
 			expect(html.includes('<figure')).toBe(mountain.primaryImage !== undefined);
 			expect(labels.filter((text) => text === "Today's mountain")).toHaveLength(2);

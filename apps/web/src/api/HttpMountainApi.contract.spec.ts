@@ -4,14 +4,7 @@ import { HttpMountainApi } from './HttpMountainApi';
 import { contractFixture, MOUNTAIN_FIXTURES } from './test-support/contractFixtures';
 import { BASE_URL, serving } from './test-support/stubFetch';
 
-const OPTIONAL_FIELDS = [
-	'prominenceMeters',
-	'rangeName',
-	'summary',
-	'camera',
-	'primaryImage',
-	'sources'
-] as const;
+const OPTIONAL_FIELDS = ['rangeName', 'summary', 'camera', 'primaryImage', 'sources'] as const;
 
 function apiServing(body: unknown, status = 200) {
 	return new HttpMountainApi({ baseUrl: BASE_URL, fetch: serving(body, status) });
@@ -51,19 +44,27 @@ describe('v1 contract fixtures through HttpMountainApi', () => {
 		expect(mountain.countries).toEqual([]);
 	});
 
-	it('keeps the sparse mountain without prominence and Wikipedia link', async () => {
+	it('keeps the sparse mountain with its camera, photograph and sources', async () => {
 		const result = await apiServing(contractFixture('mountain-sparse.json')).getMountain(
 			'mount-olympus'
 		);
 
 		expect(result.kind).toBe('found');
 		const mountain = (result as { mountain: Mountain }).mountain;
-		expect('prominenceMeters' in mountain).toBe(false);
 		expect(mountain.sources).toBeDefined();
-		expect('wikipedia' in mountain.sources!).toBe(false);
 		expect(mountain.camera?.framing).toBeDefined();
 		expect(mountain.primaryImage?.width).toBeGreaterThan(0);
 	});
+
+	it.each(MOUNTAIN_FIXTURES)(
+		'serves neither the prominence nor the Wikipedia link in %s',
+		(name) => {
+			const mountain = contractFixture(name) as { sources?: object };
+
+			expect(mountain).not.toHaveProperty('prominenceMeters');
+			expect(mountain.sources ?? {}).not.toHaveProperty('wikipedia');
+		}
+	);
 
 	it('takes the discovery date from the daily payload', async () => {
 		const payload = contractFixture('daily-mountain.json') as { date: string; mountain: unknown };

@@ -96,7 +96,7 @@ def test_a_mountain_without_a_summary_is_publishable():
 
 
 def test_source_metadata_is_optional_for_publication():
-    assert publication_violations(mountain(osm=None, wikidata_id=None, wikipedia_url=None)) == ()
+    assert publication_violations(mountain(osm_node_id=None, wikidata_id=None)) == ()
 
 
 @pytest.mark.parametrize(
@@ -146,7 +146,6 @@ UNSAFE_LINK = "http://example.com/page"
 @pytest.mark.parametrize(
     ("overrides", "field"),
     [
-        ({"wikipedia_url": UNSAFE_LINK}, PublicLinkField.WIKIPEDIA_URL),
         (
             {"primary_image": primary_image(source_page_url="HTTPS://example.com")},
             PublicLinkField.IMAGE_SOURCE_PAGE_URL,
@@ -166,13 +165,11 @@ def test_an_unsafe_public_link_is_reported_with_the_field_that_carries_it(overri
 
 def test_several_unsafe_links_are_one_violation_naming_every_field():
     candidate = mountain(
-        wikipedia_url=UNSAFE_LINK,
         primary_image=primary_image(source_page_url=UNSAFE_LINK, license_url=UNSAFE_LINK),
     )
 
     assert publication_violations(candidate) == (PublicationViolation.LINK_NOT_HTTPS,)
     assert unsafe_public_links(candidate) == (
-        PublicLinkField.WIKIPEDIA_URL,
         PublicLinkField.IMAGE_SOURCE_PAGE_URL,
         PublicLinkField.IMAGE_LICENSE_URL,
     )
@@ -180,7 +177,6 @@ def test_several_unsafe_links_are_one_violation_naming_every_field():
 
 def test_absent_optional_links_are_not_unsafe():
     candidate = mountain(
-        wikipedia_url=None,
         primary_image=primary_image(license_name="Public domain", license_url=None),
     )
 

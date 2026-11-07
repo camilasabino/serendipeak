@@ -25,12 +25,6 @@ def test_every_committed_seed_link_is_a_public_link():
     for entry in committed_seed().mountains:
         mountain = entry.mountain
         image = mountain.primary_image
-        links.extend(
-            [
-                mountain.wikipedia_url,
-                image.source_page_url,
-                image.license_url,
-            ]
-        )
+        links.extend([image.source_page_url, image.license_url])
 
     assert [link for link in links if link is not None and not is_public_link(link)] == []

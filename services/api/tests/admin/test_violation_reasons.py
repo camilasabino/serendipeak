@@ -5,24 +5,29 @@ from tests.support.catalog import mountain, primary_image
 
 def test_an_unsafe_link_violation_names_every_offending_field():
     candidate = mountain(
-        wikipedia_url="http://en.wikipedia.org/wiki/Aconcagua",
-        primary_image=primary_image(license_url="javascript:alert(1)"),
+        primary_image=primary_image(
+            source_page_url="http://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg",
+            license_url="javascript:alert(1)",
+        ),
     )
 
     reasons = violation_reasons(publication_violations(candidate), candidate)
 
     assert reasons == [
-        "the Wikipedia link does not use https://",
+        "the photo page URL does not use https://",
         "the photograph license URL does not use https://",
     ]
 
 
 def test_other_violations_keep_their_own_message():
-    candidate = mountain(camera=None, wikipedia_url="http://example.com")
+    candidate = mountain(camera=None, primary_image=primary_image(license_url="http://example.com"))
 
     reasons = violation_reasons(publication_violations(candidate), candidate)
 
-    assert reasons == ["the camera is missing", "the Wikipedia link does not use https://"]
+    assert reasons == [
+        "the camera is missing",
+        "the photograph license URL does not use https://",
+    ]
     assert PublicationViolation.CAMERA_MISSING in publication_violations(candidate)
 
 

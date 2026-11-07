@@ -25,7 +25,7 @@ def served_identity(record):
         "name": record.name,
         "elevationMeters": record.elevation_meters,
         "sources": {
-            "osm": f"https://www.openstreetmap.org/{record.osm_type}/{record.osm_id}",
+            "osm": f"https://www.openstreetmap.org/node/{record.osm_node_id}",
             "wikidata": f"https://www.wikidata.org/wiki/{record.wikidata_id}",
         },
         "primaryImage": {
