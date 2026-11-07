@@ -2,13 +2,13 @@ import type { ReactNode } from 'react';
 import type { Mountain } from '../api/contract';
 import { ExternalLink } from '../links/ExternalLink';
 import { formatElevation } from '../formatElevation';
-import { formatCoordinates, formatCountries } from './format';
+import { formatCoordinates, formatCountries, formatRegion } from './format';
 import { googleMapsUrl } from './googleMaps';
 import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
 import styles from './MountainInfoPanel.module.css';
 
 export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
-	const { continent, coordinates, countries, rangeName, summary } = mountain;
+	const { continent, coordinates, countries, region, summary } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
 
 	return (
@@ -24,8 +24,8 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 						{formatCountries(countries.map((country) => country.name))}
 					</Fact>
 				)}
+				{region && <Fact term="Region">{formatRegion(region)}</Fact>}
 				<Fact term="Elevation">{formatElevation(mountain.elevationMeters)}</Fact>
-				{rangeName && <Fact term="Range">{rangeName}</Fact>}
 				<Fact term="Coordinates">
 					<ExternalLink
 						href={googleMapsUrl(coordinates.latitude, coordinates.longitude)}

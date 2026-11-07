@@ -39,6 +39,7 @@ from tests.support.geography import (
     reference,
     synthetic_geography,
 )
+from tests.support.regions import region_path, regions_of
 
 SEED_PATH = Path(__file__).resolve().parents[2] / "seed" / "legacy-catalog-v1.json"
 CREATED_AT = datetime.datetime(2026, 10, 2, 2, 55, 52, 889902, tzinfo=datetime.UTC)
@@ -104,7 +105,7 @@ def mountain(slug="aconcagua", **overrides):
         "elevation_meters": 6961,
         "continent": continent("SA"),
         "countries": countries("AR"),
-        "range_name": "Principal Cordillera",
+        "region": region_path("Test Chain", "Test Range"),
         "summary": LocalizedText(en="Highest mountain outside Asia."),
         "camera": CanonicalCamera(
             heading_degrees=66.87,
@@ -148,24 +149,31 @@ def catalog_discovery(day, entry):
 
 
 def catalog_seed(*mountains, discoveries=()):
-    return CatalogSeed(mountains=tuple(mountains), discoveries=tuple(discoveries))
+    regions = regions_of(*(entry.mountain.region for entry in mountains))
+
+    return CatalogSeed(mountains=tuple(mountains), discoveries=tuple(discoveries), regions=regions)
 
 
 def split_seed(seed):
     """A complete seed as the two inputs a bootstrap takes: the seed as parsed, which holds the
     v1 names of the countries and no continent, and the geography input that completes it."""
     names = {}
+    ranges = {}
     mountains = []
     entries = []
     for entry in seed.mountains:
         mountain = entry.mountain
+        ranges[mountain.id] = None if mountain.region is None else mountain.region.region.name.en
         names[mountain.id] = tuple(
             name
             for country in mountain.countries
             if (name := legacy_name_of_code(country.code)) is not None
         )
         mountains.append(
-            replace(entry, mountain=replace(mountain, continent=PENDING_CONTINENT, countries=()))
+            replace(
+                entry,
+                mountain=replace(mountain, continent=PENDING_CONTINENT, countries=(), region=None),
+            )
         )
         entries.append(
             (
@@ -173,12 +181,20 @@ def split_seed(seed):
                 mountain.slug,
                 mountain.continent.code,
                 [country.code for country in mountain.countries],
+                *(() if mountain.region is None else (mountain.region.region.slug,)),
             )
         )
 
+    regions = regions_of(*(entry.mountain.region for entry in seed.mountains))
+
     return (
-        replace(seed, mountains=tuple(mountains), legacy_country_names=names),
-        parse_document(geography_document(entries)),
+        replace(
+            seed,
+            mountains=tuple(mountains),
+            legacy_country_names=names,
+            legacy_range_names=ranges,
+        ),
+        parse_document(geography_document(entries, regions)),
     )
 
 
@@ -223,6 +239,7 @@ def committed_seed_with_media():
     return CatalogSeed(
         mountains=tuple(with_media(entry) for entry in seed.mountains),
         discoveries=seed.discoveries,
+        regions=seed.regions,
     )
 
 
@@ -241,7 +258,7 @@ def bare_mountain(status=MountainStatus.INACTIVE):
         elevation_meters=2000,
         continent=continent("EU"),
         countries=(),
-        range_name=None,
+        region=None,
         summary=None,
         camera=None,
         primary_image=None,

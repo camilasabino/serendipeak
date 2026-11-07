@@ -55,16 +55,19 @@ from serendipeak.catalog.publication import (
 )
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
+from serendipeak.catalog.regions import PATH_SEPARATOR, regions_in_tree_order
 from serendipeak.catalog.relocation import RelocationOutcome, judge_relocation
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.camera_editor_url import camera_editor_url
 from serendipeak.persistence.mapping import (
+    load_region_paths,
     to_camera,
     to_coordinates,
     to_mountain,
     to_mountain_with_image,
+    to_region,
     with_geography,
 )
 from serendipeak.persistence.models import (
@@ -73,6 +76,7 @@ from serendipeak.persistence.models import (
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
+    MountainRegionRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -184,7 +188,7 @@ CAMERA_LOG_MESSAGE = "Camera changed."
 CAMERA_CLEARED_LOG_MESSAGE = "Camera cleared by a change of coordinates."
 CAMERA_ANCHOR = "camera"
 
-OPTIONAL_TEXT = ("range_name", "summary_en")
+OPTIONAL_TEXT = ("summary_en",)
 CAMERA_FIELDS = (
     "camera_heading_degrees",
     "camera_pitch_degrees",
@@ -210,7 +214,8 @@ MOVABLE_MOUNTAIN_FIELDS = (
     CAMERA_RESET_FIELD,
     "elevation_meters",
 )
-GEOGRAPHY_FIELDS = ("continent", "countries", "range_name")
+GEOGRAPHY_FIELDS = ("continent", "countries", "region")
+READ_ONLY_GEOGRAPHY_FIELDS = ("continent", "countries", "region_path")
 EDITORIAL_FIELDS = ("summary_en",)
 ADDITIONAL_FIELDS = ("osm_node_id", "wikidata_id")
 PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
@@ -280,6 +285,15 @@ def _country_label(country):
     return f"{country.name_en} ({country.code})"
 
 
+def _region_choices():
+    """Every region in tree order, each labelled with its path, from one query."""
+    records = list(MountainRegionRecord.objects.all())
+    by_id = {record.id: record for record in records}
+    ordered = regions_in_tree_order(to_region(record) for record in records)
+
+    return [(by_id[region.id].pk, label) for region, label in ordered]
+
+
 def _clean_summary(value):
     if value is None:
         return value
@@ -319,14 +333,14 @@ class MountainForm(forms.ModelForm):
             "name_en",
             "elevation_meters",
             "continent",
-            "range_name",
+            "region",
             "summary_en",
             "osm_node_id",
             "wikidata_id",
         )
         labels = {"name_en": "Name", "summary_en": "Summary"}
         widgets = {
-            **_single_line("slug", "name_en", "range_name"),
+            **_single_line("slug", "name_en"),
             "summary_en": _summary_textarea(),
         }
 
@@ -342,6 +356,14 @@ class MountainForm(forms.ModelForm):
             continent.help_text = (
                 "The continent where the summit lies. It is chosen, never derived from the"
                 " countries."
+            )
+        region = self.fields.get("region")
+        if region is not None:
+            region.required = False
+            region.choices = [("", "No region"), *_region_choices()]
+            region.help_text = (
+                "The most specific region known, shown with the regions above it. The regions"
+                " themselves cannot be edited here."
             )
         self.fields["countries"].label_from_instance = _country_label
         if not self.instance._state.adding:
@@ -881,12 +903,11 @@ class MountainAdmin(admin.ModelAdmin):
         "continent",
         "country_codes",
         "elevation_meters",
-        "range_name",
+        "region_label",
         "updated_at",
     )
     list_filter = ("status",)
-    list_select_related = ("continent",)
-    search_fields = ("name_en", "slug", "range_name", "country_links__country__name_en")
+    search_fields = ("name_en", "slug", "region__name_en", "country_links__country__name_en")
     ordering = ("slug",)
     form = MountainForm
     inlines = [MountainImageInline]
@@ -904,7 +925,13 @@ class MountainAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         movable = obj is not None and self.has_change_permission(request, obj)
         mountain = ("Mountain", {"fields": MOVABLE_MOUNTAIN_FIELDS if movable else MOUNTAIN_FIELDS})
-        geography = ("Geography", {"fields": GEOGRAPHY_FIELDS})
+        # A model field always wins over a method of the same name, so a user who cannot change
+        # the mountain reads the region through a method with another name.
+        editable = obj is None or self.has_change_permission(request, obj)
+        geography = (
+            "Geography",
+            {"fields": GEOGRAPHY_FIELDS if editable else READ_ONLY_GEOGRAPHY_FIELDS},
+        )
         editorial = ("Editorial", {"fields": EDITORIAL_FIELDS})
         additional = ("Additional data", {"fields": ADDITIONAL_FIELDS, "classes": ("collapse",)})
         if obj is None:
@@ -922,11 +949,34 @@ class MountainAdmin(admin.ModelAdmin):
         return [publication, mountain, geography, editorial, camera_diagnostics, additional]
 
     def get_queryset(self, request):
-        return with_geography(super().get_queryset(request))
+        # The region and its parent are joined here, not through list_select_related, which the
+        # changelist ignores once the queryset already selects the continent.
+        return with_geography(super().get_queryset(request)).select_related("region__parent")
 
     @admin.display(description="Name", ordering="name_en")
     def english_name(self, obj):
         return obj.name_en
+
+    @admin.display(description="Region", ordering="region__name_en")
+    def region_label(self, obj):
+        region = obj.region
+        if region is None:
+            return "-"
+
+        return (
+            region.name_en
+            if region.parent is None
+            else f"{region.name_en}, {region.parent.name_en}"
+        )
+
+    @admin.display(description="Region")
+    def region_path(self, obj):
+        # What a user who cannot change the mountain sees in place of the selection.
+        path = load_region_paths([obj]).get(obj.region_id)
+        if path is None:
+            return "None"
+
+        return PATH_SEPARATOR.join(ref.name.en for ref in (*path.ancestors, path.region))
 
     @admin.display(description="Countries")
     def country_codes(self, obj):

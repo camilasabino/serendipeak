@@ -4,7 +4,7 @@ import { HttpMountainApi } from './HttpMountainApi';
 import { contractFixture, MOUNTAIN_FIXTURES } from './test-support/contractFixtures';
 import { BASE_URL, serving } from './test-support/stubFetch';
 
-const OPTIONAL_FIELDS = ['rangeName', 'summary', 'camera', 'primaryImage', 'sources'] as const;
+const OPTIONAL_FIELDS = ['summary', 'camera', 'primaryImage', 'sources'] as const;
 
 function apiServing(body: unknown, status = 200) {
 	return new HttpMountainApi({ baseUrl: BASE_URL, fetch: serving(body, status) });
@@ -42,6 +42,7 @@ describe('v1 contract fixtures through HttpMountainApi', () => {
 			expect(field in mountain, field).toBe(false);
 		}
 		expect(mountain.countries).toEqual([]);
+		expect(mountain.region).toBeNull();
 		expect(mountain.continent).toEqual({ code: 'EU', name: 'Europe' });
 	});
 

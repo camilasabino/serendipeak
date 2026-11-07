@@ -44,13 +44,14 @@ def statement_heads(captured):
 
 @pytest.mark.django_db(transaction=True)
 def test_load_locks_checks_and_inserts_in_one_transaction(django_assert_num_queries):
-    with django_assert_num_queries(8) as captured:
+    with django_assert_num_queries(9) as captured:
         DjangoCatalogStore().load(committed_seed())
 
     assert statement_heads(captured) == [
         "BEGIN",
         'LOCK TABLE "mountain"',
         "SELECT 1 AS",
+        'INSERT INTO "mountain_region"',
         'INSERT INTO "mountain"',
         'INSERT INTO "mountain_country"',
         'INSERT INTO "mountain_image"',
@@ -78,7 +79,7 @@ def test_a_refused_load_writes_nothing_and_rolls_back(django_assert_num_queries)
 
 
 @pytest.mark.django_db
-def test_snapshot_is_three_queries_whatever_the_images_and_countries_of_the_mountains(
+def test_snapshot_is_four_queries_whatever_the_images_countries_and_regions_of_the_mountains(
     django_assert_num_queries,
 ):
     committed = committed_seed()
@@ -92,7 +93,7 @@ def test_snapshot_is_three_queries_whatever_the_images_and_countries_of_the_moun
     )
     DjangoCatalogStore().load(seed)
 
-    with django_assert_num_queries(3):
+    with django_assert_num_queries(4):
         snapshot = DjangoCatalogStore().snapshot()
 
     assert (len(snapshot.mountains), len(snapshot.discoveries)) == (74, 8)
@@ -101,11 +102,11 @@ def test_snapshot_is_three_queries_whatever_the_images_and_countries_of_the_moun
 
 
 @pytest.mark.django_db
-def test_check_catalog_reads_the_catalog_in_three_queries(django_assert_num_queries):
+def test_check_catalog_reads_the_catalog_in_four_queries(django_assert_num_queries):
     store = DjangoCatalogStore()
     store.load(committed_seed_with_media())
 
-    with django_assert_num_queries(3):
+    with django_assert_num_queries(4):
         report = CheckCatalog(store).execute()
 
     assert (report.checked, report.violations) == (73, ())

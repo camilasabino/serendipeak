@@ -3,6 +3,7 @@ from django.db import IntegrityError, transaction
 
 from serendipeak.catalog.country_aliases import legacy_name_of_code
 from serendipeak.catalog.entities import ImageDimensions
+from serendipeak.catalog.regions import region_id_for_slug
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 
@@ -91,11 +92,11 @@ def pre_minimal_photograph_columns(entry, raw_image, model):
     return {name: value for name, value in columns.items() if name in names}
 
 
-def columns_at_schema(record, model, *, countries=()):
+def columns_at_schema(record, model, *, countries=(), range_name=None):
     """The columns of a mountain row the schema of model has, under the names it has them by.
 
     Before the localized text and the geography, a mountain row held name, summary and the v1
-    country names as text, and no continent.
+    country names as text, and no continent; before the regions it held the range name as text.
     """
     names = {field.attname for field in model._meta.concrete_fields}
     columns = {
@@ -103,10 +104,27 @@ def columns_at_schema(record, model, *, countries=()):
         for field in record._meta.concrete_fields
         if field.attname in names
     }
-    legacy = {"name": record.name_en, "summary": record.summary_en, "countries": list(countries)}
+    legacy = {
+        "name": record.name_en,
+        "summary": record.summary_en,
+        "countries": list(countries),
+        "range_name": range_name,
+    }
     columns.update({name: value for name, value in legacy.items() if name in names})
 
     return columns
+
+
+def region_ids_of(entry):
+    region = entry.mountain.region
+
+    return {} if region is None else {region.region.slug: region_id_for_slug(region.region.slug)}
+
+
+def legacy_range_name(entry):
+    region = entry.mountain.region
+
+    return None if region is None else region.region.name.en
 
 
 def legacy_country_names(entry):
@@ -137,7 +155,10 @@ def load_committed_catalog_at(target, *, with_media):
     mountain_model.objects.bulk_create(
         mountain_model(
             **columns_at_schema(
-                mountain_record_of(entry), mountain_model, countries=legacy_country_names(entry)
+                mountain_record_of(entry, region_ids_of(entry)),
+                mountain_model,
+                countries=legacy_country_names(entry),
+                range_name=legacy_range_name(entry),
             )
         )
         for entry in entries

@@ -29,13 +29,13 @@ def repository():
         ("unknown-peak", False),
     ],
 )
-def test_a_lookup_joins_the_image_and_continent_and_reads_the_countries_in_one_more_query(
+def test_a_lookup_joins_the_image_and_continent_and_reads_countries_and_ancestors_apart(
     repository,
     django_assert_num_queries,
     slug,
     found,
 ):
-    with django_assert_num_queries(2 if found else 1) as captured:
+    with django_assert_num_queries(3 if found else 1) as captured:
         mountain = repository.find_public_by_slug(slug)
 
     assert (mountain is not None) is found
@@ -45,6 +45,7 @@ def test_a_lookup_joins_the_image_and_continent_and_reads_the_countries_in_one_m
     assert """"mountain"."status" IN ('active', 'inactive')""" in sql
     if found:
         assert 'FROM "mountain_country" INNER JOIN "country"' in captured.captured_queries[1]["sql"]
+        assert "RECURSIVE" in captured.captured_queries[2]["sql"]
 
 
 def test_listing_active_candidates_is_one_query_without_model_instances(

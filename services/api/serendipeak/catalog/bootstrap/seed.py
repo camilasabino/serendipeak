@@ -30,8 +30,8 @@ LEGACY_COMMIT = "f9a66deb2c0591a9c574fb4751b938b5863e6a1e"
 
 _OSM_NODE = "node"
 
-# The seed holds neither continents nor country codes. A parsed seed carries this placeholder
-# until a geography input assigns the real ones.
+# The seed holds neither continents nor country codes, and its range names are plain text. A parsed
+# seed carries this placeholder, no countries and no region until a geography input assigns them.
 PENDING_CONTINENT = Continent(code="", name=LocalizedText(en=""))
 
 _LEGACY_STATUSES = {
@@ -110,9 +110,10 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
         _mountain(raw, f"content.mountains[{index}]")
         for index, raw in enumerate(_list(content["mountains"], "content.mountains"))
     ]
-    mountains = tuple(entry for entry, _, _ in parsed)
-    approvals = sum(approved for _, approved, _ in parsed)
-    legacy_countries = {entry.mountain.id: names for entry, _, names in parsed}
+    mountains = tuple(entry for entry, _, _, _ in parsed)
+    approvals = sum(approved for _, approved, _, _ in parsed)
+    legacy_countries = {entry.mountain.id: names for entry, _, names, _ in parsed}
+    legacy_ranges = {entry.mountain.id: name for entry, _, _, name in parsed}
     discoveries = tuple(
         _discovery(raw, f"content.daily_discoveries[{index}]")
         for index, raw in enumerate(
@@ -127,6 +128,7 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
         mountains=mountains,
         discoveries=discoveries,
         legacy_country_names=legacy_countries,
+        legacy_range_names=legacy_ranges,
     )
 
 
@@ -185,6 +187,7 @@ def _mountain(raw, label):
         _text(country, f"{label} countries")
         for country in _list(fields["countries"], f"{label} countries")
     )
+    legacy_range = _optional(_text, fields["range_name"], f"{label} range_name")
     mountain = Mountain(
         id=_uuid(fields["id"], f"{label} id"),
         slug=slug,
@@ -194,7 +197,7 @@ def _mountain(raw, label):
         elevation_meters=_integer(fields["elevation_meters"], f"{label} elevation_meters"),
         continent=PENDING_CONTINENT,
         countries=(),
-        range_name=_optional(_text, fields["range_name"], f"{label} range_name"),
+        region=None,
         summary=None if summary is None else LocalizedText(en=summary),
         camera=_camera(fields, label),
         primary_image=image,
@@ -208,7 +211,7 @@ def _mountain(raw, label):
         updated_at=_timestamp(fields["updated_at"], f"{label} updated_at"),
     )
 
-    return entry, approved, legacy_countries
+    return entry, approved, legacy_countries, legacy_range
 
 
 def _camera(fields, label):

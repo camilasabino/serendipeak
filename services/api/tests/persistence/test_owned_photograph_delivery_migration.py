@@ -12,7 +12,9 @@ from tests.support.migrations import (
 from tests.support.records import (
     columns_at_schema,
     legacy_country_names,
+    legacy_range_name,
     pre_minimal_photograph_columns,
+    region_ids_of,
 )
 
 BEFORE = ("catalog", "0006_photograph_media")
@@ -47,7 +49,10 @@ def load_committed_catalog_before_the_migration(*, with_media):
     mountain_model.objects.bulk_create(
         mountain_model(
             **columns_at_schema(
-                mountain_record_of(entry), mountain_model, countries=legacy_country_names(entry)
+                mountain_record_of(entry, region_ids_of(entry)),
+                mountain_model,
+                countries=legacy_country_names(entry),
+                range_name=legacy_range_name(entry),
             )
         )
         for entry in entries

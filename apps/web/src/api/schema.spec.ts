@@ -26,6 +26,21 @@ describe('isMountain', () => {
 		expect(isMountain({ ...complete, continent: { code, name: 'Somewhere' } })).toBe(true);
 	});
 
+	it('accepts a mountain without a region, served as null', () => {
+		expect(isMountain({ ...complete, region: null })).toBe(true);
+	});
+
+	it.each([0, 1, 3, 6])('accepts a region with %i ancestors', (depth) => {
+		const ancestors = Array.from({ length: depth }, (_, index) => ({
+			slug: `level-${index}`,
+			name: `Level ${index}`
+		}));
+
+		expect(isMountain({ ...complete, region: { slug: 'leaf', name: 'Leaf', ancestors } })).toBe(
+			true
+		);
+	});
+
 	it('accepts a mountain without countries', () => {
 		expect(isMountain({ ...complete, countries: [] })).toBe(true);
 	});
@@ -39,14 +54,20 @@ describe('isMountain', () => {
 		expect(isMountain({ ...complete, countries })).toBe(true);
 	});
 
-	it.each(['id', 'slug', 'name', 'coordinates', 'elevationMeters', 'continent', 'countries'])(
-		'rejects a mountain without %s',
-		(key) => {
-			expect(isMountain(without(complete, key))).toBe(false);
-		}
-	);
+	it.each([
+		'id',
+		'slug',
+		'name',
+		'coordinates',
+		'elevationMeters',
+		'continent',
+		'countries',
+		'region'
+	])('rejects a mountain without %s', (key) => {
+		expect(isMountain(without(complete, key))).toBe(false);
+	});
 
-	it.each(['rangeName', 'summary', 'camera', 'primaryImage', 'sources'])(
+	it.each(['summary', 'camera', 'primaryImage', 'sources'])(
 		'rejects %s when present as null',
 		(key) => {
 			expect(isMountain({ ...complete, [key]: null })).toBe(false);
@@ -84,6 +105,25 @@ describe('isMountain', () => {
 		['continent with a blank name', { continent: { code: 'SA', name: '' } }],
 		['unknown continent code', { continent: { code: 'ZZ', name: 'Nowhere' } }],
 		['lowercase continent code', { continent: { code: 'sa', name: 'South America' } }],
+		['undefined region', { region: undefined }],
+		['string region', { region: 'Andes' }],
+		['region without a slug', { region: { name: 'Alpha Chain', ancestors: [] } }],
+		['region with an invalid slug', { region: { slug: 'Alpha', name: 'A', ancestors: [] } }],
+		['region with the reserved slug', { region: { slug: 'today', name: 'A', ancestors: [] } }],
+		['region with a blank name', { region: { slug: 'alpha-chain', name: '', ancestors: [] } }],
+		['region without ancestors', { region: { slug: 'alpha-chain', name: 'Alpha Chain' } }],
+		[
+			'region with null ancestors',
+			{ region: { slug: 'alpha-chain', name: 'Alpha Chain', ancestors: null } }
+		],
+		[
+			'ancestor without a name',
+			{ region: { slug: 'beta-range', name: 'B', ancestors: [{ slug: 'alpha-chain' }] } }
+		],
+		[
+			'ancestor with an invalid slug',
+			{ region: { slug: 'beta-range', name: 'B', ancestors: [{ slug: 'A B', name: 'A' }] } }
+		],
 		['latitude out of range', { coordinates: { latitude: 91, longitude: 0 } }],
 		['longitude out of range', { coordinates: { latitude: 0, longitude: -181 } }],
 		['missing longitude', { coordinates: { latitude: 0 } }],

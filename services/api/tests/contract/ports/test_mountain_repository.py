@@ -15,6 +15,7 @@ from tests.support.catalog import (
 )
 from tests.support.fakes import InMemoryMountainRepository
 from tests.support.geography import continent, countries
+from tests.support.regions import region_path
 
 ACONCAGUA = catalog_mountain("aconcagua")
 WITHOUT_DIMENSIONS = catalog_mountain(
@@ -159,3 +160,16 @@ def test_a_mountain_keeps_a_continent_that_differs_from_its_countries(repository
 
     assert islet.continent.code == "AF"
     assert [country.continent_code for country in islet.countries] == ["EU"]
+
+
+@pytest.mark.parametrize("names", [("Alpha Chain",), ("Alpha Chain", "Beta Range", "Gamma Ridge")])
+def test_a_region_comes_back_with_its_ancestors_root_first(repository_holding, names):
+    entry = catalog_mountain("ridge-peak", region=region_path(*names))
+
+    found = repository_holding(entry).find_public_by_slug("ridge-peak")
+
+    assert found.region == region_path(*names)
+
+
+def test_a_mountain_without_a_region_has_none(repository_holding):
+    assert repository_holding(BARE).find_public_by_slug("bare-peak").region is None

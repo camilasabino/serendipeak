@@ -12,13 +12,15 @@ CONTINENTS = ("catalog", "0015_continent_reference")
 COUNTRIES = ("catalog", "0016_country_reference")
 SCHEMA_READY = ("catalog", "0017_mountain_continent")
 FINAL = ("catalog", "0018_geography_final_validation")
+REGIONS = ("catalog", "0019_mountain_region")
+REGIONS_FINAL = ("catalog", "0020_region_final_validation")
 
 CREATED = datetime.datetime(2026, 10, 2, 2, 55, 52, 889902, tzinfo=datetime.UTC)
 UPDATED = datetime.datetime(2026, 10, 12, 17, 59, 25, 645765, tzinfo=datetime.UTC)
 
 # The columns a conversion has to leave exactly as they are, under the names of the latest schema.
 PRESERVED = (
-    "id, slug, name_en, name_es, name_pt, location::text, elevation_meters, range_name,"
+    "id, slug, name_en, name_es, name_pt, location::text, elevation_meters,"
     " summary_en, summary_es, summary_pt, camera_heading_degrees, camera_pitch_degrees,"
     " camera_range_meters, camera_framing_x, camera_framing_y, osm_node_id, wikidata_id,"
     " status, created_at, updated_at"
@@ -32,7 +34,7 @@ def mountain_values(slug, legacy_names=(), **overrides):
         "name_en": slug.replace("-", " ").title(),
         "location": Point(8.5, 46.5, srid=4326),
         "elevation_meters": 3500,
-        "range_name": "Invented Range",
+        "range_name": None,
         "countries": list(legacy_names),
         "summary_en": "An invented summary.",
         "camera_heading_degrees": 66.87,

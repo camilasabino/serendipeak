@@ -15,6 +15,7 @@ from serendipeak.persistence.models import (
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
+    MountainRegionRecord,
 )
 from tests.admin.support import form_payload, input_names, jpeg, upload
 from tests.support.catalog import catalog_mountain, primary_image, seeded_mountain
@@ -23,7 +24,7 @@ MEDIA_BASE_URL = settings.MEDIA_PUBLIC_BASE_URL
 ADD_URL = reverse("admin:catalog_mountainrecord_add")
 CHANGELIST_URL = reverse("admin:catalog_mountainrecord_changelist")
 
-DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, range_name="Karakoram")
+DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
 NO_IMAGE_DRAFT = catalog_mountain(
@@ -46,7 +47,7 @@ NEW_MOUNTAIN = {
     "longitude": "8.5",
     "elevation_meters": "3500",
     "continent": "EU",
-    "range_name": "",
+    "region": "",
     "countries": [],
     "summary_en": "",
     "osm_node_id": "1504741757",
@@ -72,7 +73,7 @@ EDITABLE = (
     "elevation_meters",
     "continent",
     "summary_en",
-    "range_name",
+    "region",
     "countries",
     "osm_node_id",
     "wikidata_id",
@@ -145,11 +146,11 @@ class TestChangeList:
         [
             ("draft", ["draft-peak"]),
             ("Draft Peak", ["draft-peak"]),
-            ("karakoram", ["draft-peak"]),
-            ("principal", ["aconcagua"]),
+            ("test range", ["aconcagua", "draft-peak"]),
+            ("TEST CHAIN", []),
         ],
     )
-    def test_searches_name_slug_and_range(self, editor_client, load_catalog, term, slugs):
+    def test_searches_name_slug_and_region(self, editor_client, load_catalog, term, slugs):
         load_catalog(DRAFT, ACTIVE)
 
         response = editor_client.get(CHANGELIST_URL, {"q": term})
@@ -218,7 +219,7 @@ class TestCreation:
 
         assert fieldsets == [
             ("Mountain", ["name_en", "slug", "latitude", "longitude", "elevation_meters"], ""),
-            ("Geography", ["continent", "countries", "range_name"], ""),
+            ("Geography", ["continent", "countries", "region"], ""),
             ("Editorial", ["summary_en"], ""),
             ("Additional data", ["osm_node_id", "wikidata_id"], "collapse"),
         ]
@@ -231,19 +232,20 @@ class TestCreation:
         assert MountainRecord.objects.get(slug="new-peak").status == "draft"
 
     def test_continent_countries_and_summary_are_stored_as_entered(self, editor_client):
+        region = MountainRegionRecord.objects.create(slug="test-range", name_en="Test Range")
         create_mountain(
             editor_client,
             continent="SA",
             countries=["CL", "AR"],
             summary_en="Highest mountain outside Asia.",
-            range_name=" Principal Cordillera ",
+            region=str(region.pk),
         )
 
         record = MountainRecord.objects.get(slug="new-peak")
         assert record.continent_id == "SA"
         assert linked_codes(record) == ["AR", "CL"]
         assert record.summary_en == "Highest mountain outside Asia."
-        assert record.range_name == "Principal Cordillera"
+        assert record.region_id == region.pk
 
     def test_the_photograph_is_created_with_the_draft(self, editor_client, media_store):
         payload = form_payload(editor_client.get(ADD_URL), **NEW_MOUNTAIN, **photograph())
@@ -517,7 +519,7 @@ class TestEditing:
             "slug",
             "elevation_meters",
             "continent_code",
-            "range_name",
+            "region_id",
             "summary_en",
             "osm_node_id",
             "wikidata_id",
@@ -593,9 +595,7 @@ class TestEditing:
         before = stored(entry)
         page = editor_client.get(change_url(entry))
 
-        response = editor_client.post(
-            change_url(entry), form_payload(page, **{"range_name": "Andes", **overrides})
-        )
+        response = editor_client.post(change_url(entry), form_payload(page, **overrides))
 
         assert response.status_code == 200
         assert field in errors_of(response)
@@ -670,11 +670,11 @@ class TestEditing:
 
         editor_client.post(
             change_url(ACTIVE),
-            form_payload(page, summary_en="", range_name="", countries=[]),
+            form_payload(page, summary_en="", region="", countries=[]),
         )
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert (record.summary_en, record.range_name, linked_codes(record)) == (None, None, [])
+        assert (record.summary_en, record.region_id, linked_codes(record)) == (None, None, [])
 
     def test_the_photograph_credit_is_saved(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -871,9 +871,7 @@ class TestDeletion:
     def test_a_draft_with_a_photograph_needs_the_photograph_removed_first(
         self, editor_client, load_catalog
     ):
-        draft = catalog_mountain(
-            "draft-peak", status=MountainStatus.DRAFT, range_name="Karakoram", countries=()
-        )
+        draft = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, countries=())
         load_catalog(draft)
         delete_url = reverse("admin:catalog_mountainrecord_delete", args=[draft.mountain.id])
 

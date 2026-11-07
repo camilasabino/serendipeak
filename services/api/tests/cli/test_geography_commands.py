@@ -70,11 +70,14 @@ class TestApplyGeographyBackfill:
         assert lines[0].startswith("Target: database test_serendipeak on ")
         assert lines[0].endswith("catalog migration 0017_mountain_continent.")
         assert lines[1:-1] == [
+            "Regions: left out, the schema has no region table yet.",
             "alpha-peak: continent - -> SA; adds AR",
             "beta-peak: continent - -> EU; adds CH, IT",
             "ice-peak: continent - -> AN; adds AQ",
         ]
-        assert lines[-1] == "Applied. 3 mountains checked, 3 changed, 0 unchanged."
+        assert (
+            lines[-1] == "Applied. 3 mountains checked, 3 changed, 0 unchanged, 0 regions to add."
+        )
         assert stderr == ""
         assert stored_geography()["beta-peak"] == ("EU", ["CH", "IT"])
 
@@ -87,7 +90,8 @@ class TestApplyGeographyBackfill:
         )
 
         assert stdout.splitlines()[-1] == (
-            "Dry run, nothing was written. 3 mountains checked, 3 changed, 0 unchanged."
+            "Dry run, nothing was written."
+            " 3 mountains checked, 3 changed, 0 unchanged, 0 regions to add."
         )
         assert nothing_is_assigned()
         assert fingerprints(PRESERVED) == before
@@ -98,7 +102,10 @@ class TestApplyGeographyBackfill:
 
         stdout, _ = run("apply_geography_backfill", "--input", str(path), "--sha256", sha)
 
-        assert stdout.splitlines()[1:] == ["Applied. 3 mountains checked, 0 changed, 3 unchanged."]
+        assert stdout.splitlines()[1:] == [
+            "Regions: left out, the schema has no region table yet.",
+            "Applied. 3 mountains checked, 0 changed, 3 unchanged, 0 regions to add.",
+        ]
 
     def test_a_wrong_checksum_is_refused_before_the_database_is_named(self, tmp_path):
         path, _ = write_input(tmp_path)
@@ -179,20 +186,24 @@ class TestPrepareGeographyInput:
                 "slug": "alpha-peak",
                 "continent": None,
                 "countries": ["AR"],
+                "region": None,
             },
             {
                 "id": str(invented_id("beta-peak")),
                 "slug": "beta-peak",
                 "continent": None,
                 "countries": ["CH", "IT"],
+                "region": None,
             },
             {
                 "id": str(invented_id("ice-peak")),
                 "slug": "ice-peak",
                 "continent": None,
                 "countries": [],
+                "region": None,
             },
         ]
+        assert draft["regions"] == []
 
     def test_it_is_read_only(self, tmp_path):
         before = fingerprints(PRESERVED)

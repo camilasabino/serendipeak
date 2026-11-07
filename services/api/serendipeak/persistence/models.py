@@ -13,7 +13,7 @@ from django.db.models import (
     UniqueConstraint,
     Value,
 )
-from django.db.models.functions import Concat, Now, Replace
+from django.db.models.functions import Concat, Lower, Now, Replace
 from django.db.models.lookups import Range
 
 from serendipeak.accounts.roles import Role
@@ -143,6 +143,58 @@ class CountryRecord(models.Model):
         return self.name_en
 
 
+class MountainRegionRecord(models.Model):
+    """A node of the geographic taxonomy. Cycles and changes of id or slug are refused by
+    triggers of the migration that creates the table, whatever route writes."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    slug = models.TextField()
+    parent = models.ForeignKey("self", null=True, on_delete=models.PROTECT, related_name="children")
+    name_en = models.TextField()
+    name_es = models.TextField(null=True)
+    name_pt = models.TextField(null=True)
+    wikidata_id = models.TextField(null=True)
+
+    class Meta:
+        db_table = "mountain_region"
+        constraints = [
+            UniqueConstraint(fields=["slug"], name="mountain_region_slug_key"),
+            CheckConstraint(
+                condition=Q(slug__regex=SLUG_PATTERN), name="mountain_region_slug_format"
+            ),
+            CheckConstraint(
+                condition=~Q(parent=F("id")), name="mountain_region_not_its_own_parent"
+            ),
+            CheckConstraint(
+                condition=_has_text("name_en"), name="mountain_region_name_en_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("name_es"), name="mountain_region_name_es_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("name_pt"), name="mountain_region_name_pt_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_matching("wikidata_id", WIKIDATA_ID_PATTERN),
+                name="mountain_region_wikidata_id_format",
+            ),
+            UniqueConstraint(
+                fields=["wikidata_id"],
+                condition=Q(wikidata_id__isnull=False),
+                name="mountain_region_wikidata_id_key",
+            ),
+            UniqueConstraint(
+                F("parent"),
+                Lower("name_en"),
+                condition=Q(parent__isnull=False),
+                name="mountain_region_sibling_name_key",
+            ),
+        ]
+
+    def __str__(self):
+        return self.slug
+
+
 class MountainRecord(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     slug = models.TextField()
@@ -158,7 +210,9 @@ class MountainRecord(models.Model):
         db_column="continent_code",
         related_name="mountains",
     )
-    range_name = models.TextField(null=True)
+    region = models.ForeignKey(
+        MountainRegionRecord, null=True, on_delete=models.PROTECT, related_name="mountains"
+    )
     summary_en = models.TextField(null=True)
     summary_es = models.TextField(null=True)
     summary_pt = models.TextField(null=True)
@@ -206,9 +260,6 @@ class MountainRecord(models.Model):
             ),
             CheckConstraint(
                 condition=Q(elevation_meters__gt=0), name="mountain_elevation_positive"
-            ),
-            CheckConstraint(
-                condition=_absent_or_has_text("range_name"), name="mountain_range_name_not_blank"
             ),
             CheckConstraint(
                 condition=_absent_or_has_text("summary_en"), name="mountain_summary_en_not_blank"

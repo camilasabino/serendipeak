@@ -3,14 +3,17 @@ from django.db.models.functions import Collate
 
 from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.catalog.regions import build_region_path
 from serendipeak.persistence.errors import translate_database_errors
 from serendipeak.persistence.mapping import (
     country_link_records,
     discovery_record,
     image_record,
     mountain_record,
+    region_record,
     to_catalog_discovery,
     to_catalog_mountain,
+    to_region,
     with_geography,
 )
 from serendipeak.persistence.models import (
@@ -18,12 +21,15 @@ from serendipeak.persistence.models import (
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
+    MountainRegionRecord,
 )
 
 
 class DjangoCatalogStore:
     def load(self, seed: CatalogSeed) -> None:
-        mountains = [mountain_record(entry) for entry in seed.mountains]
+        regions = [region_record(region) for region in seed.regions]
+        region_ids = {region.slug: region.id for region in seed.regions}
+        mountains = [mountain_record(entry, region_ids) for entry in seed.mountains]
         links = [link for entry in seed.mountains for link in country_link_records(entry)]
         images = [record for entry in seed.mountains if (record := image_record(entry))]
         discoveries = [discovery_record(discovery) for discovery in seed.discoveries]
@@ -35,6 +41,9 @@ class DjangoCatalogStore:
             if MountainRecord.objects.exists():
                 raise CatalogAlreadyPopulated()
 
+            # The parent link is a deferred foreign key, so the regions go in as one batch in any
+            # order, and a mountain's region only has to exist by commit.
+            MountainRegionRecord.objects.bulk_create(regions)
             MountainRecord.objects.bulk_create(mountains)
             MountainCountryRecord.objects.bulk_create(links)
             MountainImageRecord.objects.bulk_create(images)
@@ -47,10 +56,15 @@ class DjangoCatalogStore:
                 Collate("slug", "C")
             )
             discoveries = DailyDiscoveryRecord.objects.order_by("date")
+            regions = {
+                record.id: to_region(record) for record in MountainRegionRecord.objects.all()
+            }
+            paths = {region_id: build_region_path(region_id, regions) for region_id in regions}
 
             return CatalogSnapshot(
-                mountains=tuple(to_catalog_mountain(record) for record in mountains),
+                mountains=tuple(to_catalog_mountain(record, paths) for record in mountains),
                 discoveries=tuple(to_catalog_discovery(record) for record in discoveries),
+                regions=tuple(sorted(regions.values(), key=lambda region: region.slug)),
             )
 
 

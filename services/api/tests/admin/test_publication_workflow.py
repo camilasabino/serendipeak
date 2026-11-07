@@ -265,7 +265,7 @@ class TestCommittedCatalogParity:
             payload = form_payload(
                 page,
                 summary_en="Edited through the admin.",
-                range_name="Edited range",
+                region="",
                 continent="OC",
                 countries=["NZ"],
                 **{"image-0-author": "Edited credit"},

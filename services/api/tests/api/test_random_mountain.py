@@ -113,7 +113,7 @@ def test_a_random_mountain_matches_the_complete_fixture(
 ):
     pick_index.index = sorted(FROZEN_BY_SLUG).index("aconcagua")
 
-    with django_assert_num_queries(3):
+    with django_assert_num_queries(4):
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)
@@ -215,7 +215,7 @@ def test_random_never_writes_a_discovery(catalog, client):
 
     statements = [query["sql"].lstrip().upper() for query in queries.captured_queries]
     assert statements
-    assert all(statement.startswith("SELECT") for statement in statements)
+    assert all(statement.startswith(("SELECT", "WITH")) for statement in statements)
     assert list(DailyDiscoveryRecord.objects.values_list("date", "mountain_id")) == before
 
 

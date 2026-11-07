@@ -14,6 +14,8 @@ from serendipeak.catalog.geography_input import (
     parse_geography_input,
 )
 from serendipeak.catalog.localization import LocalizedText
+from serendipeak.catalog.regions import derive_region_slug
+from tests.support.regions import region_documents, region_path, regions_of
 
 CONTINENT_MIGRATION = "serendipeak.persistence.migrations.0015_continent_reference"
 COUNTRY_MIGRATION = "serendipeak.persistence.migrations.0016_country_reference"
@@ -85,20 +87,57 @@ def restore_reference_data(connection=None):
     )
 
 
-def geography_document(entries):
-    """A geography input document, checksummed. entries: (id, slug, continent, countries)."""
+def geography_document(entries, regions=()):
+    """A geography input document, checksummed.
+
+    entries: (id, slug, continent, countries) or (id, slug, continent, countries, region slug).
+    regions: the MountainRegion entities of the taxonomy, parents first.
+    """
     document = {
         "format": GEOGRAPHY_FORMAT,
         "version": GEOGRAPHY_FORMAT_VERSION,
         "content_sha256": "",
         "mountains": [
-            {"id": str(mountain_id), "slug": slug, "continent": continent_code, "countries": codes}
-            for mountain_id, slug, continent_code, codes in entries
+            {
+                "id": str(mountain_id),
+                "slug": slug,
+                "continent": continent_code,
+                "countries": codes,
+                "region": region[0] if region else None,
+            }
+            for mountain_id, slug, continent_code, codes, *region in entries
         ],
+        "regions": region_documents(regions),
     }
     document["content_sha256"] = geography_content_sha256(document)
 
     return document
+
+
+def document_of(geography, mountains=None):
+    """The document of a parsed input, or of some of its mountains with the regions they use."""
+    chosen = geography.mountains if mountains is None else mountains
+    used = {entry.region_slug for entry in chosen}
+    by_id = {region.id: region for region in geography.regions}
+    for slug in list(used):
+        region = next((r for r in geography.regions if r.slug == slug), None)
+        while region is not None and region.parent_id is not None:
+            region = by_id[region.parent_id]
+            used.add(region.slug)
+
+    return geography_document(
+        [
+            (
+                entry.id,
+                entry.slug,
+                entry.continent_code,
+                list(entry.country_codes),
+                *(() if entry.region_slug is None else (entry.region_slug,)),
+            )
+            for entry in chosen
+        ],
+        [region for region in geography.regions if region.slug in used],
+    )
 
 
 def parse_document(document):
@@ -109,11 +148,12 @@ def synthetic_geography(seed: CatalogSeed) -> GeographyInput:
     """A geography input for a parsed seed, by a rule that is not editorial.
 
     It exists so tests can load the seed: the countries are the seed's v1 names through the
-    alias table (Antarctica when there are none) and the continent is the reference continent
-    of the first of them. Real assignments live in the private input and are never tested
-    against.
+    alias table (Antarctica when there are none), the continent is the reference continent
+    of the first of them, and the region is a root named by the seed's range name. Real
+    assignments live in the private input and are never tested against.
     """
     entries = []
+    paths = []
     for entry in seed.mountains:
         mountain = entry.mountain
         names = seed.legacy_country_names[mountain.id]
@@ -124,9 +164,19 @@ def synthetic_geography(seed: CatalogSeed) -> GeographyInput:
             if first is None
             else country(sorted(codes_of_legacy_names([first]))[0]).continent_code
         )
-        entries.append((mountain.id, mountain.slug, continent_code, codes))
+        range_name = seed.legacy_range_names.get(mountain.id)
+        paths.append(None if range_name is None else region_path(range_name))
+        entries.append(
+            (
+                mountain.id,
+                mountain.slug,
+                continent_code,
+                codes,
+                *(() if range_name is None else (derive_region_slug(range_name),)),
+            )
+        )
 
-    return parse_document(geography_document(entries))
+    return parse_document(geography_document(entries, regions_of(*paths)))
 
 
 def invented_id(label):

@@ -1,4 +1,4 @@
-import type { Coordinates } from '../api/contract';
+import type { Coordinates, Region } from '../api/contract';
 
 const COORDINATE_DECIMALS = 4;
 
@@ -28,4 +28,12 @@ export function formatCoordinates({ latitude, longitude }: Coordinates): string 
 
 export function formatCountries(countries: string[]): string {
 	return countryList.format(countries);
+}
+
+// The region and its nearest ancestor, for example "Cordillera Blanca, Andes". The contract keeps
+// the whole path so that a later page can show every ancestor.
+export function formatRegion({ name, ancestors }: Region): string {
+	const parent = ancestors.at(-1);
+
+	return parent === undefined ? name : `${name}, ${parent.name}`;
 }

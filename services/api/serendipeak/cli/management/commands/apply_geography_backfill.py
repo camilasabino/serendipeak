@@ -11,12 +11,13 @@ from serendipeak.errors import ApplicationError, InfrastructureError
 
 class Command(BaseCommand):
     help = (
-        "Give every mountain of the catalog its continent and country links from the private"
-        " geography input. The input must carry the given checksum and cover the stored mountains"
-        " exactly, or nothing is read or written. Runs in one transaction and writes nothing but"
-        " the continent and the links. With --dry-run it reports what would change and writes"
-        " nothing. Meant for the schema between the continent migration and the final geography"
-        " validation migration."
+        "Give every mountain of the catalog its continent, country links and region, and the"
+        " catalog the regions it lacks, from the private geography input. The input must carry"
+        " the given checksum and cover the stored mountains exactly, or nothing is read or"
+        " written. Runs in one transaction and writes nothing but the continent, the links, the"
+        " regions and the region of each mountain. With --dry-run it reports what would change"
+        " and writes nothing. Meant for the schema between the continent migration and the final"
+        " region validation migration; the regions are left out until the region table exists."
     )
 
     def add_arguments(self, parser):
@@ -54,12 +55,19 @@ class Command(BaseCommand):
         except (ApplicationError, InfrastructureError) as error:
             raise command_error(error) from error
 
+        new_regions = result.plan.new_regions
+        if new_regions is None:
+            self.stdout.write("Regions: left out, the schema has no region table yet.")
+        else:
+            for slug in new_regions:
+                self.stdout.write(f"region {slug}: new")
         for change in result.plan.changes:
             self.stdout.write(self.describe(change))
         mode = "Dry run, nothing was written." if options["dry_run"] else "Applied."
         self.stdout.write(
             f"{mode} {result.plan.checked} mountains checked,"
-            f" {len(result.plan.changes)} changed, {result.plan.unchanged} unchanged."
+            f" {len(result.plan.changes)} changed, {result.plan.unchanged} unchanged,"
+            f" {len(new_regions or ())} regions to add."
         )
 
     def write_target(self, target: BackfillTarget):
@@ -77,5 +85,8 @@ class Command(BaseCommand):
             parts.append(f"adds {', '.join(change.added_countries)}")
         if change.removed_countries:
             parts.append(f"removes {', '.join(change.removed_countries)}")
+        if change.region is not None:
+            before, after = change.region
+            parts.append(f"region {before or '-'} -> {after or '-'}")
 
         return f"{change.slug}: {'; '.join(parts)}"

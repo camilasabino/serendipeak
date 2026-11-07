@@ -24,7 +24,7 @@ def load(*entries):
 def test_reading_a_mountain_costs_two_queries_whatever_its_number_of_countries(
     how_many, django_assert_num_queries
 ):
-    load(catalog_mountain("many-lands", countries=countries(*ALL_CODES[:how_many])))
+    load(catalog_mountain("many-lands", region=None, countries=countries(*ALL_CODES[:how_many])))
 
     with django_assert_num_queries(2):
         found = DjangoMountainRepository().find_public_by_slug("many-lands")
@@ -33,7 +33,7 @@ def test_reading_a_mountain_costs_two_queries_whatever_its_number_of_countries(
 
 
 def test_reading_a_mountain_joins_no_country_row_per_link():
-    load(catalog_mountain("many-lands", countries=countries("AR", "CL", "BO")))
+    load(catalog_mountain("many-lands", region=None, countries=countries("AR", "CL", "BO")))
 
     with CaptureQueriesContext(connection) as queries:
         DjangoMountainRepository().find_public_by_slug("many-lands")
@@ -47,7 +47,7 @@ def test_a_daily_mountain_carries_its_geography_in_two_queries(django_assert_num
     import datetime
 
     entry = catalog_mountain(
-        "daily-peak", continent=continent("AS"), countries=countries("NP", "CN")
+        "daily-peak", region=None, continent=continent("AS"), countries=countries("NP", "CN")
     )
     load(entry)
     day = datetime.date(2026, 10, 3)

@@ -36,11 +36,12 @@ class InMemoryGeographyReference:
 class InMemoryGeographyStore:
     """Stands in for the Django adapter of the backfill and draft ports."""
 
-    def __init__(self, mountains=(), known_countries=None):
+    def __init__(self, mountains=(), known_countries=None, regions=None):
         from tests.support.geography import reference
 
         self._rows = {mountain.id: mountain for mountain in mountains}
         self._known = frozenset(known_countries or reference().countries)
+        self.regions = regions
         self.reads = 0
         self.writes = 0
 
@@ -55,10 +56,16 @@ class InMemoryGeographyStore:
         from serendipeak.catalog.geography_input import plan_backfill
 
         self.reads += 1
-        plan = plan_backfill(geography, list(self._rows.values()), self._known)
+        plan = plan_backfill(geography, list(self._rows.values()), self._known, self.regions)
         if dry_run:
             return plan
 
+        if plan.new_regions:
+            self.writes += 1
+            self.regions = [
+                *self.regions,
+                *(region for region in geography.regions if region.slug in plan.new_regions),
+            ]
         by_slug = {entry.slug: entry for entry in geography.mountains}
         for change in plan.changes:
             entry = by_slug[change.slug]
@@ -67,6 +74,9 @@ class InMemoryGeographyStore:
                 self._rows[entry.id],
                 continent_code=entry.continent_code,
                 country_codes=entry.country_codes,
+                region_slug=entry.region_slug
+                if change.region is not None
+                else (self._rows[entry.id].region_slug),
             )
 
         return plan
@@ -79,11 +89,13 @@ class InMemoryCatalogStore:
     def __init__(self):
         self._mountains = {}
         self._discoveries = {}
+        self._regions = ()
 
     def load(self, seed: CatalogSeed):
         if self._mountains:
             raise CatalogAlreadyPopulated()
 
+        self._regions = seed.regions
         self._mountains.update((entry.mountain.id, entry) for entry in seed.mountains)
         self._discoveries.update((discovery.date, discovery) for discovery in seed.discoveries)
 
@@ -93,6 +105,7 @@ class InMemoryCatalogStore:
                 sorted(self._mountains.values(), key=lambda entry: entry.mountain.slug)
             ),
             discoveries=tuple(sorted(self._discoveries.values(), key=lambda item: item.date)),
+            regions=self._regions,
         )
 
     def attach_media(self, mountain_id, expected_dimensions, media):

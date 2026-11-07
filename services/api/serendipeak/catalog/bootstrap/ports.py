@@ -8,6 +8,7 @@ from uuid import UUID
 from serendipeak.catalog.entities import ImageDimensions, Mountain, PhotographMedia
 from serendipeak.catalog.geography import GeographyReference
 from serendipeak.catalog.geography_input import BackfillPlan, GeographyInput, StoredGeography
+from serendipeak.catalog.regions import MountainRegion
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,23 +27,27 @@ class CatalogDiscovery:
 
 @dataclass(frozen=True, slots=True)
 class CatalogSeed:
-    """The mountains and discoveries to load. A parsed seed names the v1 country text of each
-    mountain in legacy_country_names; a seed ready to load holds real geography instead."""
+    """The mountains and discoveries to load. A parsed seed names the v1 country text and range
+    name of each mountain in legacy_country_names and legacy_range_names; a seed ready to load
+    holds real geography and the regions, parents first, instead."""
 
     mountains: tuple[CatalogMountain, ...]
     discoveries: tuple[CatalogDiscovery, ...]
     legacy_country_names: Mapping[UUID, tuple[str, ...]] = field(default_factory=dict)
+    legacy_range_names: Mapping[UUID, str | None] = field(default_factory=dict)
+    regions: tuple[MountainRegion, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class CatalogSnapshot:
     mountains: tuple[CatalogMountain, ...]
     discoveries: tuple[CatalogDiscovery, ...]
+    regions: tuple[MountainRegion, ...] = ()
 
 
 class CatalogStore(Protocol):
     def load(self, seed: CatalogSeed) -> None:
-        """Load the seed atomically into a store without mountains.
+        """Load the seed atomically into a store without mountains, its regions included.
 
         Raises CatalogAlreadyPopulated and changes nothing when the store holds a mountain,
         including one stored by a concurrent load.
@@ -96,7 +101,8 @@ class GeographyBackfillStore(Protocol):
 
         The mountains are read, judged by plan_backfill and written under one lock, so the plan
         describes exactly what is written. Only the continent of a mountain and its country
-        links are written; no other column and no timestamp changes. A dry run writes nothing.
+        links are written, and the regions of the input that the store lacks, with the region
+        of each mountain; no other column and no timestamp changes. A dry run writes nothing.
 
         Raises UnexpectedSchemaState before reading when the schema is not the one the backfill
         is meant for, and GeographyBackfillRejected, writing nothing, when the input does not

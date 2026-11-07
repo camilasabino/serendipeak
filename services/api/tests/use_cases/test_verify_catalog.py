@@ -47,6 +47,7 @@ def test_an_empty_catalog_reports_every_seed_row_as_missing():
 
     assert (report.mountains, report.images, report.discoveries) == (0, 0, 0)
     assert report.seed_mismatches == (
+        *(f"region {region.slug} ({region.id}) is missing" for region in GEOGRAPHY.regions),
         f"mountain aconcagua ({ACONCAGUA.mountain.id}) is missing",
         f"mountain mont-blanc ({MONT_BLANC.mountain.id}) is missing",
         "daily discovery 2026-10-03 is missing",

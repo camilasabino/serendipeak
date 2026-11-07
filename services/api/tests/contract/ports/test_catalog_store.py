@@ -34,7 +34,7 @@ SPARSE_DRAFT = catalog_mountain(
     "draft-peak",
     status=MountainStatus.DRAFT,
     coordinates=Coordinates(latitude=90.0, longitude=-180.0),
-    range_name=None,
+    region=None,
     countries=(),
     summary=None,
     camera=None,

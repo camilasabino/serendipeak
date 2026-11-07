@@ -44,20 +44,51 @@ describe('MountainInfoPanel', () => {
 	it('omits the country row for an empty list', () => {
 		expect(textsOf(render({ countries: [] }), 'dt')).toEqual([
 			'Continent',
+			'Region',
 			'Elevation',
-			'Range',
 			'Coordinates'
 		]);
 	});
 
-	it('omits the summary and the range when absent', () => {
-		const { summary, rangeName, ...rest } = complete;
-		const html = renderToStaticMarkup(<MountainInfoPanel mountain={rest as Mountain} />);
+	it('omits the summary and the region when absent', () => {
+		const { summary, ...rest } = complete;
+		const html = renderToStaticMarkup(
+			<MountainInfoPanel mountain={{ ...rest, region: null } as Mountain} />
+		);
 
 		expect(summary).toBeDefined();
-		expect(rangeName).toBeDefined();
+		expect(complete.region).not.toBeNull();
 		expect(html).not.toContain('<p');
 		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Elevation', 'Coordinates']);
+	});
+
+	it('shows the region between the countries and the elevation', () => {
+		expect(textsOf(render({}), 'dt')).toEqual([
+			'Continent',
+			'Country',
+			'Region',
+			'Elevation',
+			'Coordinates'
+		]);
+	});
+
+	it('shows a root region by its name alone', () => {
+		const region = { slug: 'alpha-chain', name: 'Alpha Chain', ancestors: [] };
+
+		expect(textsOf(render({ region }), 'dd')[2]).toBe('Alpha Chain');
+	});
+
+	it('shows the region followed by its nearest ancestor only', () => {
+		const region = {
+			slug: 'gamma-ridge',
+			name: 'Gamma Ridge',
+			ancestors: [
+				{ slug: 'alpha-chain', name: 'Alpha Chain' },
+				{ slug: 'beta-range', name: 'Beta Range' }
+			]
+		};
+
+		expect(textsOf(render({ region }), 'dd')[2]).toBe('Gamma Ridge, Beta Range');
 	});
 
 	it('speaks the coordinates as a map link', () => {

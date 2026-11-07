@@ -4,6 +4,7 @@ from pathlib import Path
 
 from serendipeak.catalog.country_aliases import ANTARCTICA_CODE, LEGACY_COUNTRY_CODES
 from serendipeak.catalog.media.keys import public_url
+from serendipeak.catalog.regions import derive_region_slug
 from tests.support.geography import countries, country, reference
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[4] / "contracts" / "v1"
@@ -34,6 +35,10 @@ DROPPED_SOURCE_MEMBERS = ("wikipedia",)
 # country, so its continent is the explicit synthetic value below, from its coordinates (45 N,
 # 10 E). Behaviour that depends on a real assignment is tested with invented mountains.
 SYNTHETIC_CONTINENT_OF_COUNTRYLESS_MOUNTAIN = {"bare-peak": "EU"}
+# Region: v1 names a flat range as text. SerendiPeak serves a region with its ancestors, always
+# present and null without one. The member is derived from `rangeName` by a rule for tests only:
+# a root region named by the range, whose slug is the plain derivation of its name. A
+# hierarchy is tested with synthetic taxonomies, never with the real one.
 
 
 def load_fixture(name):
@@ -77,6 +82,13 @@ def served_by_serendipeak(document, media_base_url, media_of_slug):
 
 
 def _serve_geography(mountain):
+    range_name = mountain.pop("rangeName", None)
+    mountain["region"] = (
+        None
+        if range_name is None
+        else {"slug": derive_region_slug(range_name), "name": range_name, "ancestors": []}
+    )
+
     slug = mountain["slug"]
     names = mountain["countries"]
     if slug in SYNTHETIC_CONTINENT_OF_COUNTRYLESS_MOUNTAIN:

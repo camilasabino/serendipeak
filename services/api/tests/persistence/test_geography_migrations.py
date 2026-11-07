@@ -31,7 +31,6 @@ from tests.support.migrations import (
     applied_head,
     historical_model,
     migrate_to,
-    migrate_to_latest,
     migrate_to_latest_discarding_catalog,
 )
 
@@ -161,7 +160,7 @@ class TestSchemaMigrations:
             assert applied_head() == target[1]
         assert {"continent", "country", "mountain_country"}.isdisjoint(table_names())
 
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         assert applied_head() == FINAL[1]
         assert {"continent", "country", "mountain_country"} <= table_names()
@@ -181,7 +180,7 @@ class TestBackfillThenFinalValidation:
         plan = backfill(input_document())
 
         assert (plan.checked, len(plan.changes)) == (3, 3)
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         assert applied_head() == FINAL[1]
         assert stored_geography() == {
@@ -216,7 +215,7 @@ class TestBackfillThenFinalValidation:
 
     def test_the_final_migration_stops_naming_the_mountains_without_a_continent(self, populated):
         with pytest.raises(RuntimeError) as raised:
-            migrate_to_latest()
+            migrate_to(FINAL)
 
         message = str(raised.value)
         assert f"no continent: {ALPHA}, {BETA}, {ICE}" in message
@@ -233,7 +232,7 @@ class TestBackfillThenFinalValidation:
             )
 
         with pytest.raises(RuntimeError) as raised:
-            migrate_to_latest()
+            migrate_to(FINAL)
 
         assert f"countries differ from their links: {BETA}" in str(raised.value)
         assert applied_head() == SCHEMA_READY[1]
@@ -241,7 +240,7 @@ class TestBackfillThenFinalValidation:
     def test_the_final_migration_accepts_antarctica_without_a_legacy_name(self, populated):
         backfill(input_document())
 
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         assert stored_geography()[ICE] == ("AN", ["AQ"])
 
@@ -335,7 +334,7 @@ class TestBackfillThenFinalValidation:
 
     def test_reversing_the_final_migration_restores_the_names_and_keeps_the_links(self, populated):
         backfill(input_document())
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         migrate_to(SCHEMA_READY)
 
@@ -351,7 +350,7 @@ class TestBackfillThenFinalValidation:
 
     def test_reversing_refuses_a_country_that_v1_had_no_name_for(self, populated):
         backfill(input_document())
-        migrate_to_latest()
+        migrate_to(FINAL)
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO mountain_country (mountain_id, country_code) VALUES (%s, 'FI')",
@@ -369,14 +368,11 @@ class TestFreshDatabase:
     def test_without_mountains_the_final_validation_passes_on_zero_rows(self):
         migrate_to(BEFORE_GEOGRAPHY)
 
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         assert applied_head() == FINAL[1]
         assert stored_geography() == {}
         assert is_nullable("mountain", "continent_code") is False
-
-    def test_the_test_database_itself_was_built_from_zero_at_the_final_migration(self):
-        assert applied_head() == FINAL[1]
 
 
 class TestBackfillRefusesTheWrongSchema:
@@ -393,7 +389,7 @@ class TestBackfillRefusesTheWrongSchema:
         model = migrate_to_schema_ready()
         populate(model)
         backfill(input_document())
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         plan = backfill(input_document())
 
@@ -403,7 +399,7 @@ class TestBackfillRefusesTheWrongSchema:
         model = migrate_to_schema_ready()
         populate(model)
         backfill(input_document())
-        migrate_to_latest()
+        migrate_to(FINAL)
         before = stored_geography()
 
         with pytest.raises(GeographyBackfillRejected, match="no longer overwritten"):
@@ -415,7 +411,7 @@ class TestBackfillRefusesTheWrongSchema:
         model = migrate_to_schema_ready()
         populate(model)
         backfill(input_document())
-        migrate_to_latest()
+        migrate_to(FINAL)
 
         plan = backfill(input_document(alpha=("NA", ["AR"])), dry_run=True)
 

@@ -16,6 +16,7 @@ from serendipeak.catalog.bootstrap.ports import (
 from serendipeak.catalog.bootstrap.seed_geography import assign_geography, without_geography
 from serendipeak.catalog.entities import Mountain
 from serendipeak.catalog.geography_input import GeographyInput
+from serendipeak.catalog.regions import MountainRegion
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,24 +50,27 @@ class VerifyCatalog:
     ) -> VerificationReport:
         """Compare the stored catalog with the seed and the frozen catalog.
 
-        The seed holds no geography. With the geography input the continent and countries of
-        the seed mountains are compared too; without it they are left out of the comparison
-        and the report says so.
+        The seed holds no geography. With the geography input the continent, countries and region
+        of the seed mountains are compared too, and so are the stored regions with those of the
+        input; without it they are left out of the comparison and the report says so.
         """
         snapshot = self._store.snapshot()
         expected = seed.mountains
         actual = snapshot.mountains
+        region_mismatches: list[str] = []
         if geography is None:
             expected = tuple(without_geography(entry) for entry in expected)
             actual = tuple(without_geography(entry) for entry in actual)
         else:
             expected = assign_geography(seed, geography, self._reference.read()).mountains
+            region_mismatches = _region_mismatches(geography.regions, snapshot.regions)
 
         return VerificationReport(
             mountains=len(snapshot.mountains),
             images=sum(entry.mountain.primary_image is not None for entry in snapshot.mountains),
             discoveries=len(snapshot.discoveries),
             seed_mismatches=(
+                *region_mismatches,
                 *_mountain_mismatches(expected, actual),
                 *_discovery_mismatches(seed.discoveries, snapshot.discoveries),
             ),
@@ -75,6 +79,26 @@ class VerifyCatalog:
             ),
             geography_compared=geography is not None,
         )
+
+
+def _region_mismatches(
+    expected: Sequence[MountainRegion], actual: Sequence[MountainRegion]
+) -> list[str]:
+    stored = {region.id: region for region in actual}
+    mismatches = []
+
+    for region in expected:
+        found = stored.pop(region.id, None)
+        if found is None:
+            mismatches.append(f"region {region.slug} ({region.id}) is missing")
+        elif found != region:
+            mismatches.append(f"region {region.slug} ({region.id}) differs from the input")
+
+    mismatches.extend(
+        f"region {region.slug} ({region.id}) is not in the input" for region in stored.values()
+    )
+
+    return mismatches
 
 
 def _mountain_mismatches(

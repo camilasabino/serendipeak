@@ -2,7 +2,8 @@
 // which stays untouched and describes the v1 API, and differs from it exactly where SerendiPeak's
 // own contract does: a photograph has one `author` instead of `attribution` and `creator`, and
 // no `sourceIdentifier`; a mountain serves no `prominenceMeters` and no `sources.wikipedia`, a
-// `continent` object and `countries` as `{code, name}` objects instead of names. The curated
+// `continent` object, `countries` as `{code, name}` objects instead of names, and a `region`
+// (always present, null without one) with its ancestors instead of `rangeName`. The curated
 // identity of each of the 73 photographs is its source page and its dimensions.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -11,6 +12,7 @@ const COORDINATE_TOLERANCE = 1e-7;
 const CAMERA_TOLERANCE = 1e-9;
 const CONTINENT_CODES = new Set(["AF", "AN", "AS", "EU", "NA", "OC", "SA"]);
 const COUNTRY_CODE = /^[A-Z]{2}$/;
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const STATEFUL_TODAY_FLAG = "--include-stateful-today";
 const GEOGRAPHY_FLAG = "--geography";
@@ -22,8 +24,8 @@ Read-only by default: GET /api/v1/mountains/today is NOT requested.
 ${STATEFUL_TODAY_FLAG}  also request today. On a new UTC date the API persists that
   date's discovery. Use it only against a disposable or test database, or when
   that mutation is intended.
-${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG}  also compare the continent and countries of the
-  mountains the private geography input covers. The shapes are always checked; without
+${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG}  also compare the continent, countries and region of
+  the mountains the private geography input covers. The shapes are always checked; without
   the input the comparison of values is skipped, and the output says so.`;
 
 const rawArgs = process.argv.slice(2);
@@ -102,7 +104,22 @@ function loadGeography() {
     console.error("the geography input does not have the expected checksum");
     process.exit(2);
   }
-  return new Map(document.mountains.map((entry) => [entry.slug, entry]));
+  const regions = new Map(document.regions.map((region) => [region.slug, region]));
+  return {
+    mountains: new Map(document.mountains.map((entry) => [entry.slug, entry])),
+    regions,
+  };
+}
+
+function regionPathOf(slug, regions) {
+  const chain = [];
+  for (let current = slug; current !== null; ) {
+    const region = regions.get(current);
+    chain.push(region);
+    current = region.parent;
+  }
+  const [region, ...above] = chain;
+  return { slug: region.slug, ancestors: above.reverse().map((r) => r.slug) };
 }
 
 const geography = loadGeography();
@@ -185,11 +202,34 @@ function checkGeographyShape(scope, mountain) {
   if (valid.some((country, index) => country !== ordered[index])) {
     fail(scope, "countries are not ordered by English name, then code");
   }
-  if (
-    mountain.rangeName !== undefined &&
-    typeof mountain.rangeName !== "string"
-  ) {
-    fail(scope, "rangeName is not a string");
+  if (mountain.rangeName !== undefined) {
+    fail(scope, "rangeName is served, and the region replaces it");
+  }
+  checkRegionShape(scope, mountain.region);
+}
+
+function checkRegionShape(scope, region) {
+  if (region === null) {
+    return;
+  }
+  if (typeof region !== "object" || region === undefined) {
+    fail(scope, "region is missing: it is an object or null, never absent");
+    return;
+  }
+  const isReference = (value) =>
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.slug === "string" &&
+    SLUG.test(value.slug) &&
+    typeof value.name === "string" &&
+    value.name !== "";
+  if (!isReference(region)) {
+    fail(scope, "region has no valid slug and name");
+  }
+  if (!Array.isArray(region.ancestors)) {
+    fail(scope, "region.ancestors is not an array");
+  } else if (!region.ancestors.every(isReference)) {
+    fail(scope, "a region ancestor has no valid slug and name");
   }
 }
 
@@ -206,7 +246,7 @@ function compareCodePoints(a, b) {
 }
 
 function checkGeographyValues(scope, served) {
-  const entry = geography?.get(served.slug);
+  const entry = geography?.mountains.get(served.slug);
   if (entry === undefined) {
     return;
   }
@@ -220,6 +260,21 @@ function checkGeographyValues(scope, served) {
     fail(
       scope,
       `countries ${codes.join(",") || "none"}, want ${wanted.join(",") || "none"}`,
+    );
+  }
+  const wantedRegion =
+    entry.region === null ? null : regionPathOf(entry.region, geography.regions);
+  const servedRegion =
+    served.region === null || served.region === undefined
+      ? null
+      : {
+          slug: served.region.slug,
+          ancestors: (served.region.ancestors ?? []).map((a) => a.slug),
+        };
+  if (JSON.stringify(servedRegion) !== JSON.stringify(wantedRegion)) {
+    fail(
+      scope,
+      `region ${JSON.stringify(servedRegion)}, want ${JSON.stringify(wantedRegion)}`,
     );
   }
 }
@@ -239,7 +294,8 @@ function checkMountainShape(scope, mountain) {
   }
   checkGeographyShape(scope, mountain);
   for (const [field, value] of Object.entries(mountain)) {
-    if (value === null || value === "") {
+    // `region` is the one member served as null when it has no value.
+    if (field !== "region" && (value === null || value === "")) {
       fail(scope, `${field} is present without a value`);
     }
   }
@@ -407,7 +463,7 @@ if (includeStatefulToday) {
 const geographyNote =
   geography === undefined
     ? `geography: shapes checked; the comparison of values was skipped (pass ${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG} to include it).`
-    : `geography: shapes checked, and the continent and countries of ${geographyCompared} mountains compared with the private input.`;
+    : `geography: shapes checked, and the continent, countries and region of ${geographyCompared} mountains compared with the private input.`;
 
 if (failures.length > 0) {
   console.error(

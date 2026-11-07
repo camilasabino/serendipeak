@@ -132,15 +132,29 @@ class TestPreparingADraft:
         )
 
         assert draft["mountains"] == [
-            {"id": str(ONE), "slug": "alpha-peak", "continent": None, "countries": ["AR"]},
-            {"id": str(TWO), "slug": "beta-peak", "continent": None, "countries": ["CH", "IT"]},
+            {
+                "id": str(ONE),
+                "slug": "alpha-peak",
+                "continent": None,
+                "countries": ["AR"],
+                "region": None,
+            },
+            {
+                "id": str(TWO),
+                "slug": "beta-peak",
+                "continent": None,
+                "countries": ["CH", "IT"],
+                "region": None,
+            },
             {
                 "id": str(invented_id("ice")),
                 "slug": "ice-peak",
                 "continent": None,
                 "countries": [],
+                "region": None,
             },
         ]
+        assert draft["regions"] == []
 
     def test_it_reads_the_links_once_the_legacy_names_are_gone(self):
         [mountain] = self.draft(

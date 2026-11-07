@@ -61,19 +61,19 @@ describe.each([
 describe('complete fixture', () => {
 	const html = render(complete);
 
-	it('renders summary, continent, country, elevation, range and coordinates in order', () => {
+	it('renders summary, continent, country, region, elevation and coordinates in order', () => {
 		expect(textsOf(html, 'dt')).toEqual([
 			'Continent',
 			'Country',
+			'Region',
 			'Elevation',
-			'Range',
 			'Coordinates'
 		]);
 		expect(textsOf(html, 'dd')).toEqual([
 			'South America',
 			'Argentina',
-			'6,961 m',
 			'Principal Cordillera',
+			'6,961 m',
 			'32.6531° S, 70.0120° W'
 		]);
 		const order = [complete.summary, 'Elevation', '<figure', 'Data sources'].map((fragment) =>
@@ -103,12 +103,12 @@ describe('complete fixture', () => {
 describe('sparse fixture', () => {
 	const html = render(sparse);
 
-	it('keeps the range, the photograph and the data sources', () => {
+	it('keeps the region, the photograph and the data sources', () => {
 		expect(textsOf(html, 'dt')).toEqual([
 			'Continent',
 			'Country',
+			'Region',
 			'Elevation',
-			'Range',
 			'Coordinates'
 		]);
 		expect(html).toContain('<figure');
@@ -125,7 +125,7 @@ describe('minimal fixture', () => {
 		expect(textsOf(html, 'p')).toEqual(["Today's mountain"]);
 	});
 
-	it.each(['Countr', 'Range', 'Data sources', '<figure', 'About this photo'])(
+	it.each(['Countr', 'Region', 'Data sources', '<figure', 'About this photo'])(
 		'renders no %s',
 		(fragment) => {
 			expect(html).not.toContain(fragment);

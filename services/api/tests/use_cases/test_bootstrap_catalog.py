@@ -23,6 +23,7 @@ from tests.support.catalog import (
 )
 from tests.support.fakes import InMemoryCatalogStore, InMemoryGeographyReference
 from tests.support.geography import countries
+from tests.support.regions import region_path
 
 ACONCAGUA = seeded_mountain("aconcagua")
 MONT_BLANC = seeded_mountain("mont-blanc")
@@ -95,7 +96,7 @@ def test_bootstrap_refuses_a_seed_that_differs_from_the_frozen_catalog_before_lo
         bootstrap(store).execute(PARSED_SEED, [renamed, FROZEN[1]], GEOGRAPHY)
 
     assert raised.value.mismatches == ("aconcagua: name differs",)
-    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=())
+    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=(), regions=())
 
 
 def test_bootstrap_reports_a_catalog_that_does_not_round_trip_the_seed():
@@ -125,7 +126,7 @@ def test_bootstrap_refuses_an_input_that_misses_a_seed_mountain_before_loading()
         bootstrap(store).execute(PARSED_SEED, FROZEN, only_aconcagua)
 
     assert [problem.split(" (")[0] for problem in raised.value.problems] == ["mountain mont-blanc"]
-    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=())
+    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=(), regions=())
 
 
 def test_bootstrap_ignores_input_entries_of_mountains_the_seed_does_not_have():
@@ -148,4 +149,99 @@ def test_bootstrap_refuses_countries_that_disagree_with_the_seed_names_before_lo
     with pytest.raises(GeographyBackfillRejected, match="do not match the stored names"):
         bootstrap(store).execute(PARSED_SEED, FROZEN, disagreeing)
 
-    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=())
+    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=(), regions=())
+
+
+DEEP = seeded_mountain("aconcagua", region=region_path("Alpha Chain", "Beta Range", "Gamma Ridge"))
+OTHER = seeded_mountain("mont-blanc", region=region_path("Alpha Chain", "Delta Range"))
+BARE = seeded_mountain("bare-peak", region=None)
+
+
+def bootstrap_regions(*mountains):
+    seed = catalog_seed(*mountains)
+    parsed, geography = split_seed(seed)
+    store = InMemoryCatalogStore()
+    frozen = [frozen_mountain(entry) for entry in mountains]
+    report = bootstrap(store).execute(parsed, frozen, geography)
+
+    return store, report
+
+
+def test_bootstrap_stores_the_region_taxonomy_and_the_region_of_each_mountain():
+    store, report = bootstrap_regions(DEEP, OTHER, BARE)
+
+    snapshot = store.snapshot()
+    assert report.is_consistent
+    assert sorted(region.slug for region in snapshot.regions) == [
+        "alpha-chain",
+        "beta-range",
+        "delta-range",
+        "gamma-ridge",
+    ]
+    by_slug = {entry.mountain.slug: entry.mountain.region for entry in snapshot.mountains}
+    assert by_slug["aconcagua"] == DEEP.mountain.region
+    assert [ref.slug for ref in by_slug["aconcagua"].ancestors] == ["alpha-chain", "beta-range"]
+    assert by_slug["mont-blanc"].ancestors[0].slug == "alpha-chain"
+    assert by_slug["bare-peak"] is None
+
+
+def test_bootstrap_refuses_a_region_that_is_not_the_seed_range_name_before_loading():
+    store = InMemoryCatalogStore()
+    parsed, geography = split_seed(catalog_seed(DEEP))
+    renamed = replace(parsed, legacy_range_names={DEEP.mountain.id: "Another Name"})
+
+    with pytest.raises(GeographyBackfillRejected, match="does not match the stored range name"):
+        bootstrap(store).execute(renamed, [frozen_mountain(DEEP)], geography)
+
+    assert store.snapshot() == CatalogSnapshot(mountains=(), discoveries=(), regions=())
+
+
+def test_bootstrap_refuses_a_seed_range_name_the_input_gives_no_region():
+    store = InMemoryCatalogStore()
+    parsed, geography = split_seed(catalog_seed(BARE))
+    ranged = replace(parsed, legacy_range_names={BARE.mountain.id: "Unplaced Range"})
+
+    with pytest.raises(GeographyBackfillRejected, match="Unplaced Range"):
+        bootstrap(store).execute(ranged, [frozen_mountain(BARE)], geography)
+
+
+def test_verification_reports_a_region_that_differs_from_the_input():
+    store, _ = bootstrap_regions(DEEP, BARE)
+    parsed, geography = split_seed(catalog_seed(DEEP, BARE))
+    drifted = replace(
+        geography,
+        regions=tuple(
+            replace(region, wikidata_id="Q7") if region.slug == "beta-range" else region
+            for region in geography.regions
+        ),
+    )
+
+    report = VerifyCatalog(store, InMemoryGeographyReference()).execute(
+        parsed, [frozen_mountain(DEEP), frozen_mountain(BARE)], drifted
+    )
+
+    assert [m.split(" (")[0] for m in report.seed_mismatches] == ["region beta-range"]
+
+
+def test_verification_reports_a_stored_region_the_input_lacks_and_a_changed_mountain_region():
+    store, _ = bootstrap_regions(DEEP, BARE)
+    moved = replace(store.snapshot().mountains[0], mountain=replace(DEEP.mountain, region=None))
+    store.replace(moved)
+    parsed, geography = split_seed(catalog_seed(DEEP, BARE))
+
+    report = VerifyCatalog(store, InMemoryGeographyReference()).execute(
+        parsed, [frozen_mountain(DEEP), frozen_mountain(BARE)], geography
+    )
+
+    assert any("differs in region" in mismatch for mismatch in report.seed_mismatches)
+
+
+def test_without_the_input_regions_are_not_compared():
+    store, _ = bootstrap_regions(DEEP, BARE)
+    parsed, _ = split_seed(catalog_seed(DEEP, BARE))
+
+    report = VerifyCatalog(store, InMemoryGeographyReference()).execute(
+        parsed, [frozen_mountain(DEEP), frozen_mountain(BARE)], None
+    )
+
+    assert report.is_consistent and not report.geography_compared

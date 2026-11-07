@@ -5,6 +5,7 @@ from serendipeak.catalog.bootstrap.seed import PENDING_CONTINENT
 from serendipeak.catalog.errors import GeographyBackfillRejected
 from serendipeak.catalog.geography import GeographyReference
 from serendipeak.catalog.geography_input import GeographyInput, StoredGeography, plan_backfill
+from serendipeak.catalog.regions import build_region_path, region_id_for_slug
 
 
 def assign_geography(
@@ -12,12 +13,13 @@ def assign_geography(
     geography: GeographyInput,
     reference: GeographyReference,
 ) -> CatalogSeed:
-    """Give every seed mountain the continent and countries of the geography input.
+    """Give every seed mountain the continent, countries and region of the geography input, and
+    the seed the regions of the input.
 
-    The input has to cover every seed mountain once, and its countries have to agree with the
-    seed's v1 names, which is what plan_backfill judges for a stored catalog. Entries of
-    mountains the seed does not have are ignored: the input also covers mountains created after
-    the seed.
+    The input has to cover every seed mountain once, and its countries and regions have to agree
+    with the seed's v1 country names and range names, which is what plan_backfill judges for a
+    stored catalog. Entries of mountains the seed does not have are ignored: the input also
+    covers mountains created after the seed.
     """
     seed_ids = {entry.mountain.id for entry in seed.mountains}
     covered = replace(
@@ -33,6 +35,8 @@ def assign_geography(
                 legacy_country_names=tuple(seed.legacy_country_names.get(entry.mountain.id, ())),
                 continent_code=None,
                 country_codes=(),
+                has_legacy_range_name=True,
+                legacy_range_name=seed.legacy_range_names.get(entry.mountain.id),
             )
             for entry in seed.mountains
         ],
@@ -40,20 +44,23 @@ def assign_geography(
     )
 
     assigned = {entry.id: entry for entry in covered.mountains}
+    regions = {region.id: region for region in geography.regions}
     mountains = tuple(
-        _assigned(entry, assigned[entry.mountain.id], reference) for entry in seed.mountains
+        _assigned(entry, assigned[entry.mountain.id], reference, regions)
+        for entry in seed.mountains
     )
 
-    return replace(seed, mountains=mountains)
+    return replace(seed, mountains=mountains, regions=geography.regions)
 
 
 def without_geography(entry: CatalogMountain) -> CatalogMountain:
     return replace(
-        entry, mountain=replace(entry.mountain, continent=PENDING_CONTINENT, countries=())
+        entry,
+        mountain=replace(entry.mountain, continent=PENDING_CONTINENT, countries=(), region=None),
     )
 
 
-def _assigned(entry, assignment, reference):
+def _assigned(entry, assignment, reference, regions):
     continent = reference.continents.get(assignment.continent_code)
     if continent is None:
         raise GeographyBackfillRejected(
@@ -65,7 +72,14 @@ def _assigned(entry, assignment, reference):
         key=lambda country: (country.name.en, country.code),
     )
 
+    region = None
+    if assignment.region_slug is not None:
+        region_id = region_id_for_slug(assignment.region_slug)
+        region = build_region_path(region_id, regions)
+
     return replace(
         entry,
-        mountain=replace(entry.mountain, continent=continent, countries=tuple(countries)),
+        mountain=replace(
+            entry.mountain, continent=continent, countries=tuple(countries), region=region
+        ),
     )

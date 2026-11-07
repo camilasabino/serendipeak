@@ -13,7 +13,7 @@ from serendipeak.cli.errors import command_error
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.support.catalog import committed_geography, load_seed_document, photograph_media
-from tests.support.geography import geography_document
+from tests.support.geography import document_of
 from tests.support.records import attach_committed_media, mountain_record
 
 pytestmark = pytest.mark.django_db
@@ -22,10 +22,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def geography(tmp_path):
     """The synthetic geography input of the committed seed, as a file with its checksum."""
-    document = geography_document(
-        (entry.id, entry.slug, entry.continent_code, list(entry.country_codes))
-        for entry in committed_geography().mountains
-    )
+    document = document_of(committed_geography())
     path = tmp_path / "geography.json"
     path.write_text(json.dumps(document), encoding="utf-8")
 
@@ -79,9 +76,7 @@ def test_bootstrap_refuses_a_geography_input_with_another_checksum_before_writin
 
 def test_bootstrap_names_the_mountains_a_geography_input_does_not_cover(tmp_path):
     entries = list(committed_geography().mountains)[1:]
-    document = geography_document(
-        (entry.id, entry.slug, entry.continent_code, list(entry.country_codes)) for entry in entries
-    )
+    document = document_of(committed_geography(), entries)
     path = tmp_path / "partial.json"
     path.write_text(json.dumps(document), encoding="utf-8")
 

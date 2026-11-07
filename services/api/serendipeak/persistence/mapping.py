@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from uuid import UUID
 
 from django.contrib.gis.geos import Point
 from django.db.models import Prefetch, prefetch_related_objects
@@ -20,6 +21,7 @@ from serendipeak.catalog.entities import (
 )
 from serendipeak.catalog.geography import GeographyReference
 from serendipeak.catalog.localization import LocalizedText
+from serendipeak.catalog.regions import MountainRegion, RegionPath, build_region_path
 from serendipeak.discovery.entities import DailyMountain
 from serendipeak.persistence.models import (
     ContinentRecord,
@@ -28,6 +30,7 @@ from serendipeak.persistence.models import (
     MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
+    MountainRegionRecord,
     UserRecord,
 )
 
@@ -53,14 +56,58 @@ def load_countries(record: MountainRecord) -> None:
     prefetch_related_objects([record], _country_links())
 
 
-def to_mountain(record: MountainRecord) -> Mountain:
-    return to_mountain_with_image(record, _image_of(record))
+_ANCESTORS_SQL = f"""
+WITH RECURSIVE chain AS (
+    SELECT * FROM {MountainRegionRecord._meta.db_table} WHERE id = ANY(%s)
+    UNION
+    SELECT parent.*
+    FROM {MountainRegionRecord._meta.db_table} parent
+    JOIN chain ON parent.id = chain.parent_id
+)
+SELECT * FROM chain
+"""
 
 
-def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | None) -> Mountain:
+def load_region_paths(records: Iterable[MountainRecord]) -> dict[UUID, RegionPath]:
+    """The path of every region the records point at, ancestors root first, in one recursive
+    query however many records or regions there are, and none when no record has a region.
+    UNION keeps the walk finite and gives each shared ancestor once."""
+    region_ids = list({record.region_id for record in records if record.region_id is not None})
+    if not region_ids:
+        return {}
+
+    regions = {
+        record.id: to_region(record)
+        for record in MountainRegionRecord.objects.raw(_ANCESTORS_SQL, [region_ids])
+    }
+
+    return {region_id: build_region_path(region_id, regions) for region_id in region_ids}
+
+
+def to_mountain(
+    record: MountainRecord, region_paths: Mapping[UUID, RegionPath] | None = None
+) -> Mountain:
+    return to_mountain_with_image(record, _image_of(record), region_paths)
+
+
+def to_mountain_with_image(
+    record: MountainRecord,
+    image: MountainImageRecord | None,
+    region_paths: Mapping[UUID, RegionPath] | None = None,
+) -> Mountain:
     """The continent and the country links are read through the record's relations: a caller
     that maps many records selects the continent and prefetches `country_links` with their
-    country, and a caller that maps one lets the relations load themselves."""
+    country, and a caller that maps one lets the relations load themselves. The region path
+    comes from region_paths, which a caller that maps many records builds once with
+    load_region_paths; without it the path of the record's own region is read in one query.
+    A caller that passes region_paths without the record's region gets no region, which is how
+    one that judges nothing about the region avoids reading it."""
+    if record.region_id is None:
+        region = None
+    else:
+        paths = load_region_paths([record]) if region_paths is None else region_paths
+        region = paths.get(record.region_id)
+
     return Mountain(
         id=record.id,
         slug=record.slug,
@@ -70,7 +117,7 @@ def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | 
         elevation_meters=record.elevation_meters,
         continent=to_continent(record.continent),
         countries=to_countries(link.country for link in record.country_links.all()),
-        range_name=record.range_name,
+        region=region,
         summary=to_summary(record),
         camera=to_camera(record),
         primary_image=None if image is None else to_primary_image(image),
@@ -92,6 +139,28 @@ def to_summary(record: MountainRecord) -> LocalizedText | None:
         return None
 
     return LocalizedText(en=record.summary_en, es=record.summary_es, pt=record.summary_pt)
+
+
+def to_region(record: MountainRegionRecord) -> MountainRegion:
+    return MountainRegion(
+        id=record.id,
+        slug=record.slug,
+        name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
+        parent_id=record.parent_id,
+        wikidata_id=record.wikidata_id,
+    )
+
+
+def region_record(region: MountainRegion) -> MountainRegionRecord:
+    return MountainRegionRecord(
+        id=region.id,
+        slug=region.slug,
+        parent_id=region.parent_id,
+        name_en=region.name.en,
+        name_es=region.name.es,
+        name_pt=region.name.pt,
+        wikidata_id=region.wikidata_id,
+    )
 
 
 def to_continent(record: ContinentRecord) -> Continent:
@@ -132,9 +201,11 @@ def to_daily_mountain(record: DailyDiscoveryRecord) -> DailyMountain:
     return DailyMountain(date=record.date, mountain=to_mountain(record.mountain))
 
 
-def to_catalog_mountain(record: MountainRecord) -> CatalogMountain:
+def to_catalog_mountain(
+    record: MountainRecord, region_paths: Mapping[UUID, RegionPath]
+) -> CatalogMountain:
     return CatalogMountain(
-        mountain=to_mountain(record),
+        mountain=to_mountain(record, region_paths),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
@@ -148,7 +219,8 @@ def to_catalog_discovery(record: DailyDiscoveryRecord) -> CatalogDiscovery:
     )
 
 
-def mountain_record(entry: CatalogMountain) -> MountainRecord:
+def mountain_record(entry: CatalogMountain, region_ids: Mapping[str, UUID]) -> MountainRecord:
+    """region_ids maps the slug of each region the mountains may point at to its id."""
     mountain = entry.mountain
 
     return MountainRecord(
@@ -160,7 +232,7 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
         location=to_point(mountain.coordinates),
         elevation_meters=mountain.elevation_meters,
         continent_id=mountain.continent.code,
-        range_name=mountain.range_name,
+        region_id=None if mountain.region is None else region_ids[mountain.region.region.slug],
         summary_en=None if mountain.summary is None else mountain.summary.en,
         summary_es=None if mountain.summary is None else mountain.summary.es,
         summary_pt=None if mountain.summary is None else mountain.summary.pt,

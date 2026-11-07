@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from serendipeak.catalog.entities import CanonicalCamera
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.discovery.entities import DailyMountain
 from serendipeak.httpapi.renderers import ContractJSONRenderer
 from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
@@ -23,6 +24,7 @@ from tests.support.contract_fixtures import (
     load_fixture,
     served_by_serendipeak,
 )
+from tests.support.regions import region_path
 
 MEDIA_BASE_URL = "https://media.example.test"
 
@@ -88,8 +90,10 @@ def test_members_without_a_value_are_omitted_never_null():
         "elevationMeters",
         "continent",
         "countries",
+        "region",
     }
     assert representation["countries"] == []
+    assert representation["region"] is None
 
 
 def test_the_dropped_members_are_never_served():
@@ -217,3 +221,36 @@ def test_sources_are_omitted_without_any_reference():
     entity = mountain(osm_node_id=None, wikidata_id=None)
 
     assert "sources" not in represent_mountain(entity, MEDIA_BASE_URL)
+
+
+def test_a_region_is_served_with_its_ancestors_from_the_root_to_the_nearest_parent():
+    entity = mountain(region=region_path("Alpha Chain", "Beta Range", "Gamma Ridge"))
+
+    assert represent_mountain(entity, MEDIA_BASE_URL)["region"] == {
+        "slug": "gamma-ridge",
+        "name": "Gamma Ridge",
+        "ancestors": [
+            {"slug": "alpha-chain", "name": "Alpha Chain"},
+            {"slug": "beta-range", "name": "Beta Range"},
+        ],
+    }
+
+
+def test_a_root_region_has_an_empty_ancestor_list():
+    entity = mountain(region=region_path("Alpha Chain"))
+
+    assert represent_mountain(entity, MEDIA_BASE_URL)["region"] == {
+        "slug": "alpha-chain",
+        "name": "Alpha Chain",
+        "ancestors": [],
+    }
+
+
+def test_only_the_english_names_of_a_region_are_served():
+    path = region_path("Alpha Chain")
+    name = LocalizedText(en="Alpha Chain", es="Cadena", pt="Cadeia")
+    translated = replace(path, region=replace(path.region, name=name))
+
+    region = represent_mountain(mountain(region=translated), MEDIA_BASE_URL)["region"]
+
+    assert region == {"slug": "alpha-chain", "name": "Alpha Chain", "ancestors": []}

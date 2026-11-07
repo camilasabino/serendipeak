@@ -38,13 +38,13 @@ def repository(db):
 
 
 @pytest.mark.parametrize(("day", "found"), [(DAY, True), (NEXT_DAY, False)])
-def test_a_date_lookup_joins_the_mountain_image_and_continent_and_reads_the_countries_apart(
+def test_a_date_lookup_joins_the_mountain_image_and_continent_and_reads_countries_and_region_apart(
     repository,
     django_assert_num_queries,
     day,
     found,
 ):
-    with django_assert_num_queries(2 if found else 1) as captured:
+    with django_assert_num_queries(3 if found else 1) as captured:
         daily = repository.find_by_date(day)
 
     assert (daily is not None) is found
@@ -75,14 +75,15 @@ def test_insert_or_get_is_an_insert_that_ignores_conflicts_and_a_re_read(
     day,
     mountain,
 ):
-    with django_assert_num_queries(3) as captured:
+    with django_assert_num_queries(4) as captured:
         repository.insert_or_get(day, mountain.mountain.id)
 
-    insert, re_read, countries = (query["sql"] for query in captured.captured_queries)
+    insert, re_read, countries, ancestors = (query["sql"] for query in captured.captured_queries)
     assert insert.startswith('INSERT INTO "daily_discovery"')
     assert insert.endswith("ON CONFLICT DO NOTHING")
     assert 'INNER JOIN "mountain"' in re_read
     assert '"mountain_country"' in countries
+    assert "RECURSIVE" in ancestors
 
 
 def test_the_insert_lets_the_database_set_the_creation_time(repository):

@@ -1,5 +1,6 @@
 import copy
 import uuid
+from dataclasses import replace
 
 import pytest
 
@@ -11,6 +12,7 @@ from serendipeak.catalog.geography_input import (
     plan_backfill,
 )
 from tests.support.geography import geography_document, invented_id, parse_document, reference
+from tests.support.regions import region_path, regions_of
 
 KNOWN = frozenset(reference().countries)
 ONE, TWO, THREE = (invented_id(label) for label in ("one", "two", "three"))
@@ -147,7 +149,7 @@ class TestParsing:
 
     def test_an_unknown_member_of_an_entry_is_refused(self):
         doc = document((ONE, "alpha-peak", "SA", ["AR"]))
-        doc["mountains"][0]["region"] = "andes"
+        doc["mountains"][0]["elevation"] = 1
 
         with pytest.raises(InvalidGeographyInput, match="unexpected keys"):
             parse(refreshed(doc))
@@ -300,3 +302,281 @@ class TestPlanning:
 
         with pytest.raises(GeographyBackfillRejected):
             self.plan([(other, "alpha-peak", "SA", ["AR"])], [stored(ONE, "alpha-peak")])
+
+
+def taxonomy(*paths):
+    return regions_of(*(region_path(*names) for names in paths))
+
+
+class TestRegionParsing:
+    def doc(self, regions, *entries):
+        return geography_document(entries, regions)
+
+    def test_regions_are_read_parents_first_with_derived_ids(self):
+        regions = taxonomy(("Alpha Chain", "Beta Range"))
+        parsed = parse(self.doc(regions, (ONE, "alpha-peak", "SA", ["AR"], "beta-range")))
+
+        assert [region.slug for region in parsed.regions] == ["alpha-chain", "beta-range"]
+        assert parsed.regions[1].parent_id == parsed.regions[0].id
+        assert parsed.regions[0].parent_id is None
+        assert parsed.mountains[0].region_slug == "beta-range"
+
+    def test_a_mountain_may_have_no_region(self):
+        assert (
+            parse(self.doc([], (ONE, "alpha-peak", "SA", ["AR"]))).mountains[0].region_slug is None
+        )
+
+    def test_a_region_that_comes_before_its_parent_is_refused(self):
+        doc = self.doc(taxonomy(("Alpha Chain", "Beta Range")), (ONE, "p", "SA", [], "beta-range"))
+        doc["regions"].reverse()
+
+        with pytest.raises(InvalidGeographyInput, match="not an earlier region"):
+            parse(refreshed(doc))
+
+    def test_a_region_that_is_its_own_parent_is_refused(self):
+        doc = self.doc(taxonomy(("Alpha Chain",)), (ONE, "p", "SA", [], "alpha-chain"))
+        doc["regions"][0]["parent"] = "alpha-chain"
+
+        with pytest.raises(InvalidGeographyInput, match="not an earlier region"):
+            parse(refreshed(doc))
+
+    def test_slugs_are_unique(self):
+        doc = self.doc(taxonomy(("Alpha Chain",)), (ONE, "p", "SA", [], "alpha-chain"))
+        doc["regions"].append(dict(doc["regions"][0]))
+
+        with pytest.raises(InvalidGeographyInput, match="slug is not unique"):
+            parse(refreshed(doc))
+
+    def test_a_slug_must_be_valid(self):
+        doc = self.doc(taxonomy(("Alpha Chain",)), (ONE, "p", "SA", [], "alpha-chain"))
+        doc["regions"][0]["slug"] = "Alpha Chain"
+
+        with pytest.raises(InvalidGeographyInput, match="not a valid slug"):
+            parse(refreshed(doc))
+
+    @pytest.mark.parametrize("name", ["", "   ", None, 3])
+    def test_the_english_name_is_required(self, name):
+        doc = self.doc(taxonomy(("Alpha Chain",)), (ONE, "p", "SA", [], "alpha-chain"))
+        doc["regions"][0]["name_en"] = name
+
+        with pytest.raises(InvalidGeographyInput, match="name_en"):
+            parse(refreshed(doc))
+
+    def test_roots_may_share_a_name_and_siblings_may_not(self):
+        doc = self.doc(
+            taxonomy(("Alpha Chain",), ("Beta Chain",), ("Gamma Chain",)),
+            (ONE, "p", "SA", [], "alpha-chain"),
+        )
+        doc["mountains"].append(
+            {
+                "id": str(TWO),
+                "slug": "q",
+                "continent": "SA",
+                "countries": [],
+                "region": "beta-chain",
+            }
+        )
+        doc["mountains"].append(
+            {
+                "id": str(THREE),
+                "slug": "r",
+                "continent": "SA",
+                "countries": [],
+                "region": "gamma-chain",
+            }
+        )
+        doc["regions"][1]["name_en"] = "Twin"
+        doc["regions"][2]["name_en"] = "twin"
+        assert len(parse(refreshed(doc)).regions) == 3
+
+        doc["regions"][1]["parent"] = "alpha-chain"
+        doc["regions"][2]["parent"] = "alpha-chain"
+
+        with pytest.raises(InvalidGeographyInput, match="sibling"):
+            parse(refreshed(doc))
+
+    def test_wikidata_ids_are_checked_and_unique(self):
+        doc = self.doc(
+            taxonomy(("Alpha Chain",), ("Beta Chain",)), (ONE, "p", "SA", [], "alpha-chain")
+        )
+        doc["mountains"].append(
+            {
+                "id": str(TWO),
+                "slug": "q",
+                "continent": "SA",
+                "countries": [],
+                "region": "beta-chain",
+            }
+        )
+        doc["regions"][0]["wikidata_id"] = "Q42"
+        doc["regions"][1]["wikidata_id"] = "Q42"
+        with pytest.raises(InvalidGeographyInput, match="not unique"):
+            parse(refreshed(doc))
+
+        doc["regions"][1]["wikidata_id"] = "q-42"
+        with pytest.raises(InvalidGeographyInput, match="Wikidata identifier"):
+            parse(refreshed(doc))
+
+    def test_a_mountain_cannot_refer_to_an_unknown_region(self):
+        doc = self.doc([], (ONE, "alpha-peak", "SA", [], "missing-range"))
+
+        with pytest.raises(InvalidGeographyInput, match="not in regions"):
+            parse(doc)
+
+    def test_a_region_nobody_is_in_is_refused(self):
+        doc = self.doc(
+            taxonomy(("Alpha Chain",), ("Stale Chain",)), (ONE, "p", "SA", [], "alpha-chain")
+        )
+
+        with pytest.raises(InvalidGeographyInput, match="stale-chain"):
+            parse(doc)
+
+    def test_a_parent_that_only_its_child_is_in_is_used(self):
+        doc = self.doc(taxonomy(("Alpha Chain", "Beta Range")), (ONE, "p", "SA", [], "beta-range"))
+
+        assert len(parse(doc).regions) == 2
+
+
+class TestRegionPlanning:
+    def plan(self, regions, entries, rows, stored_regions=()):
+        geography = parse_document(geography_document(entries, regions))
+
+        return plan_backfill(geography, rows, KNOWN, stored_regions)
+
+    def row(self, mountain_id, slug, range_name=None, region=None, has_range=True):
+        return StoredGeography(
+            id=mountain_id,
+            slug=slug,
+            legacy_country_names=(),
+            continent_code="AN",
+            country_codes=("AQ",),
+            has_legacy_range_name=has_range,
+            legacy_range_name=range_name,
+            region_slug=region,
+        )
+
+    def test_new_regions_and_the_region_of_each_mountain_are_planned(self):
+        regions = taxonomy(("Alpha Chain", "Beta Range"))
+
+        plan = self.plan(
+            regions,
+            [(ONE, "ice-peak", "AN", ["AQ"], "beta-range")],
+            [self.row(ONE, "ice-peak", range_name="Beta Range")],
+            stored_regions=[],
+        )
+
+        assert plan.new_regions == ("alpha-chain", "beta-range")
+        assert [(c.slug, c.region) for c in plan.changes] == [("ice-peak", (None, "beta-range"))]
+
+    def test_stored_regions_that_equal_the_input_are_not_planned_again(self):
+        regions = taxonomy(("Alpha Chain",))
+
+        plan = self.plan(
+            regions,
+            [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+            [self.row(ONE, "ice-peak", "Alpha Chain", "alpha-chain")],
+            stored_regions=list(regions),
+        )
+
+        assert (plan.new_regions, plan.changes) == ((), ())
+
+    def test_without_a_region_table_regions_are_left_out_of_the_plan(self):
+        plan = self.plan(
+            taxonomy(("Alpha Chain",)),
+            [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+            [self.row(ONE, "ice-peak", range_name="Alpha Chain")],
+            stored_regions=None,
+        )
+
+        assert (plan.new_regions, plan.changes) == (None, ())
+
+    def test_a_range_name_the_input_does_not_carry_is_named(self):
+        with pytest.raises(GeographyBackfillRejected, match="ice-peak: region None does not match"):
+            self.plan(
+                [],
+                [(ONE, "ice-peak", "AN", ["AQ"])],
+                [self.row(ONE, "ice-peak", range_name="Unknown Range")],
+                stored_regions=[],
+            )
+
+    def test_a_region_whose_name_differs_from_the_range_name_is_refused(self):
+        with pytest.raises(GeographyBackfillRejected, match="'Other Name'"):
+            self.plan(
+                taxonomy(("Alpha Chain",)),
+                [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+                [self.row(ONE, "ice-peak", range_name="Other Name")],
+                stored_regions=[],
+            )
+
+    def test_a_region_for_a_mountain_without_a_range_name_is_refused(self):
+        with pytest.raises(GeographyBackfillRejected, match="does not match the stored range"):
+            self.plan(
+                taxonomy(("Alpha Chain",)),
+                [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+                [self.row(ONE, "ice-peak", range_name=None)],
+                stored_regions=[],
+            )
+
+    def test_no_range_name_and_no_region_agree(self):
+        plan = self.plan(
+            [], [(ONE, "ice-peak", "AN", ["AQ"])], [self.row(ONE, "ice-peak")], stored_regions=[]
+        )
+
+        assert plan.changes == ()
+
+    def test_the_range_name_is_not_compared_once_the_column_is_gone(self):
+        regions = taxonomy(("Alpha Chain",))
+
+        plan = self.plan(
+            regions,
+            [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+            [self.row(ONE, "ice-peak", region="alpha-chain", has_range=False)],
+            stored_regions=list(regions),
+        )
+
+        assert plan.changes == ()
+
+    def test_a_stored_region_that_is_not_in_the_input_is_named(self):
+        stored_region = taxonomy(("Extra Chain",))[0]
+
+        with pytest.raises(
+            GeographyBackfillRejected, match="region extra-chain .* not in the input"
+        ):
+            self.plan(
+                [],
+                [(ONE, "ice-peak", "AN", ["AQ"])],
+                [self.row(ONE, "ice-peak")],
+                stored_regions=[stored_region],
+            )
+
+    def test_a_stored_region_that_differs_from_the_input_is_named(self):
+        regions = taxonomy(("Alpha Chain",))
+        drifted = replace(regions[0], wikidata_id="Q7")
+
+        with pytest.raises(GeographyBackfillRejected, match="alpha-chain differs from the input"):
+            self.plan(
+                regions,
+                [(ONE, "ice-peak", "AN", ["AQ"], "alpha-chain")],
+                [self.row(ONE, "ice-peak", "Alpha Chain")],
+                stored_regions=[drifted],
+            )
+
+    def test_a_changed_region_is_planned_with_both_slugs(self):
+        regions = taxonomy(("Alpha Chain",), ("Beta Chain",))
+
+        plan = self.plan(
+            regions,
+            [
+                (ONE, "ice-peak", "AN", ["AQ"], "beta-chain"),
+                (TWO, "snow-peak", "AN", ["AQ"], "alpha-chain"),
+            ],
+            [
+                self.row(ONE, "ice-peak", "Beta Chain", "alpha-chain"),
+                self.row(TWO, "snow-peak", "Alpha Chain", "alpha-chain"),
+            ],
+            stored_regions=list(regions),
+        )
+
+        assert [(c.slug, c.region) for c in plan.changes] == [
+            ("ice-peak", ("alpha-chain", "beta-chain"))
+        ]

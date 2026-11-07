@@ -13,7 +13,9 @@ import type {
 	Mountain,
 	MountainCamera,
 	MountainImage,
-	MountainSources
+	MountainSources,
+	Region,
+	RegionReference
 } from './contract';
 
 type JsonRecord = Record<string, unknown>;
@@ -141,6 +143,19 @@ function isCountry(value: unknown): value is Country {
 	);
 }
 
+function isRegionReference(value: unknown): value is RegionReference {
+	return isRecord(value) && isValidSlug(value.slug) && isNonEmptyString(value.name);
+}
+
+function isRegion(value: unknown): value is Region {
+	return (
+		isRegionReference(value) &&
+		isRecord(value) &&
+		Array.isArray(value.ancestors) &&
+		value.ancestors.every(isRegionReference)
+	);
+}
+
 function areDistinctCountries(value: unknown): value is Country[] {
 	return (
 		Array.isArray(value) &&
@@ -159,7 +174,8 @@ export function isMountain(value: unknown): value is Mountain {
 		isPositiveInteger(value.elevationMeters) &&
 		isContinent(value.continent) &&
 		areDistinctCountries(value.countries) &&
-		isOptional(value, 'rangeName', isNonEmptyString) &&
+		value.region !== undefined &&
+		(value.region === null || isRegion(value.region)) &&
 		isOptional(value, 'summary', isNonEmptyString) &&
 		isOptional(value, 'camera', isMountainCamera) &&
 		isOptional(value, 'primaryImage', isMountainImage) &&

@@ -1,5 +1,6 @@
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
 from serendipeak.catalog.media.keys import public_url
+from serendipeak.catalog.regions import RegionPath, RegionRef
 from serendipeak.discovery.entities import DailyMountain
 
 OSM_NODE_URL = "https://www.openstreetmap.org/node/{id}"
@@ -9,7 +10,7 @@ WIKIDATA_URL = "https://www.wikidata.org/wiki/{id}"
 def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, object]:
     coordinates = mountain.coordinates
 
-    return _present(
+    members = _present(
         {
             "id": str(mountain.id),
             "slug": mountain.slug,
@@ -23,13 +24,29 @@ def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, obj
             "countries": [
                 {"code": country.code, "name": country.name.en} for country in mountain.countries
             ],
-            "rangeName": mountain.range_name,
             "summary": None if mountain.summary is None else mountain.summary.en,
             "camera": _camera(mountain.camera),
             "primaryImage": _primary_image(mountain.primary_image, media_base_url),
             "sources": _sources(mountain),
         }
     )
+
+    # Always present, and null without a region, unlike every other member that has no value.
+    return {**members, "region": _region(mountain.region)}
+
+
+def _region(path: RegionPath | None) -> dict[str, object] | None:
+    if path is None:
+        return None
+
+    return {
+        **_region_ref(path.region),
+        "ancestors": [_region_ref(ancestor) for ancestor in path.ancestors],
+    }
+
+
+def _region_ref(ref: RegionRef) -> dict[str, object]:
+    return {"slug": ref.slug, "name": ref.name.en}
 
 
 def represent_daily_mountain(daily: DailyMountain, media_base_url: str) -> dict[str, object]:

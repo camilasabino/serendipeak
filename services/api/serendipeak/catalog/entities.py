@@ -3,6 +3,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from serendipeak.catalog.localization import LocalizedText
+from serendipeak.catalog.regions import RegionPath
 
 WIKIDATA_ID_PATTERN = r"^Q[1-9][0-9]*$"
 
@@ -83,7 +84,7 @@ class Mountain:
     elevation_meters: int
     continent: Continent
     countries: tuple[Country, ...]
-    range_name: str | None
+    region: RegionPath | None
     summary: LocalizedText | None
     camera: CanonicalCamera | None
     primary_image: PrimaryImage | None

@@ -41,6 +41,15 @@ export interface Country {
 	name: string;
 }
 
+export interface RegionReference {
+	slug: string;
+	name: string;
+}
+
+export interface Region extends RegionReference {
+	ancestors: RegionReference[];
+}
+
 export interface Mountain {
 	id: string;
 	slug: string;
@@ -49,7 +58,7 @@ export interface Mountain {
 	elevationMeters: number;
 	continent: Continent;
 	countries: Country[];
-	rangeName?: string;
+	region: Region | null;
 	summary?: string;
 	camera?: MountainCamera;
 	primaryImage?: MountainImage;

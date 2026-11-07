@@ -70,10 +70,10 @@ def test_non_ascii_text_is_served_unescaped(catalog, client):
     assert "Bjørn Christian Tørrissen".encode() in response.content
 
 
-def test_a_lookup_is_two_queries_and_an_unknown_slug_one(
+def test_a_lookup_is_three_queries_and_an_unknown_slug_one(
     catalog, client, django_assert_num_queries
 ):
-    with django_assert_num_queries(2):
+    with django_assert_num_queries(3):
         assert client.get("/api/v1/mountains/aconcagua").status_code == 200
 
     with django_assert_num_queries(1):
