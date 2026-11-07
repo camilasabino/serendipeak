@@ -1,5 +1,6 @@
 import uuid
 
+from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.gis.db import models as gis_models
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -16,6 +17,8 @@ from django.db.models import (
 from django.db.models.functions import Concat, Now, Replace
 from django.db.models.lookups import Range
 
+from serendipeak.accounts.roles import Role
+from serendipeak.accounts.username import USERNAME_PATTERN, USERNAME_RULE
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus
 from serendipeak.catalog.media import keys
@@ -111,7 +114,6 @@ class MountainRecord(models.Model):
 
     class Meta:
         db_table = "mountain"
-        permissions = [("publish_mountain", "Can publish, deactivate and reactivate mountains")]
         constraints = [
             UniqueConstraint(fields=["slug"], name="mountain_slug_key"),
             CheckConstraint(condition=Q(slug__regex=SLUG_PATTERN), name="mountain_slug_format"),
@@ -335,3 +337,63 @@ class DailyDiscoveryRecord(models.Model):
 
     def __str__(self):
         return self.date.isoformat()
+
+
+ROLES = tuple(role.value for role in Role)
+VIEW_PERMISSION_PREFIX = "view_"
+
+
+class UserManager(BaseUserManager):
+    # Stored usernames are lowercase by constraint, so folding the typed one makes sign-in
+    # case-insensitive without a second index or a lookup that bypasses the unique key.
+    def get_by_natural_key(self, username):
+        return super().get_by_natural_key(username.lower())
+
+
+class UserRecord(AbstractBaseUser):
+    """An editorial account. Authorization derives from the role alone: there are no per-user
+    permissions or groups, and the framework tables that hold them stay unused."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    username = models.TextField()
+    role = models.TextField(choices=[(value, value.capitalize()) for value in ROLES])
+    is_active = models.BooleanField("active", default=True)
+    date_joined = models.DateTimeField(db_default=Now(), editable=False)
+
+    objects = UserManager()
+
+    USERNAME_FIELD = "username"
+
+    class Meta:
+        db_table = "app_user"
+        verbose_name = "user"
+        constraints = [
+            UniqueConstraint(
+                fields=["username"],
+                name="user_username_key",
+                violation_error_message="A user with this username already exists.",
+            ),
+            CheckConstraint(
+                condition=Q(username__regex=USERNAME_PATTERN),
+                name="user_username_format",
+                violation_error_message=USERNAME_RULE,
+            ),
+            CheckConstraint(condition=Q(role__in=ROLES), name="user_role_valid"),
+            CheckConstraint(condition=~Q(password=""), name="user_password_not_blank"),
+        ]
+
+    # The admin site only reads this flag to decide who may enter, and both roles may.
+    @property
+    def is_staff(self):
+        return self.is_active
+
+    def has_perm(self, perm, obj=None):
+        if not self.is_active:
+            return False
+
+        return Role(self.role).can_write or perm.rpartition(".")[2].startswith(
+            VIEW_PERMISSION_PREFIX
+        )
+
+    def has_module_perms(self, app_label):
+        return self.is_active

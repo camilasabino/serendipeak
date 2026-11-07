@@ -1,6 +1,11 @@
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import UTC, date, datetime
+from uuid import uuid4
 
+from serendipeak.accounts.access import Access, AccessChangeContext, AccessViolation, Account
+from serendipeak.accounts.entities import User
+from serendipeak.accounts.errors import PasswordRejected, UsernameTaken
+from serendipeak.accounts.ports import AccessChange, AccessChangeOutcome
 from serendipeak.catalog.bootstrap.ports import AttachOutcome, CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
@@ -109,6 +114,69 @@ class InMemoryMountainStatusStore:
 
     def status_of(self, mountain_id):
         return self._mountains[mountain_id].status
+
+
+class InMemoryUserStore:
+    """Stands in for the Django adapter; its password policy is only the minimum length."""
+
+    MINIMUM_PASSWORD_LENGTH = 8
+
+    def __init__(self, users=()):
+        self._users = {user.id: user for user in users}
+
+    def create(self, username, role, password):
+        if len(password) < self.MINIMUM_PASSWORD_LENGTH:
+            raise PasswordRejected(("This password is too short.",))
+        if any(user.username == username for user in self._users.values()):
+            raise UsernameTaken(username)
+
+        user = User(
+            id=uuid4(),
+            username=username,
+            role=role,
+            is_active=True,
+            last_login=None,
+            date_joined=datetime.now(UTC),
+        )
+        self._users[user.id] = user
+
+        return user
+
+    def change_access(self, actor_id, target_id, desired, rule):
+        target = self._users.get(target_id)
+        if target is None:
+            return AccessChange(AccessChangeOutcome.NOT_FOUND)
+
+        actor = self._users.get(actor_id)
+        if actor is None:
+            return AccessChange(
+                AccessChangeOutcome.REFUSED, violation=AccessViolation.ACTOR_NOT_EDITOR
+            )
+
+        violation = rule(
+            AccessChangeContext(
+                actor=Account(actor.id, self._access_of(actor)),
+                target=Account(target.id, self._access_of(target)),
+                desired=desired,
+                active_editors=sum(
+                    self._access_of(u).is_active_editor for u in self._users.values()
+                ),
+            )
+        )
+        if violation is not None:
+            return AccessChange(AccessChangeOutcome.REFUSED, violation=violation)
+
+        changed = replace(target, role=desired.role, is_active=desired.is_active)
+        self._users[target.id] = changed
+
+        return AccessChange(AccessChangeOutcome.APPLIED, user=changed)
+
+    def get(self, user_id):
+        return self._users[user_id]
+
+    @staticmethod
+    def _access_of(user):
+        return Access(user.role, user.is_active)
 
 
 class InMemoryMountainCameraStore:

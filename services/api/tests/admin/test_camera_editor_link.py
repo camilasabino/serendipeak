@@ -3,8 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.conf import settings
-from django.contrib.auth.models import Permission, User
-from django.test import Client, RequestFactory
+from django.test import RequestFactory
 from django.urls import reverse
 
 from config.admin import build_admin_site
@@ -44,16 +43,6 @@ def editor_links(html):
 
 def query_of(href):
     return {key: values[0] for key, values in parse_qs(urlsplit(href).query).items()}
-
-
-@pytest.fixture
-def viewer_client(db):
-    viewer = User.objects.create_user("viewer", password="not-used", is_staff=True)
-    viewer.user_permissions.set(Permission.objects.filter(codename="view_mountainrecord"))
-    client = Client()
-    client.force_login(viewer)
-
-    return client
 
 
 class TestLink:
@@ -223,17 +212,6 @@ class TestLink:
 
         assert (got.status_code, posted.status_code) == (403, 403)
         assert MountainRecord.objects.values().get(pk=ACTIVE.mountain.id) == before
-
-    def test_a_staff_user_with_no_permissions_is_refused(self, db, load_catalog):
-        load_catalog(ACTIVE)
-        nobody = User.objects.create_user("nobody", password="not-used", is_staff=True)
-        client = Client()
-        client.force_login(nobody)
-
-        response = client.get(change_url(ACTIVE))
-
-        assert response.status_code == 403
-        assert settings.WEB_ORIGIN not in response.content.decode()
 
     def test_it_is_offered_to_a_user_who_can_change_the_mountain(self, editor, load_catalog):
         load_catalog(ACTIVE)

@@ -156,13 +156,13 @@ class RowObservingStore(FakeMediaStore):
 
 class TestUpload:
     def test_a_draft_gets_an_uploaded_photograph_and_is_published_with_it(
-        self, publisher_client, load_catalog, media_store
+        self, editor_client, load_catalog, media_store
     ):
         load_catalog(BARE_DRAFT)
         data = gps_jpeg()
-        page = publisher_client.get(change_url(BARE_DRAFT))
+        page = editor_client.get(change_url(BARE_DRAFT))
 
-        response = publisher_client.post(
+        response = editor_client.post(
             change_url(BARE_DRAFT),
             form_payload(page, **{"image-0-photograph_file": upload(data), **UNSPLASH_CREDIT}),
         )
@@ -180,11 +180,11 @@ class TestUpload:
             assert b"Exif" not in rendition and b"Camera maker" not in rendition
             assert not Image.open(io.BytesIO(rendition)).getexif()
 
-        published = publisher_client.post(transition_url(BARE_DRAFT, "publish"))
+        published = editor_client.post(transition_url(BARE_DRAFT, "publish"))
 
         assert published.status_code == 302
         assert MountainRecord.objects.get(pk=BARE_DRAFT.mountain.id).status == "active"
-        served = publisher_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
+        served = editor_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
         assert served["url"] == f"{MEDIA_BASE_URL}/{viewer_key}"
         assert served["thumbnailUrl"] == f"{MEDIA_BASE_URL}/{page_key}"
         assert served["sourcePageUrl"] == UNSPLASH_CREDIT["image-0-source_page_url"]
@@ -302,12 +302,12 @@ class TestOptionalPageAndLicense:
     }
 
     def test_a_photograph_needs_neither_a_page_nor_a_license_to_be_saved_and_published(
-        self, publisher_client, load_catalog, media_store
+        self, editor_client, load_catalog, media_store
     ):
         load_catalog(BARE_DRAFT)
-        page = publisher_client.get(change_url(BARE_DRAFT))
+        page = editor_client.get(change_url(BARE_DRAFT))
 
-        response = publisher_client.post(
+        response = editor_client.post(
             change_url(BARE_DRAFT),
             form_payload(
                 page, **{"image-0-photograph_file": upload(jpeg()), **self.OWN_PHOTOGRAPH}
@@ -317,18 +317,16 @@ class TestOptionalPageAndLicense:
         assert response.status_code == 302
         image = stored_image(BARE_DRAFT)
         assert (image.source_page_url, image.license_name, image.license_url) == (None, None, None)
-        assert publisher_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
-        served = publisher_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
+        assert editor_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
+        served = editor_client.get("/api/v1/mountains/bare-peak").json()["primaryImage"]
         assert served["author"] == "Camila Sabino"
         assert not {"sourcePageUrl", "license", "licenseUrl"} & set(served)
 
-    def test_a_page_does_not_stand_in_for_a_license(
-        self, publisher_client, load_catalog, media_store
-    ):
+    def test_a_page_does_not_stand_in_for_a_license(self, editor_client, load_catalog, media_store):
         load_catalog(BARE_DRAFT)
-        page = publisher_client.get(change_url(BARE_DRAFT))
+        page = editor_client.get(change_url(BARE_DRAFT))
 
-        response = publisher_client.post(
+        response = editor_client.post(
             change_url(BARE_DRAFT),
             form_payload(
                 page,
@@ -343,7 +341,7 @@ class TestOptionalPageAndLicense:
         assert response.status_code == 302
         image = stored_image(BARE_DRAFT)
         assert image.license_name is None
-        assert publisher_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
+        assert editor_client.post(transition_url(BARE_DRAFT, "publish")).status_code == 302
 
     def test_an_author_is_required(self, editor_client, load_catalog, media_store):
         load_catalog(BARE_DRAFT)

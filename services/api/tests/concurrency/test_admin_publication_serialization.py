@@ -4,7 +4,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from django.contrib.auth.models import Permission, User
 from django.db import connection
 from django.test import Client
 from django.urls import reverse
@@ -30,6 +29,7 @@ from tests.support.concurrency import (
     wait_until,
 )
 from tests.support.fakes import FakeMediaStore
+from tests.support.users import create_user
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -55,16 +55,7 @@ def stored(entry):
 @pytest.fixture
 def editor_client():
     DjangoCatalogStore().load(catalog_seed(DRAFT, ACTIVE, INACTIVE))
-    editor = User.objects.create_user("editor", password="not-used", is_staff=True)
-    editor.user_permissions.set(
-        Permission.objects.filter(
-            codename__in=[
-                "view_mountainrecord",
-                "change_mountainrecord",
-                "delete_mountainrecord",
-            ]
-        )
-    )
+    editor = create_user("editor")
     client = Client()
     client.force_login(editor)
 

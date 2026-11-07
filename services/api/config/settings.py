@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.gis",
     "django.contrib.postgres",
     "django.contrib.contenttypes",
-    "config.apps.UsersConfig",
+    "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
@@ -76,13 +76,16 @@ TEMPLATES = [
     },
 ]
 
+AUTH_USER_MODEL = "catalog.UserRecord"
+
+PASSWORD_MINIMUM_LENGTH = 8
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": f"django.contrib.auth.password_validation.{name}"}
-    for name in (
-        "UserAttributeSimilarityValidator",
-        "MinimumLengthValidator",
-        "CommonPasswordValidator",
-        "NumericPasswordValidator",
+    {"NAME": f"django.contrib.auth.password_validation.{name}", **options}
+    for name, options in (
+        ("UserAttributeSimilarityValidator", {}),
+        ("MinimumLengthValidator", {"OPTIONS": {"min_length": PASSWORD_MINIMUM_LENGTH}}),
+        ("CommonPasswordValidator", {}),
+        ("NumericPasswordValidator", {}),
     )
 ]
 

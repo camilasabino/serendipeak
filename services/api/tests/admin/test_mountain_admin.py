@@ -103,14 +103,6 @@ def test_anonymous_visitors_are_sent_to_the_login(client):
     assert response.headers["Location"].startswith(reverse("admin:login"))
 
 
-def test_a_staff_user_without_catalog_permissions_sees_no_mountains(client, db):
-    from django.contrib.auth.models import User
-
-    client.force_login(User.objects.create_user("intruder", is_staff=True))
-
-    assert client.get(CHANGELIST_URL).status_code == 403
-
-
 @pytest.mark.parametrize("url", ["/admin/login/", "/admin/"])
 def test_the_admin_cannot_be_framed(client, url):
     assert client.get(url).headers["X-Frame-Options"] == "DENY"
@@ -164,10 +156,10 @@ class TestChangeList:
 
         assert [row.slug for row in response.context["cl"].result_list] == ["draft-peak"]
 
-    def test_has_no_bulk_delete(self, publisher_client, load_catalog):
+    def test_has_no_bulk_delete(self, editor_client, load_catalog):
         load_catalog(DRAFT)
 
-        response = publisher_client.get(CHANGELIST_URL)
+        response = editor_client.get(CHANGELIST_URL)
 
         offered = dict(response.context["action_form"].fields["action"].choices)
         assert "delete_selected" not in offered
@@ -715,7 +707,7 @@ class TestEditing:
         assert MountainRecord.objects.get(pk=ACTIVE.mountain.id).updated_at > before
 
     def test_saving_does_not_overwrite_a_status_changed_after_the_row_was_read(
-        self, publisher, load_catalog, rf
+        self, editor, load_catalog, rf
     ):
         load_catalog(DRAFT)
         stale = MountainRecord.objects.get(pk=DRAFT.mountain.id)
@@ -735,7 +727,7 @@ class TestEditing:
         )
         assert form.is_valid(), form.errors
         request = rf.post("/")
-        request.user = publisher
+        request.user = editor
 
         model_admin.save_model(request, form.save(commit=False), form, change=True)
 
@@ -822,15 +814,10 @@ class TestEditing:
 
         assert response.status_code == 302
 
-    def test_a_viewer_without_change_permission_cannot_post(self, client, load_catalog, db):
-        from django.contrib.auth.models import Permission, User
-
+    def test_a_viewer_cannot_post(self, viewer_client, load_catalog):
         load_catalog(ACTIVE)
-        viewer = User.objects.create_user("viewer", is_staff=True)
-        viewer.user_permissions.set(Permission.objects.filter(codename="view_mountainrecord"))
-        client.force_login(viewer)
 
-        response = client.post(change_url(ACTIVE), {"summary": "Highest in the Andes."})
+        response = viewer_client.post(change_url(ACTIVE), {"summary": "Highest in the Andes."})
 
         assert response.status_code == 403
         assert (
@@ -1076,11 +1063,11 @@ class TestPhotographInline:
         assert MountainImageRecord.objects.get(pk=awaiting.mountain.id).original_key is None
 
     def test_a_seeded_photograph_awaiting_its_file_blocks_publication(
-        self, publisher_client, load_catalog
+        self, editor_client, load_catalog
     ):
         awaiting = seeded_mountain("awaiting-peak", status=MountainStatus.DRAFT)
         load_catalog(awaiting)
 
-        html = publisher_client.get(change_url(awaiting)).content.decode()
+        html = editor_client.get(change_url(awaiting)).content.decode()
 
         assert "The photograph file is not stored yet" in html

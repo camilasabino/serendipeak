@@ -3,6 +3,7 @@ from runpy import run_path
 
 import pytest
 from django.conf import settings
+from django.contrib.auth import get_user_model
 
 SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
 MEDIA_ENVIRONMENT = {
@@ -19,7 +20,7 @@ MEDIA_ENVIRONMENT = {
 def test_the_admin_stack_is_installed_without_autodiscovering_the_default_site():
     for app in (
         "django.contrib.admin.apps.SimpleAdminConfig",
-        "config.apps.UsersConfig",
+        "django.contrib.auth",
         "django.contrib.contenttypes",
         "django.contrib.sessions",
         "django.contrib.messages",
@@ -44,8 +45,28 @@ def test_session_csrf_and_message_middleware_run_after_cors_and_before_the_views
     )
 
 
-def test_passwords_are_validated():
-    assert len(settings.AUTH_PASSWORD_VALIDATORS) >= 4
+def test_the_user_model_is_the_catalog_user_record():
+    assert settings.AUTH_USER_MODEL == "catalog.UserRecord"
+    assert get_user_model()._meta.label == "catalog.UserRecord"
+
+
+def test_the_password_policy_requires_eight_characters_and_the_three_other_checks():
+    validators = {
+        validator["NAME"].rpartition(".")[2]: validator.get("OPTIONS", {})
+        for validator in settings.AUTH_PASSWORD_VALIDATORS
+    }
+
+    assert validators == {
+        "UserAttributeSimilarityValidator": {},
+        "MinimumLengthValidator": {"min_length": 8},
+        "CommonPasswordValidator": {},
+        "NumericPasswordValidator": {},
+    }
+
+
+def test_the_default_hasher_is_pbkdf2_and_sessions_are_stored_in_the_database():
+    assert settings.PASSWORD_HASHERS[0] == "django.contrib.auth.hashers.PBKDF2PasswordHasher"
+    assert settings.SESSION_ENGINE == "django.contrib.sessions.backends.db"
 
 
 def test_cookies_are_http_only_and_same_site():

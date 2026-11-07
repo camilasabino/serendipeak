@@ -3,6 +3,8 @@ from pathlib import Path
 
 from django.conf import settings
 
+from serendipeak.accounts.change_user_access import ChangeUserAccess
+from serendipeak.accounts.create_user import CreateUser
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
 from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotographMedia
@@ -30,6 +32,7 @@ from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraSt
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
+from serendipeak.persistence.user_store import DjangoUserStore
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 SEED_PATH = SERVICE_ROOT / "seed" / "legacy-catalog-v1.json"
@@ -95,6 +98,14 @@ def build_reactivate_mountain() -> ReactivateMountain:
 
 def build_change_mountain_camera() -> ChangeMountainCamera:
     return ChangeMountainCamera(DjangoMountainCameraStore())
+
+
+def build_create_user() -> CreateUser:
+    return CreateUser(DjangoUserStore())
+
+
+def build_change_user_access() -> ChangeUserAccess:
+    return ChangeUserAccess(DjangoUserStore())
 
 
 def build_media_store() -> MediaStore:

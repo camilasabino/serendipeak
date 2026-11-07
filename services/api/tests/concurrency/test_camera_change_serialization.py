@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
-from django.contrib.auth.models import Permission, User
 from django.db import connection, transaction
 from django.test import Client
 from django.urls import reverse
@@ -23,6 +22,7 @@ from serendipeak.persistence.mountain_status_store import DjangoMountainStatusSt
 from tests.admin.support import form_payload
 from tests.support.catalog import catalog_mountain, catalog_seed
 from tests.support.concurrency import WAIT_SECONDS, run_while_a_change_holds_the_lock
+from tests.support.users import create_user
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -51,10 +51,7 @@ def stored(entry):
 @pytest.fixture
 def editor_client():
     DjangoCatalogStore().load(catalog_seed(ACTIVE, CAMERALESS_DRAFT, FRAMED_DRAFT))
-    editor = User.objects.create_user("editor", password="not-used", is_staff=True)
-    editor.user_permissions.set(
-        Permission.objects.filter(codename__in=["view_mountainrecord", "change_mountainrecord"])
-    )
+    editor = create_user("editor")
     client = Client()
     client.force_login(editor)
 

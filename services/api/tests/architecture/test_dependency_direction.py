@@ -58,10 +58,16 @@ NONDETERMINISTIC_SOURCES = frozenset(
     }
 )
 NONDETERMINISTIC_SOURCE_ALLOWED_FILES = {"serendipeak/discovery/clock.py"}
-USE_CASE_PACKAGES = ("serendipeak.catalog", "serendipeak.discovery")
+USE_CASE_PACKAGES = ("serendipeak.accounts", "serendipeak.catalog", "serendipeak.discovery")
 
-CAPABILITY_PACKAGES = ("serendipeak.catalog", "serendipeak.discovery", "serendipeak.errors")
+CAPABILITY_PACKAGES = (
+    "serendipeak.accounts",
+    "serendipeak.catalog",
+    "serendipeak.discovery",
+    "serendipeak.errors",
+)
 PERMITTED_BY_PACKAGE = {
+    "serendipeak.accounts": ("serendipeak.accounts", "serendipeak.errors"),
     "serendipeak.catalog": ("serendipeak.catalog", "serendipeak.errors"),
     "serendipeak.discovery": ("serendipeak.discovery", "serendipeak.catalog", "serendipeak.errors"),
     "serendipeak.errors": ("serendipeak.errors",),
@@ -70,6 +76,7 @@ PERMITTED_BY_PACKAGE = {
         "django.core.management",
         "config.composition",
         "serendipeak.cli",
+        "serendipeak.accounts",
         "serendipeak.catalog",
         "serendipeak.discovery",
         "serendipeak.errors",
@@ -264,6 +271,9 @@ def test_scan_covers_the_application_packages():
     files = source_files()
 
     assert "serendipeak/catalog/slug.py" in files
+    assert "serendipeak/accounts/change_user_access.py" in files
+    assert "serendipeak/persistence/user_store.py" in files
+    assert "serendipeak/cli/management/commands/create_editor.py" in files
     assert "serendipeak/catalog/bootstrap/seed.py" in files
     assert "serendipeak/persistence/models.py" in files
     assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
@@ -310,6 +320,31 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak/catalog/__init__.py",
             "from serendipeak import discovery",
             "serendipeak.catalog imports serendipeak.discovery",
+        ),
+        (
+            "serendipeak/accounts/roles.py",
+            "from django.contrib.auth import models",
+            "serendipeak.accounts.roles imports django.contrib.auth",
+        ),
+        (
+            "serendipeak/accounts/create_user.py",
+            "from serendipeak.persistence import models",
+            "serendipeak.accounts.create_user imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/accounts/create_user.py",
+            "from serendipeak.catalog import entities",
+            "serendipeak.accounts.create_user imports serendipeak.catalog",
+        ),
+        (
+            "serendipeak/accounts/entities.py",
+            "import os",
+            "serendipeak.accounts.entities imports os",
+        ),
+        (
+            "serendipeak/cli/management/commands/create_editor.py",
+            "from serendipeak.persistence.models import UserRecord",
+            "serendipeak.cli.management.commands.create_editor imports serendipeak.persistence",
         ),
         (
             "serendipeak/discovery/clock.py",

@@ -4,7 +4,6 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.contrib.admin.models import LogEntry
-from django.contrib.auth.models import Permission, User
 from django.contrib.messages import get_messages
 from django.test import Client
 from django.urls import reverse
@@ -62,16 +61,6 @@ def confirmation_payload(client, entry, query=PROPOSED):
     assert response.status_code == 200
 
     return form_payload(response)
-
-
-@pytest.fixture
-def viewer_client(db):
-    viewer = User.objects.create_user("viewer", password="not-used", is_staff=True)
-    viewer.user_permissions.set(Permission.objects.filter(codename="view_mountainrecord"))
-    client = Client()
-    client.force_login(viewer)
-
-    return client
 
 
 class TestConfirmation:

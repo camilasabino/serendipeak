@@ -1,5 +1,7 @@
 from django.contrib.gis.geos import Point
 
+from serendipeak.accounts.entities import User
+from serendipeak.accounts.roles import Role
 from serendipeak.catalog.bootstrap.ports import CatalogDiscovery, CatalogMountain
 from serendipeak.catalog.entities import (
     CameraFraming,
@@ -16,6 +18,7 @@ from serendipeak.persistence.models import (
     DailyDiscoveryRecord,
     MountainImageRecord,
     MountainRecord,
+    UserRecord,
 )
 
 
@@ -167,4 +170,15 @@ def _photograph_media(image: MountainImageRecord) -> PhotographMedia | None:
         original_sha256=image.original_sha256,
         page_key=image.page_key,
         viewer_key=image.viewer_key,
+    )
+
+
+def to_user(record: UserRecord) -> User:
+    return User(
+        id=record.id,
+        username=record.username,
+        role=Role(record.role),
+        is_active=record.is_active,
+        last_login=record.last_login,
+        date_joined=record.date_joined,
     )

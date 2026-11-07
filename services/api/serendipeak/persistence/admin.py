@@ -58,7 +58,6 @@ from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
 logger = logging.getLogger(__name__)
 
-PUBLISH_PERMISSION = "catalog.publish_mountain"
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS", "TRACE")
 
 SUMMARY_MESSAGES = {
@@ -1018,7 +1017,7 @@ class MountainAdmin(admin.ModelAdmin):
         )
 
     def has_publish_permission(self, request):
-        return request.user.has_perm(PUBLISH_PERMISSION)
+        return self.has_change_permission(request)
 
     def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
         actions = super().get_actions(request, action_location)

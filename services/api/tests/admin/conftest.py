@@ -1,53 +1,35 @@
 import pytest
-from django.contrib.auth.models import Permission, User
+from django.test import Client
 
+from serendipeak.accounts.roles import Role
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.admin.support import use_fake_media_store
 from tests.support.catalog import catalog_mountain, catalog_seed
-
-
-def _user(username, *codenames):
-    user = User.objects.create_user(username, password="not-used", is_staff=True)
-    user.user_permissions.set(Permission.objects.filter(codename__in=codenames))
-
-    return user
+from tests.support.users import create_user
 
 
 @pytest.fixture
 def editor(db):
-    return _user(
-        "editor",
-        "add_mountainrecord",
-        "change_mountainrecord",
-        "view_mountainrecord",
-        "delete_mountainrecord",
-        "view_dailydiscoveryrecord",
-    )
+    return create_user("editor", Role.EDITOR)
 
 
 @pytest.fixture
-def publisher(db):
-    return _user(
-        "publisher",
-        "add_mountainrecord",
-        "change_mountainrecord",
-        "view_mountainrecord",
-        "delete_mountainrecord",
-        "view_dailydiscoveryrecord",
-        "publish_mountain",
-    )
+def viewer(db):
+    return create_user("viewer", Role.VIEWER)
 
 
 @pytest.fixture
-def editor_client(client, editor):
+def editor_client(editor):
+    client = Client()
     client.force_login(editor)
 
     return client
 
 
 @pytest.fixture
-def publisher_client(client, publisher):
-    client.force_login(publisher)
+def viewer_client(viewer):
+    client = Client()
+    client.force_login(viewer)
 
     return client
 
