@@ -32,3 +32,6 @@ apps/web/public/cesium/
 
 # Local cache of downloaded legacy photograph source files (materialize_photographs --cache-dir).
 .photograph-cache/
+
+# Local dev logs
+.dev-logs/
