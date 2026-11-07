@@ -18,9 +18,11 @@ from serendipeak.catalog.errors import (
     CatalogAlreadyPopulated,
     PhotographRejected,
     PhotographRejection,
+    PublicationRejected,
     SlugTaken,
     UnknownContinent,
     UnknownCountries,
+    UnknownMountain,
 )
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
@@ -343,6 +345,63 @@ class InMemoryMountainCreationStore:
 
     def mountain(self, slug):
         return self._mountains.get(slug)
+
+
+class InMemoryMountainUpdateStore:
+    """Holds the reference data of tests.support.geography and the given regions."""
+
+    def __init__(self, mountains=(), regions=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+        self._regions = {region.id: region for region in regions}
+        self.calls = 0
+
+    def update(self, mountain_id, update, gate):
+        self.calls += 1
+        current = self._mountains.get(mountain_id)
+        if current is None:
+            raise UnknownMountain(mountain_id)
+
+        reference = geography_reference()
+        wanted = set(update.country_codes)
+        if any(m.slug == update.slug and m.id != mountain_id for m in self._mountains.values()):
+            raise SlugTaken(update.slug)
+        if update.continent_code not in reference.continents:
+            raise UnknownContinent(update.continent_code)
+        if update.region_id is not None and update.region_id not in self._regions:
+            raise UnknownRegion(update.region_id)
+        if wanted - reference.countries.keys():
+            raise UnknownCountries(tuple(sorted(wanted - reference.countries.keys())))
+
+        stored_summary = current.summary or LocalizedText(en="")
+        prospective = replace(
+            current,
+            slug=update.slug,
+            name=replace(current.name, en=update.name),
+            elevation_meters=update.elevation_meters,
+            continent=reference.continents[update.continent_code],
+            countries=tuple(
+                sorted(
+                    (reference.countries[code] for code in wanted),
+                    key=lambda country: (country.name.en, country.code),
+                )
+            ),
+            region=None
+            if update.region_id is None
+            else build_region_path(update.region_id, self._regions),
+            summary=None if update.summary is None else replace(stored_summary, en=update.summary),
+            osm_node_id=update.osm_node_id,
+            wikidata_id=update.wikidata_id,
+        )
+        violations = tuple(gate(prospective))
+        if violations:
+            raise PublicationRejected(violations)
+
+        self._mountains[mountain_id] = prospective
+
+        return prospective
+
+    def mountain(self, mountain_id):
+        return self._mountains[mountain_id]
 
 
 class InMemoryDailyDiscoveryRepository:

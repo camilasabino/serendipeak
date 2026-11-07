@@ -22,6 +22,7 @@ from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographInges
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
+from serendipeak.catalog.update_mountain import UpdateMountain
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
@@ -43,6 +44,7 @@ from serendipeak.persistence.mountain_creation_store import DjangoMountainCreati
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
+from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
 from serendipeak.persistence.user_store import DjangoUserStore
 
@@ -131,6 +133,10 @@ def build_change_mountain_location() -> ChangeMountainLocation:
 
 def build_create_mountain() -> CreateMountain:
     return CreateMountain(DjangoMountainCreationStore(), build_admin_photograph_ingestion())
+
+
+def build_update_mountain() -> UpdateMountain:
+    return UpdateMountain(DjangoMountainUpdateStore())
 
 
 def build_create_user() -> CreateUser:

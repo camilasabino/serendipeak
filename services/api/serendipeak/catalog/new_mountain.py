@@ -66,6 +66,43 @@ _VIOLATION_OF_IMAGE = {
 }
 
 
+def content_violations(
+    *,
+    slug: str,
+    name: str,
+    elevation_meters: int,
+    summary: str | None,
+    osm_node_id: int | None,
+    wikidata_id: str | None,
+    coordinates: Coordinates | None = None,
+) -> tuple[NewMountainViolation, ...]:
+    """The rules the database enforces on the editable content of a mountain, draft or public.
+
+    Shared by the creation and the update of a mountain, which judge the same columns. The
+    coordinates are judged only when given: an update never moves the mountain.
+    """
+    violations = []
+
+    if not is_valid_slug(slug):
+        violations.append(NewMountainViolation.SLUG_INVALID)
+    if not name.strip():
+        violations.append(NewMountainViolation.NAME_BLANK)
+    if coordinates is not None and not coordinates_in_range(
+        coordinates.latitude, coordinates.longitude
+    ):
+        violations.append(NewMountainViolation.COORDINATES_OUT_OF_RANGE)
+    if elevation_meters <= 0:
+        violations.append(NewMountainViolation.ELEVATION_NOT_POSITIVE)
+    if summary is not None and summary_violations(summary):
+        violations.append(NewMountainViolation.SUMMARY_INVALID)
+    if osm_node_id is not None and osm_node_id <= 0:
+        violations.append(NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE)
+    if wikidata_id is not None and not _WIKIDATA_ID.fullmatch(wikidata_id):
+        violations.append(NewMountainViolation.WIKIDATA_ID_INVALID)
+
+    return tuple(violations)
+
+
 def new_mountain_violations(mountain: NewMountain) -> tuple[NewMountainViolation, ...]:
     """Why a draft cannot be stored; empty means it can.
 
@@ -74,22 +111,17 @@ def new_mountain_violations(mountain: NewMountain) -> tuple[NewMountainViolation
     whether the continent, countries and region exist when the draft is written. Publication
     rules that a draft may still break (camera, image completeness) are not checked here.
     """
-    violations = []
-
-    if not is_valid_slug(mountain.slug):
-        violations.append(NewMountainViolation.SLUG_INVALID)
-    if not mountain.name.strip():
-        violations.append(NewMountainViolation.NAME_BLANK)
-    if not coordinates_in_range(mountain.coordinates.latitude, mountain.coordinates.longitude):
-        violations.append(NewMountainViolation.COORDINATES_OUT_OF_RANGE)
-    if mountain.elevation_meters <= 0:
-        violations.append(NewMountainViolation.ELEVATION_NOT_POSITIVE)
-    if mountain.summary is not None and summary_violations(mountain.summary):
-        violations.append(NewMountainViolation.SUMMARY_INVALID)
-    if mountain.osm_node_id is not None and mountain.osm_node_id <= 0:
-        violations.append(NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE)
-    if mountain.wikidata_id is not None and not _WIKIDATA_ID.fullmatch(mountain.wikidata_id):
-        violations.append(NewMountainViolation.WIKIDATA_ID_INVALID)
+    violations = list(
+        content_violations(
+            slug=mountain.slug,
+            name=mountain.name,
+            elevation_meters=mountain.elevation_meters,
+            summary=mountain.summary,
+            osm_node_id=mountain.osm_node_id,
+            wikidata_id=mountain.wikidata_id,
+            coordinates=mountain.coordinates,
+        )
+    )
 
     violations.extend(_photograph_violations(mountain.photograph))
 

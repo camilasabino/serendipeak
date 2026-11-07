@@ -12,6 +12,7 @@ from serendipeak.catalog.entities import (
     MountainStatus,
     PrimaryImage,
 )
+from serendipeak.catalog.mountain_update import MountainUpdate
 from serendipeak.catalog.new_mountain import NewMountain
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.catalog.relocation import RelocationOutcome, RelocationRule
@@ -129,4 +130,23 @@ class MountainCreationStore(Protocol):
         code, UnknownRegion for a region id and UnknownCountries for country codes that
         reference data does not hold, and writes nothing. When several apply, the first of
         them in this order is raised.
+        """
+
+
+class MountainUpdateStore(Protocol):
+    def update(self, mountain_id: UUID, update: MountainUpdate, gate: Gate) -> Mountain:
+        """Write the content and geography of the mountain, atomically, and return it as stored.
+
+        The mountain is locked first, so concurrent changes to the same mountain run one at a
+        time, and the state the gate judges is exactly the one written. The columns of update
+        and the country links change together or not at all; repeated country codes are one
+        link, and a mountain whose state already equals update is not written. The status, the
+        coordinates, the camera, the photograph and the translated texts are never touched. The
+        gate receives the mountain as it would be stored, whatever its status, and a non-empty
+        answer rejects the update.
+
+        Raises UnknownMountain, SlugTaken (the slug of another mountain), UnknownContinent,
+        UnknownRegion and UnknownCountries for references that reference data does not hold,
+        and PublicationRejected with the gate's answer, and writes nothing. When several apply,
+        the first of them in this order is raised.
         """
