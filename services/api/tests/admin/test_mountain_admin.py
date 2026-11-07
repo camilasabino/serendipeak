@@ -79,8 +79,6 @@ EDITABLE = (
 )
 CORRECTIONS = {
     "name_en": "Cerro Aconcagua",
-    "latitude": "-32.65",
-    "longitude": "-70.01",
     "elevation_meters": "6960",
     "osm_node_id": "42",
     "wikidata_id": "Q1",
@@ -430,14 +428,11 @@ class TestEditing:
         changed = {name for name in before if before[name] != after[name]}
         assert changed == {
             "name_en",
-            "location",
             "elevation_meters",
             "osm_node_id",
             "wikidata_id",
             "updated_at",
         }
-        assert (after["location"].y, after["location"].x) == (-32.65, -70.01)
-        assert after["location"].srid == 4326
         assert (after["name_en"], after["elevation_meters"]) == ("Cerro Aconcagua", 6960)
         assert (after["osm_node_id"], after["wikidata_id"]) == (42, "Q1")
         assert after["status"] == entry.mountain.status.value
@@ -520,7 +515,6 @@ class TestEditing:
         assert assigned == {
             "name_en",
             "slug",
-            "location",
             "elevation_meters",
             "continent_code",
             "range_name",

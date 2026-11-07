@@ -21,6 +21,7 @@ from serendipeak.catalog.errors import (
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
 from serendipeak.catalog.ports import CameraChange, StatusChange, StatusChangeOutcome
+from serendipeak.catalog.relocation import RelocationOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 
@@ -233,17 +234,40 @@ class InMemoryMountainCameraStore:
         self._mountains = {mountain.id: mountain for mountain in mountains}
         self.calls = 0
 
-    def replace_camera(self, mountain_id, camera, expected):
+    def replace_camera(self, mountain_id, camera, expected, expected_coordinates):
         self.calls += 1
         mountain = self._mountains.get(mountain_id)
         if mountain is None:
             return CameraChange.NOT_FOUND
+        if mountain.coordinates != expected_coordinates:
+            return CameraChange.LOCATION_CHANGED
         if mountain.camera != expected:
             return CameraChange.STALE
 
         self._mountains[mountain_id] = replace(mountain, camera=camera)
 
         return CameraChange.APPLIED
+
+    def mountain(self, mountain_id):
+        return self._mountains[mountain_id]
+
+
+class InMemoryMountainLocationStore:
+    def __init__(self, mountains=()):
+        self._mountains = {mountain.id: mountain for mountain in mountains}
+        self.calls = 0
+
+    def relocate(self, mountain_id, coordinates, rule):
+        self.calls += 1
+        mountain = self._mountains.get(mountain_id)
+        if mountain is None:
+            return RelocationOutcome.NOT_FOUND
+
+        outcome = rule(mountain.status, mountain.coordinates)
+        if outcome is RelocationOutcome.APPLIED:
+            self._mountains[mountain_id] = replace(mountain, coordinates=coordinates, camera=None)
+
+        return outcome
 
     def mountain(self, mountain_id):
         return self._mountains[mountain_id]

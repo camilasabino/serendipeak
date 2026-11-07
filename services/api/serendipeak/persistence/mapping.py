@@ -66,7 +66,7 @@ def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | 
         slug=record.slug,
         name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
         status=MountainStatus(record.status),
-        coordinates=Coordinates(latitude=record.location.y, longitude=record.location.x),
+        coordinates=to_coordinates(record),
         elevation_meters=record.elevation_meters,
         continent=to_continent(record.continent),
         countries=to_countries(link.country for link in record.country_links.all()),
@@ -77,6 +77,14 @@ def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | 
         osm_node_id=record.osm_node_id,
         wikidata_id=record.wikidata_id,
     )
+
+
+def to_coordinates(record: MountainRecord) -> Coordinates:
+    return Coordinates(latitude=record.location.y, longitude=record.location.x)
+
+
+def to_point(coordinates: Coordinates) -> Point:
+    return Point(coordinates.longitude, coordinates.latitude, srid=4326)
 
 
 def to_summary(record: MountainRecord) -> LocalizedText | None:
@@ -149,7 +157,7 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
         name_en=mountain.name.en,
         name_es=mountain.name.es,
         name_pt=mountain.name.pt,
-        location=Point(mountain.coordinates.longitude, mountain.coordinates.latitude, srid=4326),
+        location=to_point(mountain.coordinates),
         elevation_meters=mountain.elevation_meters,
         continent_id=mountain.continent.code,
         range_name=mountain.range_name,

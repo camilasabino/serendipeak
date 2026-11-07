@@ -81,6 +81,26 @@ class CameraChanged(ApplicationError):
         self.mountain_id = mountain_id
 
 
+class LocationChanged(ApplicationError):
+    def __init__(self, mountain_id: UUID):
+        super().__init__(f"the location of mountain {mountain_id} changed since it was read")
+        self.mountain_id = mountain_id
+
+
+class CoordinatesRejected(DomainError):
+    pass
+
+
+class CameraResetNotConfirmed(DomainError):
+    def __init__(self):
+        super().__init__("changing the coordinates clears the camera, which must be confirmed")
+
+
+class ActiveMountainLocationLocked(DomainError):
+    def __init__(self):
+        super().__init__("an active mountain must be deactivated before its coordinates change")
+
+
 class UnknownPhotographs(ApplicationError):
     def __init__(self, slugs: tuple[str, ...]):
         super().__init__(f"no selected photograph has these slugs: {', '.join(slugs)}")

@@ -17,6 +17,10 @@
 
 {% block content %}
 <div id="content-main">
+  {% if stale_location %}
+    <p class="errornote">{{ stale_location }}</p>
+    <p><a href="{{ editor_url }}" rel="noreferrer">Reopen the camera editor</a> · <a href="{{ change_url }}">Back to the mountain</a></p>
+  {% else %}
   {% if unreadable %}
     <p class="errornote">{{ unreadable_message }}</p>
   {% else %}
@@ -54,6 +58,7 @@
       {% csrf_token %}
       {% for field in proposed_form %}{{ field }}{% endfor %}
       {% for field in expected_form %}{{ field }}{% endfor %}
+      {% for field in location_form %}{{ field }}{% endfor %}
       <div class="submit-row">
         <input type="submit" class="default" value="Save camera">
         <a href="{{ change_url }}" class="closelink">Cancel</a>
@@ -62,6 +67,7 @@
     </form>
   {% else %}
     <p><a href="{{ change_url }}">Back to the mountain</a> · <a href="{{ editor_url }}" rel="noreferrer">Back to the editor</a></p>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

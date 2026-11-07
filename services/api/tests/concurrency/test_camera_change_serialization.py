@@ -41,7 +41,12 @@ OTHER_CAMERA = replace(PROPOSED_CAMERA, heading_degrees=200.0)
 
 def camera_url(entry, query=None):
     url = reverse("admin:catalog_mountainrecord_camera", args=[entry.mountain.id])
-    return f"{url}?{urlencode(query)}" if query else url
+    if not query:
+        return url
+    coordinates = entry.mountain.coordinates
+    located = {"lat": repr(coordinates.latitude), "lon": repr(coordinates.longitude), **query}
+
+    return f"{url}?{urlencode(located)}"
 
 
 def stored(entry):
@@ -104,7 +109,10 @@ def test_a_camera_save_waiting_on_a_publication_applies_and_keeps_the_new_status
 def test_a_publication_waiting_on_a_camera_save_is_judged_with_the_new_camera(editor_client):
     def give_the_draft_a_camera():
         change = DjangoMountainCameraStore().replace_camera(
-            CAMERALESS_DRAFT.mountain.id, PROPOSED_CAMERA, None
+            CAMERALESS_DRAFT.mountain.id,
+            PROPOSED_CAMERA,
+            None,
+            CAMERALESS_DRAFT.mountain.coordinates,
         )
         assert change is CameraChange.APPLIED
 
@@ -126,7 +134,7 @@ def test_a_camera_save_waiting_on_another_camera_change_is_stale_and_writes_noth
 
     def another_camera_change():
         change = DjangoMountainCameraStore().replace_camera(
-            ACTIVE.mountain.id, OTHER_CAMERA, ACTIVE.mountain.camera
+            ACTIVE.mountain.id, OTHER_CAMERA, ACTIVE.mountain.camera, ACTIVE.mountain.coordinates
         )
         assert change is CameraChange.APPLIED
 
@@ -148,7 +156,10 @@ def test_a_camera_change_in_flight_does_not_block_the_daily_discovery_of_its_mou
         try:
             with transaction.atomic():
                 DjangoMountainCameraStore().replace_camera(
-                    ACTIVE.mountain.id, PROPOSED_CAMERA, ACTIVE.mountain.camera
+                    ACTIVE.mountain.id,
+                    PROPOSED_CAMERA,
+                    ACTIVE.mountain.camera,
+                    ACTIVE.mountain.coordinates,
                 )
                 locked.set()
                 assert release.wait(WAIT_SECONDS)

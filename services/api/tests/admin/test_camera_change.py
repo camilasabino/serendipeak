@@ -1,9 +1,12 @@
+import re
 import uuid
 from dataclasses import replace
+from html import unescape
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.contrib.admin.models import LogEntry
+from django.contrib.gis.geos import Point
 from django.contrib.messages import get_messages
 from django.test import Client
 from django.urls import reverse
@@ -39,9 +42,16 @@ PROPOSED_CAMERA = CanonicalCamera(
 SAVE_BUTTON = 'value="Save camera"'
 
 
+def location_query(entry):
+    coordinates = entry.mountain.coordinates
+
+    return {"lat": repr(coordinates.latitude), "lon": repr(coordinates.longitude)}
+
+
 def camera_url(entry, query=PROPOSED):
+    """The confirmation address; a query is sent with the coordinates the editor opened on."""
     url = reverse("admin:catalog_mountainrecord_camera", args=[entry.mountain.id])
-    return f"{url}?{urlencode(query)}" if query else url
+    return f"{url}?{urlencode({**location_query(entry), **query})}" if query else url
 
 
 def change_url(entry):
@@ -248,7 +258,7 @@ class TestSave:
         location = urlsplit(response["Location"])
         assert location.path == camera_url(ACTIVE, None)
         assert {name: float(values[0]) for name, values in parse_qs(location.query).items()} == {
-            name: float(value) for name, value in PROPOSED.items()
+            name: float(value) for name, value in {**PROPOSED, **location_query(ACTIVE)}.items()
         }
         assert stored_camera(ACTIVE) == meanwhile
         assert "changed by someone else" in messages_of(response)[0]
@@ -358,3 +368,223 @@ class TestAccess:
         url = reverse("admin:catalog_mountainrecord_camera", args=[object_id])
 
         assert editor_client.get(f"{url}?{urlencode(PROPOSED)}").status_code == 404
+
+
+MOVED_QUERY = {"lat": "-33.25", "lon": "-70.75"}
+
+
+def move(entry, latitude=-33.25, longitude=-70.75):
+    """Another editor's move. A draft or inactive mountain loses its camera with it; an active one
+    can only have moved while inactive and been given a camera and reactivated since."""
+    columns = {"location": Point(longitude, latitude, srid=4326)}
+    if entry.mountain.status is not MountainStatus.ACTIVE:
+        columns |= {
+            "camera_heading_degrees": None,
+            "camera_pitch_degrees": None,
+            "camera_range_meters": None,
+            "camera_framing_x": None,
+            "camera_framing_y": None,
+        }
+    MountainRecord.objects.filter(pk=entry.mountain.id).update(**columns)
+
+
+def editor_link_query(response):
+    hrefs = re.findall(r'href="([^"]*editorial/camera\?[^"]*)"', response.content.decode())
+    assert hrefs
+    return {k: v[0] for k, v in parse_qs(urlsplit(unescape(hrefs[0])).query).items()}
+
+
+class TestTheCoordinatesOfTheProposal:
+    def test_the_form_carries_the_coordinates_the_editor_was_opened_on(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(AWKWARD)
+
+        payload = confirmation_payload(editor_client, AWKWARD)
+
+        coordinates = AWKWARD.mountain.coordinates
+        assert float(payload["lat"]) == coordinates.latitude
+        assert float(payload["lon"]) == coordinates.longitude
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            {key: value for key, value in PROPOSED.items()},
+            {**PROPOSED, "lat": "-32.65"},
+            {**PROPOSED, "lon": "-70.01"},
+            {**PROPOSED, "lat": "north", "lon": "-70.01"},
+            {**PROPOSED, "lat": "90.5", "lon": "-70.01"},
+            {**PROPOSED, "lat": "-32.65", "lon": "180.5"},
+            {**PROPOSED, "lat": "nan", "lon": "-70.01"},
+            {**PROPOSED, "lat": "-32.65", "lon": "inf"},
+        ],
+        ids=["none", "no-lon", "no-lat", "text", "lat-range", "lon-range", "nan", "infinite"],
+    )
+    def test_a_proposal_without_readable_coordinates_cannot_be_saved(
+        self, editor_client, load_catalog, query
+    ):
+        load_catalog(ACTIVE)
+        url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
+
+        response = editor_client.get(f"{url}?{urlencode(query)}")
+
+        assert response.status_code == 400
+        assert SAVE_BUTTON not in response.content.decode()
+        assert "could not be read" in response.content.decode()
+
+    @pytest.mark.parametrize(
+        "entry", [DRAFT, ACTIVE, INACTIVE], ids=["draft", "active", "inactive"]
+    )
+    @pytest.mark.parametrize(
+        "composed_on",
+        [
+            {"lat": "-33.25"},
+            {"lon": "-70.75"},
+            MOVED_QUERY,
+        ],
+        ids=["latitude", "longitude", "both"],
+    )
+    def test_a_proposal_for_other_coordinates_is_refused_when_it_is_shown(
+        self, editor_client, load_catalog, entry, composed_on
+    ):
+        load_catalog(entry)
+        coordinates = entry.mountain.coordinates
+        query = {
+            **PROPOSED,
+            "lat": repr(coordinates.latitude),
+            "lon": repr(coordinates.longitude),
+            **composed_on,
+        }
+        url = reverse("admin:catalog_mountainrecord_camera", args=[entry.mountain.id])
+
+        response = editor_client.get(f"{url}?{urlencode(query)}")
+
+        assert response.status_code == 409
+        html = response.content.decode()
+        assert "Nothing was saved" in html
+        assert "Reopen the camera editor" in html
+        assert SAVE_BUTTON not in html
+        assert 'id="camera_form"' not in html
+        assert not LogEntry.objects.exists()
+
+    def test_the_refusal_sends_the_editor_back_with_the_latest_coordinates(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        move(DRAFT)
+
+        response = editor_client.get(camera_url(DRAFT))
+
+        assert response.status_code == 409
+        query = editor_link_query(response)
+        assert (query["lat"], query["lon"]) == ("-33.25", "-70.75")
+        assert not {"heading", "pitch", "range", "fx", "fy", "proposal"} & set(query)
+        assert "-33.25, -70.75" in response.content.decode()
+
+
+class TestAStaleProposalOnSave:
+    @pytest.mark.parametrize(
+        "entry", [DRAFT, ACTIVE, INACTIVE], ids=["draft", "active", "inactive"]
+    )
+    def test_a_save_after_the_mountain_moved_is_refused_and_writes_nothing(
+        self, editor_client, load_catalog, entry
+    ):
+        load_catalog(entry)
+        payload = confirmation_payload(editor_client, entry)
+        move(entry)
+        moved = MountainRecord.objects.filter(pk=entry.mountain.id).values().get()
+
+        response = editor_client.post(camera_url(entry, None), payload)
+
+        assert response.status_code == 409
+        assert "Nothing was saved" in response.content.decode()
+        assert MountainRecord.objects.filter(pk=entry.mountain.id).values().get() == moved
+        assert not LogEntry.objects.exists()
+        query = editor_link_query(response)
+        assert (query["lat"], query["lon"]) == ("-33.25", "-70.75")
+
+    def test_it_is_refused_when_both_the_expected_and_the_stored_camera_are_absent(
+        self, editor_client, load_catalog
+    ):
+        # The mountain had no camera, and the move leaves it with none: the camera comparison
+        # passes, so only the coordinates can tell that the proposal was composed elsewhere.
+        load_catalog(DRAFT)
+        MountainRecord.objects.filter(pk=DRAFT.mountain.id).update(
+            camera_heading_degrees=None,
+            camera_pitch_degrees=None,
+            camera_range_meters=None,
+            camera_framing_x=None,
+            camera_framing_y=None,
+        )
+        payload = confirmation_payload(editor_client, DRAFT)
+        assert {payload[f"expected-{name}"] for name in PROPOSED} == {""}
+        move(DRAFT)
+
+        response = editor_client.post(camera_url(DRAFT, None), payload)
+
+        assert response.status_code == 409
+        assert stored_camera(DRAFT) is None
+
+    def test_forged_coordinates_do_not_get_a_camera_saved_on_a_moved_mountain(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        payload = confirmation_payload(editor_client, DRAFT)
+        move(DRAFT)
+
+        response = editor_client.post(camera_url(DRAFT, None), {**payload, **MOVED_QUERY})
+
+        assert response.status_code == 302
+        # The forged values equal the mountain's, which is what the check asks of the page: the
+        # camera that is stored is still the one the editor proposed, and it was validated.
+        assert stored_camera(DRAFT) == PROPOSED_CAMERA
+
+    @pytest.mark.parametrize(
+        "changes",
+        [{"lat": ""}, {"lon": "x"}, {"lat": "91"}],
+        ids=["blank", "text", "range"],
+    )
+    def test_an_unreadable_location_is_refused_and_nothing_is_written(
+        self, editor_client, load_catalog, changes
+    ):
+        load_catalog(ACTIVE)
+        payload = confirmation_payload(editor_client, ACTIVE)
+
+        response = editor_client.post(camera_url(ACTIVE, None), {**payload, **changes})
+
+        assert response.status_code == 400
+        assert stored_camera(ACTIVE) == ACTIVE.mountain.camera
+
+    def test_reopening_the_editor_on_the_new_location_leads_to_a_camera_that_saves(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(DRAFT)
+        payload = confirmation_payload(editor_client, DRAFT)
+        move(DRAFT)
+        refused = editor_client.post(camera_url(DRAFT, None), payload)
+        reopened = editor_link_query(refused)
+
+        recomposed = {**PROPOSED, "lat": reopened["lat"], "lon": reopened["lon"]}
+        url = camera_url(DRAFT, None)
+        confirmation = editor_client.get(f"{url}?{urlencode(recomposed)}")
+        assert confirmation.status_code == 200
+        saved = editor_client.post(url, form_payload(confirmation))
+
+        assert saved.status_code == 302
+        assert stored_camera(DRAFT) == PROPOSED_CAMERA
+
+    def test_a_camera_changed_meanwhile_still_returns_the_proposal_with_its_coordinates(
+        self, editor_client, load_catalog
+    ):
+        load_catalog(ACTIVE)
+        payload = confirmation_payload(editor_client, ACTIVE)
+        MountainRecord.objects.filter(pk=ACTIVE.mountain.id).update(camera_heading_degrees=10.0)
+
+        response = editor_client.post(camera_url(ACTIVE, None), payload)
+
+        query = {k: v[0] for k, v in parse_qs(urlsplit(response["Location"]).query).items()}
+        coordinates = ACTIVE.mountain.coordinates
+        assert (float(query["lat"]), float(query["lon"])) == (
+            coordinates.latitude,
+            coordinates.longitude,
+        )

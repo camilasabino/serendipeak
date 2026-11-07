@@ -233,6 +233,9 @@ class TestLink:
 
 
 PROPOSAL = "heading=10&pitch=-10&range=5000&fx=0.5&fy=-0.5"
+ACTIVE_LOCATION = (
+    f"lat={ACTIVE.mountain.coordinates.latitude!r}&lon={ACTIVE.mountain.coordinates.longitude!r}"
+)
 
 
 class TestReturn:
@@ -240,7 +243,9 @@ class TestReturn:
         load_catalog(ACTIVE)
         url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
 
-        response = editor_client.get(f"{url}?heading=10&pitch=-10&range=5000&fx=0&fy=0")
+        response = editor_client.get(
+            f"{url}?heading=10&pitch=-10&range=5000&fx=0&fy=0&{ACTIVE_LOCATION}"
+        )
 
         links = editor_links(response.content.decode())
         assert len(links) == 1
@@ -263,7 +268,7 @@ class TestReturn:
         load_catalog(ACTIVE)
         url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
 
-        response = editor_client.get(f"{url}?{PROPOSAL}")
+        response = editor_client.get(f"{url}?{PROPOSAL}&{ACTIVE_LOCATION}")
 
         query = query_of(editor_links(response.content.decode())[0][0])
         assert (query["heading"], query["pitch"], query["range"]) == ("10.0", "-10.0", "5000.0")
@@ -282,6 +287,7 @@ class TestReturn:
         same = (
             f"heading={stored.heading_degrees!r}&pitch={stored.pitch_degrees!r}"
             f"&range={stored.range_meters!r}&fx={stored.framing.x!r}&fy={stored.framing.y!r}"
+            f"&{ACTIVE_LOCATION}"
         )
 
         response = editor_client.get(f"{url}?{same}")
@@ -296,7 +302,9 @@ class TestReturn:
         load_catalog(ACTIVE)
         url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
 
-        response = editor_client.get(f"{url}?heading=10&pitch=16&range=5000&fx=0&fy=0")
+        response = editor_client.get(
+            f"{url}?heading=10&pitch=16&range=5000&fx=0&fy=0&{ACTIVE_LOCATION}"
+        )
 
         assert response.status_code == 400
         query = query_of(editor_links(response.content.decode())[0][0])
@@ -308,7 +316,7 @@ class TestReturn:
     ):
         load_catalog(ACTIVE)
         url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
-        payload = form_payload(editor_client.get(f"{url}?{PROPOSAL}"))
+        payload = form_payload(editor_client.get(f"{url}?{PROPOSAL}&{ACTIVE_LOCATION}"))
         MountainRecord.objects.filter(pk=ACTIVE.mountain.id).update(camera_heading_degrees=200.0)
 
         again = editor_client.post(url, payload, follow=True)
@@ -325,7 +333,7 @@ class TestReturn:
         load_catalog(ACTIVE)
         url = reverse("admin:catalog_mountainrecord_camera", args=[ACTIVE.mountain.id])
         confirmation = editor_client.get(
-            f"{url}?heading=123.45&pitch=-12.5&range=4321&fx=0.125&fy=-0.25"
+            f"{url}?heading=123.45&pitch=-12.5&range=4321&fx=0.125&fy=-0.25&{ACTIVE_LOCATION}"
         )
         saved = editor_client.post(url, form_payload(confirmation), follow=True)
 

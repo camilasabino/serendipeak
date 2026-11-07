@@ -214,7 +214,17 @@ test.describe('@webgl camera editor', () => {
 		const url = reached()!;
 		expect(url.origin).toBe(STUB_API_URL);
 		expectSaved(url, reading);
-		expect([...url.searchParams.keys()].sort()).toEqual(['fx', 'fy', 'heading', 'pitch', 'range']);
+		expect([...url.searchParams.keys()].sort()).toEqual([
+			'fx',
+			'fy',
+			'heading',
+			'lat',
+			'lon',
+			'pitch',
+			'range'
+		]);
+		expect(Number(url.searchParams.get('lat'))).toBe(TARGET.coordinates.latitude);
+		expect(Number(url.searchParams.get('lon'))).toBe(TARGET.coordinates.longitude);
 		// The editor wrote nothing: the Admin form is what saves.
 		await expect(page.getByText('confirmation')).toBeVisible();
 	});

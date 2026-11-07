@@ -15,6 +15,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.functional import cached_property
 from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
 from django.utils.text import capfirst
@@ -24,17 +25,20 @@ from serendipeak.catalog import camera as camera_bounds
 from serendipeak.catalog import coordinates
 from serendipeak.catalog.camera import CameraViolation, camera_violations
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
+from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import (
     WIKIDATA_ID_PATTERN,
     CameraFraming,
     CanonicalCamera,
+    Coordinates,
     MountainStatus,
 )
 from serendipeak.catalog.errors import (
     CameraChanged,
     CameraRejected,
     InvalidStatusTransition,
+    LocationChanged,
     PhotographRejected,
     PhotographRejection,
     PublicationRejected,
@@ -51,12 +55,14 @@ from serendipeak.catalog.publication import (
 )
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
+from serendipeak.catalog.relocation import RelocationOutcome, judge_relocation
 from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.camera_editor_url import camera_editor_url
 from serendipeak.persistence.mapping import (
     to_camera,
+    to_coordinates,
     to_mountain,
     to_mountain_with_image,
     with_geography,
@@ -145,12 +151,37 @@ CAMERA_VIOLATION_MESSAGES = {
 CAMERA_UNREADABLE = (
     "The camera to save could not be read. Open this page from the camera editor again."
 )
+CAMERA_LOCATION_CHANGED = (
+    "The coordinates of this mountain changed after the camera editor was opened, so the camera "
+    "composed there no longer fits it. Nothing was saved. Reopen the camera editor to compose "
+    "the camera again on the current coordinates."
+)
 CAMERA_CHANGED_MEANWHILE = (
     "The camera was changed by someone else after this page was opened. Nothing was saved; "
     "compare it with yours and confirm again."
 )
+CAMERA_RESET_LABEL = "Clear the camera if the coordinates change"
+CAMERA_RESET_HELP = (
+    "Tick it when you change the latitude or longitude. The saved camera is composed on the "
+    "current location, so it is cleared with the move and has to be configured again in the "
+    "camera editor. An active mountain cannot move: deactivate it first."
+)
+CAMERA_RESET_REQUIRED = (
+    "Changing the coordinates clears the saved camera. Tick this box to confirm, or restore the "
+    "saved coordinates."
+)
+ACTIVE_LOCATION_LOCKED = (
+    "An active mountain's coordinates cannot change, because its public camera is composed on "
+    "them. Deactivate the mountain first, then change the coordinates and configure the camera "
+    "again."
+)
+COORDINATES_MOVED = (
+    "The coordinates were saved and the camera was cleared, because it was composed on the old "
+    "location. The camera must be configured again with the camera editor{}."
+)
 CAMERA_EDITOR_LABEL = "Edit camera visually"
 CAMERA_LOG_MESSAGE = "Camera changed."
+CAMERA_CLEARED_LOG_MESSAGE = "Camera cleared by a change of coordinates."
 CAMERA_ANCHOR = "camera"
 
 OPTIONAL_TEXT = ("range_name", "summary_en")
@@ -161,6 +192,7 @@ CAMERA_FIELDS = (
     "camera_framing_x",
     "camera_framing_y",
 )
+CAMERA_RESET_FIELD = "confirm_camera_reset"
 IMAGE_CREDIT_FIELDS = ("author", "source_page_url")
 IMAGE_LICENSE_FIELDS = ("license_name", "license_url")
 IMAGE_FIELDS = (*IMAGE_CREDIT_FIELDS, *IMAGE_LICENSE_FIELDS)
@@ -170,14 +202,24 @@ CAMERA_DIAGNOSTIC_FIELDS = (*CAMERA_FIELDS, "camera_check")
 PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
 MOUNTAIN_FIELDS = ("name_en", "slug", "latitude", "longitude", "elevation_meters")
+MOVABLE_MOUNTAIN_FIELDS = (
+    "name_en",
+    "slug",
+    "latitude",
+    "longitude",
+    CAMERA_RESET_FIELD,
+    "elevation_meters",
+)
 GEOGRAPHY_FIELDS = ("continent", "countries", "range_name")
 EDITORIAL_FIELDS = ("summary_en",)
 ADDITIONAL_FIELDS = ("osm_node_id", "wikidata_id")
 PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
 COLUMN_OF_FORM_FIELD = {"latitude": "location", "longitude": "location"}
-# The countries are links in a table of their own, written by save_related.
-FORM_ONLY_FIELDS = frozenset({"countries"})
-NEVER_FORM_WRITTEN = frozenset({"status", *CAMERA_FIELDS, *FORM_ONLY_FIELDS})
+# The countries are links in a table of their own, written by save_related; the camera reset is
+# a confirmation, not a column.
+FORM_ONLY_FIELDS = frozenset({"countries", CAMERA_RESET_FIELD})
+# The location moves only through ChangeMountainLocation, which clears the camera with it.
+NEVER_FORM_WRITTEN = frozenset({"status", "location", *CAMERA_FIELDS, *FORM_ONLY_FIELDS})
 _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 
 
@@ -257,6 +299,9 @@ class MountainForm(forms.ModelForm):
         help_text=f"Degrees, {coordinates.LONGITUDE_MIN_DEGREES:g} to "
         f"{coordinates.LONGITUDE_MAX_DEGREES:g}."
     )
+    confirm_camera_reset = forms.BooleanField(
+        label=CAMERA_RESET_LABEL, required=False, help_text=CAMERA_RESET_HELP
+    )
     elevation_meters = forms.IntegerField(min_value=1)
     osm_node_id = forms.IntegerField(required=False, min_value=1)
     wikidata_id = forms.CharField(required=False, empty_value=None)
@@ -305,9 +350,18 @@ class MountainForm(forms.ModelForm):
             )
 
         location = self.instance.location
+        self.stored_coordinates: Coordinates | None = None
         if location is not None:
             self.initial.setdefault("latitude", location.y)
             self.initial.setdefault("longitude", location.x)
+            self.stored_coordinates = to_coordinates(self.instance)
+        if self.instance._state.adding:
+            del self.fields[CAMERA_RESET_FIELD]
+
+    @cached_property
+    def changed_data(self):
+        # The confirmation is not a value of the mountain, so the history does not list it.
+        return [name for name in super().changed_data if name != CAMERA_RESET_FIELD]
 
     def clean_slug(self):
         slug = self.cleaned_data["slug"]
@@ -353,10 +407,42 @@ class MountainForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
 
-        if "latitude" in cleaned and "longitude" in cleaned:
-            self.instance.location = Point(cleaned["longitude"], cleaned["latitude"], srid=4326)
+        if "latitude" not in cleaned or "longitude" not in cleaned:
+            return cleaned
+
+        requested = Coordinates(latitude=cleaned["latitude"], longitude=cleaned["longitude"])
+        if self._relocation_allowed(requested, cleaned):
+            self.instance.location = Point(requested.longitude, requested.latitude, srid=4326)
 
         return cleaned
+
+    def _relocation_allowed(self, requested, cleaned):
+        # The change view holds the row lock from before this form is built, so the stored
+        # coordinates and status are the ones the save is then judged on. The use case judges
+        # them again under its own lock for callers that hold none.
+        if self.stored_coordinates is None:
+            return True
+
+        outcome = judge_relocation(
+            MountainStatus(self.instance.status),
+            self.stored_coordinates,
+            requested,
+            bool(cleaned.get(CAMERA_RESET_FIELD)),
+        )
+        match outcome:
+            case RelocationOutcome.ACTIVE_MOUNTAIN:
+                for field, stored in (
+                    ("latitude", self.stored_coordinates.latitude),
+                    ("longitude", self.stored_coordinates.longitude),
+                ):
+                    if cleaned[field] != stored:
+                        self.add_error(field, ACTIVE_LOCATION_LOCKED)
+                return False
+            case RelocationOutcome.CONFIRMATION_REQUIRED:
+                self.add_error(CAMERA_RESET_FIELD, CAMERA_RESET_REQUIRED)
+                return False
+            case _:
+                return True
 
 
 class CameraForm(forms.Form):
@@ -399,6 +485,25 @@ class CameraForm(forms.Form):
             if values.get("fx") is None
             else CameraFraming(x=values["fx"], y=values["fy"]),
         )
+
+
+class LocationForm(forms.Form):
+    """The coordinates a camera proposal was composed on, carried from the editor through the
+    confirmation page to the save, which refuses a mountain that has moved since."""
+
+    lat = forms.FloatField(
+        widget=forms.HiddenInput,
+        min_value=coordinates.LATITUDE_MIN_DEGREES,
+        max_value=coordinates.LATITUDE_MAX_DEGREES,
+    )
+    lon = forms.FloatField(
+        widget=forms.HiddenInput,
+        min_value=coordinates.LONGITUDE_MIN_DEGREES,
+        max_value=coordinates.LONGITUDE_MAX_DEGREES,
+    )
+
+    def coordinates(self) -> Coordinates:
+        return Coordinates(latitude=self.cleaned_data["lat"], longitude=self.cleaned_data["lon"])
 
 
 def _camera_values(camera: CanonicalCamera | None) -> dict[str, float | None]:
@@ -615,6 +720,12 @@ class MountainImageFormSet(BaseInlineFormSet):
 
         prospective = to_mountain_with_image(self.instance, self._prospective_image())
         violations = publication_violations(prospective)
+        if self.instance.status == MountainStatus.INACTIVE.value:
+            # Moving an inactive mountain clears its camera, and only the camera editor can give
+            # it one back. Reactivation is what requires a camera, not every other edit.
+            violations = tuple(
+                v for v in violations if v is not PublicationViolation.CAMERA_MISSING
+            )
         if violations:
             raise ValidationError(
                 [
@@ -757,6 +868,7 @@ class MountainAdmin(admin.ModelAdmin):
     deactivate_mountain: DeactivateMountain
     reactivate_mountain: ReactivateMountain
     change_mountain_camera: ChangeMountainCamera
+    change_mountain_location: ChangeMountainLocation
     photograph_ingestion: PhotographIngestion
     media_base_url: str
     web_origin: str
@@ -790,7 +902,8 @@ class MountainAdmin(admin.ModelAdmin):
         return (*PUBLICATION_FIELDS, *CAMERA_DIAGNOSTIC_FIELDS)
 
     def get_fieldsets(self, request, obj=None):
-        mountain = ("Mountain", {"fields": MOUNTAIN_FIELDS})
+        movable = obj is not None and self.has_change_permission(request, obj)
+        mountain = ("Mountain", {"fields": MOVABLE_MOUNTAIN_FIELDS if movable else MOUNTAIN_FIELDS})
         geography = ("Geography", {"fields": GEOGRAPHY_FIELDS})
         editorial = ("Editorial", {"fields": EDITORIAL_FIELDS})
         additional = ("Additional data", {"fields": ADDITIONAL_FIELDS, "classes": ("collapse",)})
@@ -828,12 +941,23 @@ class MountainAdmin(admin.ModelAdmin):
 
         return ", ".join(_country_label(link.country) for link in links) or "None"
 
+    def _saved_mountain(self, request, obj):
+        # A change that failed validation leaves its unsaved values on the instance. The editor
+        # opens on the saved ones, because the camera it proposes is compared with the saved
+        # coordinates when it is stored.
+        if request.method in SAFE_METHODS:
+            return obj
+
+        return MountainRecord.objects.get(pk=obj.pk)
+
     def _camera_editor_tool(self, request, obj):
         if obj is None or not self.has_change_permission(request, obj):
             return {}
 
         return {
-            "camera_editor_url": camera_editor_url(self.web_origin, obj),
+            "camera_editor_url": camera_editor_url(
+                self.web_origin, self._saved_mountain(request, obj)
+            ),
             "camera_editor_label": CAMERA_EDITOR_LABEL,
         }
 
@@ -849,7 +973,7 @@ class MountainAdmin(admin.ModelAdmin):
         return format_html(
             '{} <a href="{}" rel="noreferrer">{}</a>',
             description,
-            camera_editor_url(self.web_origin, obj),
+            camera_editor_url(self.web_origin, self._saved_mountain(request, obj)),
             CAMERA_EDITOR_LABEL,
         )
 
@@ -910,21 +1034,32 @@ class MountainAdmin(admin.ModelAdmin):
             return self._save_camera(request, record)
 
         # Showing the confirmation never writes: only its CSRF-protected POST does.
-        return self._camera_confirmation(request, record, CameraForm(request.GET))
+        return self._camera_confirmation(
+            request, record, CameraForm(request.GET), LocationForm(request.GET)
+        )
 
     def _save_camera(self, request, record):
         proposed = CameraForm(request.POST)
         expected = CameraForm(request.POST, prefix="expected", absent_allowed=True)
-        if not (proposed.is_valid() and expected.is_valid()):
-            return self._camera_confirmation(request, record, proposed, readable=False)
+        composed_on = LocationForm(request.POST)
+        if not (proposed.is_valid() and expected.is_valid() and composed_on.is_valid()):
+            return self._camera_confirmation(request, record, proposed, composed_on, readable=False)
 
         try:
-            self.change_mountain_camera.execute(record.pk, proposed.camera(), expected.camera())
+            self.change_mountain_camera.execute(
+                record.pk, proposed.camera(), expected.camera(), composed_on.coordinates()
+            )
         except CameraRejected:
-            return self._camera_confirmation(request, record, proposed)
+            return self._camera_confirmation(request, record, proposed, composed_on)
+        except LocationChanged:
+            moved = self.get_object(request, str(record.pk))
+            if moved is None:
+                raise Http404 from None
+            return self._stale_location(request, moved)
         except CameraChanged:
             self.message_user(request, CAMERA_CHANGED_MEANWHILE, messages.WARNING)
-            query = urlencode({name: repr(value) for name, value in proposed.cleaned_data.items()})
+            carried = {**proposed.cleaned_data, **composed_on.cleaned_data}
+            query = urlencode({name: repr(value) for name, value in carried.items()})
             return HttpResponseRedirect(f"{self._url('camera', record)}?{query}")
         except UnknownMountain as unknown:
             raise Http404 from unknown
@@ -934,9 +1069,35 @@ class MountainAdmin(admin.ModelAdmin):
 
         return HttpResponseRedirect(f"{self._url('change', record)}#{CAMERA_ANCHOR}")
 
-    def _camera_confirmation(self, request, record, proposed_form, readable=True):
+    def _stale_location(self, request, record):
+        coordinates_now = to_coordinates(record)
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Change the camera of {record.name_en}",
+            "opts": self.opts,
+            "original": record,
+            "change_url": self._url("change", record),
+            "editor_url": camera_editor_url(self.web_origin, record),
+            "stale_location": (
+                f"{CAMERA_LOCATION_CHANGED} Its coordinates are now "
+                f"{coordinates_now.latitude!r}, {coordinates_now.longitude!r}."
+            ),
+        }
+
+        return TemplateResponse(
+            request,
+            "admin/catalog/mountainrecord/camera_confirmation.html",
+            context,
+            status=409,
+        )
+
+    def _camera_confirmation(self, request, record, proposed_form, location_form, readable=True):
+        readable = readable and proposed_form.is_valid() and location_form.is_valid()
+        if readable and location_form.coordinates() != to_coordinates(record):
+            return self._stale_location(request, record)
+
         current = to_camera(record)
-        proposed = proposed_form.camera() if readable and proposed_form.is_valid() else None
+        proposed = proposed_form.camera() if readable else None
         violations = () if proposed is None else camera_violations(proposed)
         savable = proposed is not None and not violations
 
@@ -955,6 +1116,14 @@ class MountainAdmin(admin.ModelAdmin):
             "proposed_form": CameraForm(initial=_camera_values(proposed)) if savable else None,
             "expected_form": CameraForm(
                 prefix="expected", absent_allowed=True, initial=_camera_values(current)
+            )
+            if savable
+            else None,
+            "location_form": LocationForm(
+                initial={
+                    "lat": location_form.cleaned_data["lat"],
+                    "lon": location_form.cleaned_data["lon"],
+                }
             )
             if savable
             else None,
@@ -1101,6 +1270,27 @@ class MountainAdmin(admin.ModelAdmin):
 
         obj.updated_at = timezone.now()
         obj.save(update_fields=[*owned, "updated_at"])
+
+        self._move(request, obj, form.cleaned_data)
+
+    def _move(self, request, obj, cleaned):
+        # Inside the change view's transaction: a failure later in the same save, such as the
+        # photograph that could not be stored, rolls the move and the cleared camera back too.
+        outcome = self.change_mountain_location.execute(
+            obj.pk,
+            Coordinates(latitude=cleaned["latitude"], longitude=cleaned["longitude"]),
+            camera_reset_confirmed=bool(cleaned.get(CAMERA_RESET_FIELD)),
+        )
+        if outcome is not RelocationOutcome.APPLIED:
+            return
+
+        self.log_change(request, obj, CAMERA_CLEARED_LOG_MESSAGE)
+        editor = format_html(
+            ' (<a href="{}" rel="noreferrer">{}</a>)',
+            camera_editor_url(self.web_origin, MountainRecord.objects.get(pk=obj.pk)),
+            CAMERA_EDITOR_LABEL,
+        )
+        self.message_user(request, format_html(COORDINATES_MOVED, editor), messages.WARNING)
 
     def has_delete_permission(self, request, obj=None):
         return super().has_delete_permission(request, obj) and (

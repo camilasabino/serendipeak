@@ -46,7 +46,15 @@ export function CameraEditor({ request, adminBaseUrl }: CameraEditorProps) {
 
 	function save() {
 		// The panel may show a pose from up to a sample ago: the value that is saved is read now.
-		const destination = saveDestination(controller.current?.readCamera(), adminBaseUrl, mountainId);
+		const destination = saveDestination(
+			controller.current?.readCamera(),
+			adminBaseUrl,
+			mountainId,
+			{
+				latitude: target.latitude,
+				longitude: target.longitude
+			}
+		);
 		if (destination) {
 			window.location.assign(destination);
 		}

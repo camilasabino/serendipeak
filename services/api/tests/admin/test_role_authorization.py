@@ -35,7 +35,10 @@ READ_PAGES = {
     "mountain list": lambda: reverse("admin:catalog_mountainrecord_changelist"),
     "mountain page": lambda: mountain_url("change"),
     "camera confirmation": lambda: (
-        mountain_url("camera") + "?heading=10&pitch=-20&range=5000&fx=0.1&fy=0.2"
+        mountain_url("camera")
+        + "?heading=10&pitch=-20&range=5000&fx=0.1&fy=0.2"
+        + f"&lat={DRAFT.mountain.coordinates.latitude!r}"
+        + f"&lon={DRAFT.mountain.coordinates.longitude!r}"
     ),
     "discovery list": lambda: reverse("admin:catalog_dailydiscoveryrecord_changelist"),
 }

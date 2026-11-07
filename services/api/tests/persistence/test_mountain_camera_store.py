@@ -36,7 +36,9 @@ def row(entry):
 def test_an_applied_change_touches_only_the_camera_and_updated_at(store):
     before = row(ACTIVE)
 
-    store.replace_camera(ACTIVE.mountain.id, NEW_CAMERA, ACTIVE.mountain.camera)
+    store.replace_camera(
+        ACTIVE.mountain.id, NEW_CAMERA, ACTIVE.mountain.camera, ACTIVE.mountain.coordinates
+    )
 
     after = row(ACTIVE)
     changed = {name for name in before if before[name] != after[name]}
@@ -53,7 +55,7 @@ def test_an_applied_change_touches_only_the_camera_and_updated_at(store):
 
 
 def test_a_stale_change_leaves_updated_at_alone(store):
-    store.replace_camera(ACTIVE.mountain.id, NEW_CAMERA, None)
+    store.replace_camera(ACTIVE.mountain.id, NEW_CAMERA, None, ACTIVE.mountain.coordinates)
 
     assert row(ACTIVE)["updated_at"] == UPDATED_AT
 
@@ -62,7 +64,9 @@ def test_a_change_locks_the_mountain_then_updates_in_one_transaction(
     store, django_assert_num_queries
 ):
     with django_assert_num_queries(4) as captured:
-        store.replace_camera(ACTIVE.mountain.id, NEW_CAMERA, ACTIVE.mountain.camera)
+        store.replace_camera(
+            ACTIVE.mountain.id, NEW_CAMERA, ACTIVE.mountain.camera, ACTIVE.mountain.coordinates
+        )
 
     statements = [query["sql"] for query in captured.captured_queries]
     assert statements[0].startswith("SAVEPOINT")
@@ -81,7 +85,7 @@ def test_a_change_that_writes_nothing_is_only_the_locking_read(
     store, django_assert_num_queries, mountain_id, outcome
 ):
     with django_assert_num_queries(3) as captured:
-        change = store.replace_camera(mountain_id, NEW_CAMERA, None)
+        change = store.replace_camera(mountain_id, NEW_CAMERA, None, ACTIVE.mountain.coordinates)
 
     assert change is outcome
     assert not any(query["sql"].startswith("UPDATE") for query in captured.captured_queries)
@@ -98,7 +102,9 @@ def test_a_change_that_writes_nothing_is_only_the_locking_read(
 )
 def test_the_database_still_refuses_an_out_of_bounds_camera(store, camera):
     with pytest.raises(InfrastructureError):
-        store.replace_camera(CAMERALESS_DRAFT.mountain.id, camera, None)
+        store.replace_camera(
+            CAMERALESS_DRAFT.mountain.id, camera, None, CAMERALESS_DRAFT.mountain.coordinates
+        )
 
     assert row(CAMERALESS_DRAFT)["camera_heading_degrees"] is None
 
@@ -106,7 +112,10 @@ def test_the_database_still_refuses_an_out_of_bounds_camera(store, camera):
 def test_the_database_still_refuses_an_active_mountain_without_framing(store):
     with pytest.raises(InfrastructureError):
         store.replace_camera(
-            ACTIVE.mountain.id, replace(NEW_CAMERA, framing=None), ACTIVE.mountain.camera
+            ACTIVE.mountain.id,
+            replace(NEW_CAMERA, framing=None),
+            ACTIVE.mountain.camera,
+            ACTIVE.mountain.coordinates,
         )
 
     assert row(ACTIVE)["camera_framing_x"] == ACTIVE.mountain.camera.framing.x

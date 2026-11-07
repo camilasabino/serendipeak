@@ -6,6 +6,7 @@ from django.views.decorators.clickjacking import xframe_options_deny
 from config.composition import (
     build_admin_photograph_ingestion,
     build_change_mountain_camera,
+    build_change_mountain_location,
     build_change_user_access,
     build_deactivate_mountain,
     build_publish_mountain,
@@ -40,6 +41,7 @@ def build_admin_site() -> EditorialAdminSite:
         deactivate_mountain=build_deactivate_mountain(),
         reactivate_mountain=build_reactivate_mountain(),
         change_mountain_camera=build_change_mountain_camera(),
+        change_mountain_location=build_change_mountain_location(),
         photograph_ingestion=build_admin_photograph_ingestion(),
         media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
         web_origin=settings.WEB_ORIGIN,

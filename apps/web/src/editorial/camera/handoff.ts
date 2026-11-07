@@ -1,6 +1,12 @@
 import type { SceneCamera } from '../../stage/globe/camera';
 import { assessCamera, type CanonicalCamera } from './canonicalCamera';
 
+/** The location of the summit that the editor was opened on, as the Admin sent it. */
+export interface ComposedOn {
+	latitude: number;
+	longitude: number;
+}
+
 const MOUNTAIN_ADMIN_PATH = '/admin/catalog/mountainrecord';
 
 // The Admin is located by build configuration and the mountain id has been validated as a UUID,
@@ -10,18 +16,23 @@ export function mountainAdminUrl(adminBaseUrl: string, mountainId: string): stri
 }
 
 // A top-level navigation to the Admin confirmation page, which only displays the proposal; the
-// Admin's own CSRF-protected form is what saves it.
+// Admin's own CSRF-protected form is what saves it. The proposal carries the coordinates it was
+// composed on, because the camera is framed on that summit: the Admin refuses to store it if the
+// mountain has moved since, which no comparison of cameras can tell when both are absent.
 export function cameraHandoffUrl(
 	adminBaseUrl: string,
 	mountainId: string,
-	camera: CanonicalCamera
+	camera: CanonicalCamera,
+	composedOn: ComposedOn
 ): string {
 	const query = new URLSearchParams({
 		heading: String(camera.headingDegrees),
 		pitch: String(camera.pitchDegrees),
 		range: String(camera.rangeMeters),
 		fx: String(camera.framing.x),
-		fy: String(camera.framing.y)
+		fy: String(camera.framing.y),
+		lat: String(composedOn.latitude),
+		lon: String(composedOn.longitude)
 	});
 
 	return `${adminBaseUrl}${MOUNTAIN_ADMIN_PATH}/${mountainId}/camera/?${query}`;
@@ -32,11 +43,12 @@ export function cameraHandoffUrl(
 export function saveDestination(
 	reading: SceneCamera | undefined,
 	adminBaseUrl: string,
-	mountainId: string
+	mountainId: string,
+	composedOn: ComposedOn
 ): string | undefined {
 	const assessment = reading ? assessCamera(reading) : undefined;
 
 	return assessment?.valid
-		? cameraHandoffUrl(adminBaseUrl, mountainId, assessment.camera)
+		? cameraHandoffUrl(adminBaseUrl, mountainId, assessment.camera, composedOn)
 		: undefined;
 }
