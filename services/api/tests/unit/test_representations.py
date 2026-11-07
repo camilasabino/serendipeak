@@ -86,6 +86,7 @@ def test_members_without_a_value_are_omitted_never_null():
         "name",
         "coordinates",
         "elevationMeters",
+        "continent",
         "countries",
     }
     assert representation["countries"] == []

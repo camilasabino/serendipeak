@@ -3,8 +3,17 @@ from django.db import IntegrityError, connection, transaction
 
 from serendipeak.persistence.mapping import mountain_record as mountain_record_of
 from tests.support.catalog import committed_seed, load_seed_document, media_of
-from tests.support.migrations import applied_head, historical_model, migrate_to, migrate_to_latest
-from tests.support.records import pre_minimal_photograph_columns
+from tests.support.migrations import (
+    applied_head,
+    historical_model,
+    migrate_to,
+    migrate_to_latest_discarding_catalog,
+)
+from tests.support.records import (
+    columns_at_schema,
+    legacy_country_names,
+    pre_minimal_photograph_columns,
+)
 
 BEFORE = ("catalog", "0006_photograph_media")
 AFTER = ("catalog", "0007_owned_photograph_delivery")
@@ -15,17 +24,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to_latest()
-
-
-def columns_of(record, model):
-    names = {field.attname for field in model._meta.concrete_fields}
-
-    return {
-        field.attname: getattr(record, field.attname)
-        for field in record._meta.concrete_fields
-        if field.attname in names
-    }
+    migrate_to_latest_discarding_catalog()
 
 
 def image_columns():
@@ -46,7 +45,12 @@ def load_committed_catalog_before_the_migration(*, with_media):
     entries = committed_seed().mountains
 
     mountain_model.objects.bulk_create(
-        mountain_model(**columns_of(mountain_record_of(entry), mountain_model)) for entry in entries
+        mountain_model(
+            **columns_at_schema(
+                mountain_record_of(entry), mountain_model, countries=legacy_country_names(entry)
+            )
+        )
+        for entry in entries
     )
     images = []
     for entry in entries:

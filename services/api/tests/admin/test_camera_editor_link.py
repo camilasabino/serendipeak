@@ -75,7 +75,7 @@ class TestLink:
         query = query_of(href)
         assert query["mountain"] == str(mountain.id)
         assert query["slug"] == mountain.slug
-        assert query["name"] == mountain.name
+        assert query["name"] == mountain.name.en
         assert float(query["lat"]) == mountain.coordinates.latitude
         assert float(query["lon"]) == mountain.coordinates.longitude
         assert int(query["elevation"]) == mountain.elevation_meters
@@ -162,7 +162,7 @@ class TestLink:
 
         html = response.content.decode()
         assert response.status_code == 200
-        assert ACTIVE.mountain.name in html
+        assert ACTIVE.mountain.name.en in html
         assert editor_links(html) == []
         assert LABEL not in html
         assert 'name="_save"' not in html
@@ -195,7 +195,7 @@ class TestLink:
         load_catalog(ACTIVE)
         before = MountainRecord.objects.values().get(pk=ACTIVE.mountain.id)
 
-        response = viewer_client.post(change_url(ACTIVE), {"name": "Hijacked", "_save": "Save"})
+        response = viewer_client.post(change_url(ACTIVE), {"name_en": "Hijacked", "_save": "Save"})
 
         assert response.status_code == 403
         assert MountainRecord.objects.values().get(pk=ACTIVE.mountain.id) == before

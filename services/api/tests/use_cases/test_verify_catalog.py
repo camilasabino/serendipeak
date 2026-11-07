@@ -2,27 +2,35 @@ import datetime
 from dataclasses import replace
 
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
+from serendipeak.catalog.localization import LocalizedText
 from tests.support.catalog import (
     catalog_discovery,
     catalog_seed,
     frozen_mountain,
     photograph_media,
     seeded_mountain,
+    split_seed,
     with_mountain,
 )
-from tests.support.fakes import InMemoryCatalogStore
+from tests.support.fakes import InMemoryCatalogStore, InMemoryGeographyReference
+from tests.support.geography import continent, countries
 
 DAY = datetime.date(2026, 10, 3)
 ACONCAGUA = seeded_mountain("aconcagua")
 MONT_BLANC = seeded_mountain("mont-blanc")
 SEED = catalog_seed(ACONCAGUA, MONT_BLANC, discoveries=[catalog_discovery(DAY, ACONCAGUA)])
 FROZEN = [frozen_mountain(ACONCAGUA), frozen_mountain(MONT_BLANC)]
+PARSED_SEED, GEOGRAPHY = split_seed(SEED)
 
 
-def verify(stored):
+def verifier(store):
+    return VerifyCatalog(store, InMemoryGeographyReference())
+
+
+def verify(stored, geography=GEOGRAPHY):
     store = InMemoryCatalogStore()
     store.load(stored)
-    return VerifyCatalog(store).execute(SEED, FROZEN)
+    return verifier(store).execute(PARSED_SEED, FROZEN, geography)
 
 
 def test_a_catalog_equal_to_the_seed_is_consistent():
@@ -30,11 +38,12 @@ def test_a_catalog_equal_to_the_seed_is_consistent():
 
     assert report.seed_mismatches == ()
     assert report.frozen.mismatches == ()
+    assert report.geography_compared
     assert report.is_consistent
 
 
 def test_an_empty_catalog_reports_every_seed_row_as_missing():
-    report = VerifyCatalog(InMemoryCatalogStore()).execute(SEED, FROZEN)
+    report = verifier(InMemoryCatalogStore()).execute(PARSED_SEED, FROZEN, GEOGRAPHY)
 
     assert (report.mountains, report.images, report.discoveries) == (0, 0, 0)
     assert report.seed_mismatches == (
@@ -47,14 +56,41 @@ def test_an_empty_catalog_reports_every_seed_row_as_missing():
 
 
 def test_differing_fields_are_named():
-    changed = with_mountain(ACONCAGUA, summary="Changed.", countries=("Argentina", "Chile"))
+    changed = with_mountain(
+        ACONCAGUA,
+        summary=LocalizedText(en="Changed."),
+        continent=continent("NA"),
+        countries=countries("AR", "CL"),
+    )
 
     report = verify(catalog_seed(changed, MONT_BLANC, discoveries=SEED.discoveries))
 
     assert report.seed_mismatches == (
-        f"mountain aconcagua ({ACONCAGUA.mountain.id}) differs in countries, summary",
+        f"mountain aconcagua ({ACONCAGUA.mountain.id}) differs in continent, countries, summary",
     )
     assert report.frozen.mismatches == ()
+
+
+def test_continents_and_countries_are_left_out_when_there_is_no_geography_input():
+    changed = with_mountain(
+        ACONCAGUA,
+        summary=LocalizedText(en="Changed."),
+        continent=continent("NA"),
+        countries=countries("AR", "CL"),
+    )
+
+    report = verify(catalog_seed(changed, MONT_BLANC, discoveries=SEED.discoveries), None)
+
+    assert report.seed_mismatches == (
+        f"mountain aconcagua ({ACONCAGUA.mountain.id}) differs in summary",
+    )
+    assert not report.geography_compared
+
+
+def test_a_catalog_equal_to_the_seed_is_consistent_without_a_geography_input():
+    report = verify(SEED, None)
+
+    assert (report.is_consistent, report.geography_compared) == (True, False)
 
 
 def test_materialized_media_is_not_compared_with_the_seed():

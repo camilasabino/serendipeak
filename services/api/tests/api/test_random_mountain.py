@@ -113,7 +113,7 @@ def test_a_random_mountain_matches_the_complete_fixture(
 ):
     pick_index.index = sorted(FROZEN_BY_SLUG).index("aconcagua")
 
-    with django_assert_num_queries(2):
+    with django_assert_num_queries(3):
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)

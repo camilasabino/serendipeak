@@ -16,7 +16,8 @@ def frozen_row(mountain):
     assert osm_type == "node"
     return MountainRecord(
         slug=mountain["slug"],
-        name=mountain["name"],
+        name_en=mountain["name"],
+        continent_id="SA",
         location=Point(
             mountain["coordinates"]["longitude"], mountain["coordinates"]["latitude"], srid=4326
         ),

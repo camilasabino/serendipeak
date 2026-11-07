@@ -51,7 +51,7 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
 
     violations.extend(image_violations(mountain.primary_image))
 
-    if mountain.summary is not None and summary_violations(mountain.summary):
+    if mountain.summary is not None and summary_violations(mountain.summary.en):
         violations.append(PublicationViolation.SUMMARY_INVALID)
 
     if unsafe_public_links(mountain):

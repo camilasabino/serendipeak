@@ -5,14 +5,17 @@ from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
 from serendipeak.persistence.errors import translate_database_errors
 from serendipeak.persistence.mapping import (
+    country_link_records,
     discovery_record,
     image_record,
     mountain_record,
     to_catalog_discovery,
     to_catalog_mountain,
+    with_geography,
 )
 from serendipeak.persistence.models import (
     DailyDiscoveryRecord,
+    MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
 )
@@ -21,6 +24,7 @@ from serendipeak.persistence.models import (
 class DjangoCatalogStore:
     def load(self, seed: CatalogSeed) -> None:
         mountains = [mountain_record(entry) for entry in seed.mountains]
+        links = [link for entry in seed.mountains for link in country_link_records(entry)]
         images = [record for entry in seed.mountains if (record := image_record(entry))]
         discoveries = [discovery_record(discovery) for discovery in seed.discoveries]
 
@@ -32,13 +36,14 @@ class DjangoCatalogStore:
                 raise CatalogAlreadyPopulated()
 
             MountainRecord.objects.bulk_create(mountains)
+            MountainCountryRecord.objects.bulk_create(links)
             MountainImageRecord.objects.bulk_create(images)
             DailyDiscoveryRecord.objects.bulk_create(discoveries)
 
     def snapshot(self) -> CatalogSnapshot:
         with translate_database_errors():
             # Code point order, so the snapshot order does not depend on the database collation.
-            mountains = MountainRecord.objects.select_related("image").order_by(
+            mountains = with_geography(MountainRecord.objects.select_related("image")).order_by(
                 Collate("slug", "C")
             )
             discoveries = DailyDiscoveryRecord.objects.order_by("date")

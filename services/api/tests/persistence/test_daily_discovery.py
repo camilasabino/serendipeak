@@ -21,7 +21,7 @@ def mountain(db):
 
 @pytest.fixture
 def other_mountain(db):
-    record = mountain_record(slug="mont-blanc", name="Mont Blanc")
+    record = mountain_record(slug="mont-blanc", name_en="Mont Blanc")
     record.save()
     return record
 

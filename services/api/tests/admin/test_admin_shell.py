@@ -63,6 +63,6 @@ def test_the_summary_is_a_multiline_textarea(editor_client, load_catalog):
     page = editor_client.get(url)
 
     html = page.content.decode()
-    assert '<textarea name="summary"' in html
+    assert '<textarea name="summary_en"' in html
     assert 'rows="3"' in html
     assert "serendipeak/admin/editorial.css" in html

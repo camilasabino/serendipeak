@@ -6,7 +6,12 @@ from config.composition import build_bootstrap_catalog, build_check_catalog
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
-from tests.support.catalog import committed_seed, frozen_catalog, load_seed_document
+from tests.support.catalog import (
+    committed_geography,
+    frozen_catalog,
+    load_seed_document,
+    parsed_committed_seed,
+)
 from tests.support.contract_fixtures import load_fixture, load_frozen_catalog
 from tests.support.records import attach_committed_media
 
@@ -22,7 +27,7 @@ def served_identity(record):
     image = record.image
     return {
         "slug": record.slug,
-        "name": record.name,
+        "name": record.name_en,
         "elevationMeters": record.elevation_meters,
         "sources": {
             "osm": f"https://www.openstreetmap.org/node/{record.osm_node_id}",
@@ -69,7 +74,9 @@ def matches_frozen(record, mountain):
 
 @pytest.fixture
 def bootstrapped(db):
-    return build_bootstrap_catalog().execute(committed_seed(), frozen_catalog())
+    return build_bootstrap_catalog().execute(
+        parsed_committed_seed(), frozen_catalog(), committed_geography()
+    )
 
 
 def test_bootstrap_reports_a_consistent_catalog(bootstrapped):
@@ -128,7 +135,9 @@ def test_a_second_bootstrap_refuses_and_changes_nothing(bootstrapped):
     before = list(MountainRecord.objects.order_by("id").values())
 
     with pytest.raises(CatalogAlreadyPopulated):
-        build_bootstrap_catalog().execute(committed_seed(), frozen_catalog())
+        build_bootstrap_catalog().execute(
+            parsed_committed_seed(), frozen_catalog(), committed_geography()
+        )
 
     assert list(MountainRecord.objects.order_by("id").values()) == before
     assert DailyDiscoveryRecord.objects.count() == 8

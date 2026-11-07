@@ -195,7 +195,7 @@ class TestSave:
         assert stored_camera(entry) == PROPOSED_CAMERA
         record = MountainRecord.objects.get(pk=entry.mountain.id)
         assert record.status == entry.mountain.status.value
-        assert messages_of(response) == [f"The camera of {record.name} was changed."]
+        assert messages_of(response) == [f"The camera of {record.name_en} was changed."]
         log = LogEntry.objects.get()
         assert (log.object_id, log.get_change_message()) == (
             str(entry.mountain.id),

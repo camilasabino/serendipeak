@@ -65,19 +65,21 @@ def test_the_database_still_refuses_a_gate_that_lets_an_incomplete_draft_through
     assert record.status == MountainStatus.DRAFT.value
 
 
-def test_a_change_locks_the_mountain_then_reads_its_image_then_updates_in_one_transaction(
+def test_a_change_locks_the_mountain_then_reads_what_the_gate_needs_then_updates(
     store, django_assert_num_queries
 ):
-    with django_assert_num_queries(5) as captured:
+    with django_assert_num_queries(6) as captured:
         store.change_status(DRAFT.mountain.id, PUBLISH, never_rejects)
 
     statements = [query["sql"] for query in captured.captured_queries]
     assert statements[0].startswith("SAVEPOINT")
-    assert statements[1].endswith("FOR UPDATE")
+    assert statements[1].endswith('FOR UPDATE OF "mountain"')
     assert "mountain_image" not in statements[1]
-    assert 'FROM "mountain_image"' in statements[2]
-    assert statements[3].startswith('UPDATE "mountain"')
-    assert statements[4].startswith("RELEASE SAVEPOINT")
+    assert 'INNER JOIN "continent"' in statements[1]
+    assert 'FROM "mountain_country" INNER JOIN "country"' in statements[2]
+    assert 'FROM "mountain_image"' in statements[3]
+    assert statements[4].startswith('UPDATE "mountain"')
+    assert statements[5].startswith("RELEASE SAVEPOINT")
 
 
 @pytest.mark.parametrize(

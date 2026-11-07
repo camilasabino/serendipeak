@@ -17,6 +17,7 @@ class _FormParser(HTMLParser):
         self.values = {}
         self.names = set()
         self._select = None
+        self._multiple = False
         self._textarea = None
         self._in_content_form = False
         self._form_depth = 0
@@ -41,9 +42,13 @@ class _FormParser(HTMLParser):
         elif tag == "select" and name:
             self.names.add(name)
             self._select = name
-            self.values.setdefault(name, "")
+            self._multiple = "multiple" in attributes
+            self.values.setdefault(name, [] if self._multiple else "")
         elif tag == "option" and self._select and "selected" in attributes:
-            self.values[self._select] = attributes.get("value", "")
+            if self._multiple:
+                self.values[self._select].append(attributes.get("value", ""))
+            else:
+                self.values[self._select] = attributes.get("value", "")
         elif tag == "textarea" and name:
             self.names.add(name)
             self._textarea = name

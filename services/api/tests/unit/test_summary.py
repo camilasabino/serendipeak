@@ -157,7 +157,7 @@ def test_normalize_summary_is_idempotent(text):
 
 def test_every_committed_summary_is_already_in_sentence_form():
     summaries = [
-        entry.mountain.summary
+        entry.mountain.summary.en
         for entry in committed_seed().mountains
         if entry.mountain.summary is not None
     ]

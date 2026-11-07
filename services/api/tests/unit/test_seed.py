@@ -7,6 +7,7 @@ import pytest
 from serendipeak.catalog.bootstrap.seed import (
     LEGACY_COMMIT,
     LEGACY_TAG,
+    PENDING_CONTINENT,
     SEED_FORMAT,
     SEED_FORMAT_VERSION,
     content_sha256,
@@ -204,3 +205,24 @@ def test_parser_rejects_non_finite_numbers():
 def test_parser_rejects_a_document_that_is_not_an_object():
     with pytest.raises(InvalidCatalogSeed, match="seed must be an object"):
         parse_catalog_seed([])
+
+
+def test_a_parsed_seed_holds_the_v1_country_names_and_no_geography_yet():
+    document = load_seed_document()
+
+    seed = parse_catalog_seed(document)
+
+    assert {entry.mountain.continent for entry in seed.mountains} == {PENDING_CONTINENT}
+    assert all(entry.mountain.countries == () for entry in seed.mountains)
+    assert {
+        str(mountain_id): list(names) for mountain_id, names in seed.legacy_country_names.items()
+    } == {raw["id"]: raw["countries"] for raw in document["content"]["mountains"]}
+
+
+def test_the_seed_names_and_summaries_are_english_text_only():
+    seed = parse_catalog_seed(load_seed_document())
+
+    for entry in seed.mountains:
+        assert entry.mountain.name.es is None and entry.mountain.name.pt is None
+        summary = entry.mountain.summary
+        assert summary is not None and summary.es is None and summary.pt is None

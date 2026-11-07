@@ -5,7 +5,7 @@ from uuid import UUID
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.errors import translate_database_errors
-from serendipeak.persistence.mapping import to_daily_mountain
+from serendipeak.persistence.mapping import to_daily_mountain, with_geography
 from serendipeak.persistence.models import DailyDiscoveryRecord
 
 
@@ -45,4 +45,7 @@ class DjangoDailyDiscoveryRepository:
 
 
 def _with_mountain():
-    return DailyDiscoveryRecord.objects.select_related("mountain", "mountain__image")
+    return with_geography(
+        DailyDiscoveryRecord.objects.select_related("mountain", "mountain__image"),
+        through="mountain",
+    )

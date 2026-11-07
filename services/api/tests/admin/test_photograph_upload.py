@@ -47,10 +47,11 @@ UNSPLASH_CREDIT = {
 }
 NEW_MOUNTAIN = {
     "slug": "new-peak",
-    "name": "New Peak",
+    "name_en": "New Peak",
     "latitude": "46.5",
     "longitude": "8.5",
     "elevation_meters": "3500",
+    "continent": "EU",
 }
 
 
@@ -557,7 +558,10 @@ class TestARefusedSubmissionStoresNothing:
         load_catalog(ACTIVE)
 
         response = replace_photograph(
-            editor_client, ACTIVE, jpeg((3000, 2000)), **{"image-0-author": "", "summary": "Typed."}
+            editor_client,
+            ACTIVE,
+            jpeg((3000, 2000)),
+            **{"image-0-author": "", "summary_en": "Typed."},
         )
 
         assert response.status_code == 200
@@ -642,7 +646,7 @@ class TestStorageFailure:
             change_url(ACTIVE),
             form_payload(
                 page,
-                summary="Edited.",
+                summary_en="Edited.",
                 **{"image-0-photograph_file": upload(data), "image-0-credit_reviewed": "on"},
             ),
             follow=True,
@@ -654,8 +658,8 @@ class TestStorageFailure:
         tags = [message.tags for message in response.context["messages"]]
         assert tags == [f"{PHOTOGRAPH_NOT_STORED_TAG} error"]
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert (record.summary, record.updated_at) == (
-            ACTIVE.mountain.summary,
+        assert (record.summary_en, record.updated_at) == (
+            ACTIVE.mountain.summary.en,
             ACTIVE.updated_at,
         )
         image = stored_image(ACTIVE)

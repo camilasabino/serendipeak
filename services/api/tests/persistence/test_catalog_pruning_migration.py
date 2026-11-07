@@ -2,7 +2,12 @@ import pytest
 from django.contrib.gis.geos import Point
 from django.db import connection
 
-from tests.support.migrations import applied_head, historical_model, migrate_to, migrate_to_latest
+from tests.support.migrations import (
+    applied_head,
+    historical_model,
+    migrate_to,
+    migrate_to_latest_discarding_catalog,
+)
 
 BEFORE = ("catalog", "0011_minimal_photograph")
 AFTER = ("catalog", "0012_catalog_pruning")
@@ -37,7 +42,7 @@ def create_before(model, slug, **overrides):
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to_latest()
+    migrate_to_latest_discarding_catalog()
 
 
 def test_node_references_become_node_ids_and_the_dropped_columns_disappear():

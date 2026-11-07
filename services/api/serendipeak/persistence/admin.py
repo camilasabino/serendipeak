@@ -5,9 +5,11 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.options import ActionLocation, ShowFacets
 from django.contrib.admin.utils import unquote
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.contrib.gis.geos import Point
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import router, transaction
+from django.db.models.functions import Collate
 from django.forms.models import BaseInlineFormSet
 from django.http import Http404, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -53,8 +55,19 @@ from serendipeak.catalog.slug import RESERVED_SLUGS, is_valid_slug
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH, SummaryViolation, summary_violations
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.camera_editor_url import camera_editor_url
-from serendipeak.persistence.mapping import to_camera, to_mountain, to_mountain_with_image
-from serendipeak.persistence.models import MountainImageRecord, MountainRecord
+from serendipeak.persistence.mapping import (
+    to_camera,
+    to_mountain,
+    to_mountain_with_image,
+    with_geography,
+)
+from serendipeak.persistence.models import (
+    ContinentRecord,
+    CountryRecord,
+    MountainCountryRecord,
+    MountainImageRecord,
+    MountainRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +153,7 @@ CAMERA_EDITOR_LABEL = "Edit camera visually"
 CAMERA_LOG_MESSAGE = "Camera changed."
 CAMERA_ANCHOR = "camera"
 
-OPTIONAL_TEXT = ("range_name", "summary")
+OPTIONAL_TEXT = ("range_name", "summary_en")
 CAMERA_FIELDS = (
     "camera_heading_degrees",
     "camera_pitch_degrees",
@@ -156,12 +169,15 @@ IMAGE_LINKS = ("source_page_url", "license_url")
 CAMERA_DIAGNOSTIC_FIELDS = (*CAMERA_FIELDS, "camera_check")
 PHOTOGRAPH_DETAIL_FIELDS = ("photograph_dimensions", "stored_original")
 PUBLIC_STATUS_VALUES = frozenset({MountainStatus.ACTIVE.value, MountainStatus.INACTIVE.value})
-MOUNTAIN_FIELDS = ("name", "slug", "latitude", "longitude", "elevation_meters")
-EDITORIAL_FIELDS = ("summary", "range_name", "countries")
+MOUNTAIN_FIELDS = ("name_en", "slug", "latitude", "longitude", "elevation_meters")
+GEOGRAPHY_FIELDS = ("continent", "countries", "range_name")
+EDITORIAL_FIELDS = ("summary_en",)
 ADDITIONAL_FIELDS = ("osm_node_id", "wikidata_id")
 PUBLICATION_FIELDS = ("status", "created_at", "updated_at", "publication_readiness")
 COLUMN_OF_FORM_FIELD = {"latitude": "location", "longitude": "location"}
-NEVER_FORM_WRITTEN = frozenset({"status", *CAMERA_FIELDS})
+# The countries are links in a table of their own, written by save_related.
+FORM_ONLY_FIELDS = frozenset({"countries"})
+NEVER_FORM_WRITTEN = frozenset({"status", *CAMERA_FIELDS, *FORM_ONLY_FIELDS})
 _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 
 
@@ -218,6 +234,10 @@ def violation_reasons(violations, mountain):
     return reasons
 
 
+def _country_label(country):
+    return f"{country.name_en} ({country.code})"
+
+
 def _clean_summary(value):
     if value is None:
         return value
@@ -240,27 +260,49 @@ class MountainForm(forms.ModelForm):
     elevation_meters = forms.IntegerField(min_value=1)
     osm_node_id = forms.IntegerField(required=False, min_value=1)
     wikidata_id = forms.CharField(required=False, empty_value=None)
+    countries = forms.ModelMultipleChoiceField(
+        queryset=CountryRecord.objects.order_by(Collate("name_en", "C"), "code"),
+        required=False,
+        widget=FilteredSelectMultiple("countries", is_stacked=False),
+        help_text="A mountain may have none, for example while it is a new draft.",
+    )
 
     class Meta:
         model = MountainRecord
         fields = (
             "slug",
-            "name",
+            "name_en",
             "elevation_meters",
+            "continent",
             "range_name",
-            "countries",
-            "summary",
+            "summary_en",
             "osm_node_id",
             "wikidata_id",
         )
+        labels = {"name_en": "Name", "summary_en": "Summary"}
         widgets = {
-            **_single_line("slug", "name", "range_name"),
-            "summary": _summary_textarea(),
+            **_single_line("slug", "name_en", "range_name"),
+            "summary_en": _summary_textarea(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        _make_optional(self, (*OPTIONAL_TEXT, "countries"))
+        _make_optional(self, OPTIONAL_TEXT)
+
+        # A user who cannot change the mountain gets a form without the model fields.
+        continent = self.fields.get("continent")
+        if continent is not None:
+            continent.queryset = ContinentRecord.objects.order_by(Collate("name_en", "C"))
+            continent.empty_label = "Select a continent"
+            continent.help_text = (
+                "The continent where the summit lies. It is chosen, never derived from the"
+                " countries."
+            )
+        self.fields["countries"].label_from_instance = _country_label
+        if not self.instance._state.adding:
+            self.initial.setdefault(
+                "countries", [link.country_id for link in self.instance.country_links.all()]
+            )
 
         location = self.instance.location
         if location is not None:
@@ -278,8 +320,8 @@ class MountainForm(forms.ModelForm):
 
         return slug
 
-    def clean_summary(self):
-        return _clean_summary(self.cleaned_data.get("summary"))
+    def clean_summary_en(self):
+        return _clean_summary(self.cleaned_data.get("summary_en"))
 
     def clean_wikidata_id(self):
         wikidata_id = self.cleaned_data.get("wikidata_id")
@@ -696,6 +738,20 @@ class MountainImageInline(admin.StackedInline):
         )
 
 
+def _write_country_links(mountain, countries):
+    # Runs in the change view's transaction, after the mountain row is locked and written, and
+    # touches only the links that differ.
+    wanted = {country.pk for country in countries}
+    held = set(
+        MountainCountryRecord.objects.filter(mountain=mountain).values_list("country_id", flat=True)
+    )
+
+    MountainCountryRecord.objects.filter(mountain=mountain, country_id__in=held - wanted).delete()
+    MountainCountryRecord.objects.bulk_create(
+        MountainCountryRecord(mountain=mountain, country_id=code) for code in sorted(wanted - held)
+    )
+
+
 class MountainAdmin(admin.ModelAdmin):
     publish_mountain: PublishMountain
     deactivate_mountain: DeactivateMountain
@@ -706,9 +762,19 @@ class MountainAdmin(admin.ModelAdmin):
     web_origin: str
 
     show_facets = ShowFacets.ALWAYS
-    list_display = ("name", "slug", "status", "elevation_meters", "range_name", "updated_at")
+    list_display = (
+        "english_name",
+        "slug",
+        "status",
+        "continent",
+        "country_codes",
+        "elevation_meters",
+        "range_name",
+        "updated_at",
+    )
     list_filter = ("status",)
-    search_fields = ("name", "slug", "range_name")
+    list_select_related = ("continent",)
+    search_fields = ("name_en", "slug", "range_name", "country_links__country__name_en")
     ordering = ("slug",)
     form = MountainForm
     inlines = [MountainImageInline]
@@ -725,10 +791,11 @@ class MountainAdmin(admin.ModelAdmin):
 
     def get_fieldsets(self, request, obj=None):
         mountain = ("Mountain", {"fields": MOUNTAIN_FIELDS})
+        geography = ("Geography", {"fields": GEOGRAPHY_FIELDS})
         editorial = ("Editorial", {"fields": EDITORIAL_FIELDS})
         additional = ("Additional data", {"fields": ADDITIONAL_FIELDS, "classes": ("collapse",)})
         if obj is None:
-            return [mountain, editorial, additional]
+            return [mountain, geography, editorial, additional]
 
         publication = ("Publication", {"fields": PUBLICATION_FIELDS})
         camera_diagnostics = (
@@ -739,7 +806,27 @@ class MountainAdmin(admin.ModelAdmin):
             },
         )
 
-        return [publication, mountain, editorial, camera_diagnostics, additional]
+        return [publication, mountain, geography, editorial, camera_diagnostics, additional]
+
+    def get_queryset(self, request):
+        return with_geography(super().get_queryset(request))
+
+    @admin.display(description="Name", ordering="name_en")
+    def english_name(self, obj):
+        return obj.name_en
+
+    @admin.display(description="Countries")
+    def country_codes(self, obj):
+        return ", ".join(sorted(link.country_id for link in obj.country_links.all()))
+
+    @admin.display(description="Countries")
+    def countries(self, obj):
+        # What a user who cannot change the mountain sees in place of the selection.
+        links = sorted(
+            obj.country_links.all(), key=lambda link: (link.country.name_en, link.country_id)
+        )
+
+        return ", ".join(_country_label(link.country) for link in links) or "None"
 
     def _camera_editor_tool(self, request, obj):
         if obj is None or not self.has_change_permission(request, obj):
@@ -843,7 +930,7 @@ class MountainAdmin(admin.ModelAdmin):
             raise Http404 from unknown
 
         self.log_change(request, record, CAMERA_LOG_MESSAGE)
-        self.message_user(request, f"The camera of {record.name} was changed.", messages.SUCCESS)
+        self.message_user(request, f"The camera of {record.name_en} was changed.", messages.SUCCESS)
 
         return HttpResponseRedirect(f"{self._url('change', record)}#{CAMERA_ANCHOR}")
 
@@ -855,7 +942,7 @@ class MountainAdmin(admin.ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            "title": f"Change the camera of {record.name}",
+            "title": f"Change the camera of {record.name_en}",
             "opts": self.opts,
             "original": record,
             "change_url": self._url("change", record),
@@ -974,6 +1061,10 @@ class MountainAdmin(admin.ModelAdmin):
 
         formset.save()
 
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        _write_country_links(form.instance, form.cleaned_data["countries"])
+
     def get_object(self, request, object_id, from_field=None):
         # Django opens the transaction of a mutating change or delete view before calling this,
         # and keeps it until the view returns. Locking here puts the row lock ahead of every
@@ -1075,7 +1166,7 @@ class DailyDiscoveryAdmin(admin.ModelAdmin):
     list_select_related = ("mountain",)
     date_hierarchy = "date"
     ordering = ("-date",)
-    search_fields = ("mountain__slug", "mountain__name")
+    search_fields = ("mountain__slug", "mountain__name_en")
 
     def has_add_permission(self, request):
         return False

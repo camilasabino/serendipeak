@@ -23,7 +23,7 @@ def camera_editor_url(
     query = {
         "mountain": record.pk,
         "slug": record.slug,
-        "name": record.name,
+        "name": record.name_en,
         "lat": record.location.y,
         "lon": record.location.x,
         "elevation": record.elevation_meters,

@@ -80,7 +80,7 @@ curl -i http://127.0.0.1:8000/healthz
 
 ### Mountain endpoint
 
-`GET /api/v1/mountains/{slug}` returns an `active` or `inactive` mountain as JSON (`application/json; charset=utf-8`), in the shape of `contracts/v1/mountain-*.json`: camelCase members, members without a value omitted (never `null`), `countries` always present. The lookup is exact and case-sensitive. A `draft` mountain, an unknown slug and a slug that breaks the slug rule answer `404 {"error":{"code":"MOUNTAIN_NOT_FOUND","message":"Mountain not found"}}`; any other failure answers `500` with code `INTERNAL_ERROR` and never its cause, which is logged with its traceback. The endpoint sends no `Cache-Control` header and answers JSON whatever the `Accept` header asks for. `today` and `random` are reserved words, never routed to this endpoint.
+`GET /api/v1/mountains/{slug}` returns an `active` or `inactive` mountain as JSON (`application/json; charset=utf-8`), in the shape of `contracts/v1/mountain-*.json`: camelCase members, members without a value omitted (never `null`), `continent` and `countries` always present. The lookup is exact and case-sensitive. A `draft` mountain, an unknown slug and a slug that breaks the slug rule answer `404 {"error":{"code":"MOUNTAIN_NOT_FOUND","message":"Mountain not found"}}`; any other failure answers `500` with code `INTERNAL_ERROR` and never its cause, which is logged with its traceback. The endpoint sends no `Cache-Control` header and answers JSON whatever the `Accept` header asks for. `today` and `random` are reserved words, never routed to this endpoint.
 
 ```sh
 curl -i http://127.0.0.1:8000/api/v1/mountains/aconcagua
@@ -100,7 +100,9 @@ SerendiPeak's `primaryImage` has no `attribution`, `creator` or `sourceIdentifie
 
 A mountain serves no `prominenceMeters` and no `sources.wikipedia`: nothing renders the prominence, and the Wikidata item (`sources.wikidata`) is the language-independent reference that stays. `sources` is omitted when the mountain has neither a Wikidata id nor an OpenStreetMap node. The catalog stores one `osm_node_id`, a positive integer, because a summit is an OpenStreetMap node; `sources.osm` is `https://www.openstreetmap.org/node/{osm_node_id}`, the same URL as in the v1 fixtures.
 
-The v1 fixtures stay untouched. The API tests turn each fixture into SerendiPeak's own document by applying exactly these changes, and compare every response with the result member by member: `primaryImage.url` and `primaryImage.thumbnailUrl` hold owned media URLs, `attribution` is renamed `author`, and `creator` and `sourceIdentifier` are dropped, and `prominenceMeters` and `sources.wikipedia` are dropped (`sources` goes with them when nothing is left). Any other difference fails. `node scripts/verify-api.mjs` is the live-API counterpart of the vendored `contracts/v1/verify-api.mjs`, which describes the v1 API and is no longer run: it differs from it only in those members, fails when `prominenceMeters` or `sources.wikipedia` is served, and checks each of the 73 photographs by source page and dimensions.
+A mountain serves `continent` as `{code, name}` and `countries` as a list of `{code, name}`, which v1 did not: v1 listed country names as text and had no continent. `continent` is always present; `countries` is always present and may be empty (a new draft can have none). Countries are ordered by English name in code point order, then by code. The `code` is the stable key (an approved continent code `AF AN AS EU NA OC SA`, an ISO 3166-1 alpha-2 country code) and `name` is the English name; the Spanish and Portuguese names are stored but not served, and the API and the web are English-only. The three Antarctic mountains, which v1 left without a country, now link `AQ`. See Geography and reference data.
+
+The v1 fixtures stay untouched. The API tests turn each fixture into SerendiPeak's own document by applying exactly these changes, and compare every response with the result member by member: `primaryImage.url` and `primaryImage.thumbnailUrl` hold owned media URLs, `attribution` is renamed `author`, and `creator` and `sourceIdentifier` are dropped, and `prominenceMeters` and `sources.wikipedia` are dropped (`sources` goes with them when nothing is left), and `continent` and the `{code, name}` countries are derived from the v1 country names by a rule that exists only in the tests and is not editorial (the names through the alias table, the continent of the first country, `AQ` and Antarctica for a mountain without any, and an explicit synthetic Europe for the invented mountain of `mountain-minimal.json`). Any other difference fails. `node scripts/verify-api.mjs` is the live-API counterpart of the vendored `contracts/v1/verify-api.mjs`, which describes the v1 API and is no longer run: it differs from it only in those members, fails when `prominenceMeters` or `sources.wikipedia` is served or `countries` are served as names, checks the shape of `continent` and `countries` (an approved continent code, well-formed unique country codes, the order above), and checks each of the 73 photographs by source page and dimensions. With `--geography <file> --geography-sha256 <hash>` it also compares the continent and country codes of the mountains the private geography input covers; without them it says that the comparison of values was skipped.
 
 ### Today's mountain endpoint
 
@@ -175,18 +177,75 @@ The PostgreSQL/PostGIS database is the canonical catalog. `bootstrap_catalog` lo
 ```sh
 cd services/api
 uv run --env-file ../../.env python manage.py migrate
-uv run --env-file ../../.env python manage.py bootstrap_catalog
+uv run --env-file ../../.env python manage.py bootstrap_catalog --geography <file> --geography-sha256 <hash>
 uv run --env-file ../../.env python manage.py check_catalog
 ```
+
+The seed holds neither continents nor country codes, and a mountain needs a continent, so `bootstrap_catalog` needs the private geography input and its checksum (see Geography and reference data) and refuses before writing without them. The input has to cover every seed mountain, and its countries have to agree with the seed's country names through the alias table; entries of mountains the seed does not have are ignored.
 
 - `bootstrap_catalog` validates the seed (format, legacy tag and commit, `content_sha256`, counts, field types, coordinate range) and compares it with the frozen `contracts/v1/catalog.json` before writing. It then loads mountains, images and daily discoveries in one transaction, keeping the legacy ids and timestamps, and verifies the stored catalog against the seed and the frozen catalog. Coordinates are compared within 1e-7 degrees and camera values within 1e-9; every other value exactly. Legacy `pending_media` becomes `draft`, which is never publicly visible.
 - It refuses when the catalog already holds mountains. The emptiness check and the load run in one transaction that first locks the `mountain` table against concurrent writes (`SHARE ROW EXCLUSIVE`; reads are not blocked), so a concurrent second run waits for the first, then refuses and loads nothing. The load is all or nothing; foreign keys are deferred, so a reference to a missing mountain fails when the transaction commits and nothing is kept.
 - The verification runs after the load has committed. When it reports mismatches, the loaded rows stay; recreate the database, run `migrate` and `bootstrap_catalog` again.
-- `bootstrap_catalog --verify-only` runs only the verification, writes nothing and can be repeated. It verifies a freshly bootstrapped catalog, not a catalog in use: later daily discoveries and catalog edits are legitimate differences from the seed, and it reports them as mismatches.
+- `bootstrap_catalog --verify-only` runs only the verification, writes nothing and can be repeated. With `--geography` and `--geography-sha256` it also compares the continent and countries of the seed mountains and says `Geography: compared.`; without them it leaves those out and says `Geography: not compared`. It verifies a freshly bootstrapped catalog, not a catalog in use: later daily discoveries and catalog edits are legitimate differences from the seed, and it reports them as mismatches.
 - `check_catalog` is the routine check. It does not compare the catalog with the seed and can run at any time.
 - `check_catalog` checks every `active` mountain: valid slug, coordinates in range, positive elevation, a curated camera with framing inside the bounds, a primary image with owned media, dimensions and an author, a license URL only with its license name, and a summary that follows the summary rules when there is one.
 
 `--seed` and `--frozen-catalog` replace the input files. On failure each command lists the mismatches or violations on stderr and exits with status 1.
+
+### Geography and reference data
+
+Every mountain has one **continent** and any number of **countries**, both references to fixed reference tables, and its name and summary are stored per language.
+
+- **Localized text.** `mountain.name_en`, `name_es`, `name_pt` and `summary_en`, `summary_es`, `summary_pt`. English is the required language: `name_en` is never blank and the summary rules (`summary_violations`, the publication gate) apply to `summary_en` exactly as they always applied to the summary. The Spanish and Portuguese columns are null or not blank, and a summary translation needs `summary_en` (`mountain_summary_translation_requires_english`). Nothing writes a translation, the API and the web serve the English text only, and a missing translation will read as English once a consumer selects a language. Ids, slugs and codes never depend on a language.
+- **Continent.** Table `continent`, seven fixed rows with the codes `AF AN AS EU NA OC SA` and names in English, Spanish and Portuguese. `mountain.continent_code` is `NOT NULL` on every status and `PROTECT`ed. The continent of a mountain is an editorial, explicit assignment, never derived from its countries: the Canary Islands belong to Africa although Spain is in Europe. Convention for the Europe-Asia boundary: the Ural Mountains, the Ural River, the Caspian Sea and the crest of the Greater Caucasus, applied to the position of the summit, never to the country.
+- **Country.** Table `country`, 249 rows keyed by ISO 3166-1 alpha-2 code, with names in the three languages, a unique English name and a reference continent (UN M49 as CLDR publishes it, except `AQ`, which is Antarctica). `mountain_country` links mountains to countries with the composite primary key `(mountain_id, country_code)`, both keys `PROTECT`ed, and an index for the reverse lookup. Countries are never inferred from coordinates. A country of a mountain is edited as a link; the reference rows have no write path in the application.
+- **Reading.** A mountain read by slug costs two queries: the mountain with its photograph and continent, then its countries.
+
+#### Reference data
+
+The continent and country rows are loaded by two immutable migrations, `0015_continent_reference` and `0016_country_reference`, generated by `services/api/tools/generate_geography_reference.py` (standard library only; nothing is fetched by the tool). The header of each migration records the sources, versions and the generator command:
+
+- **Names:** Unicode CLDR 49.0.0, locales `en`, `es` and `pt`, territory display names in their standard form (npm packages `cldr-core` and `cldr-localenames-full`, whose registry integrity is in the header). CLDR's own spellings are kept, including the forms it uses to disambiguate ("Congo - Kinshasa", "Hong Kong SAR China", "Myanmar (Burma)"), its house style ("St.", "&") and its current names ("Türkiye"). The list of overrides in the generator is empty: a name is changed only by an explicit entry (code, language, CLDR value, chosen value, reason).
+- **Codes:** the 249 officially assigned ISO 3166-1 alpha-2 codes as listed by Debian `iso-codes` 4.20.1 (`data/iso_3166-1.json`, pinned by its sha256). User-assigned, exceptionally reserved, transitionally reserved and deleted codes are excluded, and the tool stops if the count is not 249.
+- **Reference continent of a country:** its UN M49 region in CLDR's `territoryContainment`, with the Americas split into South America and the rest (North and Central America and the Caribbean). Transcontinental countries take M49's placement of the whole country (Russia Europe; Kazakhstan, Türkiye, Georgia, Armenia, Azerbaijan, Cyprus, Indonesia and Timor-Leste Asia; Egypt Africa; Panama North America). Overseas territories with their own ISO code take their own placement (Réunion and Mayotte Africa, French Guiana South America, Greenland North America). Only `AQ` is overridden.
+- **Adopting a newer release** is never automatic. Download the packages and the list once, change the pins in the generator, generate new migrations and review the diff like these. A code that ISO withdraws while a mountain still links it is refused by `PROTECT`, so the mountain needs an explicit editorial change first.
+
+```sh
+cd services/api
+npm pack cldr-core@49.0.0 cldr-localenames-full@49.0.0   # then extract each into its own directory
+uv run python tools/generate_geography_reference.py --cldr-core <dir> --cldr-names <dir> \
+  --iso-codes <iso_3166-1.json> --retrieved-on <date> --output-dir serendipeak/persistence/migrations
+```
+
+#### The private geography input
+
+Which continent a mountain is on and which countries it is in is editorial data, and mutable editorial data is not versioned in Git. It lives in the database and, for transfers and for initializing an empty environment, in a private, checksum-verified JSON file that is kept outside the repository and covered by the owner's backups. The tools take explicit paths and never default into the working tree.
+
+```json
+{
+  "format": "serendipeak.geography",
+  "version": 1,
+  "content_sha256": "<sha256 of the canonical content>",
+  "mountains": [
+    { "id": "<uuid>", "slug": "<slug>", "continent": "<AF|AN|AS|EU|NA|OC|SA>", "countries": ["<ISO alpha-2>"] }
+  ]
+}
+```
+
+`content_sha256` is the SHA-256 of the canonical serialization (UTF-8, sorted keys, no whitespace) of everything but itself, and every command that reads the file also takes the expected checksum, which must match; otherwise it stops before it reads the database. The tracked parser (`catalog/geography_input.py`) validates the format, unique ids and slugs, approved continent codes, well-formed unique country codes known to the reference data, and, against a catalog, **coverage** (every mountain appears exactly once, matched by id and slug; an entry without a mountain aborts the run) and **agreement** (the countries of an entry map, through the alias table of the v1 country names, to the names the mountain still stores; `AQ` is the one link that needs no legacy name).
+
+- `prepare_geography_input --output <file>` is read-only. It writes a draft from the database: ids, slugs and countries (the v1 names mapped to codes while the catalog still holds them), the continents empty and the checksum unset, so a draft can never be applied. The operator fills in the continents and freezes the file by writing the checksum, which `catalog.geography_input.geography_content_sha256` computes.
+- `apply_geography_backfill --input <file> --sha256 <hash> [--dry-run]` prints the target first (database, host, port, catalog migration) and then judges the input against the stored mountains. It runs in one transaction under a lock on the mountain table, writes only the continent and the country links (no other column and no timestamp), is idempotent and creates, deletes or edits no mountain. `--dry-run` reports every change and writes nothing. It refuses a schema that is not the one it is meant for, and once the final migration below is applied it only reports.
+
+#### Converting an existing database
+
+Three stages, so that no migration carries editorial data and a database with mountains converts without losing any:
+
+1. `migrate` up to `0017_mountain_continent`. The migrations carry the schema and the reference data only: `0014_localized_mountain_text` renames `name` and `summary` to the English columns and adds the others, `0015` and `0016` create and fill the reference tables and the link table, and `0017` adds a nullable `continent_code`. The legacy text array `countries` stays.
+2. `apply_geography_backfill`, first with `--dry-run`, then for real.
+3. `migrate` to the head. `0018_geography_final_validation` refuses, naming the mountains, while one has no continent or its links disagree with the legacy country names (through the alias table, with `AQ` accepted), and only then makes `continent_code` `NOT NULL` and drops the text array. On a database without mountains it passes on zero rows. Reversing restores the text array from the links in alphabetical order and refuses a country that v1 had no name for.
+
+A database that is initialized from the seed is built by `migrate` and `bootstrap_catalog --geography … --geography-sha256 …`.
 
 ### Editorial admin
 
@@ -204,8 +263,8 @@ Accounts are `catalog.UserRecord` (`AUTH_USER_MODEL`, table `app_user`): a usern
 - The `catalog` migration `0013_user_record_and_role_permissions` creates the user table, runs before the admin's migrations because the admin log references it, and drops the former `publish_mountain` permission. Django cannot swap the user model on a database that already applied the admin migrations: such a database is rebuilt or its catalog tables are copied into a freshly migrated one.
 
 - A mountain is created as a `draft` with every field the form offers. A draft is editable and never public: it is not served by slug, `today` or `random`. The status is never a form field.
-- The mountain page has the sections Publication, Mountain (name, slug, latitude, longitude, elevation), Editorial (summary, range, countries), Camera and a collapsed Additional data (OpenStreetMap node id, Wikidata id). The add page has no Publication and no Camera section.
-- Mountain data stays editable on every status: name, coordinates, elevation, summary, range, countries and the additional data. Latitude and longitude are form fields; saving rebuilds the stored point from them.
+- The mountain page has the sections Publication, Mountain (name, slug, latitude, longitude, elevation), Geography (continent, countries, range), Editorial (summary), Camera and a collapsed Additional data (OpenStreetMap node id, Wikidata id). The add page has no Publication and no Camera section.
+- Mountain data stays editable on every status: name, coordinates, elevation, continent, countries, range, summary and the additional data. The continent is required on every mountain, drafts included, and is chosen from the seven continents; it is never derived from the countries. Countries are a selection over the 249 reference countries (`Name (CODE)`, searchable, ordered by English name); saving writes only the links that differ, in the same transaction as the mountain. A mountain may have none. A draft that still has countries cannot be deleted until they are removed, like a draft with a photograph. The name and summary are the English text; the Spanish and Portuguese columns exist but nothing writes them yet. The changelist shows the continent and the country codes and searches by English country name. Continents and countries are reference data: they have no Admin page. Latitude and longitude are form fields; saving rebuilds the stored point from them.
 - The slug is editable on every status and keeps its syntax, reserved-name and uniqueness checks. The catalog is a pre-cutover editorial seed, so a slug change does not leave redirects or history.
 - The camera is read-only in the mountain form, which never writes it, including on creation, so a draft starts without a camera; publication still needs one. The Camera section shows the stored values and whether they are complete and within bounds.
 - **Edit camera visually** (object tools and Camera section, for Editors only) opens the camera editor on `WEB_ORIGIN` at `/editorial/camera`, with the mountain and its stored camera in the query because a draft has no public API. The editor renders the real stage, shows the live pose as it would be saved and, on **Save camera…**, navigates to the confirmation page below with the quantized camera (heading and pitch to two decimals, range to the meter, framing to four). It writes nothing itself and never navigates to an address taken from its query: the Admin is located by `NEXT_PUBLIC_API_BASE_URL`. The confirmation page offers the way back to the editor.

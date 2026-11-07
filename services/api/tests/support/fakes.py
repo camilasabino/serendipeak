@@ -25,6 +25,55 @@ from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 
 
+class InMemoryGeographyReference:
+    def read(self):
+        from tests.support.geography import reference
+
+        return reference()
+
+
+class InMemoryGeographyStore:
+    """Stands in for the Django adapter of the backfill and draft ports."""
+
+    def __init__(self, mountains=(), known_countries=None):
+        from tests.support.geography import reference
+
+        self._rows = {mountain.id: mountain for mountain in mountains}
+        self._known = frozenset(known_countries or reference().countries)
+        self.reads = 0
+        self.writes = 0
+
+    def target(self):
+        from serendipeak.catalog.bootstrap.ports import BackfillTarget
+
+        return BackfillTarget(
+            database="memory", host="local", port="none", migration="0017_mountain_continent"
+        )
+
+    def backfill(self, geography, *, dry_run):
+        from serendipeak.catalog.geography_input import plan_backfill
+
+        self.reads += 1
+        plan = plan_backfill(geography, list(self._rows.values()), self._known)
+        if dry_run:
+            return plan
+
+        by_slug = {entry.slug: entry for entry in geography.mountains}
+        for change in plan.changes:
+            entry = by_slug[change.slug]
+            self.writes += 1
+            self._rows[entry.id] = replace(
+                self._rows[entry.id],
+                continent_code=entry.continent_code,
+                country_codes=entry.country_codes,
+            )
+
+        return plan
+
+    def read_mountains(self):
+        return tuple(sorted(self._rows.values(), key=lambda row: row.slug))
+
+
 class InMemoryCatalogStore:
     def __init__(self):
         self._mountains = {}

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
+from serendipeak.catalog.localization import LocalizedText
+
 WIKIDATA_ID_PATTERN = r"^Q[1-9][0-9]*$"
 
 
@@ -59,16 +61,30 @@ class PrimaryImage:
 
 
 @dataclass(frozen=True, slots=True)
+class Continent:
+    code: str
+    name: LocalizedText
+
+
+@dataclass(frozen=True, slots=True)
+class Country:
+    code: str
+    name: LocalizedText
+    continent_code: str
+
+
+@dataclass(frozen=True, slots=True)
 class Mountain:
     id: UUID
     slug: str
-    name: str
+    name: LocalizedText
     status: MountainStatus
     coordinates: Coordinates
     elevation_meters: int
+    continent: Continent
+    countries: tuple[Country, ...]
     range_name: str | None
-    countries: tuple[str, ...]
-    summary: str | None
+    summary: LocalizedText | None
     camera: CanonicalCamera | None
     primary_image: PrimaryImage | None
     osm_node_id: int | None

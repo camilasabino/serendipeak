@@ -5,6 +5,7 @@ import pytest
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.errors import InvalidStatusTransition, PublicationRejected, UnknownMountain
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
@@ -50,7 +51,7 @@ def test_publishing_an_incomplete_draft_is_rejected_with_every_violation_and_cha
 
 
 def test_publishing_applies_the_summary_rule(store):
-    store.replace(replace(DRAFT, summary="highest mountain."))
+    store.replace(replace(DRAFT, summary=LocalizedText(en="highest mountain.")))
 
     with pytest.raises(PublicationRejected) as raised:
         PublishMountain(store).execute(DRAFT.id)
@@ -69,7 +70,7 @@ def test_only_a_draft_can_be_published(store, entity):
 
 
 def test_deactivating_an_active_mountain_does_not_need_it_to_be_publishable(store):
-    store.replace(replace(ACTIVE, summary="not a sentence"))
+    store.replace(replace(ACTIVE, summary=LocalizedText(en="not a sentence")))
 
     DeactivateMountain(store).execute(ACTIVE.id)
 

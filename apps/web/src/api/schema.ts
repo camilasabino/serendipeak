@@ -6,7 +6,9 @@ import {
 } from './cameraBounds';
 import type {
 	CameraFraming,
+	Continent,
 	Coordinates,
+	Country,
 	DailyMountain,
 	Mountain,
 	MountainCamera,
@@ -118,6 +120,35 @@ function isMountainSources(value: unknown): value is MountainSources {
 	);
 }
 
+const CONTINENT_CODES = new Set(['AF', 'AN', 'AS', 'EU', 'NA', 'OC', 'SA']);
+const COUNTRY_CODE = /^[A-Z]{2}$/;
+
+function isContinent(value: unknown): value is Continent {
+	return (
+		isRecord(value) &&
+		typeof value.code === 'string' &&
+		CONTINENT_CODES.has(value.code) &&
+		isNonEmptyString(value.name)
+	);
+}
+
+function isCountry(value: unknown): value is Country {
+	return (
+		isRecord(value) &&
+		typeof value.code === 'string' &&
+		COUNTRY_CODE.test(value.code) &&
+		isNonEmptyString(value.name)
+	);
+}
+
+function areDistinctCountries(value: unknown): value is Country[] {
+	return (
+		Array.isArray(value) &&
+		value.every(isCountry) &&
+		new Set(value.map((country) => country.code)).size === value.length
+	);
+}
+
 export function isMountain(value: unknown): value is Mountain {
 	return (
 		isRecord(value) &&
@@ -126,8 +157,8 @@ export function isMountain(value: unknown): value is Mountain {
 		isNonEmptyString(value.name) &&
 		isCoordinates(value.coordinates) &&
 		isPositiveInteger(value.elevationMeters) &&
-		Array.isArray(value.countries) &&
-		value.countries.every(isNonEmptyString) &&
+		isContinent(value.continent) &&
+		areDistinctCountries(value.countries) &&
 		isOptional(value, 'rangeName', isNonEmptyString) &&
 		isOptional(value, 'summary', isNonEmptyString) &&
 		isOptional(value, 'camera', isMountainCamera) &&

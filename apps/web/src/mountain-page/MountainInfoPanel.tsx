@@ -8,7 +8,7 @@ import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
 import styles from './MountainInfoPanel.module.css';
 
 export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
-	const { coordinates, countries, rangeName, summary } = mountain;
+	const { continent, coordinates, countries, rangeName, summary } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
 
 	return (
@@ -18,9 +18,10 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 			</h1>
 			{summary && <p className={styles.summary}>{summary}</p>}
 			<dl className={styles.facts}>
+				<Fact term="Continent">{continent.name}</Fact>
 				{countries.length > 0 && (
 					<Fact term={countries.length === 1 ? 'Country' : 'Countries'}>
-						{formatCountries(countries)}
+						{formatCountries(countries.map((country) => country.name))}
 					</Fact>
 				)}
 				<Fact term="Elevation">{formatElevation(mountain.elevationMeters)}</Fact>

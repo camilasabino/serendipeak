@@ -19,14 +19,35 @@ describe('MountainInfoPanel', () => {
 		expect(html).toContain('<h1 id="mountain-name"');
 	});
 
+	it('shows the continent first, by its name', () => {
+		const continent = { code: 'AF', name: 'Africa' };
+
+		expect(textsOf(render({ continent }), 'dt')[0]).toBe('Continent');
+		expect(textsOf(render({ continent }), 'dd')[0]).toBe('Africa');
+	});
+
+	it('shows the continent whatever the countries, even none', () => {
+		const html = render({ continent: { code: 'AN', name: 'Antarctica' }, countries: [] });
+
+		expect(textsOf(html, 'dd')[0]).toBe('Antarctica');
+	});
+
 	it('labels one country as Country and several as Countries', () => {
-		expect(textsOf(render({ countries: ['Nepal'] }), 'dt')[0]).toBe('Country');
-		expect(textsOf(render({ countries: ['Nepal', 'China'] }), 'dd')[0]).toBe('Nepal and China');
-		expect(textsOf(render({ countries: ['Nepal', 'China'] }), 'dt')[0]).toBe('Countries');
+		const nepal = { code: 'NP', name: 'Nepal' };
+		const china = { code: 'CN', name: 'China' };
+
+		expect(textsOf(render({ countries: [nepal] }), 'dt')[1]).toBe('Country');
+		expect(textsOf(render({ countries: [nepal, china] }), 'dd')[1]).toBe('Nepal and China');
+		expect(textsOf(render({ countries: [nepal, china] }), 'dt')[1]).toBe('Countries');
 	});
 
 	it('omits the country row for an empty list', () => {
-		expect(textsOf(render({ countries: [] }), 'dt')).toEqual(['Elevation', 'Range', 'Coordinates']);
+		expect(textsOf(render({ countries: [] }), 'dt')).toEqual([
+			'Continent',
+			'Elevation',
+			'Range',
+			'Coordinates'
+		]);
 	});
 
 	it('omits the summary and the range when absent', () => {
@@ -36,7 +57,7 @@ describe('MountainInfoPanel', () => {
 		expect(summary).toBeDefined();
 		expect(rangeName).toBeDefined();
 		expect(html).not.toContain('<p');
-		expect(textsOf(html, 'dt')).toEqual(['Country', 'Elevation', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Elevation', 'Coordinates']);
 	});
 
 	it('speaks the coordinates as a map link', () => {

@@ -12,6 +12,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.media.keys import public_url
 from serendipeak.persistence.admin import CAMERA_FIELDS, MountainForm
 from serendipeak.persistence.models import (
+    MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
 )
@@ -25,7 +26,9 @@ CHANGELIST_URL = reverse("admin:catalog_mountainrecord_changelist")
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, range_name="Karakoram")
 ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
-NO_IMAGE_DRAFT = catalog_mountain("bare-peak", status=MountainStatus.DRAFT, primary_image=None)
+NO_IMAGE_DRAFT = catalog_mountain(
+    "bare-peak", status=MountainStatus.DRAFT, primary_image=None, countries=()
+)
 
 
 def admin_site():
@@ -38,13 +41,14 @@ def change_url(entry):
 
 NEW_MOUNTAIN = {
     "slug": "new-peak",
-    "name": "New Peak",
+    "name_en": "New Peak",
     "latitude": "46.5",
     "longitude": "8.5",
     "elevation_meters": "3500",
+    "continent": "EU",
     "range_name": "",
-    "countries": "",
-    "summary": "",
+    "countries": [],
+    "summary_en": "",
     "osm_node_id": "1504741757",
     "wikidata_id": "Q39739",
 }
@@ -62,24 +66,29 @@ def create_mountain(client, **overrides):
 
 
 EDITABLE = (
-    "name",
+    "name_en",
     "latitude",
     "longitude",
     "elevation_meters",
-    "summary",
+    "continent",
+    "summary_en",
     "range_name",
     "countries",
     "osm_node_id",
     "wikidata_id",
 )
 CORRECTIONS = {
-    "name": "Cerro Aconcagua",
+    "name_en": "Cerro Aconcagua",
     "latitude": "-32.65",
     "longitude": "-70.01",
     "elevation_meters": "6960",
     "osm_node_id": "42",
     "wikidata_id": "Q1",
 }
+
+
+def linked_codes(record):
+    return sorted(link.country_id for link in record.country_links.all())
 
 
 def stored(entry):
@@ -129,7 +138,7 @@ class TestChangeList:
 
         rows = list(response.context["cl"].result_list)
         assert [row.slug for row in rows] == ["aconcagua", "draft-peak", "old-peak"]
-        assert {"slug", "name", "status", "elevation_meters"} <= set(
+        assert {"slug", "english_name", "status", "continent", "country_codes"} <= set(
             response.context["cl"].list_display
         )
 
@@ -177,8 +186,9 @@ class TestCreation:
         assert record.location.srid == 4326
         assert record.osm_node_id == 1504741757
         assert all(getattr(record, name) is None for name in CAMERA_FIELDS)
-        assert record.countries == []
-        assert record.summary is None
+        assert not record.country_links.exists()
+        assert record.continent_id == "EU"
+        assert record.summary_en is None
 
     def test_the_add_form_offers_no_status_no_camera_and_no_map_widget(self, editor_client):
         names = input_names(editor_client.get(ADD_URL))
@@ -187,6 +197,10 @@ class TestCreation:
         assert "location" not in names
         assert names & set(CAMERA_FIELDS) == set()
         assert {"latitude", "longitude", "slug", "osm_node_id", "wikidata_id"} <= names
+        assert {"name_en", "summary_en", "continent", "countries"} <= names
+        assert {"name", "summary", "name_es", "name_pt", "summary_es", "summary_pt"}.isdisjoint(
+            names
+        )
 
     def test_a_posted_camera_is_ignored_on_creation(self, editor_client):
         payload = new_mountain_payload(editor_client) | {
@@ -205,8 +219,9 @@ class TestCreation:
         ]
 
         assert fieldsets == [
-            ("Mountain", ["name", "slug", "latitude", "longitude", "elevation_meters"], ""),
-            ("Editorial", ["summary", "range_name", "countries"], ""),
+            ("Mountain", ["name_en", "slug", "latitude", "longitude", "elevation_meters"], ""),
+            ("Geography", ["continent", "countries", "range_name"], ""),
+            ("Editorial", ["summary_en"], ""),
             ("Additional data", ["osm_node_id", "wikidata_id"], "collapse"),
         ]
 
@@ -217,17 +232,19 @@ class TestCreation:
 
         assert MountainRecord.objects.get(slug="new-peak").status == "draft"
 
-    def test_countries_and_summary_are_stored_as_entered(self, editor_client):
+    def test_continent_countries_and_summary_are_stored_as_entered(self, editor_client):
         create_mountain(
             editor_client,
-            countries="Argentina, Chile",
-            summary="Highest mountain outside Asia.",
+            continent="SA",
+            countries=["CL", "AR"],
+            summary_en="Highest mountain outside Asia.",
             range_name=" Principal Cordillera ",
         )
 
         record = MountainRecord.objects.get(slug="new-peak")
-        assert record.countries == ["Argentina", "Chile"]
-        assert record.summary == "Highest mountain outside Asia."
+        assert record.continent_id == "SA"
+        assert linked_codes(record) == ["AR", "CL"]
+        assert record.summary_en == "Highest mountain outside Asia."
         assert record.range_name == "Principal Cordillera"
 
     def test_the_photograph_is_created_with_the_draft(self, editor_client, media_store):
@@ -278,7 +295,10 @@ class TestCreation:
             ({"slug": "random"}, "slug"),
             ({"slug": "-lead"}, "slug"),
             ({"slug": ""}, "slug"),
-            ({"name": "  "}, "name"),
+            ({"name_en": "  "}, "name_en"),
+            ({"continent": ""}, "continent"),
+            ({"continent": "ZZ"}, "continent"),
+            ({"countries": ["ZZ"]}, "countries"),
             ({"elevation_meters": "0"}, "elevation_meters"),
             ({"elevation_meters": "-5"}, "elevation_meters"),
             ({"elevation_meters": ""}, "elevation_meters"),
@@ -287,7 +307,7 @@ class TestCreation:
             ({"osm_node_id": "node/1"}, "osm_node_id"),
             ({"wikidata_id": "39739"}, "wikidata_id"),
             ({"wikidata_id": "Q0"}, "wikidata_id"),
-            ({"summary": "highest mountain."}, "summary"),
+            ({"summary_en": "highest mountain."}, "summary_en"),
         ],
     )
     def test_each_frozen_rule_gives_authoring_feedback_on_its_field(
@@ -366,6 +386,7 @@ class TestEditing:
         assert sections == [
             ("Publication", ""),
             ("Mountain", ""),
+            ("Geography", ""),
             ("Editorial", ""),
             ("Camera", ""),
             ("Additional data", "collapse"),
@@ -408,7 +429,7 @@ class TestEditing:
         after = stored(entry)
         changed = {name for name in before if before[name] != after[name]}
         assert changed == {
-            "name",
+            "name_en",
             "location",
             "elevation_meters",
             "osm_node_id",
@@ -417,7 +438,7 @@ class TestEditing:
         }
         assert (after["location"].y, after["location"].x) == (-32.65, -70.01)
         assert after["location"].srid == 4326
-        assert (after["name"], after["elevation_meters"]) == ("Cerro Aconcagua", 6960)
+        assert (after["name_en"], after["elevation_meters"]) == ("Cerro Aconcagua", 6960)
         assert (after["osm_node_id"], after["wikidata_id"]) == (42, "Q1")
         assert after["status"] == entry.mountain.status.value
 
@@ -426,7 +447,7 @@ class TestEditing:
         before = stored(ACTIVE)["location"]
         page = editor_client.get(change_url(ACTIVE))
 
-        editor_client.post(change_url(ACTIVE), form_payload(page, name="Cerro Aconcagua"))
+        editor_client.post(change_url(ACTIVE), form_payload(page, name_en="Cerro Aconcagua"))
 
         assert stored(ACTIVE)["location"].ewkb == before.ewkb
 
@@ -464,7 +485,7 @@ class TestEditing:
         load_catalog(entry)
         before = stored(entry)
         page = editor_client.get(change_url(entry))
-        payload = form_payload(page, summary="Highest mountain in the Andes.")
+        payload = form_payload(page, summary_en="Highest mountain in the Andes.")
         payload |= {
             "status": "draft" if entry is not DRAFT else "active",
             "camera_heading_degrees": "1",
@@ -482,7 +503,7 @@ class TestEditing:
         assert response.status_code == 302
         after = stored(entry)
         assert {name for name in before if before[name] != after[name]} == {
-            "summary",
+            "summary_en",
             "updated_at",
         }
 
@@ -491,19 +512,19 @@ class TestEditing:
         page = editor_client.get(change_url(ACTIVE))
 
         with CaptureQueriesContext(connection) as queries:
-            editor_client.post(change_url(ACTIVE), form_payload(page, name="Cerro Aconcagua"))
+            editor_client.post(change_url(ACTIVE), form_payload(page, name_en="Cerro Aconcagua"))
 
         updates = [q["sql"] for q in queries if q["sql"].startswith('UPDATE "mountain" SET')]
         assert len(updates) == 1
         assigned = set(re.findall(r'"(\w+)" = ', updates[0].split(" WHERE ")[0]))
         assert assigned == {
-            "name",
+            "name_en",
             "slug",
             "location",
             "elevation_meters",
+            "continent_code",
             "range_name",
-            "countries",
-            "summary",
+            "summary_en",
             "osm_node_id",
             "wikidata_id",
             "updated_at",
@@ -518,12 +539,12 @@ class TestEditing:
             camera_heading_degrees=10.0, camera_framing_x=0.1
         )
 
-        response = editor_client.post(change_url(ACTIVE), form_payload(page, name="Renamed"))
+        response = editor_client.post(change_url(ACTIVE), form_payload(page, name_en="Renamed"))
 
         assert response.status_code == 302
         after = stored(ACTIVE)
         assert (after["camera_heading_degrees"], after["camera_framing_x"]) == (10.0, 0.1)
-        assert after["name"] == "Renamed"
+        assert after["name_en"] == "Renamed"
 
     def test_optional_source_references_can_be_cleared_on_a_public_mountain(
         self, editor_client, load_catalog
@@ -567,8 +588,8 @@ class TestEditing:
             ({"latitude": "90.5"}, "latitude"),
             ({"longitude": "-181"}, "longitude"),
             ({"latitude": "nan"}, "latitude"),
-            ({"name": " "}, "name"),
-            ({"summary": "highest mountain."}, "summary"),
+            ({"name_en": " "}, "name_en"),
+            ({"summary_en": "highest mountain."}, "summary_en"),
         ],
     )
     def test_a_public_mountain_cannot_be_saved_into_an_unpublishable_state(
@@ -596,7 +617,7 @@ class TestEditing:
         before = stored(INACTIVE)
         page = editor_client.get(change_url(INACTIVE))
 
-        response = editor_client.post(change_url(INACTIVE), form_payload(page, name="Renamed"))
+        response = editor_client.post(change_url(INACTIVE), form_payload(page, name_en="Renamed"))
 
         assert response.status_code == 200
         assert inline_errors_of(response) == [
@@ -612,7 +633,7 @@ class TestEditing:
         before = stored(awaiting)
         page = editor_client.get(change_url(awaiting))
 
-        response = editor_client.post(change_url(awaiting), form_payload(page, name="Renamed"))
+        response = editor_client.post(change_url(awaiting), form_payload(page, name_en="Renamed"))
 
         assert response.status_code == 200
         assert inline_errors_of(response) == [
@@ -632,10 +653,10 @@ class TestEditing:
         load_catalog(draft)
         page = editor_client.get(change_url(draft))
 
-        response = editor_client.post(change_url(draft), form_payload(page, name="Bare Draft"))
+        response = editor_client.post(change_url(draft), form_payload(page, name_en="Bare Draft"))
 
         assert response.status_code == 302
-        assert stored(draft)["name"] == "Bare Draft"
+        assert stored(draft)["name_en"] == "Bare Draft"
 
     def test_countries_are_editable(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -643,11 +664,11 @@ class TestEditing:
 
         editor_client.post(
             change_url(ACTIVE),
-            form_payload(page, countries="Argentina, Chile"),
+            form_payload(page, countries=["AR", "CL"]),
         )
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert record.countries == ["Argentina", "Chile"]
+        assert linked_codes(record) == ["AR", "CL"]
 
     def test_optional_fields_can_be_cleared(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -655,11 +676,11 @@ class TestEditing:
 
         editor_client.post(
             change_url(ACTIVE),
-            form_payload(page, summary="", range_name="", countries=""),
+            form_payload(page, summary_en="", range_name="", countries=[]),
         )
 
         record = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
-        assert (record.summary, record.range_name, record.countries) == (None, None, [])
+        assert (record.summary_en, record.range_name, linked_codes(record)) == (None, None, [])
 
     def test_the_photograph_credit_is_saved(self, editor_client, load_catalog):
         load_catalog(ACTIVE)
@@ -689,7 +710,9 @@ class TestEditing:
         before = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
         page = editor_client.get(change_url(ACTIVE))
 
-        editor_client.post(change_url(ACTIVE), form_payload(page, summary="Highest in the Andes."))
+        editor_client.post(
+            change_url(ACTIVE), form_payload(page, summary_en="Highest in the Andes.")
+        )
 
         after = MountainRecord.objects.get(pk=ACTIVE.mountain.id)
         assert after.updated_at > before.updated_at
@@ -715,13 +738,14 @@ class TestEditing:
         model_admin = admin_site().get_model_admin(MountainRecord)
         form = MountainForm(
             {
-                "name": stale.name,
+                "name_en": stale.name_en,
                 "slug": stale.slug,
                 "latitude": "-32.6531487",
                 "longitude": "-70.0119607",
                 "elevation_meters": "6961",
-                "summary": "Highest in the Andes.",
-                "countries": "Argentina",
+                "continent": "SA",
+                "summary_en": "Highest in the Andes.",
+                "countries": ["AR"],
             },
             instance=stale,
         )
@@ -732,7 +756,7 @@ class TestEditing:
         model_admin.save_model(request, form.save(commit=False), form, change=True)
 
         saved = MountainRecord.objects.get(pk=DRAFT.mountain.id)
-        assert (saved.status, saved.summary) == ("active", "Highest in the Andes.")
+        assert (saved.status, saved.summary_en) == ("active", "Highest in the Andes.")
 
     @pytest.mark.parametrize(
         "summary",
@@ -751,12 +775,12 @@ class TestEditing:
         load_catalog(ACTIVE)
         page = editor_client.get(change_url(ACTIVE))
 
-        response = editor_client.post(change_url(ACTIVE), form_payload(page, summary=summary))
+        response = editor_client.post(change_url(ACTIVE), form_payload(page, summary_en=summary))
 
         assert response.status_code == 200
-        assert "summary" in errors_of(response)
+        assert "summary_en" in errors_of(response)
         assert (
-            MountainRecord.objects.get(pk=ACTIVE.mountain.id).summary
+            MountainRecord.objects.get(pk=ACTIVE.mountain.id).summary_en
             == "Highest mountain outside Asia."
         )
 
@@ -770,7 +794,7 @@ class TestEditing:
 
         response = editor_client.post(
             change_url(entry),
-            form_payload(page, summary="Edited.", **{cleared: ""}),
+            form_payload(page, summary_en="Edited.", **{cleared: ""}),
         )
 
         image = MountainImageRecord.objects.get(pk=entry.mountain.id)
@@ -817,11 +841,11 @@ class TestEditing:
     def test_a_viewer_cannot_post(self, viewer_client, load_catalog):
         load_catalog(ACTIVE)
 
-        response = viewer_client.post(change_url(ACTIVE), {"summary": "Highest in the Andes."})
+        response = viewer_client.post(change_url(ACTIVE), {"summary_en": "Highest in the Andes."})
 
         assert response.status_code == 403
         assert (
-            MountainRecord.objects.get(pk=ACTIVE.mountain.id).summary
+            MountainRecord.objects.get(pk=ACTIVE.mountain.id).summary_en
             == "Highest mountain outside Asia."
         )
 
@@ -853,16 +877,37 @@ class TestDeletion:
     def test_a_draft_with_a_photograph_needs_the_photograph_removed_first(
         self, editor_client, load_catalog
     ):
+        draft = catalog_mountain(
+            "draft-peak", status=MountainStatus.DRAFT, range_name="Karakoram", countries=()
+        )
+        load_catalog(draft)
+        delete_url = reverse("admin:catalog_mountainrecord_delete", args=[draft.mountain.id])
+
+        blocked = editor_client.post(delete_url, {"post": "yes"})
+        assert blocked.status_code == 200
+        assert MountainRecord.objects.filter(pk=draft.mountain.id).exists()
+
+        page = editor_client.get(change_url(draft))
+        editor_client.post(change_url(draft), form_payload(page, **{"image-0-DELETE": "on"}))
+        assert not MountainImageRecord.objects.exists()
+
+        assert editor_client.post(delete_url, {"post": "yes"}).status_code == 302
+        assert not MountainRecord.objects.exists()
+
+    def test_a_draft_with_countries_needs_them_removed_first(self, editor_client, load_catalog):
         load_catalog(DRAFT)
         delete_url = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
 
         blocked = editor_client.post(delete_url, {"post": "yes"})
         assert blocked.status_code == 200
         assert MountainRecord.objects.filter(pk=DRAFT.mountain.id).exists()
+        assert MountainCountryRecord.objects.filter(mountain_id=DRAFT.mountain.id).exists()
 
         page = editor_client.get(change_url(DRAFT))
-        editor_client.post(change_url(DRAFT), form_payload(page, **{"image-0-DELETE": "on"}))
-        assert not MountainImageRecord.objects.exists()
+        editor_client.post(
+            change_url(DRAFT), form_payload(page, countries=[], **{"image-0-DELETE": "on"})
+        )
+        assert not MountainCountryRecord.objects.exists()
 
         assert editor_client.post(delete_url, {"post": "yes"}).status_code == 302
         assert not MountainRecord.objects.exists()
@@ -1056,7 +1101,7 @@ class TestPhotographInline:
 
         assert input_names(page) & set(forged) == set()
         response = editor_client.post(
-            change_url(awaiting), {**form_payload(page, summary="Edited."), **forged}
+            change_url(awaiting), {**form_payload(page, summary_en="Edited."), **forged}
         )
 
         assert response.status_code == 302

@@ -2,7 +2,12 @@ import pytest
 from django.contrib.auth.models import Permission
 from django.db import connection
 
-from tests.support.migrations import applied_head, migrate_to, migrate_to_latest
+from tests.support.migrations import (
+    applied_head,
+    migrate_to,
+    migrate_to_latest,
+    migrate_to_latest_discarding_catalog,
+)
 from tests.support.records import mountain_record
 
 BEFORE = ("catalog", "0012_catalog_pruning")
@@ -19,7 +24,7 @@ def tables():
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to_latest()
+    migrate_to_latest_discarding_catalog()
 
 
 def test_a_fresh_database_creates_the_user_table_before_the_admin_log_that_references_it():
@@ -65,9 +70,14 @@ def test_the_migration_reverses_without_touching_the_catalog_and_applies_again()
     assert "django_admin_log" not in tables()
     assert "mountain" in tables()
 
+    # Going back through the geography migrations dropped the continent, which an older schema
+    # does not hold, so the mountain is given it again before the final validation.
+    migrate_to(("catalog", "0017_mountain_continent"))
+    with connection.cursor() as cursor:
+        cursor.execute("UPDATE mountain SET continent_code = 'SA'")
     migrate_to_latest()
 
-    assert applied_head() == "0013_user_record_and_role_permissions"
+    assert applied_head() == "0018_geography_final_validation"
     assert "app_user" in tables()
     with connection.cursor() as cursor:
         cursor.execute("SELECT count(*) FROM mountain WHERE slug = 'aconcagua'")

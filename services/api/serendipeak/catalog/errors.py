@@ -15,6 +15,24 @@ class InvalidFrozenCatalog(ApplicationError):
     pass
 
 
+class InvalidGeographyInput(ApplicationError):
+    pass
+
+
+class GeographyBackfillRejected(ApplicationError):
+    def __init__(self, problems: tuple[str, ...]):
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+class UnexpectedSchemaState(ApplicationError):
+    def __init__(self, migration: str, expected: tuple[str, ...]):
+        super().__init__(
+            f"the catalog schema is at migration {migration}, not at {' or '.join(expected)}"
+        )
+        self.migration = migration
+
+
 class CatalogAlreadyPopulated(ApplicationError):
     def __init__(self):
         super().__init__("the catalog already holds mountains")

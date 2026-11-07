@@ -13,15 +13,18 @@ def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, obj
         {
             "id": str(mountain.id),
             "slug": mountain.slug,
-            "name": mountain.name,
+            "name": mountain.name.en,
             "coordinates": {
                 "latitude": coordinates.latitude,
                 "longitude": coordinates.longitude,
             },
             "elevationMeters": mountain.elevation_meters,
+            "continent": {"code": mountain.continent.code, "name": mountain.continent.name.en},
+            "countries": [
+                {"code": country.code, "name": country.name.en} for country in mountain.countries
+            ],
             "rangeName": mountain.range_name,
-            "countries": list(mountain.countries),
-            "summary": mountain.summary,
+            "summary": None if mountain.summary is None else mountain.summary.en,
             "camera": _camera(mountain.camera),
             "primaryImage": _primary_image(mountain.primary_image, media_base_url),
             "sources": _sources(mountain),

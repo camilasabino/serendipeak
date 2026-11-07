@@ -31,14 +31,25 @@ export interface MountainCamera {
 	framing?: CameraFraming;
 }
 
+export interface Continent {
+	code: string;
+	name: string;
+}
+
+export interface Country {
+	code: string;
+	name: string;
+}
+
 export interface Mountain {
 	id: string;
 	slug: string;
 	name: string;
 	coordinates: Coordinates;
 	elevationMeters: number;
+	continent: Continent;
+	countries: Country[];
 	rangeName?: string;
-	countries: string[];
 	summary?: string;
 	camera?: MountainCamera;
 	primaryImage?: MountainImage;

@@ -94,7 +94,7 @@ test.describe('minimal permalink', () => {
 	test('collapses to elevation and coordinates', async ({ request }) => {
 		const html = await (await request.get(`/mountains/${minimal.slug}`)).text();
 
-		expect(textsOf(html, 'dt')).toEqual(['Elevation', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
 	});
 });
 

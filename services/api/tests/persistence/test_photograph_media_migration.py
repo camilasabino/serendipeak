@@ -1,8 +1,12 @@
 import pytest
 from django.db import connection
 
-from tests.support.migrations import historical_model, migrate_to, migrate_to_latest
-from tests.support.records import mountain_record
+from tests.support.migrations import (
+    historical_model,
+    migrate_to,
+    migrate_to_latest_discarding_catalog,
+)
+from tests.support.records import columns_at_schema, mountain_record
 
 FILE_URL = "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg"
 BEFORE = ("catalog", "0005_optional_provenance")
@@ -22,7 +26,7 @@ def image_columns():
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to_latest()
+    migrate_to_latest_discarding_catalog()
 
 
 def test_existing_images_keep_their_urls_and_gain_empty_photograph_media():
@@ -30,14 +34,7 @@ def test_existing_images_keep_their_urls_and_gain_empty_photograph_media():
     historical_mountain = historical_model(BEFORE, "MountainRecord")
     historical_image = historical_model(BEFORE, "MountainImageRecord")
     mountain = mountain_record()
-    names = {field.attname for field in historical_mountain._meta.concrete_fields}
-    historical_mountain.objects.create(
-        **{
-            field.attname: getattr(mountain, field.attname)
-            for field in mountain._meta.concrete_fields
-            if field.attname in names
-        }
-    )
+    historical_mountain.objects.create(**columns_at_schema(mountain, historical_mountain))
     historical_image.objects.create(
         mountain_id=mountain.pk,
         attribution="Bjørn Christian Tørrissen",

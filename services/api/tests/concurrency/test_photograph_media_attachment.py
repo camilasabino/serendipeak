@@ -24,7 +24,7 @@ def admin_save(**image_columns):
 
     def change():
         MountainRecord.objects.select_for_update().filter(pk=FUJI.mountain.id).get()
-        MountainRecord.objects.filter(pk=FUJI.mountain.id).update(name="Fuji-san")
+        MountainRecord.objects.filter(pk=FUJI.mountain.id).update(name_en="Fuji-san")
         MountainImageRecord.objects.filter(pk=FUJI.mountain.id).update(**image_columns)
 
     return change

@@ -2,7 +2,12 @@ import pytest
 from django.db import IntegrityError, transaction
 
 from serendipeak.catalog.media import keys
-from tests.support.migrations import applied_head, historical_model, migrate_to, migrate_to_latest
+from tests.support.migrations import (
+    applied_head,
+    historical_model,
+    migrate_to,
+    migrate_to_latest_discarding_catalog,
+)
 from tests.support.records import load_committed_catalog_at
 
 BEFORE = ("catalog", "0008_source_agnostic_photograph")
@@ -14,7 +19,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 @pytest.fixture(autouse=True)
 def back_to_the_latest_schema():
     yield
-    migrate_to_latest()
+    migrate_to_latest_discarding_catalog()
 
 
 def stored_keys(target):

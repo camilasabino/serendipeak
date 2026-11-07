@@ -2,7 +2,6 @@ import uuid
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.gis.db import models as gis_models
-from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import (
     BooleanField,
@@ -21,6 +20,7 @@ from serendipeak.accounts.roles import Role
 from serendipeak.accounts.username import USERNAME_PATTERN, USERNAME_RULE
 from serendipeak.catalog import camera, coordinates
 from serendipeak.catalog.entities import WIKIDATA_ID_PATTERN, MountainStatus
+from serendipeak.catalog.geography import CONTINENT_CODES, COUNTRY_CODE_PATTERN
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.keys import MEDIA_KEY_PATTERN, SHA256_PATTERN
 from serendipeak.catalog.public_link import PUBLIC_LINK_PATTERN
@@ -91,16 +91,77 @@ def _location_coordinate_between(function, minimum, maximum):
     return Q(Range(_location(function, FloatField()), (minimum, maximum)))
 
 
+class ContinentRecord(models.Model):
+    """Reference data: loaded by a migration, never written by the application."""
+
+    code = models.TextField(primary_key=True)
+    name_en = models.TextField()
+    name_es = models.TextField()
+    name_pt = models.TextField()
+
+    class Meta:
+        db_table = "continent"
+        constraints = [
+            CheckConstraint(condition=Q(code__in=CONTINENT_CODES), name="continent_code_valid"),
+            UniqueConstraint(fields=["name_en"], name="continent_name_en_key"),
+            CheckConstraint(condition=_has_text("name_en"), name="continent_name_en_not_blank"),
+            CheckConstraint(condition=_has_text("name_es"), name="continent_name_es_not_blank"),
+            CheckConstraint(condition=_has_text("name_pt"), name="continent_name_pt_not_blank"),
+        ]
+
+    def __str__(self):
+        return self.name_en
+
+
+class CountryRecord(models.Model):
+    """Reference data: loaded by a migration, never written by the application."""
+
+    code = models.TextField(primary_key=True)
+    name_en = models.TextField()
+    name_es = models.TextField()
+    name_pt = models.TextField()
+    continent = models.ForeignKey(
+        ContinentRecord,
+        on_delete=models.PROTECT,
+        db_column="continent_code",
+        related_name="countries",
+    )
+
+    class Meta:
+        db_table = "country"
+        constraints = [
+            CheckConstraint(
+                condition=Q(code__regex=COUNTRY_CODE_PATTERN), name="country_code_format"
+            ),
+            UniqueConstraint(fields=["name_en"], name="country_name_en_key"),
+            CheckConstraint(condition=_has_text("name_en"), name="country_name_en_not_blank"),
+            CheckConstraint(condition=_has_text("name_es"), name="country_name_es_not_blank"),
+            CheckConstraint(condition=_has_text("name_pt"), name="country_name_pt_not_blank"),
+        ]
+
+    def __str__(self):
+        return self.name_en
+
+
 class MountainRecord(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4)
     slug = models.TextField()
-    name = models.TextField()
+    name_en = models.TextField()
+    name_es = models.TextField(null=True)
+    name_pt = models.TextField(null=True)
     # geography would silently wrap out-of-range coordinates before any CHECK could see them.
     location = gis_models.PointField(srid=4326, spatial_index=False)
     elevation_meters = models.IntegerField()
+    continent = models.ForeignKey(
+        ContinentRecord,
+        on_delete=models.PROTECT,
+        db_column="continent_code",
+        related_name="mountains",
+    )
     range_name = models.TextField(null=True)
-    countries = ArrayField(models.TextField(), default=list)
-    summary = models.TextField(null=True)
+    summary_en = models.TextField(null=True)
+    summary_es = models.TextField(null=True)
+    summary_pt = models.TextField(null=True)
     camera_heading_degrees = models.FloatField(null=True)
     camera_pitch_degrees = models.FloatField(null=True)
     camera_range_meters = models.FloatField(null=True)
@@ -120,7 +181,13 @@ class MountainRecord(models.Model):
             CheckConstraint(
                 condition=~Q(slug__in=sorted(RESERVED_SLUGS)), name="mountain_slug_not_reserved"
             ),
-            CheckConstraint(condition=_has_text("name"), name="mountain_name_not_blank"),
+            CheckConstraint(condition=_has_text("name_en"), name="mountain_name_en_not_blank"),
+            CheckConstraint(
+                condition=_absent_or_has_text("name_es"), name="mountain_name_es_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("name_pt"), name="mountain_name_pt_not_blank"
+            ),
             CheckConstraint(
                 condition=~Q(_location("ST_IsEmpty", BooleanField())),
                 name="mountain_location_not_empty",
@@ -144,7 +211,18 @@ class MountainRecord(models.Model):
                 condition=_absent_or_has_text("range_name"), name="mountain_range_name_not_blank"
             ),
             CheckConstraint(
-                condition=_absent_or_has_text("summary"), name="mountain_summary_not_blank"
+                condition=_absent_or_has_text("summary_en"), name="mountain_summary_en_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("summary_es"), name="mountain_summary_es_not_blank"
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("summary_pt"), name="mountain_summary_pt_not_blank"
+            ),
+            CheckConstraint(
+                condition=Q(summary_en__isnull=False)
+                | Q(summary_es__isnull=True, summary_pt__isnull=True),
+                name="mountain_summary_translation_requires_english",
             ),
             CheckConstraint(
                 condition=Q(status__in=MOUNTAIN_STATUSES), name="mountain_status_valid"
@@ -216,6 +294,29 @@ class MountainRecord(models.Model):
 
     def __str__(self):
         return self.slug
+
+
+class MountainCountryRecord(models.Model):
+    pk = models.CompositePrimaryKey("mountain_id", "country_id")
+    # The primary key serves the lookups by mountain and the index below those by country, so
+    # the foreign keys need no indexes of their own.
+    mountain = models.ForeignKey(
+        MountainRecord, on_delete=models.PROTECT, related_name="country_links", db_index=False
+    )
+    country = models.ForeignKey(
+        CountryRecord,
+        on_delete=models.PROTECT,
+        db_column="country_code",
+        related_name="mountain_links",
+        db_index=False,
+    )
+
+    class Meta:
+        db_table = "mountain_country"
+        indexes = [models.Index(fields=["country", "mountain"], name="mountain_country_reverse")]
+
+    def __str__(self):
+        return f"link to {self.country_id}"
 
 
 class MountainImageRecord(models.Model):

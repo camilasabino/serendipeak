@@ -88,7 +88,7 @@ def _differences(expected: FrozenMountain, actual: Mountain) -> list[str]:
 
     if actual.status not in PUBLIC_STATUSES:
         differences.append(f"status {actual.status} is not public")
-    if actual.name != expected.name:
+    if actual.name.en != expected.name:
         differences.append("name differs")
     if not _coordinates_match(expected.coordinates, actual.coordinates):
         differences.append("coordinates differ")

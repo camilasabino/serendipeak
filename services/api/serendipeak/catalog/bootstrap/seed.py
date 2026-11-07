@@ -1,5 +1,3 @@
-import hashlib
-import json
 import math
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
@@ -10,10 +8,12 @@ from serendipeak.catalog.bootstrap.ports import (
     CatalogMountain,
     CatalogSeed,
 )
+from serendipeak.catalog.canonical_json import content_sha256
 from serendipeak.catalog.coordinates import coordinates_in_range
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
+    Continent,
     Coordinates,
     ImageDimensions,
     Mountain,
@@ -21,6 +21,7 @@ from serendipeak.catalog.entities import (
     PrimaryImage,
 )
 from serendipeak.catalog.errors import InvalidCatalogSeed
+from serendipeak.catalog.localization import LocalizedText
 
 SEED_FORMAT = "serendipeak.legacy-catalog"
 SEED_FORMAT_VERSION = 1
@@ -28,6 +29,10 @@ LEGACY_TAG = "v1-behavioral-freeze"
 LEGACY_COMMIT = "f9a66deb2c0591a9c574fb4751b938b5863e6a1e"
 
 _OSM_NODE = "node"
+
+# The seed holds neither continents nor country codes. A parsed seed carries this placeholder
+# until a geography input assigns the real ones.
+PENDING_CONTINENT = Continent(code="", name=LocalizedText(en=""))
 
 _LEGACY_STATUSES = {
     "active": MountainStatus.ACTIVE,
@@ -82,20 +87,6 @@ _IMAGE_KEYS = {
 _DISCOVERY_KEYS = {"date", "mountain_id", "created_at"}
 
 
-def _canonical_json(value: object) -> str:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-
-
-def content_sha256(content: object) -> str:
-    return hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
-
-
 def parse_catalog_seed(document: object) -> CatalogSeed:
     seed = _object(document, {*_SEED_KEYS, "content"}, "seed")
     if seed["format"] != SEED_FORMAT or seed["format_version"] != SEED_FORMAT_VERSION:
@@ -119,8 +110,9 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
         _mountain(raw, f"content.mountains[{index}]")
         for index, raw in enumerate(_list(content["mountains"], "content.mountains"))
     ]
-    mountains = tuple(entry for entry, _ in parsed)
-    approvals = sum(approved for _, approved in parsed)
+    mountains = tuple(entry for entry, _, _ in parsed)
+    approvals = sum(approved for _, approved, _ in parsed)
+    legacy_countries = {entry.mountain.id: names for entry, _, names in parsed}
     discoveries = tuple(
         _discovery(raw, f"content.daily_discoveries[{index}]")
         for index, raw in enumerate(
@@ -131,7 +123,11 @@ def parse_catalog_seed(document: object) -> CatalogSeed:
     _check_counts(_object(seed["counts"], _COUNT_KEYS, "counts"), mountains, approvals, discoveries)
     _check_references(mountains, discoveries)
 
-    return CatalogSeed(mountains=mountains, discoveries=discoveries)
+    return CatalogSeed(
+        mountains=mountains,
+        discoveries=discoveries,
+        legacy_country_names=legacy_countries,
+    )
 
 
 def _check_counts(counts, mountains, approvals, discoveries):
@@ -184,19 +180,22 @@ def _mountain(raw, label):
     _optional(_text, fields["wikipedia_url"], f"{label} wikipedia_url")
 
     image, approved = (None, False) if fields["image"] is None else _image(fields["image"], label)
+    summary = _optional(_text, fields["summary"], f"{label} summary")
+    legacy_countries = tuple(
+        _text(country, f"{label} countries")
+        for country in _list(fields["countries"], f"{label} countries")
+    )
     mountain = Mountain(
         id=_uuid(fields["id"], f"{label} id"),
         slug=slug,
-        name=_text(fields["name"], f"{label} name"),
+        name=LocalizedText(en=_text(fields["name"], f"{label} name")),
         status=status,
         coordinates=Coordinates(latitude=latitude, longitude=longitude),
         elevation_meters=_integer(fields["elevation_meters"], f"{label} elevation_meters"),
+        continent=PENDING_CONTINENT,
+        countries=(),
         range_name=_optional(_text, fields["range_name"], f"{label} range_name"),
-        countries=tuple(
-            _text(country, f"{label} countries")
-            for country in _list(fields["countries"], f"{label} countries")
-        ),
-        summary=_optional(_text, fields["summary"], f"{label} summary"),
+        summary=None if summary is None else LocalizedText(en=summary),
         camera=_camera(fields, label),
         primary_image=image,
         osm_node_id=_osm_node_id(fields, label),
@@ -209,7 +208,7 @@ def _mountain(raw, label):
         updated_at=_timestamp(fields["updated_at"], f"{label} updated_at"),
     )
 
-    return entry, approved
+    return entry, approved, legacy_countries
 
 
 def _camera(fields, label):

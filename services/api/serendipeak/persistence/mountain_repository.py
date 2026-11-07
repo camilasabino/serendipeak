@@ -9,7 +9,7 @@ from serendipeak.catalog.entities import (
     MountainStatus,
 )
 from serendipeak.persistence.errors import translate_database_errors
-from serendipeak.persistence.mapping import to_mountain
+from serendipeak.persistence.mapping import to_mountain, with_geography
 from serendipeak.persistence.models import MountainRecord
 
 _PUBLIC_STATUS_VALUES = sorted(status.value for status in PUBLIC_STATUSES)
@@ -19,7 +19,7 @@ class DjangoMountainRepository:
     def find_public_by_slug(self, slug: str) -> Mountain | None:
         with translate_database_errors():
             record = (
-                MountainRecord.objects.select_related("image")
+                with_geography(MountainRecord.objects.select_related("image"))
                 .filter(slug=slug, status__in=_PUBLIC_STATUS_VALUES)
                 .first()
             )

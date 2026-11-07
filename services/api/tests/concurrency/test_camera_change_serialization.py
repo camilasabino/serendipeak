@@ -76,12 +76,12 @@ def an_admin_edit_of(entry, **columns):
 def test_a_camera_save_waiting_on_an_admin_edit_applies_afterwards(editor_client):
     save = confirm(editor_client, ACTIVE)
 
-    response = run_while_a_change_holds_the_lock(an_admin_edit_of(ACTIVE, name="Renamed"), save)
+    response = run_while_a_change_holds_the_lock(an_admin_edit_of(ACTIVE, name_en="Renamed"), save)
 
     assert response.status_code == 302
     record = stored(ACTIVE)
     assert to_camera(record) == PROPOSED_CAMERA
-    assert record.name == "Renamed"
+    assert record.name_en == "Renamed"
 
 
 def test_a_camera_save_waiting_on_a_publication_applies_and_keeps_the_new_status(editor_client):

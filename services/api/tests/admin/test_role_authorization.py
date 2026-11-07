@@ -13,7 +13,9 @@ from tests.support.catalog import catalog_discovery, catalog_mountain
 from tests.support.users import create_user
 
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
-NO_IMAGE_DRAFT = catalog_mountain("bare-peak", status=MountainStatus.DRAFT, primary_image=None)
+NO_IMAGE_DRAFT = catalog_mountain(
+    "bare-peak", status=MountainStatus.DRAFT, primary_image=None, countries=()
+)
 ACTIVE = catalog_mountain("aconcagua")
 DAY = date(2026, 1, 15)
 
@@ -92,7 +94,7 @@ class TestWithoutAccess:
         before = snapshot()
         method, url = WRITE_REQUESTS[request_name]()
 
-        response = getattr(without_access, method)(url, {"summary": "Changed."})
+        response = getattr(without_access, method)(url, {"summary_en": "Changed."})
 
         assert response.status_code == 302
         assert response.headers["Location"].startswith(LOGIN_URL)
@@ -116,7 +118,7 @@ class TestViewer:
         before = snapshot()
         method, url = WRITE_REQUESTS[request_name]()
 
-        response = getattr(viewer_client, method)(url, {"summary": "Changed."})
+        response = getattr(viewer_client, method)(url, {"summary_en": "Changed."})
 
         assert response.status_code == 403
         assert snapshot() == before
@@ -142,10 +144,10 @@ class TestEditor:
         url = mountain_url("change")
         page = editor_client.get(url)
 
-        response = editor_client.post(url, form_payload(page, summary="A new summary."))
+        response = editor_client.post(url, form_payload(page, summary_en="A new summary."))
 
         assert response.status_code == 302
-        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).summary == "A new summary."
+        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).summary_en == "A new summary."
 
     def test_an_editor_changes_the_publication_state(self, editor_client):
         response = editor_client.post(transition_url(ACTIVE, "deactivate"))
@@ -177,16 +179,16 @@ class TestSessionsFollowTheCurrentRole:
 
     def test_a_demoted_editor_loses_write_access_immediately(self, editor_client, editor):
         url = mountain_url("change")
-        payload = form_payload(editor_client.get(url), summary="Written as editor.")
+        payload = form_payload(editor_client.get(url), summary_en="Written as editor.")
 
         type(editor).objects.filter(pk=editor.pk).update(role=Role.VIEWER.value)
 
         assert editor_client.post(url, payload).status_code == 403
-        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).summary != "Written as editor."
+        assert MountainRecord.objects.get(pk=DRAFT.mountain.id).summary_en != "Written as editor."
 
     def test_a_promoted_viewer_gains_write_access_immediately(self, viewer_client, viewer):
         url = mountain_url("change")
-        assert viewer_client.post(url, {"summary": "No."}).status_code == 403
+        assert viewer_client.post(url, {"summary_en": "No."}).status_code == 403
 
         type(viewer).objects.filter(pk=viewer.pk).update(role=Role.EDITOR.value)
 

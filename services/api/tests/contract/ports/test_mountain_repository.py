@@ -14,6 +14,7 @@ from tests.support.catalog import (
     primary_image,
 )
 from tests.support.fakes import InMemoryMountainRepository
+from tests.support.geography import continent, countries
 
 ACONCAGUA = catalog_mountain("aconcagua")
 WITHOUT_DIMENSIONS = catalog_mountain(
@@ -118,3 +119,43 @@ def test_every_committed_active_mountain_is_a_candidate(repository_holding):
 )
 def test_no_active_mountain_gives_no_candidates(repository_holding, entries):
     assert repository_holding(*entries).list_active_candidates() == ()
+
+
+GEOGRAPHY = [
+    # The continent is stored on its own: nothing derives it from the countries.
+    catalog_mountain("alpine-islet", continent=continent("AF"), countries=countries("CH")),
+    catalog_mountain("pacific-cone", continent=continent("OC"), countries=countries("US")),
+    catalog_mountain("ice-dome", continent=continent("AN"), countries=countries("AQ")),
+    catalog_mountain(
+        "border-spire", continent=continent("AS"), countries=countries("NP", "CN", "IN")
+    ),
+    catalog_mountain("unclaimed-rock", continent=continent("EU"), countries=()),
+]
+
+
+@pytest.mark.parametrize("entry", GEOGRAPHY, ids=lambda entry: entry.mountain.slug)
+def test_the_continent_and_countries_come_back_as_stored(repository_holding, entry):
+    repository = repository_holding(*GEOGRAPHY)
+
+    found = repository.find_public_by_slug(entry.mountain.slug)
+
+    assert found.continent == entry.mountain.continent
+    assert found.countries == entry.mountain.countries
+
+
+def test_countries_are_ordered_by_english_name_then_code(repository_holding):
+    repository = repository_holding(*GEOGRAPHY)
+
+    found = repository.find_public_by_slug("border-spire")
+
+    assert [country.name.en for country in found.countries] == ["China", "India", "Nepal"]
+    assert [country.code for country in found.countries] == ["CN", "IN", "NP"]
+
+
+def test_a_mountain_keeps_a_continent_that_differs_from_its_countries(repository_holding):
+    repository = repository_holding(*GEOGRAPHY)
+
+    islet = repository.find_public_by_slug("alpine-islet")
+
+    assert islet.continent.code == "AF"
+    assert [country.continent_code for country in islet.countries] == ["EU"]

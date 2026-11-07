@@ -11,8 +11,11 @@ from serendipeak.catalog.bootstrap.ports import (
     CatalogMountain,
     CatalogSeed,
     CatalogStore,
+    GeographyReferenceReader,
 )
+from serendipeak.catalog.bootstrap.seed_geography import assign_geography, without_geography
 from serendipeak.catalog.entities import Mountain
+from serendipeak.catalog.geography_input import GeographyInput
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +25,7 @@ class VerificationReport:
     discoveries: int
     seed_mismatches: tuple[str, ...]
     frozen: FrozenComparison
+    geography_compared: bool
 
     @property
     def mismatches(self) -> tuple[str, ...]:
@@ -33,27 +37,43 @@ class VerificationReport:
 
 
 class VerifyCatalog:
-    def __init__(self, store: CatalogStore):
+    def __init__(self, store: CatalogStore, reference: GeographyReferenceReader):
         self._store = store
+        self._reference = reference
 
     def execute(
         self,
         seed: CatalogSeed,
         frozen: Sequence[FrozenMountain],
+        geography: GeographyInput | None = None,
     ) -> VerificationReport:
+        """Compare the stored catalog with the seed and the frozen catalog.
+
+        The seed holds no geography. With the geography input the continent and countries of
+        the seed mountains are compared too; without it they are left out of the comparison
+        and the report says so.
+        """
         snapshot = self._store.snapshot()
+        expected = seed.mountains
+        actual = snapshot.mountains
+        if geography is None:
+            expected = tuple(without_geography(entry) for entry in expected)
+            actual = tuple(without_geography(entry) for entry in actual)
+        else:
+            expected = assign_geography(seed, geography, self._reference.read()).mountains
 
         return VerificationReport(
             mountains=len(snapshot.mountains),
             images=sum(entry.mountain.primary_image is not None for entry in snapshot.mountains),
             discoveries=len(snapshot.discoveries),
             seed_mismatches=(
-                *_mountain_mismatches(seed.mountains, snapshot.mountains),
+                *_mountain_mismatches(expected, actual),
                 *_discovery_mismatches(seed.discoveries, snapshot.discoveries),
             ),
             frozen=compare_with_frozen_catalog(
                 frozen, (entry.mountain for entry in snapshot.mountains)
             ),
+            geography_compared=geography is not None,
         )
 
 

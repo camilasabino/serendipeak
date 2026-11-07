@@ -22,7 +22,24 @@ describe('isMountain', () => {
 		expect(isMountain(minimal)).toBe(true);
 	});
 
-	it.each(['id', 'slug', 'name', 'coordinates', 'elevationMeters', 'countries'])(
+	it.each(['AF', 'AN', 'AS', 'EU', 'NA', 'OC', 'SA'])('accepts the continent code %s', (code) => {
+		expect(isMountain({ ...complete, continent: { code, name: 'Somewhere' } })).toBe(true);
+	});
+
+	it('accepts a mountain without countries', () => {
+		expect(isMountain({ ...complete, countries: [] })).toBe(true);
+	});
+
+	it('accepts several countries', () => {
+		const countries = [
+			{ code: 'CN', name: 'China' },
+			{ code: 'NP', name: 'Nepal' }
+		];
+
+		expect(isMountain({ ...complete, countries })).toBe(true);
+	});
+
+	it.each(['id', 'slug', 'name', 'coordinates', 'elevationMeters', 'continent', 'countries'])(
 		'rejects a mountain without %s',
 		(key) => {
 			expect(isMountain(without(complete, key))).toBe(false);
@@ -45,8 +62,28 @@ describe('isMountain', () => {
 		['zero elevation', { elevationMeters: 0 }],
 		['string elevation', { elevationMeters: '6961' }],
 		['non-array countries', { countries: 'Argentina' }],
-		['non-string country', { countries: ['Argentina', 1] }],
-		['blank country', { countries: [''] }],
+		['countries as names', { countries: ['Argentina'] }],
+		['non-object country', { countries: [{ code: 'AR', name: 'Argentina' }, 1] }],
+		['country without a name', { countries: [{ code: 'AR' }] }],
+		['country with a blank name', { countries: [{ code: 'AR', name: '' }] }],
+		['country without a code', { countries: [{ name: 'Argentina' }] }],
+		['lowercase country code', { countries: [{ code: 'ar', name: 'Argentina' }] }],
+		['three-letter country code', { countries: [{ code: 'ARG', name: 'Argentina' }] }],
+		[
+			'duplicate country',
+			{
+				countries: [
+					{ code: 'AR', name: 'Argentina' },
+					{ code: 'AR', name: 'Argentina' }
+				]
+			}
+		],
+		['string continent', { continent: 'South America' }],
+		['null continent', { continent: null }],
+		['continent without a name', { continent: { code: 'SA' } }],
+		['continent with a blank name', { continent: { code: 'SA', name: '' } }],
+		['unknown continent code', { continent: { code: 'ZZ', name: 'Nowhere' } }],
+		['lowercase continent code', { continent: { code: 'sa', name: 'South America' } }],
 		['latitude out of range', { coordinates: { latitude: 91, longitude: 0 } }],
 		['longitude out of range', { coordinates: { latitude: 0, longitude: -181 } }],
 		['missing longitude', { coordinates: { latitude: 0 } }],

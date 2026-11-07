@@ -1,27 +1,58 @@
 // SerendiPeak's live-API verifier. It descends from the vendored contracts/v1/verify-api.mjs,
 // which stays untouched and describes the v1 API, and differs from it exactly where SerendiPeak's
 // own contract does: a photograph has one `author` instead of `attribution` and `creator`, and
-// no `sourceIdentifier`; a mountain serves no `prominenceMeters` and no `sources.wikipedia`. The
-// curated identity of each of the 73 photographs is its source page and its dimensions.
+// no `sourceIdentifier`; a mountain serves no `prominenceMeters` and no `sources.wikipedia`, a
+// `continent` object and `countries` as `{code, name}` objects instead of names. The curated
+// identity of each of the 73 photographs is its source page and its dimensions.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const COORDINATE_TOLERANCE = 1e-7;
 const CAMERA_TOLERANCE = 1e-9;
+const CONTINENT_CODES = new Set(["AF", "AN", "AS", "EU", "NA", "OC", "SA"]);
+const COUNTRY_CODE = /^[A-Z]{2}$/;
 
 const STATEFUL_TODAY_FLAG = "--include-stateful-today";
+const GEOGRAPHY_FLAG = "--geography";
+const GEOGRAPHY_SHA256_FLAG = "--geography-sha256";
 const USAGE = `usage: node scripts/verify-api.mjs <api-base-url> [${STATEFUL_TODAY_FLAG}]
+  [${GEOGRAPHY_FLAG} <file> ${GEOGRAPHY_SHA256_FLAG} <sha256>]
 
 Read-only by default: GET /api/v1/mountains/today is NOT requested.
 ${STATEFUL_TODAY_FLAG}  also request today. On a new UTC date the API persists that
   date's discovery. Use it only against a disposable or test database, or when
-  that mutation is intended.`;
+  that mutation is intended.
+${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG}  also compare the continent and countries of the
+  mountains the private geography input covers. The shapes are always checked; without
+  the input the comparison of values is skipped, and the output says so.`;
 
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const options = {};
+const args = [];
+for (let index = 0; index < rawArgs.length; index += 1) {
+  if (
+    rawArgs[index] === GEOGRAPHY_FLAG ||
+    rawArgs[index] === GEOGRAPHY_SHA256_FLAG
+  ) {
+    options[rawArgs[index]] = rawArgs[(index += 1)];
+  } else {
+    args.push(rawArgs[index]);
+  }
+}
 const unknownFlags = args.filter(
   (arg) => arg.startsWith("-") && arg !== STATEFUL_TODAY_FLAG,
 );
 if (unknownFlags.length > 0) {
   console.error(`unknown option: ${unknownFlags.join(", ")}\n${USAGE}`);
+  process.exit(2);
+}
+if (
+  (options[GEOGRAPHY_FLAG] === undefined) !==
+  (options[GEOGRAPHY_SHA256_FLAG] === undefined)
+) {
+  console.error(
+    `${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG} go together\n${USAGE}`,
+  );
   process.exit(2);
 }
 const includeStatefulToday = args.includes(STATEFUL_TODAY_FLAG);
@@ -36,10 +67,46 @@ if (!baseUrl || positional.length > 1) {
 }
 
 const snapshot = JSON.parse(
-  readFileSync(new URL("../contracts/v1/catalog.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../contracts/v1/catalog.json", import.meta.url),
+    "utf8",
+  ),
 );
 const frozenSlugs = new Set(snapshot.mountains.map((entry) => entry.slug));
 const failures = [];
+
+// The same canonical serialization as the tracked tools: sorted keys, no whitespace.
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const members = Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
+    return `{${members.join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function loadGeography() {
+  if (options[GEOGRAPHY_FLAG] === undefined) {
+    return undefined;
+  }
+  const document = JSON.parse(readFileSync(options[GEOGRAPHY_FLAG], "utf8"));
+  const { content_sha256: stated, ...content } = document;
+  const actual = createHash("sha256")
+    .update(canonicalJson(content))
+    .digest("hex");
+  if (actual !== stated || actual !== options[GEOGRAPHY_SHA256_FLAG]) {
+    console.error("the geography input does not have the expected checksum");
+    process.exit(2);
+  }
+  return new Map(document.mountains.map((entry) => [entry.slug, entry]));
+}
+
+const geography = loadGeography();
+let geographyCompared = 0;
 
 function fail(scope, message) {
   failures.push(`${scope}: ${message}`);
@@ -68,6 +135,95 @@ async function get(path) {
   return { status: response.status, headers: response.headers, body };
 }
 
+function checkGeographyShape(scope, mountain) {
+  const continent = mountain.continent;
+  if (typeof continent !== "object" || continent === null) {
+    fail(scope, "continent is missing or not an object");
+  } else {
+    if (!CONTINENT_CODES.has(continent.code)) {
+      fail(
+        scope,
+        `continent code ${JSON.stringify(continent.code)} is not an approved code`,
+      );
+    }
+    if (typeof continent.name !== "string" || continent.name === "") {
+      fail(scope, "continent name is not a non-empty string");
+    }
+  }
+
+  const countries = mountain.countries;
+  if (!Array.isArray(countries)) {
+    fail(scope, "countries is not an array");
+    return;
+  }
+  for (const country of countries) {
+    if (typeof country !== "object" || country === null) {
+      fail(
+        scope,
+        `country ${JSON.stringify(country)} is not a {code, name} object`,
+      );
+    } else if (
+      typeof country.code !== "string" ||
+      !COUNTRY_CODE.test(country.code)
+    ) {
+      fail(scope, `country code ${JSON.stringify(country.code)} is malformed`);
+    } else if (typeof country.name !== "string" || country.name === "") {
+      fail(scope, `country ${country.code} has no name`);
+    }
+  }
+  const valid = countries.filter(
+    (country) =>
+      typeof country?.code === "string" && typeof country?.name === "string",
+  );
+  if (new Set(valid.map((country) => country.code)).size !== valid.length) {
+    fail(scope, "countries repeat a code");
+  }
+  const ordered = [...valid].sort(
+    (a, b) =>
+      compareCodePoints(a.name, b.name) || compareCodePoints(a.code, b.code),
+  );
+  if (valid.some((country, index) => country !== ordered[index])) {
+    fail(scope, "countries are not ordered by English name, then code");
+  }
+  if (
+    mountain.rangeName !== undefined &&
+    typeof mountain.rangeName !== "string"
+  ) {
+    fail(scope, "rangeName is not a string");
+  }
+}
+
+function compareCodePoints(a, b) {
+  const left = [...a];
+  const right = [...b];
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    const difference = left[index].codePointAt(0) - right[index].codePointAt(0);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+  return left.length - right.length;
+}
+
+function checkGeographyValues(scope, served) {
+  const entry = geography?.get(served.slug);
+  if (entry === undefined) {
+    return;
+  }
+  geographyCompared += 1;
+  if (served.continent?.code !== entry.continent) {
+    fail(scope, `continent ${served.continent?.code}, want ${entry.continent}`);
+  }
+  const codes = (served.countries ?? []).map((country) => country.code).sort();
+  const wanted = [...entry.countries].sort();
+  if (JSON.stringify(codes) !== JSON.stringify(wanted)) {
+    fail(
+      scope,
+      `countries ${codes.join(",") || "none"}, want ${wanted.join(",") || "none"}`,
+    );
+  }
+}
+
 function checkMountainShape(scope, mountain) {
   if (typeof mountain !== "object" || mountain === null) {
     fail(scope, "body is not a mountain object");
@@ -81,9 +237,7 @@ function checkMountainShape(scope, mountain) {
   if (!Number.isInteger(mountain.elevationMeters)) {
     fail(scope, "elevationMeters is not an integer");
   }
-  if (!Array.isArray(mountain.countries)) {
-    fail(scope, "countries is not an array");
-  }
+  checkGeographyShape(scope, mountain);
   for (const [field, value] of Object.entries(mountain)) {
     if (value === null || value === "") {
       fail(scope, `${field} is present without a value`);
@@ -121,6 +275,7 @@ async function checkCatalog() {
       continue;
     }
     const served = response.body;
+    checkGeographyValues(scope, served);
     if (served.slug !== frozen.slug || served.name !== frozen.name) {
       fail(scope, `identity ${served.slug} / ${served.name}`);
     }
@@ -185,14 +340,20 @@ async function checkCatalog() {
     }
     for (const field of ["attribution", "creator", "sourceIdentifier"]) {
       if (image?.[field] !== undefined) {
-        fail(scope, `primaryImage.${field} is served; SerendiPeak has no such member`);
+        fail(
+          scope,
+          `primaryImage.${field} is served; SerendiPeak has no such member`,
+        );
       }
     }
     if (served.prominenceMeters !== undefined) {
       fail(scope, "prominenceMeters is served; SerendiPeak has no such member");
     }
     if (served.sources?.wikipedia !== undefined) {
-      fail(scope, "sources.wikipedia is served; SerendiPeak has no such member");
+      fail(
+        scope,
+        "sources.wikipedia is served; SerendiPeak has no such member",
+      );
     }
   }
 }
@@ -243,6 +404,11 @@ if (includeStatefulToday) {
   await checkStatefulToday();
 }
 
+const geographyNote =
+  geography === undefined
+    ? `geography: shapes checked; the comparison of values was skipped (pass ${GEOGRAPHY_FLAG} and ${GEOGRAPHY_SHA256_FLAG} to include it).`
+    : `geography: shapes checked, and the continent and countries of ${geographyCompared} mountains compared with the private input.`;
+
 if (failures.length > 0) {
   console.error(
     `${failures.length} contract difference(s) against ${baseUrl}:`,
@@ -250,12 +416,14 @@ if (failures.length > 0) {
   for (const failure of failures) {
     console.error(`- ${failure}`);
   }
+  console.error(geographyNote);
   process.exit(1);
 }
 
 console.log(
   `${baseUrl} serves the ${snapshot.mountains.length} v1 mountains, the random contract, and the error envelope (read-only checks).`,
 );
+console.log(geographyNote);
 console.log(
   includeStatefulToday
     ? "stateful check: GET /api/v1/mountains/today requested and verified (may have persisted the current UTC date)."

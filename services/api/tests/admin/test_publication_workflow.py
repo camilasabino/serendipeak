@@ -14,6 +14,7 @@ from tests.support.catalog import (
     catalog_mountain,
     committed_seed,
     frozen_catalog,
+    parsed_committed_seed,
     primary_image,
 )
 from tests.support.records import attach_committed_media
@@ -263,15 +264,16 @@ class TestCommittedCatalogParity:
             page = editor_client.get(url)
             payload = form_payload(
                 page,
-                summary="Edited through the admin.",
+                summary_en="Edited through the admin.",
                 range_name="Edited range",
-                countries="Edited country",
+                continent="OC",
+                countries=["NZ"],
                 **{"image-0-author": "Edited credit"},
             )
 
             assert editor_client.post(url, payload).status_code == 302
 
-        report = build_verify_catalog().execute(committed_seed(), frozen_catalog())
+        report = build_verify_catalog().execute(parsed_committed_seed(), frozen_catalog())
         assert report.mountains == 73
         assert report.frozen.matched == report.frozen.total == 73
         assert report.frozen.mismatches == ()
@@ -289,5 +291,5 @@ class TestCommittedCatalogParity:
             )
 
         assert MountainRecord.objects.filter(status="active").count() == len(everyone)
-        report = build_verify_catalog().execute(committed_seed(), frozen_catalog())
+        report = build_verify_catalog().execute(parsed_committed_seed(), frozen_catalog())
         assert report.frozen.mismatches == ()

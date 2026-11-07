@@ -1,4 +1,7 @@
+from collections.abc import Iterable
+
 from django.contrib.gis.geos import Point
+from django.db.models import Prefetch, prefetch_related_objects
 
 from serendipeak.accounts.entities import User
 from serendipeak.accounts.roles import Role
@@ -6,20 +9,48 @@ from serendipeak.catalog.bootstrap.ports import CatalogDiscovery, CatalogMountai
 from serendipeak.catalog.entities import (
     CameraFraming,
     CanonicalCamera,
+    Continent,
     Coordinates,
+    Country,
     ImageDimensions,
     Mountain,
     MountainStatus,
     PhotographMedia,
     PrimaryImage,
 )
+from serendipeak.catalog.geography import GeographyReference
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.discovery.entities import DailyMountain
 from serendipeak.persistence.models import (
+    ContinentRecord,
+    CountryRecord,
     DailyDiscoveryRecord,
+    MountainCountryRecord,
     MountainImageRecord,
     MountainRecord,
     UserRecord,
 )
+
+
+def _country_links(prefix: str = "") -> Prefetch:
+    return Prefetch(
+        f"{prefix}country_links",
+        queryset=MountainCountryRecord.objects.select_related("country"),
+    )
+
+
+def with_geography(queryset, *, through: str = ""):
+    """Select the continent and prefetch the countries of the mountains a queryset reads, in
+    one join and one extra query however many mountains there are. through names the relation
+    to the mountain when the queryset is not of mountains."""
+    prefix = f"{through}__" if through else ""
+
+    return queryset.select_related(f"{prefix}continent").prefetch_related(_country_links(prefix))
+
+
+def load_countries(record: MountainRecord) -> None:
+    """Read the countries of one record that was fetched without them, in one query."""
+    prefetch_related_objects([record], _country_links())
 
 
 def to_mountain(record: MountainRecord) -> Mountain:
@@ -27,20 +58,65 @@ def to_mountain(record: MountainRecord) -> Mountain:
 
 
 def to_mountain_with_image(record: MountainRecord, image: MountainImageRecord | None) -> Mountain:
+    """The continent and the country links are read through the record's relations: a caller
+    that maps many records selects the continent and prefetches `country_links` with their
+    country, and a caller that maps one lets the relations load themselves."""
     return Mountain(
         id=record.id,
         slug=record.slug,
-        name=record.name,
+        name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
         status=MountainStatus(record.status),
         coordinates=Coordinates(latitude=record.location.y, longitude=record.location.x),
         elevation_meters=record.elevation_meters,
+        continent=to_continent(record.continent),
+        countries=to_countries(link.country for link in record.country_links.all()),
         range_name=record.range_name,
-        countries=tuple(record.countries),
-        summary=record.summary,
+        summary=to_summary(record),
         camera=to_camera(record),
         primary_image=None if image is None else to_primary_image(image),
         osm_node_id=record.osm_node_id,
         wikidata_id=record.wikidata_id,
+    )
+
+
+def to_summary(record: MountainRecord) -> LocalizedText | None:
+    if record.summary_en is None:
+        return None
+
+    return LocalizedText(en=record.summary_en, es=record.summary_es, pt=record.summary_pt)
+
+
+def to_continent(record: ContinentRecord) -> Continent:
+    return Continent(
+        code=record.code,
+        name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
+    )
+
+
+def to_country(record: CountryRecord) -> Country:
+    return Country(
+        code=record.code,
+        name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
+        continent_code=record.continent_id,
+    )
+
+
+def to_countries(records) -> tuple[Country, ...]:
+    # Code point order of the English name, then the code, whatever the database collation.
+    return tuple(
+        sorted(
+            (to_country(record) for record in records),
+            key=lambda country: (country.name.en, country.code),
+        )
+    )
+
+
+def to_geography_reference(
+    continents: Iterable[ContinentRecord], countries: Iterable[CountryRecord]
+) -> GeographyReference:
+    return GeographyReference(
+        continents={record.code: to_continent(record) for record in continents},
+        countries={record.code: to_country(record) for record in countries},
     )
 
 
@@ -70,12 +146,16 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
     return MountainRecord(
         id=mountain.id,
         slug=mountain.slug,
-        name=mountain.name,
+        name_en=mountain.name.en,
+        name_es=mountain.name.es,
+        name_pt=mountain.name.pt,
         location=Point(mountain.coordinates.longitude, mountain.coordinates.latitude, srid=4326),
         elevation_meters=mountain.elevation_meters,
+        continent_id=mountain.continent.code,
         range_name=mountain.range_name,
-        countries=list(mountain.countries),
-        summary=mountain.summary,
+        summary_en=None if mountain.summary is None else mountain.summary.en,
+        summary_es=None if mountain.summary is None else mountain.summary.es,
+        summary_pt=None if mountain.summary is None else mountain.summary.pt,
         **camera_columns(mountain.camera),
         osm_node_id=mountain.osm_node_id,
         wikidata_id=mountain.wikidata_id,
@@ -83,6 +163,13 @@ def mountain_record(entry: CatalogMountain) -> MountainRecord:
         created_at=entry.created_at,
         updated_at=entry.updated_at,
     )
+
+
+def country_link_records(entry: CatalogMountain) -> list[MountainCountryRecord]:
+    return [
+        MountainCountryRecord(mountain_id=entry.mountain.id, country_id=country.code)
+        for country in entry.mountain.countries
+    ]
 
 
 def image_record(entry: CatalogMountain) -> MountainImageRecord | None:

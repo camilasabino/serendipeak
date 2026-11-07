@@ -13,6 +13,17 @@ def migrate_to_latest():
     executor.migrate(executor.loader.graph.leaf_nodes())
 
 
+def migrate_to_latest_discarding_catalog():
+    """Returns to the latest schema after a test that filled an older one.
+
+    The rows a test loaded at an older schema carry no continent, which the latest schema
+    refuses, and the test is over with them, so they go first.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("TRUNCATE TABLE mountain CASCADE")
+    migrate_to_latest()
+
+
 def applied_head():
     executor = MigrationExecutor(connection)
 

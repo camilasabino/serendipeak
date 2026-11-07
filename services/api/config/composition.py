@@ -5,11 +5,13 @@ from django.conf import settings
 
 from serendipeak.accounts.change_user_access import ChangeUserAccess
 from serendipeak.accounts.create_user import CreateUser
+from serendipeak.catalog.bootstrap.apply_geography_backfill import ApplyGeographyBackfill
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
 from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotographMedia
 from serendipeak.catalog.bootstrap.materialize_photographs import MaterializePhotographs
 from serendipeak.catalog.bootstrap.photograph_manifest import PhotographManifest
+from serendipeak.catalog.bootstrap.prepare_geography_input import PrepareGeographyInput
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
@@ -28,6 +30,11 @@ from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
+from serendipeak.persistence.geography_backfill_store import (
+    DjangoGeographyBackfillStore,
+    DjangoGeographyDraftReader,
+)
+from serendipeak.persistence.geography_reference import DjangoGeographyReference
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
@@ -56,12 +63,21 @@ SOURCE_FETCH_TIMEOUT_SECONDS = 60
 
 def build_bootstrap_catalog() -> BootstrapCatalog:
     store = DjangoCatalogStore()
+    reference = DjangoGeographyReference()
 
-    return BootstrapCatalog(store, VerifyCatalog(store))
+    return BootstrapCatalog(store, VerifyCatalog(store, reference), reference)
 
 
 def build_verify_catalog() -> VerifyCatalog:
-    return VerifyCatalog(DjangoCatalogStore())
+    return VerifyCatalog(DjangoCatalogStore(), DjangoGeographyReference())
+
+
+def build_apply_geography_backfill() -> ApplyGeographyBackfill:
+    return ApplyGeographyBackfill(DjangoGeographyBackfillStore())
+
+
+def build_prepare_geography_input() -> PrepareGeographyInput:
+    return PrepareGeographyInput(DjangoGeographyDraftReader())
 
 
 def build_check_catalog() -> CheckCatalog:

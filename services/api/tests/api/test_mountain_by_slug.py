@@ -22,6 +22,7 @@ from tests.support.catalog import (
     media_of,
 )
 from tests.support.contract_fixtures import load_fixture, served_by_serendipeak
+from tests.support.geography import continent, countries, country
 
 CONTENT_TYPE = "application/json; charset=utf-8"
 NOT_FOUND = load_fixture("error-mountain-not-found.json")
@@ -69,8 +70,10 @@ def test_non_ascii_text_is_served_unescaped(catalog, client):
     assert "Bjørn Christian Tørrissen".encode() in response.content
 
 
-def test_a_lookup_is_one_query(catalog, client, django_assert_num_queries):
-    with django_assert_num_queries(1):
+def test_a_lookup_is_two_queries_and_an_unknown_slug_one(
+    catalog, client, django_assert_num_queries
+):
+    with django_assert_num_queries(2):
         assert client.get("/api/v1/mountains/aconcagua").status_code == 200
 
     with django_assert_num_queries(1):
@@ -203,3 +206,70 @@ def test_a_database_failure_through_the_composed_endpoint_is_an_internal_error_l
     assert response.status_code == 500
     assert body(response) == INTERNAL
     assert b"mountain_image" not in response.content
+
+
+GEOGRAPHY_PEAKS = [
+    # The continent is not the countries' continent: a European country with an African
+    # continent, a North American country with an Oceanian one, the Antarctic link, a mountain
+    # across several countries and one with none.
+    ("alpine-islet", "AF", ["CH"]),
+    ("pacific-cone", "OC", ["US"]),
+    ("ice-dome", "AN", ["AQ"]),
+    ("border-spire", "AS", ["CN", "IN", "NP"]),
+    ("unclaimed-rock", "EU", []),
+]
+
+
+@pytest.fixture
+def geography_catalog(db):
+    DjangoCatalogStore().load(
+        catalog_seed(
+            *(
+                catalog_mountain(slug, continent=continent(code), countries=countries(*codes))
+                for slug, code, codes in GEOGRAPHY_PEAKS
+            )
+        )
+    )
+
+
+@pytest.mark.parametrize(("slug", "continent_code", "country_codes"), GEOGRAPHY_PEAKS)
+def test_the_continent_and_countries_are_served_as_code_and_english_name(
+    geography_catalog, client, slug, continent_code, country_codes
+):
+    served = body(client.get(f"/api/v1/mountains/{slug}"))
+
+    assert served["continent"] == {
+        "code": continent_code,
+        "name": continent(continent_code).name.en,
+    }
+    assert served["countries"] == [
+        {"code": code, "name": country(code).name.en} for code in country_codes
+    ]
+
+
+def test_countries_are_served_even_when_empty_and_ordered_by_english_name(
+    geography_catalog, client
+):
+    assert body(client.get("/api/v1/mountains/unclaimed-rock"))["countries"] == []
+
+    countries_served = body(client.get("/api/v1/mountains/border-spire"))["countries"]
+    assert [item["name"] for item in countries_served] == ["China", "India", "Nepal"]
+
+
+def test_only_english_text_and_reference_codes_are_served(geography_catalog, client):
+    text = client.get("/api/v1/mountains/alpine-islet").content.decode()
+
+    assert "África" not in text and "Suiza" not in text and "Suíça" not in text
+    served = json.loads(text)
+    assert set(served["continent"]) == {"code", "name"}
+    assert all(set(item) == {"code", "name"} for item in served["countries"])
+    assert not {key for key in served if key.endswith(("_es", "_pt", "Es", "Pt"))}
+
+
+def test_the_daily_and_random_mountains_serve_the_same_geography(geography_catalog, client):
+    for path in ("/api/v1/mountains/today", "/api/v1/mountains/random"):
+        served = body(client.get(path))
+        mountain = served.get("mountain", served)
+
+        assert set(mountain["continent"]) == {"code", "name"}
+        assert isinstance(mountain["countries"], list)

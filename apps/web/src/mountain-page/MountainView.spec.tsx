@@ -61,9 +61,16 @@ describe.each([
 describe('complete fixture', () => {
 	const html = render(complete);
 
-	it('renders summary, country, elevation, range and coordinates in editorial order', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Country', 'Elevation', 'Range', 'Coordinates']);
+	it('renders summary, continent, country, elevation, range and coordinates in order', () => {
+		expect(textsOf(html, 'dt')).toEqual([
+			'Continent',
+			'Country',
+			'Elevation',
+			'Range',
+			'Coordinates'
+		]);
 		expect(textsOf(html, 'dd')).toEqual([
+			'South America',
 			'Argentina',
 			'6,961 m',
 			'Principal Cordillera',
@@ -97,7 +104,13 @@ describe('sparse fixture', () => {
 	const html = render(sparse);
 
 	it('keeps the range, the photograph and the data sources', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Country', 'Elevation', 'Range', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual([
+			'Continent',
+			'Country',
+			'Elevation',
+			'Range',
+			'Coordinates'
+		]);
 		expect(html).toContain('<figure');
 		expect(html).toContain('Data sources');
 	});
@@ -107,12 +120,12 @@ describe('minimal fixture', () => {
 	const html = render(minimal);
 
 	it('collapses to the name and the facts that exist', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Elevation', 'Coordinates']);
-		expect(textsOf(html, 'dd')).toEqual(['2,000 m', '45.0000° N, 10.0000° E']);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
+		expect(textsOf(html, 'dd')).toEqual(['Europe', '2,000 m', '45.0000° N, 10.0000° E']);
 		expect(textsOf(html, 'p')).toEqual(["Today's mountain"]);
 	});
 
-	it.each(['Country', 'Range', 'Data sources', '<figure', 'About this photo'])(
+	it.each(['Countr', 'Range', 'Data sources', '<figure', 'About this photo'])(
 		'renders no %s',
 		(fragment) => {
 			expect(html).not.toContain(fragment);
@@ -150,7 +163,7 @@ describe('daily composition', () => {
 	it('renders the minimal fixture without the cue becoming a placeholder row', () => {
 		const minimalDaily = render(minimal, true);
 
-		expect(textsOf(minimalDaily, 'dt')).toEqual(['Elevation', 'Coordinates']);
+		expect(textsOf(minimalDaily, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
 		expect(minimalDaily).toContain('Tomorrow, another mountain.');
 	});
 });

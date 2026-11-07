@@ -85,7 +85,7 @@ def assert_no_store_json(response, status):
 
 
 def test_a_persisted_date_matches_the_daily_fixture(catalog, client, django_assert_num_queries):
-    with django_assert_num_queries(1):
+    with django_assert_num_queries(2):
         response = client.get(PATH)
 
     assert_no_store_json(response, 200)
@@ -100,9 +100,9 @@ def test_a_new_date_persists_its_discovery_and_later_requests_reuse_it(
 ):
     on_day(NEW_DAY)
 
-    with django_assert_num_queries(5):
+    with django_assert_num_queries(6):
         first = client.get(PATH)
-    with django_assert_num_queries(1):
+    with django_assert_num_queries(2):
         second = client.get(PATH)
 
     assert_no_store_json(first, 200)

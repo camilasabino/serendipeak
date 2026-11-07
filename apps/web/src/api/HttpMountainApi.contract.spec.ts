@@ -42,6 +42,7 @@ describe('v1 contract fixtures through HttpMountainApi', () => {
 			expect(field in mountain, field).toBe(false);
 		}
 		expect(mountain.countries).toEqual([]);
+		expect(mountain.continent).toEqual({ code: 'EU', name: 'Europe' });
 	});
 
 	it('keeps the sparse mountain with its camera, photograph and sources', async () => {

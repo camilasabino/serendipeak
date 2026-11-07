@@ -26,8 +26,12 @@ REJECTED_DRAFTS = [
     ("mountain_slug_format", {"slug": "mont\n"}),
     ("mountain_slug_not_reserved", {"slug": "today"}),
     ("mountain_slug_not_reserved", {"slug": "random"}),
-    ("mountain_name_not_blank", {"name": ""}),
-    ("mountain_name_not_blank", {"name": " \t"}),
+    ("mountain_name_en_not_blank", {"name_en": ""}),
+    ("mountain_name_en_not_blank", {"name_en": " \t"}),
+    ("mountain_name_es_not_blank", {"name_es": ""}),
+    ("mountain_name_es_not_blank", {"name_es": " "}),
+    ("mountain_name_pt_not_blank", {"name_pt": ""}),
+    ("mountain_name_pt_not_blank", {"name_pt": "\n"}),
     ("mountain_location_not_empty", {"location": Point(srid=4326)}),
     ("mountain_longitude_valid", {"location": Point(180.001, 0.0, srid=4326)}),
     ("mountain_longitude_valid", {"location": Point(-180.001, 0.0, srid=4326)}),
@@ -42,7 +46,15 @@ REJECTED_DRAFTS = [
     ("mountain_elevation_positive", {"elevation_meters": 0}),
     ("mountain_elevation_positive", {"elevation_meters": -1}),
     ("mountain_range_name_not_blank", {"range_name": " "}),
-    ("mountain_summary_not_blank", {"summary": ""}),
+    ("mountain_summary_en_not_blank", {"summary_en": ""}),
+    ("mountain_summary_es_not_blank", {"summary_en": "En.", "summary_es": " "}),
+    ("mountain_summary_pt_not_blank", {"summary_en": "En.", "summary_pt": ""}),
+    ("mountain_summary_translation_requires_english", {"summary_es": "Es."}),
+    ("mountain_summary_translation_requires_english", {"summary_pt": "Pt."}),
+    (
+        "mountain_summary_translation_requires_english",
+        {"summary_en": None, "summary_es": "Es.", "summary_pt": "Pt."},
+    ),
     ("mountain_status_valid", {"status": "pending_media"}),
     ("mountain_status_valid", {"status": ""}),
     (
@@ -100,7 +112,7 @@ def test_rejects_active_mountains_missing_publication_fields(constraint, overrid
 def test_rejects_a_duplicate_slug():
     mountain_record().save()
 
-    error = insert_error(mountain_record(name="Another"))
+    error = insert_error(mountain_record(name_en="Another"))
 
     assert error.constraint_name == "mountain_slug_key"
 
@@ -115,7 +127,10 @@ def test_rejects_a_duplicate_slug():
         {"camera_range_meters": 80000.0, "camera_framing_x": 1.0, "camera_framing_y": -1.0},
         {"location": Point(-180.0, -90.0, srid=4326)},
         {"location": Point(180.0, 90.0, srid=4326)},
-        {"range_name": None, "summary": None},
+        {"range_name": None, "summary_en": None},
+        {"summary_en": "En.", "summary_es": "Es.", "summary_pt": "Pt."},
+        {"name_es": "Es", "name_pt": "Pt"},
+        {"summary_en": "En.", "summary_es": None, "summary_pt": "Pt."},
         {"osm_node_id": 1},
         {"osm_node_id": None, "wikidata_id": None},
     ],

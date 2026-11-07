@@ -151,7 +151,7 @@ def test_a_deletion_posted_against_a_draft_is_refused_once_the_publication_it_wa
 
 
 def test_a_camera_committed_while_an_edit_waits_survives_the_edit(editor_client):
-    payload = form_payload(editor_client.get(change_url(ACTIVE)), name="Renamed")
+    payload = form_payload(editor_client.get(change_url(ACTIVE)), name_en="Renamed")
     camera_change = locked_update(ACTIVE, camera_heading_degrees=10.0, camera_framing_x=0.1)
 
     response = run_while_a_change_holds_the_lock(
@@ -161,11 +161,11 @@ def test_a_camera_committed_while_an_edit_waits_survives_the_edit(editor_client)
     assert response.status_code == 302
     record = stored(ACTIVE)
     assert (record.camera_heading_degrees, record.camera_framing_x) == (10.0, 0.1)
-    assert record.name == "Renamed"
+    assert record.name_en == "Renamed"
 
 
 def test_an_edit_is_judged_against_the_camera_committed_while_it_waited(editor_client):
-    payload = form_payload(editor_client.get(change_url(INACTIVE)), name="Renamed")
+    payload = form_payload(editor_client.get(change_url(INACTIVE)), name_en="Renamed")
     framing_removal = locked_update(INACTIVE, camera_framing_x=None, camera_framing_y=None)
 
     response = run_while_a_change_holds_the_lock(
@@ -174,7 +174,7 @@ def test_an_edit_is_judged_against_the_camera_committed_while_it_waited(editor_c
 
     assert response.status_code == 200
     assert "the camera framing is missing" in response.content.decode()
-    assert stored(INACTIVE).name == INACTIVE.mountain.name
+    assert stored(INACTIVE).name_en == INACTIVE.mountain.name.en
 
 
 class StoreHeldOpen(FakeMediaStore):

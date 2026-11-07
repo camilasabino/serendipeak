@@ -17,9 +17,11 @@ from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,
     catalog_seed,
+    committed_geography,
     committed_seed,
     committed_seed_with_media,
     frozen_catalog,
+    parsed_committed_seed,
     primary_image,
 )
 
@@ -42,7 +44,7 @@ def statement_heads(captured):
 
 @pytest.mark.django_db(transaction=True)
 def test_load_locks_checks_and_inserts_in_one_transaction(django_assert_num_queries):
-    with django_assert_num_queries(7) as captured:
+    with django_assert_num_queries(8) as captured:
         DjangoCatalogStore().load(committed_seed())
 
     assert statement_heads(captured) == [
@@ -50,6 +52,7 @@ def test_load_locks_checks_and_inserts_in_one_transaction(django_assert_num_quer
         'LOCK TABLE "mountain"',
         "SELECT 1 AS",
         'INSERT INTO "mountain"',
+        'INSERT INTO "mountain_country"',
         'INSERT INTO "mountain_image"',
         'INSERT INTO "daily_discovery"',
         "COMMIT",
@@ -75,7 +78,7 @@ def test_a_refused_load_writes_nothing_and_rolls_back(django_assert_num_queries)
 
 
 @pytest.mark.django_db
-def test_snapshot_is_two_queries_whether_or_not_a_mountain_has_an_image(
+def test_snapshot_is_three_queries_whatever_the_images_and_countries_of_the_mountains(
     django_assert_num_queries,
 ):
     committed = committed_seed()
@@ -89,7 +92,7 @@ def test_snapshot_is_two_queries_whether_or_not_a_mountain_has_an_image(
     )
     DjangoCatalogStore().load(seed)
 
-    with django_assert_num_queries(2):
+    with django_assert_num_queries(3):
         snapshot = DjangoCatalogStore().snapshot()
 
     assert (len(snapshot.mountains), len(snapshot.discoveries)) == (74, 8)
@@ -98,11 +101,11 @@ def test_snapshot_is_two_queries_whether_or_not_a_mountain_has_an_image(
 
 
 @pytest.mark.django_db
-def test_check_catalog_reads_the_catalog_in_two_queries(django_assert_num_queries):
+def test_check_catalog_reads_the_catalog_in_three_queries(django_assert_num_queries):
     store = DjangoCatalogStore()
     store.load(committed_seed_with_media())
 
-    with django_assert_num_queries(2):
+    with django_assert_num_queries(3):
         report = CheckCatalog(store).execute()
 
     assert (report.checked, report.violations) == (73, ())
@@ -163,7 +166,7 @@ def test_a_concurrent_bootstrap_waits_for_a_disjoint_load_and_refuses():
     first_seed = catalog_seed(
         unlisted, discoveries=[catalog_discovery(day_before_the_seed, unlisted)]
     )
-    seed, frozen = committed_seed(), frozen_catalog()
+    seed, frozen = parsed_committed_seed(), frozen_catalog()
     assert unlisted.mountain.id not in {entry.mountain.id for entry in seed.mountains}
     assert unlisted.mountain.slug not in {entry.mountain.slug for entry in seed.mountains}
     assert day_before_the_seed not in {discovery.date for discovery in seed.discoveries}
@@ -182,7 +185,9 @@ def test_a_concurrent_bootstrap_waits_for_a_disjoint_load_and_refuses():
 
     def second():
         try:
-            outcomes["second"] = build_bootstrap_catalog().execute(seed, frozen)
+            outcomes["second"] = build_bootstrap_catalog().execute(
+                seed, frozen, committed_geography()
+            )
         except CatalogAlreadyPopulated as error:
             outcomes["second"] = error
         finally:
