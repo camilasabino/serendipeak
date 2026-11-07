@@ -3,6 +3,7 @@ from uuid import UUID
 
 from serendipeak.catalog.camera import CameraViolation
 from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.new_mountain import NewMountainViolation
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.errors import ApplicationError, DomainError
 
@@ -126,3 +127,27 @@ class PhotographRejected(ApplicationError):
     def __init__(self, reason: PhotographRejection):
         super().__init__(f"the photograph was rejected: {reason.value}")
         self.reason = reason
+
+
+class InvalidMountain(DomainError):
+    def __init__(self, violations: tuple[NewMountainViolation, ...]):
+        super().__init__(", ".join(violations))
+        self.violations = violations
+
+
+class SlugTaken(ApplicationError):
+    def __init__(self, slug: str):
+        super().__init__(f"the slug {slug!r} is already in use")
+        self.slug = slug
+
+
+class UnknownContinent(ApplicationError):
+    def __init__(self, code: str):
+        super().__init__(f"no continent has the code {code!r}")
+        self.code = code
+
+
+class UnknownCountries(ApplicationError):
+    def __init__(self, codes: tuple[str, ...]):
+        super().__init__(f"no country has these codes: {', '.join(codes)}")
+        self.codes = codes

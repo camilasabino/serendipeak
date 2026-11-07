@@ -15,6 +15,7 @@ from serendipeak.catalog.bootstrap.prepare_geography_input import PrepareGeograp
 from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
+from serendipeak.catalog.create_mountain import CreateMountain
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
@@ -38,6 +39,7 @@ from serendipeak.persistence.geography_backfill_store import (
 )
 from serendipeak.persistence.geography_reference import DjangoGeographyReference
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
+from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
@@ -125,6 +127,10 @@ def build_change_mountain_camera() -> ChangeMountainCamera:
 
 def build_change_mountain_location() -> ChangeMountainLocation:
     return ChangeMountainLocation(DjangoMountainLocationStore())
+
+
+def build_create_mountain() -> CreateMountain:
+    return CreateMountain(DjangoMountainCreationStore(), build_admin_photograph_ingestion())
 
 
 def build_create_user() -> CreateUser:

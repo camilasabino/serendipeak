@@ -10,7 +10,9 @@ from serendipeak.catalog.entities import (
     Coordinates,
     Mountain,
     MountainStatus,
+    PrimaryImage,
 )
+from serendipeak.catalog.new_mountain import NewMountain
 from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.catalog.relocation import RelocationOutcome, RelocationRule
 from serendipeak.catalog.status_transitions import Gate, StatusTransition
@@ -110,4 +112,21 @@ class MountainLocationStore(Protocol):
         the update time changes. Every other outcome writes nothing; NOT_FOUND is the store's
         own. Any mountain status is addressable, drafts included, and the status is never
         changed.
+        """
+
+
+class MountainCreationStore(Protocol):
+    def create_draft(self, mountain: NewMountain, image: PrimaryImage) -> Mountain:
+        """Store mountain as a draft with image as its photograph, atomically, and return it.
+
+        The mountain, its photograph and its country links are written together or not at all.
+        The status is draft, the camera is absent and both timestamps are the store's. The
+        photograph's own file is not part of mountain: image already describes it. Repeated
+        country codes are one link. The returned mountain is what was stored, with its
+        continent, countries and region path.
+
+        Raises SlugTaken when a mountain already has the slug, UnknownContinent for a continent
+        code, UnknownRegion for a region id and UnknownCountries for country codes that
+        reference data does not hold, and writes nothing. When several apply, the first of
+        them in this order is raised.
         """

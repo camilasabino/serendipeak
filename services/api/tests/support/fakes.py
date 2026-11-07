@@ -11,19 +11,26 @@ from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
     CandidateMountain,
     ImageDimensions,
+    Mountain,
     MountainStatus,
 )
 from serendipeak.catalog.errors import (
     CatalogAlreadyPopulated,
     PhotographRejected,
     PhotographRejection,
+    SlugTaken,
+    UnknownContinent,
+    UnknownCountries,
 )
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
 from serendipeak.catalog.ports import CameraChange, StatusChange, StatusChangeOutcome
+from serendipeak.catalog.regions import UnknownRegion, build_region_path
 from serendipeak.catalog.relocation import RelocationOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
+from tests.support.geography import reference as geography_reference
 
 
 class InMemoryGeographyReference:
@@ -284,6 +291,58 @@ class InMemoryMountainLocationStore:
 
     def mountain(self, mountain_id):
         return self._mountains[mountain_id]
+
+
+class InMemoryMountainCreationStore:
+    """Holds the reference data of tests.support.geography and the given regions."""
+
+    def __init__(self, mountains=(), regions=()):
+        self._mountains = {mountain.slug: mountain for mountain in mountains}
+        self._regions = {region.id: region for region in regions}
+        self.calls = 0
+
+    def create_draft(self, mountain, image):
+        self.calls += 1
+        reference = geography_reference()
+        wanted = set(mountain.country_codes)
+        if mountain.slug in self._mountains:
+            raise SlugTaken(mountain.slug)
+        if mountain.continent_code not in reference.continents:
+            raise UnknownContinent(mountain.continent_code)
+        if mountain.region_id is not None and mountain.region_id not in self._regions:
+            raise UnknownRegion(mountain.region_id)
+        if wanted - reference.countries.keys():
+            raise UnknownCountries(tuple(sorted(wanted - reference.countries.keys())))
+
+        created = Mountain(
+            id=uuid4(),
+            slug=mountain.slug,
+            name=LocalizedText(en=mountain.name),
+            status=MountainStatus.DRAFT,
+            coordinates=mountain.coordinates,
+            elevation_meters=mountain.elevation_meters,
+            continent=reference.continents[mountain.continent_code],
+            countries=tuple(
+                sorted(
+                    (reference.countries[code] for code in wanted),
+                    key=lambda country: (country.name.en, country.code),
+                )
+            ),
+            region=None
+            if mountain.region_id is None
+            else build_region_path(mountain.region_id, self._regions),
+            summary=None if mountain.summary is None else LocalizedText(en=mountain.summary),
+            camera=None,
+            primary_image=image,
+            osm_node_id=mountain.osm_node_id,
+            wikidata_id=mountain.wikidata_id,
+        )
+        self._mountains[created.slug] = created
+
+        return created
+
+    def mountain(self, slug):
+        return self._mountains.get(slug)
 
 
 class InMemoryDailyDiscoveryRepository:
