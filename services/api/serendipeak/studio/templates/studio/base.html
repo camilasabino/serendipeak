@@ -1,0 +1,19 @@
+{% load static studio %}<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title>{% block title %}Overview{% endblock %} · SerendiPeak Admin</title>
+	<link rel="icon" href="{% static 'studio/brand/serendipeak-mark.png' %}" type="image/png">
+	<link rel="stylesheet" href="{% static 'studio/studio.css' %}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+	<a class="skip-link" href="#content">Skip to content</a>
+	{% block header %}{% studio_header %}{% endblock %}
+	<main id="content" class="page" tabindex="-1">
+		{% include "studio/components/messages.html" %}
+		{% block content %}{% endblock %}
+	</main>
+</body>
+</html>

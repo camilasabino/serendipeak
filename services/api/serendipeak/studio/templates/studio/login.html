@@ -1,0 +1,25 @@
+{% extends "studio/base.html" %}
+{% load static %}
+{% block title %}Sign in{% endblock %}
+{% block body_class %}body--sign-in{% endblock %}
+{% block header %}{% endblock %}
+{% block content %}
+	<div class="sign-in">
+		<section class="sign-in__intro" aria-labelledby="sign-in-intro">
+			<img src="{% static 'studio/brand/serendipeak-mark.png' %}" alt="" width="56" height="56">
+			<p class="kicker kicker--on-stage">SerendiPeak Admin</p>
+			<h2 class="sign-in__lede" id="sign-in-intro">The back office of the mountain catalog.</h2>
+			<p>Sign in to review and edit the mountains, photographs and cameras that readers see.</p>
+		</section>
+		<section class="sign-in__panel" aria-labelledby="sign-in-title">
+			<h1 class="page-title" id="sign-in-title">Sign in</h1>
+			{% include "studio/components/error_summary.html" %}
+			<form method="post" novalidate>
+				{% csrf_token %}
+				{% for field in form %}{% include "studio/components/field.html" %}{% endfor %}
+				<input type="hidden" name="next" value="{{ next }}">
+				<button class="button" type="submit">Sign in</button>
+			</form>
+		</section>
+	</div>
+{% endblock %}

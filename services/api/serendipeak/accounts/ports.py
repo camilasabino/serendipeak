@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -46,3 +47,33 @@ class UserStore(Protocol):
 
         APPLIED carries the changed user; REFUSED carries the violation.
         """
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedLoginAttempt:
+    attempt_id: int
+    by_username: int
+    by_address: int
+
+
+class LoginAttemptLog(Protocol):
+    def record(
+        self,
+        *,
+        username_key: str,
+        address: str,
+        at: datetime,
+        window_start: datetime,
+    ) -> RecordedLoginAttempt:
+        """Store one attempt and count the attempts since the window start.
+
+        Attempts older than the window start are dropped. The counts include the attempt just
+        stored and every attempt committed before the count was read: those for the username key
+        and those for the address.
+        """
+
+    def discard(self, attempt_id: int) -> None:
+        """Remove one stored attempt; an unknown id is ignored."""
+
+    def forget_username(self, username_key: str) -> None:
+        """Remove every stored attempt of the username key."""

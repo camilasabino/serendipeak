@@ -5,7 +5,7 @@ from uuid import uuid4
 from serendipeak.accounts.access import Access, AccessChangeContext, AccessViolation, Account
 from serendipeak.accounts.entities import User
 from serendipeak.accounts.errors import PasswordRejected, UsernameTaken
-from serendipeak.accounts.ports import AccessChange, AccessChangeOutcome
+from serendipeak.accounts.ports import AccessChange, AccessChangeOutcome, RecordedLoginAttempt
 from serendipeak.catalog.bootstrap.ports import AttachOutcome, CatalogSeed, CatalogSnapshot
 from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
@@ -259,6 +259,55 @@ class InMemoryUserStore:
     @staticmethod
     def _access_of(user):
         return Access(user.role, user.is_active)
+
+
+class InMemoryLoginAttemptLog:
+    def __init__(self):
+        self._attempts = {}
+        self._next_id = 1
+
+    def record(self, *, username_key, address, at, window_start):
+        self._attempts = {
+            attempt_id: attempt
+            for attempt_id, attempt in self._attempts.items()
+            if attempt[2] >= window_start
+        }
+        attempt_id = self._next_id
+        self._next_id += 1
+        self._attempts[attempt_id] = (username_key, address, at)
+        in_window = self._attempts.values()
+
+        return RecordedLoginAttempt(
+            attempt_id=attempt_id,
+            by_username=sum(attempt[0] == username_key for attempt in in_window),
+            by_address=sum(attempt[1] == address for attempt in in_window),
+        )
+
+    def discard(self, attempt_id):
+        self._attempts.pop(attempt_id, None)
+
+    def forget_username(self, username_key):
+        self._attempts = {
+            attempt_id: attempt
+            for attempt_id, attempt in self._attempts.items()
+            if attempt[0] != username_key
+        }
+
+    def stored(self):
+        return len(self._attempts)
+
+
+class ManualClock:
+    """A clock the test moves by hand."""
+
+    def __init__(self, now):
+        self._now = now
+
+    def now(self):
+        return self._now
+
+    def advance(self, delta):
+        self._now += delta
 
 
 class InMemoryMountainCameraStore:

@@ -1,0 +1,27 @@
+{% extends "studio/base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Overview</p>
+		<h1 class="page-title">Welcome, {{ user.get_username }}</h1>
+	</header>
+	<div class="grid">
+		<section class="panel" aria-labelledby="access-title">
+			<h2 class="panel__title" id="access-title">Your access</h2>
+			<dl class="ledger">
+				<div class="ledger__row"><dt>Username</dt><dd>{{ user.get_username }}</dd></div>
+				<div class="ledger__row"><dt>Role</dt><dd>{{ user.role|capfirst }}</dd></div>
+				<div class="ledger__row"><dt>Member since</dt><dd class="numeric">{{ user.date_joined|date:"j M Y" }}</dd></div>
+			</dl>
+			<p class="panel__note">
+				{% if user.role == "editor" %}As an Editor you can read and change everything the Studio offers.{% else %}As a Viewer you can read everything the Studio offers. Changes are made by Editors.{% endif %}
+			</p>
+		</section>
+		<section class="panel panel--stage" aria-labelledby="catalog-title">
+			<h2 class="panel__title" id="catalog-title">Catalog editing</h2>
+			<p>No catalog sections are listed here yet. Mountains, daily discoveries and users will appear in the navigation above as they become available in the Studio.</p>
+			<p>Until then, the catalog is edited in the Django Admin.</p>
+			<a class="button button--on-stage" href="{% url 'admin:index' %}">Open the Django Admin</a>
+		</section>
+	</div>
+{% endblock %}

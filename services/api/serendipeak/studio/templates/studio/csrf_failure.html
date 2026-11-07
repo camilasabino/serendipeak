@@ -1,0 +1,12 @@
+{% extends "studio/base.html" %}
+{% block title %}Page expired{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Error 403</p>
+		<h1 class="page-title">This page expired</h1>
+	</header>
+	<section class="panel panel--narrow">
+		<p>The form could not be verified, usually because the page was open for a long time or the session ended. Nothing was changed. Open the page again and retry.</p>
+		<a class="button" href="{% url 'studio:landing' %}">Back to the overview</a>
+	</section>
+{% endblock %}

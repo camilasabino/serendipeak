@@ -1,11 +1,13 @@
 from pathlib import Path
 
 from django.conf import settings
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 from django.views.static import serve
 
 from config.admin import build_admin_site
 from config.composition import (
+    build_admit_login_attempt,
+    build_clear_login_failures,
     build_get_mountain_by_slug,
     build_get_random_mountain,
     build_get_todays_mountain,
@@ -13,6 +15,8 @@ from config.composition import (
 from config.health import healthz
 from serendipeak.httpapi.urls import mountain_urlpatterns
 from serendipeak.media.filesystem_media_store import PUBLIC_DIRECTORY
+from serendipeak.studio.access import STUDIO_PATH_PREFIX
+from serendipeak.studio.urls import studio_urlpatterns
 
 
 def development_media_urlpatterns(*, debug: bool, media_store: str, media_root: Path):
@@ -35,6 +39,19 @@ def development_media_urlpatterns(*, debug: bool, media_store: str, media_root: 
 urlpatterns = [
     path("healthz", healthz),
     path("admin/", build_admin_site().urls),
+    path(
+        STUDIO_PATH_PREFIX.lstrip("/"),
+        include(
+            (
+                studio_urlpatterns(
+                    admit_login_attempt=build_admit_login_attempt(),
+                    clear_login_failures=build_clear_login_failures(),
+                    trusted_proxy_hops=settings.TRUSTED_PROXY_HOPS,
+                ),
+                "studio",
+            )
+        ),
+    ),
     *mountain_urlpatterns(
         get_mountain=build_get_mountain_by_slug(),
         get_todays_mountain=build_get_todays_mountain(),

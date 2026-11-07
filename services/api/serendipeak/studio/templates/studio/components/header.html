@@ -1,0 +1,31 @@
+{% load static %}<header class="app-header">
+	<div class="app-header__inner">
+		<a class="brand" href="{% url 'studio:landing' %}">
+			<img src="{% static 'studio/brand/serendipeak-mark.png' %}" alt="" width="36" height="36">
+			<span class="brand__name">SerendiPeak</span>
+			<span class="brand__product">Admin</span>
+		</a>
+		{% if items %}
+			<nav class="app-nav" aria-label="Studio">
+				<ul class="app-nav__list">
+					{% for item in items %}
+						<li>
+							<a class="app-nav__link" href="{% url item.url_name %}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+						</li>
+					{% endfor %}
+				</ul>
+			</nav>
+		{% endif %}
+		<div class="app-account">
+			<a class="app-account__link" href="{{ web_origin }}" target="_blank" rel="noopener">View site<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
+			{% if signed_in %}
+				<span class="app-account__who"><span class="visually-hidden">Signed in as </span>{{ username }} <span class="role-tag">{{ role }}</span></span>
+				<a class="app-account__link" href="{% url 'studio:password_change' %}">Change password</a>
+				<form class="app-account__form" method="post" action="{% url 'studio:logout' %}">
+					{% csrf_token %}
+					<button class="link-button" type="submit">Sign out</button>
+				</form>
+			{% endif %}
+		</div>
+	</div>
+</header>

@@ -549,3 +549,32 @@ class UserRecord(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_active
+
+
+class LoginAttemptRecord(models.Model):
+    """One sign-in attempt, kept only for as long as the throttling window needs it.
+
+    The username is stored as a digest so that a password typed into the wrong field is never
+    persisted.
+    """
+
+    username_key = models.CharField(max_length=64)
+    address = models.CharField(max_length=45)
+    attempted_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "login_attempt"
+        constraints = [
+            CheckConstraint(
+                condition=Q(username_key__regex=SHA256_PATTERN),
+                name="login_attempt_username_key_digest",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["username_key", "attempted_at"], name="login_attempt_username"),
+            models.Index(fields=["address", "attempted_at"], name="login_attempt_address"),
+            models.Index(fields=["attempted_at"], name="login_attempt_time"),
+        ]
+
+    def __str__(self):
+        return f"{self.address} at {self.attempted_at.isoformat()}"

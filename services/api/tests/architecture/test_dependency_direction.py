@@ -57,7 +57,10 @@ NONDETERMINISTIC_SOURCES = frozenset(
         "uuid.uuid8",
     }
 )
-NONDETERMINISTIC_SOURCE_ALLOWED_FILES = {"serendipeak/discovery/clock.py"}
+NONDETERMINISTIC_SOURCE_ALLOWED_FILES = {
+    "serendipeak/accounts/clock.py",
+    "serendipeak/discovery/clock.py",
+}
 USE_CASE_PACKAGES = ("serendipeak.accounts", "serendipeak.catalog", "serendipeak.discovery")
 
 CAPABILITY_PACKAGES = (
@@ -98,6 +101,14 @@ FORBIDDEN_BY_PACKAGE = {
     ),
     "serendipeak.httpapi": (*ORM_MODULES, "serendipeak.persistence", "serendipeak.media", "config"),
     "serendipeak.cli": ("django.db", "serendipeak.persistence"),
+    "serendipeak.studio": (
+        "rest_framework",
+        "serendipeak.persistence",
+        "serendipeak.httpapi",
+        "serendipeak.cli",
+        "serendipeak.media",
+        "config",
+    ),
     "serendipeak.media": (
         "rest_framework",
         "serendipeak.persistence",
@@ -278,6 +289,9 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/persistence/models.py" in files
     assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
     assert "serendipeak/httpapi/views.py" in files
+    assert "serendipeak/studio/middleware.py" in files
+    assert "serendipeak/accounts/login_throttle.py" in files
+    assert "serendipeak/persistence/login_attempt_log.py" in files
     assert "serendipeak/discovery/get_todays_mountain.py" in files
     assert "serendipeak/discovery/get_random_mountain.py" in files
     assert "serendipeak/persistence/daily_discovery_repository.py" in files
@@ -360,6 +374,31 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak/cli/management/commands/check_catalog.py",
             "from serendipeak.persistence.models import MountainRecord",
             "serendipeak.cli.management.commands.check_catalog imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/studio/views.py",
+            "from serendipeak.persistence.models import UserRecord",
+            "serendipeak.studio.views imports serendipeak.persistence",
+        ),
+        (
+            "serendipeak/studio/urls.py",
+            "from config.composition import build_admit_login_attempt",
+            "serendipeak.studio.urls imports config",
+        ),
+        (
+            "serendipeak/studio/forms.py",
+            "from django.db import models",
+            "serendipeak.studio.forms imports django.db",
+        ),
+        (
+            "serendipeak/studio/views.py",
+            "from rest_framework.views import APIView",
+            "serendipeak.studio.views imports rest_framework",
+        ),
+        (
+            "serendipeak/accounts/login_throttle.py",
+            "from datetime import datetime\ndatetime.now()",
+            "serendipeak.accounts.login_throttle reads datetime.datetime.now",
         ),
         (
             "config/composition.py",

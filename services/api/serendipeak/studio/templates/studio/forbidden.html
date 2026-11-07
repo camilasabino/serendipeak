@@ -1,0 +1,12 @@
+{% extends "studio/base.html" %}
+{% block title %}Not allowed{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Error 403</p>
+		<h1 class="page-title">You are not allowed to do that</h1>
+	</header>
+	<section class="panel panel--narrow">
+		<p>Your account does not have access to this page. Ask an Editor if you need it.</p>
+		<a class="button" href="{% url 'studio:landing' %}">Back to the overview</a>
+	</section>
+{% endblock %}

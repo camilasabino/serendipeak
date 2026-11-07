@@ -50,15 +50,18 @@ INSTALLED_APPS = [
     "rest_framework",
     "serendipeak.persistence",
     "serendipeak.cli",
+    "serendipeak.studio",
 ]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
+    "serendipeak.studio.middleware.StudioSecurityHeadersMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "serendipeak.studio.middleware.StudioAccessMiddleware",
 ]
 
 TEMPLATES = [
@@ -89,8 +92,15 @@ AUTH_PASSWORD_VALIDATORS = [
     )
 ]
 
-# Only the admin sets cookies. They carry the editor's identity, so they never travel over
-# plain HTTP outside local development.
+LOGIN_URL = "studio:login"
+LOGIN_REDIRECT_URL = "studio:landing"
+
+# Only the Studio and the Admin set cookies. They carry the editor's identity, so they never
+# travel over plain HTTP outside local development. The cookies keep the default path "/" because
+# the Admin at /admin/ shares them with the Studio at /studio/; one path cannot cover both
+# without covering the API too, and the API never reads or sets them.
+SESSION_COOKIE_AGE = 12 * 60 * 60
+CSRF_FAILURE_VIEW = "serendipeak.studio.views.csrf_failure"
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
@@ -99,6 +109,20 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 
 STATIC_URL = "static/"
+
+
+def non_negative_integer(name):
+    value = os.environ.get(name, "0")
+    if not value.isascii() or not value.isdecimal():
+        raise ImproperlyConfigured(f"{name} must be a non-negative integer")
+
+    return int(value)
+
+
+# How many reverse proxies in front of the service append to X-Forwarded-For. Zero ignores the
+# header, which is the only safe reading when nothing in front of the service is known to set it:
+# the address that login throttling counts would otherwise be chosen by the client.
+TRUSTED_PROXY_HOPS = non_negative_integer("TRUSTED_PROXY_HOPS")
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -218,7 +242,11 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "readable": {"format": "{asctime} {levelname} {name} {message}", "style": "{"},
+        "readable": {
+            "()": "config.logging.ReadableFormatter",
+            "format": "{asctime} {levelname} {name} {message}",
+            "style": "{",
+        },
         "json_line": {"()": "config.logging.JsonLineFormatter"},
     },
     "handlers": {

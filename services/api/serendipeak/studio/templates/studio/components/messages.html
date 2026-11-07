@@ -1,0 +1,10 @@
+{% if messages %}
+	<ul class="messages" role="status">
+		{% for message in messages %}
+			<li class="message message--{{ message.level_tag }}">
+				<span class="message__label">{{ message.level_tag|capfirst }}</span>
+				<span class="message__text">{{ message }}</span>
+			</li>
+		{% endfor %}
+	</ul>
+{% endif %}

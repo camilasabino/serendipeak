@@ -37,3 +37,26 @@ def test_the_traceback_stays_inside_the_line():
 
     assert "\n" not in line
     assert "RuntimeError: database unavailable" in json.loads(line)["exception"]
+
+
+def record_with_fields(**fields):
+    entry = record("login_failed")
+    entry.fields = fields
+
+    return entry
+
+
+def test_structured_fields_are_added_when_a_call_supplies_them():
+    entry = json.loads(JsonLineFormatter().format(record_with_fields(address="203.0.113.7")))
+
+    assert entry["fields"] == {"address": "203.0.113.7"}
+
+
+def test_the_readable_format_appends_the_fields_to_the_message():
+    from config.logging import ReadableFormatter
+
+    line = ReadableFormatter("{levelname} {message}", style="{").format(
+        record_with_fields(address="203.0.113.7", role="editor")
+    )
+
+    assert line == "ERROR login_failed address=203.0.113.7 role=editor"

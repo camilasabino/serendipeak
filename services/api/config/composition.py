@@ -4,7 +4,9 @@ from pathlib import Path
 from django.conf import settings
 
 from serendipeak.accounts.change_user_access import ChangeUserAccess
+from serendipeak.accounts.clock import SystemUtcClock as AccountsClock
 from serendipeak.accounts.create_user import CreateUser
+from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
 from serendipeak.catalog.bootstrap.apply_geography_backfill import ApplyGeographyBackfill
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
@@ -45,6 +47,7 @@ from serendipeak.persistence.geography_backfill_store import (
     DjangoGeographyDraftReader,
 )
 from serendipeak.persistence.geography_reference import DjangoGeographyReference
+from serendipeak.persistence.login_attempt_log import DjangoLoginAttemptLog
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
@@ -176,6 +179,14 @@ def build_create_user() -> CreateUser:
 
 def build_change_user_access() -> ChangeUserAccess:
     return ChangeUserAccess(DjangoUserStore())
+
+
+def build_admit_login_attempt() -> AdmitLoginAttempt:
+    return AdmitLoginAttempt(DjangoLoginAttemptLog(), AccountsClock())
+
+
+def build_clear_login_failures() -> ClearLoginFailures:
+    return ClearLoginFailures(DjangoLoginAttemptLog())
 
 
 def build_media_store() -> MediaStore:
