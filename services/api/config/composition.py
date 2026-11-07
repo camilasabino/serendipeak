@@ -16,14 +16,18 @@ from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
 from serendipeak.catalog.create_mountain import CreateMountain
+from serendipeak.catalog.create_mountain_region import CreateMountainRegion
 from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.delete_draft_mountain import DeleteDraftMountain
+from serendipeak.catalog.delete_mountain_region import DeleteMountainRegion
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
+from serendipeak.catalog.move_mountain_region import MoveMountainRegion
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.catalog.update_mountain import UpdateMountain
+from serendipeak.catalog.update_mountain_region import UpdateMountainRegion
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
@@ -44,6 +48,7 @@ from serendipeak.persistence.geography_reference import DjangoGeographyReference
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
+from serendipeak.persistence.mountain_region_store import DjangoMountainRegionStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
@@ -147,6 +152,22 @@ def build_update_mountain(ingestion: PhotographIngestion | None = None) -> Updat
 
 def build_delete_draft_mountain() -> DeleteDraftMountain:
     return DeleteDraftMountain(DjangoDraftMountainDeletionStore())
+
+
+def build_create_mountain_region() -> CreateMountainRegion:
+    return CreateMountainRegion(DjangoMountainRegionStore())
+
+
+def build_update_mountain_region() -> UpdateMountainRegion:
+    return UpdateMountainRegion(DjangoMountainRegionStore())
+
+
+def build_move_mountain_region() -> MoveMountainRegion:
+    return MoveMountainRegion(DjangoMountainRegionStore())
+
+
+def build_delete_mountain_region() -> DeleteMountainRegion:
+    return DeleteMountainRegion(DjangoMountainRegionStore())
 
 
 def build_create_user() -> CreateUser:

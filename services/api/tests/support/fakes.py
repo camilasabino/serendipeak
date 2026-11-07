@@ -31,7 +31,14 @@ from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
 from serendipeak.catalog.ports import CameraChange, StatusChange, StatusChangeOutcome
-from serendipeak.catalog.regions import UnknownRegion, build_region_path
+from serendipeak.catalog.region_changes import (
+    RegionInUse,
+    RegionNameTaken,
+    RegionSlugTaken,
+    RegionWikidataTaken,
+    RegionWouldDescendFromItself,
+)
+from serendipeak.catalog.regions import MountainRegion, UnknownRegion, build_region_path
 from serendipeak.catalog.relocation import RelocationOutcome
 from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
@@ -447,6 +454,118 @@ class InMemoryDraftMountainDeletionStore:
 
     def mountain(self, mountain_id):
         return self._mountains.get(mountain_id)
+
+
+class InMemoryMountainRegionStore:
+    """Stands in for the Django adapter of the region writes. Every operation judges before it
+    writes, so a refusal leaves the taxonomy as it was. mountain_region_ids holds the region of
+    each mountain that has one."""
+
+    def __init__(self, regions=(), mountain_region_ids=()):
+        self._regions = {region.id: region for region in regions}
+        self._mountain_region_ids = list(mountain_region_ids)
+        self.calls = 0
+
+    def create(self, region):
+        self.calls += 1
+        parent_id = region.parent_id
+        if parent_id is not None and parent_id not in self._regions:
+            raise UnknownRegion(parent_id)
+        if any(other.slug == region.slug for other in self._regions.values()):
+            raise RegionSlugTaken(region.slug)
+        if parent_id is not None and self._has_child_named(parent_id, region.name.en):
+            raise RegionNameTaken(parent_id, region.name.en)
+        self._require_free_wikidata(region.wikidata_id)
+
+        stored = MountainRegion(
+            id=uuid4(),
+            slug=region.slug,
+            name=region.name,
+            parent_id=parent_id,
+            wikidata_id=region.wikidata_id,
+        )
+        self._regions[stored.id] = stored
+
+        return stored
+
+    def update(self, region_id, update):
+        self.calls += 1
+        current = self._known(region_id)
+        parent_id = current.parent_id
+        if parent_id is not None and self._has_child_named(
+            parent_id, update.name.en, excluding=region_id
+        ):
+            raise RegionNameTaken(parent_id, update.name.en)
+        self._require_free_wikidata(update.wikidata_id, excluding=region_id)
+
+        stored = replace(current, name=update.name, wikidata_id=update.wikidata_id)
+        self._regions[region_id] = stored
+
+        return stored
+
+    def move(self, region_id, parent_id):
+        self.calls += 1
+        current = self._known(region_id)
+        if current.parent_id == parent_id:
+            return current
+        if parent_id is not None:
+            self._known(parent_id)
+            if self._is_inside(parent_id, region_id):
+                raise RegionWouldDescendFromItself(region_id, parent_id)
+            if self._has_child_named(parent_id, current.name.en, excluding=region_id):
+                raise RegionNameTaken(parent_id, current.name.en)
+
+        stored = replace(current, parent_id=parent_id)
+        self._regions[region_id] = stored
+
+        return stored
+
+    def delete(self, region_id):
+        self.calls += 1
+        self._known(region_id)
+        children = sum(1 for other in self._regions.values() if other.parent_id == region_id)
+        mountains = self._mountain_region_ids.count(region_id)
+        if children or mountains:
+            raise RegionInUse(region_id, children, mountains)
+
+        del self._regions[region_id]
+
+    def region(self, region_id):
+        return self._regions.get(region_id)
+
+    def regions(self):
+        return dict(self._regions)
+
+    def _known(self, region_id):
+        region = self._regions.get(region_id)
+        if region is None:
+            raise UnknownRegion(region_id)
+
+        return region
+
+    def _is_inside(self, region_id, ancestor_id):
+        current = region_id
+        while current is not None:
+            if current == ancestor_id:
+                return True
+            current = self._regions[current].parent_id
+
+        return False
+
+    def _has_child_named(self, parent_id, name, excluding=None):
+        return any(
+            other.parent_id == parent_id
+            and other.id != excluding
+            and other.name.en.lower() == name.lower()
+            for other in self._regions.values()
+        )
+
+    def _require_free_wikidata(self, wikidata_id, excluding=None):
+        if wikidata_id is not None and any(
+            other.wikidata_id == wikidata_id and other.id != excluding
+            for other in self._regions.values()
+        ):
+            raise RegionWikidataTaken(wikidata_id)
 
 
 class InMemoryDailyDiscoveryRepository:

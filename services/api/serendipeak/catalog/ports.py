@@ -15,6 +15,8 @@ from serendipeak.catalog.entities import (
 from serendipeak.catalog.mountain_update import MountainUpdate
 from serendipeak.catalog.new_mountain import NewMountain
 from serendipeak.catalog.publication import PublicationViolation
+from serendipeak.catalog.region_changes import MountainRegionUpdate, NewMountainRegion
+from serendipeak.catalog.regions import MountainRegion
 from serendipeak.catalog.relocation import RelocationOutcome, RelocationRule
 from serendipeak.catalog.status_transitions import Gate, StatusTransition
 
@@ -176,4 +178,46 @@ class DraftMountainDeletionStore(Protocol):
 
         Raises UnknownMountain, MountainNotDraft for a mountain that is not a draft and
         MountainReferenced for a mountain that a daily discovery refers to, and deletes nothing.
+        """
+
+
+class MountainRegionStore(Protocol):
+    """The writes of the region taxonomy. They share one port because they share one invariant
+    and one lock: the structure of the tree, and the sibling names and Wikidata items that
+    depend on it, change one write at a time. Each operation is atomic and writes nothing when
+    it raises. None of them reassigns a child region or a mountain."""
+
+    def create(self, region: NewMountainRegion) -> MountainRegion:
+        """Store region with a new id and return it as stored.
+
+        Raises UnknownRegion for a parent that does not exist, RegionSlugTaken, RegionNameTaken
+        for a sibling that has the English name, ignoring case (roots are exempt), and
+        RegionWikidataTaken. When several apply, the first of them in this order is raised.
+        """
+
+    def update(self, region_id: UUID, update: MountainRegionUpdate) -> MountainRegion:
+        """Replace the names and the Wikidata item of the region and return it as stored.
+
+        The id, the slug and the parent never change. A region whose state already equals
+        update is not written.
+
+        Raises UnknownRegion, RegionNameTaken and RegionWikidataTaken, in that order.
+        """
+
+    def move(self, region_id: UUID, parent_id: UUID | None) -> MountainRegion:
+        """Make parent_id the parent of the region, or a root when it is None, and return it.
+
+        Its descendants and its mountains are not touched: they point at the moved region. A
+        region already under that parent is not written.
+
+        Raises UnknownRegion for the region or for the parent, RegionWouldDescendFromItself
+        when the parent is the region or one of its descendants, and RegionNameTaken, in that
+        order.
+        """
+
+    def delete(self, region_id: UUID) -> None:
+        """Delete the region.
+
+        Raises UnknownRegion and RegionInUse, with the number of its child regions and
+        mountains, when either exists. Nothing is moved or cascaded.
         """
