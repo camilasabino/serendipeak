@@ -210,3 +210,25 @@ def test_infrastructure_errors_name_their_cause():
 
 def test_application_errors_keep_their_message():
     assert str(command_error(CatalogAlreadyPopulated())) == "the catalog already holds mountains"
+
+
+def test_prune_daily_discoveries_deletes_only_expired_rows_and_is_repeatable():
+    import datetime
+
+    from serendipeak.persistence.models import DailyDiscoveryRecord
+
+    today = datetime.datetime.now(datetime.UTC).date()
+    expired = today - datetime.timedelta(days=366)
+    retained = today - datetime.timedelta(days=365)
+    record = mountain_record()
+    record.save()
+    for day in (expired, retained, today):
+        DailyDiscoveryRecord(date=day, mountain=record).save(force_insert=True)
+
+    stdout, _ = run("prune_daily_discoveries")
+    again, _ = run("prune_daily_discoveries")
+
+    cutoff = retained.isoformat()
+    assert stdout == f"Deleted 1 daily discoveries dated before {cutoff}.\n"
+    assert again == f"Deleted 0 daily discoveries dated before {cutoff}.\n"
+    assert sorted(DailyDiscoveryRecord.objects.values_list("date", flat=True)) == [retained, today]

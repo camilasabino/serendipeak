@@ -192,6 +192,16 @@ The seed holds neither continents nor country codes, and a mountain needs a cont
 
 `--seed` and `--frozen-catalog` replace the input files. On failure each command lists the mismatches or violations on stderr and exits with status 1.
 
+### Daily discovery retention
+
+Daily discoveries are kept for 365 days: a discovery is kept while its date is on or after today (UTC) minus 365 days, and older ones are deleted. The table is otherwise immutable, and the database enforces it: its trigger refuses every `UPDATE` and any `DELETE` of a row inside the window, judged by the database's own UTC date whatever the caller asks for. The 30-day window of the daily selection lies inside the retention window, so today's discovery and the history that excludes recent mountains are never affected. The trigger's constant mirrors `RETENTION_DAYS` in `serendipeak/discovery/retention.py`.
+
+```bash
+uv run --env-file ../../.env python manage.py prune_daily_discoveries
+```
+
+The command is one `DELETE` on the date key, idempotent, and prints how many rows it removed and the cutoff. It is not scheduled by the application: a production deployment must run it daily (for example a Railway cron service) or the table grows without bound. The public request path never prunes.
+
 ### Geography and reference data
 
 Every mountain has one **continent** and any number of **countries**, both references to fixed reference tables, and its name and summary are stored per language.

@@ -123,3 +123,42 @@ def test_an_unknown_mountain_is_an_infrastructure_error_that_persists_nothing(
         repository.insert_or_get(new_day, uuid.uuid4())
 
     assert repository.find_by_date(new_day) is None
+
+
+REAL_TODAY = datetime.datetime.now(datetime.UTC).date()
+CUTOFF = REAL_TODAY - datetime.timedelta(days=365)
+
+
+def kept_on(offset):
+    return CUTOFF + datetime.timedelta(days=offset)
+
+
+def test_deletes_the_discoveries_before_the_cutoff_and_keeps_the_rest(repository_holding):
+    repository = repository_holding(
+        catalog_discovery(kept_on(-2), ACONCAGUA),
+        catalog_discovery(kept_on(-1), RETIRED),
+        catalog_discovery(CUTOFF, DENALI),
+        catalog_discovery(REAL_TODAY, ACONCAGUA),
+    )
+
+    deleted = repository.delete_before(CUTOFF)
+
+    assert deleted == 2
+    assert repository.find_by_date(kept_on(-2)) is None
+    assert repository.find_by_date(kept_on(-1)) is None
+    assert repository.find_by_date(CUTOFF).mountain == DENALI.mountain
+    assert repository.find_by_date(REAL_TODAY).mountain == ACONCAGUA.mountain
+
+
+def test_deleting_before_the_cutoff_twice_deletes_nothing_the_second_time(repository_holding):
+    repository = repository_holding(catalog_discovery(kept_on(-1), DENALI))
+
+    assert repository.delete_before(CUTOFF) == 1
+    assert repository.delete_before(CUTOFF) == 0
+
+
+def test_deleting_with_nothing_expired_deletes_nothing(repository_holding):
+    repository = repository_holding(*HISTORY)
+
+    assert repository.delete_before(CUTOFF) == 0
+    assert repository.find_by_date(DAY) is not None

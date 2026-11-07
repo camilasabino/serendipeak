@@ -313,6 +313,13 @@ class InMemoryDailyDiscoveryRepository:
 
         return self.find_by_date(day)
 
+    def delete_before(self, cutoff):
+        expired = [day for day in self._mountain_ids if day < cutoff]
+        for day in expired:
+            del self._mountain_ids[day]
+
+        return len(expired)
+
 
 @dataclass
 class FixedClock:

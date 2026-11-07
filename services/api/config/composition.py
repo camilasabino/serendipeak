@@ -24,6 +24,7 @@ from serendipeak.catalog.reactivate_mountain import ReactivateMountain
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
+from serendipeak.discovery.prune_daily_discoveries import PruneDailyDiscoveries
 from serendipeak.media.caching_source_fetcher import CachingSourceImageFetcher
 from serendipeak.media.filesystem_media_store import FilesystemMediaStore
 from serendipeak.media.http_source_fetcher import HttpSourceImageFetcher
@@ -96,6 +97,10 @@ def build_get_todays_mountain() -> GetTodaysMountain:
         DjangoDailyDiscoveryRepository(),
         SystemUtcClock(),
     )
+
+
+def build_prune_daily_discoveries() -> PruneDailyDiscoveries:
+    return PruneDailyDiscoveries(DjangoDailyDiscoveryRepository(), SystemUtcClock())
 
 
 def build_get_random_mountain() -> GetRandomMountain:

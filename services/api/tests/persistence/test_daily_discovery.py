@@ -7,7 +7,7 @@ from django.db.models import ProtectedError
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
 from tests.support.records import image_record, insert_error, mountain_record
 
-DAY = datetime.date(2026, 10, 1)
+DAY = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=30)
 RESTRICT_VIOLATION = "23001"
 FOREIGN_KEY_VIOLATION = "23503"
 
@@ -134,3 +134,61 @@ def test_a_mountain_without_dependents_can_be_deleted(mountain):
     mountain.delete()
 
     assert not MountainRecord.objects.exists()
+
+
+TODAY = datetime.datetime.now(datetime.UTC).date()
+OLDEST_RETAINED = TODAY - datetime.timedelta(days=365)
+EXPIRED = OLDEST_RETAINED - datetime.timedelta(days=1)
+
+
+def discovery_on(day, mountain):
+    record = DailyDiscoveryRecord(date=day, mountain=mountain)
+    record.save(force_insert=True)
+    return record
+
+
+def test_the_oldest_retained_date_cannot_be_deleted(mountain):
+    discovery_on(OLDEST_RETAINED, mountain)
+
+    error = database_error(DailyDiscoveryRecord.objects.filter(date=OLDEST_RETAINED).delete)
+
+    assert error.sqlstate == RESTRICT_VIOLATION
+    assert DailyDiscoveryRecord.objects.filter(date=OLDEST_RETAINED).exists()
+
+
+def test_a_date_beyond_the_retention_window_can_be_deleted(mountain):
+    discovery_on(EXPIRED, mountain)
+
+    deleted, _ = DailyDiscoveryRecord.objects.filter(date=EXPIRED).delete()
+
+    assert deleted == 1
+    assert not DailyDiscoveryRecord.objects.exists()
+
+
+def test_a_bulk_delete_that_includes_a_retained_row_deletes_nothing(mountain):
+    discovery_on(EXPIRED, mountain)
+    discovery_on(TODAY, mountain)
+
+    error = database_error(DailyDiscoveryRecord.objects.all().delete)
+
+    assert error.sqlstate == RESTRICT_VIOLATION
+    assert DailyDiscoveryRecord.objects.count() == 2
+
+
+def test_todays_discovery_cannot_be_deleted(mountain):
+    discovery_on(TODAY, mountain)
+
+    error = database_error(DailyDiscoveryRecord.objects.filter(date=TODAY).delete)
+
+    assert error.sqlstate == RESTRICT_VIOLATION
+
+
+def test_an_expired_discovery_still_cannot_be_updated(mountain, other_mountain):
+    discovery_on(EXPIRED, mountain)
+
+    error = database_error(
+        lambda: DailyDiscoveryRecord.objects.filter(date=EXPIRED).update(mountain=other_mountain)
+    )
+
+    assert error.sqlstate == RESTRICT_VIOLATION
+    assert DailyDiscoveryRecord.objects.get(date=EXPIRED).mountain_id == mountain.id

@@ -323,7 +323,7 @@ class TestFinalValidation:
 
         migrate_to_latest()
 
-        assert applied_head() == REGIONS_FINAL[1]
+        assert applied_head() == "0021_daily_discovery_retention"
         assert stored_regions() == []
         assert "range_name" not in column_names()
 

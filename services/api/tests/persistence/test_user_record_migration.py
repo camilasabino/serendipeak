@@ -77,7 +77,7 @@ def test_the_migration_reverses_without_touching_the_catalog_and_applies_again()
         cursor.execute("UPDATE mountain SET continent_code = 'SA'")
     migrate_to_latest()
 
-    assert applied_head() == "0020_region_final_validation"
+    assert applied_head() == "0021_daily_discovery_retention"
     assert "app_user" in tables()
     with connection.cursor() as cursor:
         cursor.execute("SELECT count(*) FROM mountain WHERE slug = 'aconcagua'")

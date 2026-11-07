@@ -26,3 +26,12 @@ class DailyDiscoveryRepository(Protocol):
         mountain raises InfrastructureError and persists nothing, even though the reference
         is only checked when the insert commits.
         """
+
+    def delete_before(self, cutoff: date) -> int:
+        """Delete the discoveries dated before cutoff and return how many were deleted.
+
+        Atomic and committed when this returns. A date from cutoff on is never deleted;
+        running it again deletes nothing. The database refuses to delete a discovery that
+        is inside the retention window whatever cutoff is passed, and that refusal is an
+        InfrastructureError that deletes nothing.
+        """

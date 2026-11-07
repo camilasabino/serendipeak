@@ -14,3 +14,9 @@ class DailyMountain:
 class RecentDiscovery:
     date: date
     slug: str
+
+
+@dataclass(frozen=True, slots=True)
+class PruneResult:
+    cutoff: date
+    deleted: int

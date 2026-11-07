@@ -43,6 +43,14 @@ class DjangoDailyDiscoveryRepository:
 
         return persisted
 
+    def delete_before(self, cutoff: date) -> int:
+        # One DELETE on the primary key. The trigger re-checks every row against the
+        # database's own clock, so a wrong cutoff cannot remove a retained discovery.
+        with translate_database_errors():
+            deleted, _ = DailyDiscoveryRecord.objects.filter(date__lt=cutoff).delete()
+
+        return deleted
+
 
 def _with_mountain():
     return with_geography(

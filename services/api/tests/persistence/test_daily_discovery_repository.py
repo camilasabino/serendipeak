@@ -140,3 +140,21 @@ def test_database_errors_become_infrastructure_errors(repository, operation):
         operation(repository)
 
     assert "daily_discovery" in str(raised.value.__cause__)
+
+
+def test_pruning_is_one_delete_on_the_date(repository, django_assert_num_queries):
+    cutoff = datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=365)
+
+    with django_assert_num_queries(1) as captured:
+        deleted = repository.delete_before(cutoff)
+
+    assert deleted == 0
+    sql = captured.captured_queries[0]["sql"]
+    assert sql.startswith('DELETE FROM "daily_discovery" WHERE "daily_discovery"."date" < ')
+
+
+def test_pruning_a_retained_date_is_an_infrastructure_error_that_deletes_nothing(repository):
+    with pytest.raises(InfrastructureError), transaction.atomic():
+        repository.delete_before(NEXT_DAY)
+
+    assert DailyDiscoveryRecord.objects.count() == 2
