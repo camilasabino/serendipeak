@@ -48,6 +48,59 @@ MATRIX = {
         VIEWER: ("status", 404),
         EDITOR: ("status", 404),
     },
+    "studio:mountain_new": {
+        "method": "get",
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/new-mountain/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/new-mountain/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ALLOWED,
+    },
+    "studio:mountain_edit": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/edit/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/edit/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:mountain_publish": {
+        "method": "post",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", LOGIN_URL),
+        INACTIVE: ("redirect", LOGIN_URL),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:mountain_unlist": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/unlist/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/unlist/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:mountain_relist": {
+        "method": "post",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", LOGIN_URL),
+        INACTIVE: ("redirect", LOGIN_URL),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:mountain_delete": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
     "studio:login": {
         "method": "get",
         "declares": StudioAccess.PUBLIC,
@@ -135,7 +188,6 @@ def test_each_caller_gets_the_outcome_the_matrix_lists(db, name, actor):
 
 
 def test_a_viewer_is_refused_an_editor_only_page_and_an_editor_is_not(db):
-    # No editor-only page exists yet, so the rule is exercised through the middleware directly.
     def view(request):
         return None
 

@@ -1,9 +1,18 @@
 from django.urls import path
 
 from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
+from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
+from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.studio.access import StudioAccess, declare_access
+from serendipeak.studio.mountain_views import (
+    DeleteDraftView,
+    EditMountainView,
+    MountainTransitionView,
+    MountainWrites,
+    NewMountainView,
+)
 from serendipeak.studio.views import (
     LandingView,
     MountainDetailView,
@@ -21,10 +30,21 @@ def studio_urlpatterns(
     trusted_proxy_hops: int,
     list_mountains: ListMountains,
     get_mountain_detail: GetMountainDetail,
+    get_mountain_form_options: GetMountainFormOptions,
+    writes: MountainWrites,
     media_base_url: str,
     web_origin: str,
+    max_photograph_bytes: int,
 ):
     """The Studio routes, each declaring who may call it. Mounted under /studio/."""
+    mountain_form = {
+        "get_mountain_detail": get_mountain_detail,
+        "get_form_options": get_mountain_form_options,
+        "writes": writes,
+        "media_base_url": media_base_url,
+        "max_photograph_bytes": max_photograph_bytes,
+    }
+
     return [
         path(
             "",
@@ -41,6 +61,12 @@ def studio_urlpatterns(
             ),
             name="mountain_list",
         ),
+        # Outside mountains/ because any valid slug, "new" included, is a mountain's address there.
+        path(
+            "new-mountain/",
+            declare_access(StudioAccess.EDITOR, NewMountainView.as_view(**mountain_form)),
+            name="mountain_new",
+        ),
         path(
             "mountains/<str:slug>/",
             declare_access(
@@ -52,6 +78,67 @@ def studio_urlpatterns(
                 ),
             ),
             name="mountain_detail",
+        ),
+        path(
+            "mountains/<str:slug>/edit/",
+            declare_access(StudioAccess.EDITOR, EditMountainView.as_view(**mountain_form)),
+            name="mountain_edit",
+        ),
+        path(
+            "mountains/<str:slug>/publish/",
+            declare_access(
+                StudioAccess.EDITOR,
+                MountainTransitionView.as_view(
+                    get_mountain_detail=get_mountain_detail,
+                    use_case=writes.publish,
+                    target_key="published",
+                    done="is published",
+                    http_method_names=["post", "options"],
+                ),
+            ),
+            name="mountain_publish",
+        ),
+        path(
+            "mountains/<str:slug>/unlist/",
+            declare_access(
+                StudioAccess.EDITOR,
+                MountainTransitionView.as_view(
+                    get_mountain_detail=get_mountain_detail,
+                    use_case=writes.deactivate,
+                    source=MountainStatus.ACTIVE,
+                    target_key="unlisted",
+                    done="is unlisted",
+                    confirmation_template="studio/mountain_unlist.html",
+                    http_method_names=["get", "post", "options"],
+                ),
+            ),
+            name="mountain_unlist",
+        ),
+        path(
+            "mountains/<str:slug>/list/",
+            declare_access(
+                StudioAccess.EDITOR,
+                MountainTransitionView.as_view(
+                    get_mountain_detail=get_mountain_detail,
+                    use_case=writes.reactivate,
+                    target_key="published",
+                    done="is listed again",
+                    http_method_names=["post", "options"],
+                ),
+            ),
+            name="mountain_relist",
+        ),
+        path(
+            "mountains/<str:slug>/delete/",
+            declare_access(
+                StudioAccess.EDITOR,
+                DeleteDraftView.as_view(
+                    get_mountain_detail=get_mountain_detail,
+                    delete_draft=writes.delete_draft,
+                    media_base_url=media_base_url,
+                ),
+            ),
+            name="mountain_delete",
         ),
         path(
             "login/",

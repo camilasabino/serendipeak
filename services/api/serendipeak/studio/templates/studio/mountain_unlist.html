@@ -1,0 +1,27 @@
+{% extends "studio/base.html" %}
+{% block title %}Unlist {{ mountain.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:mountain_list' %}">Mountains</a><span aria-hidden="true"> / </span><a href="{% url 'studio:mountain_detail' mountain.slug %}">{{ mountain.name.en }}</a>
+	</nav>
+	<header class="page-header">
+		<p class="kicker">{{ mountain.slug }}</p>
+		<h1 class="page-title">Unlist {{ mountain.name.en }}?</h1>
+	</header>
+	<section class="panel panel--narrow" aria-labelledby="unlist-title">
+		<h2 class="panel__title" id="unlist-title">What unlisting does</h2>
+		<ul class="plain-list">
+			<li>The mountain stays reachable at its public address, so existing links keep working.</li>
+			<li>It is no longer chosen as the mountain of the day or at random.</li>
+			<li>Its coordinates become editable again; changing them clears the camera.</li>
+			<li>You can list it again at any time, if it still meets the publication rules.</li>
+		</ul>
+		<form method="post" action="{% url 'studio:mountain_unlist' mountain.slug %}">
+			{% csrf_token %}
+			<div class="actions">
+				<button class="button" type="submit">Unlist mountain</button>
+				<a class="button button--quiet" href="{% url 'studio:mountain_detail' mountain.slug %}">Cancel</a>
+			</div>
+		</form>
+	</section>
+{% endblock %}

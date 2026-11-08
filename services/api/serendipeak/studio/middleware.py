@@ -79,11 +79,12 @@ class StudioSecurityHeadersMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
-        # Photographs are the only thing the Studio loads from another origin.
+        # Photographs are the only thing the Studio loads from another origin. blob: is the preview
+        # of a file the editor chose, made by the page itself before anything is uploaded.
         self.content_security_policy = "; ".join(
             [
                 "default-src 'none'",
-                f"img-src 'self' {_origin(settings.MEDIA_PUBLIC_BASE_URL)}",
+                f"img-src 'self' {_origin(settings.MEDIA_PUBLIC_BASE_URL)} blob:",
                 "style-src 'self'",
                 "font-src 'self'",
                 "script-src 'self'",

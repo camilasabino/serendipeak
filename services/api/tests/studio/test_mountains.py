@@ -487,8 +487,8 @@ def test_the_detail_costs_two_queries_for_the_session_and_three_for_the_mountain
     assert query_count(viewer_client, detail_url("aconcagua")) == 5
 
 
-def test_the_detail_has_no_forms_or_change_controls(catalog, editor_client):
-    body = text_of(editor_client.get(detail_url("ready-draft")))
+def test_a_viewers_detail_has_no_forms_or_change_controls(catalog, viewer_client):
+    body = text_of(viewer_client.get(detail_url("ready-draft")))
 
     assert re.findall(r"<button[^>]*>([^<]+)</button>", body) == ["Sign out"]
     assert len(re.findall(r"<form", body)) == 1

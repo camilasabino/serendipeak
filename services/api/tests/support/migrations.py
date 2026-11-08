@@ -30,6 +30,13 @@ def applied_head():
     return max(name for app, name in executor.loader.applied_migrations if app == "catalog")
 
 
+def latest_head():
+    leaves = MigrationExecutor(connection).loader.graph.leaf_nodes("catalog")
+
+    assert len(leaves) == 1
+    return leaves[0][1]
+
+
 def historical_model(target, model_name):
     executor = MigrationExecutor(connection)
 

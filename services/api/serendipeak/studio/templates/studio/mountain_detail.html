@@ -15,6 +15,9 @@
 			{% if site_url %}
 				<a class="button button--quiet" href="{{ site_url }}" target="_blank" rel="noopener">View on site<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
 			{% endif %}
+			{% if can_write %}
+				<a class="button" href="{% url 'studio:mountain_edit' mountain.slug %}">Edit</a>
+			{% endif %}
 		</div>
 	</header>
 
@@ -51,6 +54,24 @@
 				</ul>
 			{% else %}
 				<p class="readiness readiness--ready">{% if is_draft %}Ready to publish{% else %}Meets the publication rules{% endif %}</p>
+			{% endif %}
+			{% if can_write %}
+				<div class="actions actions--panel">
+					{% if is_draft %}
+						<form method="post" action="{% url 'studio:mountain_publish' mountain.slug %}">
+							{% csrf_token %}
+							<button class="button" type="submit"{% if reasons %} disabled aria-describedby="publication-title"{% endif %}>Publish</button>
+						</form>
+					{% elif is_published %}
+						<a class="button button--quiet" href="{% url 'studio:mountain_unlist' mountain.slug %}">Unlist…</a>
+					{% else %}
+						<form method="post" action="{% url 'studio:mountain_relist' mountain.slug %}">
+							{% csrf_token %}
+							<button class="button" type="submit"{% if reasons %} disabled aria-describedby="publication-title"{% endif %}>List again</button>
+						</form>
+					{% endif %}
+				</div>
+				<p class="panel__note">Publication judges the saved mountain, not unsaved edits.</p>
 			{% endif %}
 		</section>
 
@@ -120,5 +141,17 @@
 				<p>No camera has been saved for this mountain.</p>
 			{% endif %}
 		</section>
+
+		{% if can_write %}
+			<section class="panel" aria-labelledby="delete-title">
+				<h2 class="panel__title" id="delete-title">Delete</h2>
+				{% if is_draft %}
+					<p>A draft that was never published can be deleted.</p>
+					<a class="button button--quiet" href="{% url 'studio:mountain_delete' mountain.slug %}">Delete draft…</a>
+				{% else %}
+					<p>Only a draft can be deleted. A {{ status.label|lower }} mountain has a public address, so it stays in the catalog.</p>
+				{% endif %}
+			</section>
+		{% endif %}
 	</div>
 {% endblock %}

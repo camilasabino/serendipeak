@@ -4,6 +4,7 @@
 	<header class="page-header">
 		<p class="kicker">Catalog</p>
 		<h1 class="page-title">Mountains</h1>
+		{% if can_write %}<a class="button" href="{% url 'studio:mountain_new' %}">New mountain</a>{% endif %}
 	</header>
 
 	<form class="search" method="get" action="{% url 'studio:mountain_list' %}" role="search">
@@ -74,6 +75,7 @@
 		<section class="panel panel--narrow" aria-labelledby="empty-title">
 			<h2 class="panel__title" id="empty-title">The catalog is empty</h2>
 			<p>No mountains have been added yet.</p>
+			{% if can_write %}<a class="button" href="{% url 'studio:mountain_new' %}">New mountain</a>{% endif %}
 		</section>
 	{% endif %}
 {% endblock %}

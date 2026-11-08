@@ -18,6 +18,7 @@ from serendipeak.catalog.publication import (
     unsafe_public_links,
 )
 from serendipeak.catalog.regions import PATH_SEPARATOR, RegionPath, RegionRef
+from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,14 +204,19 @@ def photograph_context(mountain: Mountain, media_base_url: str) -> dict | None:
     }
 
 
-def detail_context(detail: MountainDetail, *, media_base_url: str, web_origin: str) -> dict:
+def detail_context(
+    detail: MountainDetail, *, media_base_url: str, web_origin: str, can_write: bool
+) -> dict:
     mountain = detail.mountain
     region = mountain.region
     refs = () if region is None else (*region.ancestors, region.region)
 
     return {
         "mountain": mountain,
+        "can_write": can_write,
         "is_draft": mountain.status is MountainStatus.DRAFT,
+        "is_published": mountain.status is MountainStatus.ACTIVE,
+        "is_unlisted": mountain.status is MountainStatus.INACTIVE,
         "status": status_presentation(mountain.status),
         "name_translations": translations(mountain.name),
         "summary_translations": translations(mountain.summary),
@@ -232,4 +238,44 @@ def detail_context(detail: MountainDetail, *, media_base_url: str, web_origin: s
             if mountain.wikidata_id is None
             else f"https://www.wikidata.org/wiki/{mountain.wikidata_id}"
         ),
+    }
+
+
+def form_context(
+    mountain_form,
+    photograph_form,
+    *,
+    mountain: Mountain | None,
+    violations,
+    media_base_url: str,
+) -> dict:
+    """The creation page (no mountain) or the edit page of a stored one."""
+    is_new = mountain is None
+    forms = [mountain_form, photograph_form]
+
+    return {
+        "mountain_form": mountain_form,
+        "photograph_form": photograph_form,
+        "forms": forms,
+        "has_errors": any(form.errors for form in forms),
+        "mountain": mountain,
+        "is_new": is_new,
+        "title": "New mountain" if is_new else mountain.name.en,
+        "status": None if is_new else status_presentation(mountain.status),
+        "is_draft": is_new or mountain.status is MountainStatus.DRAFT,
+        "reasons": [] if is_new else violation_reasons(mountain, violations),
+        "photograph": None if is_new else photograph_context(mountain, media_base_url),
+        # A page that comes back refused already holds edits the server does not have.
+        "unsaved_on_load": any(form.is_bound and form.errors for form in forms),
+        "max_summary_length": SUMMARY_MAX_LENGTH,
+    }
+
+
+def deletion_context(mountain: Mountain, media_base_url: str) -> dict:
+    return {
+        "mountain": mountain,
+        "is_draft": mountain.status is MountainStatus.DRAFT,
+        "status": status_presentation(mountain.status),
+        "photograph": photograph_context(mountain, media_base_url),
+        "country_names": [country.name.en for country in mountain.countries],
     }

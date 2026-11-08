@@ -19,7 +19,13 @@ NAVIGATION = (
         "Mountains",
         "studio:mountain_list",
         StudioAccess.VIEWER,
-        section_url_names=("studio:mountain_detail",),
+        section_url_names=(
+            "studio:mountain_detail",
+            "studio:mountain_new",
+            "studio:mountain_edit",
+            "studio:mountain_unlist",
+            "studio:mountain_delete",
+        ),
     ),
 )
 

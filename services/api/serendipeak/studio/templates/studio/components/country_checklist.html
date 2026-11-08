@@ -1,0 +1,15 @@
+<fieldset class="field field--checklist{% if field.errors %} field--invalid{% endif %}" id="{{ field.auto_id }}" data-country-filter tabindex="-1">
+	<legend class="field__label">{{ field.label }} <span class="field__optional">(optional)</span></legend>
+	{% if field.help_text %}<p class="field__help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}
+	{{ field.errors }}
+	<div class="checklist__filter" data-country-filter-controls hidden>
+		<label class="field__label" for="country-filter">Filter countries</label>
+		<input id="country-filter" type="search" autocomplete="off" aria-controls="{{ field.auto_id }}_list">
+		<p class="field__help" role="status" data-country-filter-status></p>
+	</div>
+	<ul class="checklist" id="{{ field.auto_id }}_list">
+		{% for widget in field %}
+			<li class="checklist__item">{{ widget.tag }} <label for="{{ widget.id_for_label }}">{{ widget.choice_label }}</label></li>
+		{% endfor %}
+	</ul>
+</fieldset>

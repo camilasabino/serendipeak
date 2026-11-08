@@ -6,6 +6,7 @@ from django.views import csrf
 from django.views.generic import TemplateView, View
 
 from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
+from serendipeak.accounts.roles import Role
 from serendipeak.catalog.errors import MountainSlugNotFound
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.list_mountains import SEARCH_MAX_LENGTH, ListMountains
@@ -127,6 +128,7 @@ class MountainListView(View):
                 else representations.status_presentation(status).key,
                 "total": listing.total,
                 "filtered": bool(search or status),
+                "can_write": Role(request.user.role).can_write,
             },
         )
 
@@ -143,7 +145,10 @@ class MountainDetailView(View):
             return render(request, "studio/mountain_not_found.html", status=404)
 
         context = representations.detail_context(
-            detail, media_base_url=self.media_base_url, web_origin=self.web_origin
+            detail,
+            media_base_url=self.media_base_url,
+            web_origin=self.web_origin,
+            can_write=Role(request.user.role).can_write,
         )
 
         return render(request, "studio/mountain_detail.html", context)

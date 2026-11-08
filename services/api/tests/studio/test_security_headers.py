@@ -59,7 +59,8 @@ def test_studio_responses_carry_a_content_security_policy_without_framing(db, la
     assert directives["style-src"] == "'self'"
     assert directives["script-src"] == "'self'"
     assert directives["font-src"] == "'self'"
-    assert directives["img-src"] == f"'self' {media_origin()}"
+    # blob: lets the photograph form preview a chosen file without uploading it.
+    assert directives["img-src"] == f"'self' {media_origin()} blob:"
     assert "unsafe" not in policy
 
 

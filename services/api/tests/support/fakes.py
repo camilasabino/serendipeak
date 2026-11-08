@@ -30,7 +30,12 @@ from serendipeak.catalog.errors import (
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
-from serendipeak.catalog.ports import CameraChange, StatusChange, StatusChangeOutcome
+from serendipeak.catalog.ports import (
+    CameraChange,
+    GeographyOptions,
+    StatusChange,
+    StatusChangeOutcome,
+)
 from serendipeak.catalog.region_changes import (
     RegionInUse,
     RegionNameTaken,
@@ -181,6 +186,22 @@ class InMemoryMountainCatalogReader:
 
     def find_by_slug(self, slug):
         return self._mountains.get(slug)
+
+
+class InMemoryGeographyOptionsReader:
+    """Holds the reference continents and countries and the regions it is given."""
+
+    def __init__(self, regions=()):
+        self._regions = tuple(regions)
+
+    def read(self):
+        reference = geography_reference()
+
+        return GeographyOptions(
+            continents=tuple(reference.continents.values()),
+            countries=tuple(reference.countries.values()),
+            regions=self._regions,
+        )
 
 
 class InMemoryMountainStatusStore:

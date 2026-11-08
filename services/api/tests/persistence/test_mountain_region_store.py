@@ -18,7 +18,7 @@ from serendipeak.persistence.mountain_region_store import (
     STRUCTURE_LOCK_KEY,
     DjangoMountainRegionStore,
 )
-from tests.support.migrations import applied_head, migrate_to, migrate_to_latest
+from tests.support.migrations import applied_head, latest_head, migrate_to, migrate_to_latest
 from tests.support.records import mountain_record
 from tests.support.region_taxonomy import TAXONOMY, id_of
 
@@ -195,7 +195,7 @@ class TestMigration:
         finally:
             migrate_to_latest()
 
-        assert applied_head() == "0022_region_cycle_requires_read_committed"
+        assert applied_head() == latest_head()
         assert "transaction_isolation" in definition()
 
 

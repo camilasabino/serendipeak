@@ -2,6 +2,7 @@ import pytest
 from django.test import Client
 
 from serendipeak.accounts.roles import Role
+from tests.studio.support import use_fake_media_store
 from tests.support.users import create_user
 
 
@@ -29,3 +30,9 @@ def viewer_client(viewer):
     client.force_login(viewer)
 
     return client
+
+
+@pytest.fixture
+def media_store(monkeypatch):
+    """The creation and edit pages store photographs in memory, never in the configured store."""
+    return use_fake_media_store(monkeypatch)

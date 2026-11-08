@@ -1,0 +1,103 @@
+{% extends "studio/base.html" %}
+{% load static %}
+{% block title %}{% if is_new %}New mountain{% else %}Edit {{ mountain.name.en }}{% endif %}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:mountain_list' %}">Mountains</a>
+		{% if not is_new %}<span aria-hidden="true"> / </span><a href="{% url 'studio:mountain_detail' mountain.slug %}">{{ mountain.name.en }}</a>{% endif %}
+	</nav>
+	<header class="page-header page-header--detail">
+		<div>
+			<p class="kicker">{% if is_new %}Catalog{% else %}{{ mountain.slug }}{% endif %}</p>
+			<h1 class="page-title">{% if is_new %}New mountain{% else %}Edit {{ mountain.name.en }}{% endif %}</h1>
+		</div>
+		{% if status %}
+			<div class="page-header__aside">
+				{% include "studio/components/status_badge.html" with status=status %}
+			</div>
+		{% endif %}
+	</header>
+
+	{% if is_new %}
+		<p class="lede">A new mountain starts as a draft. Add its camera with the camera editor, then publish it from the mountain page.</p>
+	{% else %}
+		<p class="lede">Saving does not change the status. Publish, unlist or list again from <a href="{% url 'studio:mountain_detail' mountain.slug %}">the mountain page</a>, which judges the saved mountain.{% if reasons and not is_draft %} <strong>It does not meet the publication rules:</strong> {{ reasons|join:" " }}{% endif %}</p>
+	{% endif %}
+
+	{% include "studio/components/error_summary_forms.html" %}
+
+	<form class="mountain-form" method="post" enctype="multipart/form-data" novalidate data-unsaved-guard{% if unsaved_on_load %} data-unsaved-on-load{% endif %}>
+		{% csrf_token %}
+
+		<fieldset class="form-section">
+			<legend class="form-section__title">Mountain</legend>
+			{% include "studio/components/field.html" with field=mountain_form.name %}
+			{% include "studio/components/field.html" with field=mountain_form.slug %}
+			{% include "studio/components/field.html" with field=mountain_form.elevation_meters %}
+			<div class="field-pair">
+				{% include "studio/components/field.html" with field=mountain_form.latitude %}
+				{% include "studio/components/field.html" with field=mountain_form.longitude %}
+			</div>
+			{% if mountain_form.confirm_camera_reset %}
+				{% include "studio/components/checkbox.html" with field=mountain_form.confirm_camera_reset %}
+			{% endif %}
+		</fieldset>
+
+		<fieldset class="form-section">
+			<legend class="form-section__title">Geography</legend>
+			{% include "studio/components/field.html" with field=mountain_form.continent %}
+			{% include "studio/components/field.html" with field=mountain_form.region %}
+			{% include "studio/components/country_checklist.html" with field=mountain_form.countries %}
+		</fieldset>
+
+		<fieldset class="form-section">
+			<legend class="form-section__title">Content</legend>
+			{% include "studio/components/field.html" with field=mountain_form.summary %}
+			{% include "studio/components/field.html" with field=mountain_form.wikidata_id %}
+			{% include "studio/components/field.html" with field=mountain_form.osm_node_id %}
+		</fieldset>
+
+		<fieldset class="form-section photograph-card">
+			<legend class="form-section__title">Photograph</legend>
+			<div class="photograph-card__figures">
+				{% if photograph.url %}
+					<figure class="photograph-figure">
+						<img class="photograph-preview" src="{{ photograph.url }}" alt="Saved photograph of {{ mountain.name.en }}">
+						<figcaption>Saved photograph</figcaption>
+					</figure>
+				{% elif photograph %}
+					<p class="empty-value">The photograph record has no stored file yet.</p>
+				{% else %}
+					<p class="empty-value">No photograph yet. A draft may have none; publishing needs one.</p>
+				{% endif %}
+				<figure class="photograph-figure" data-photograph-selected hidden>
+					<img class="photograph-preview" alt="Selected photograph" data-photograph-preview>
+					<figcaption>Selected photograph, not saved yet.{% if photograph %} Saving replaces the saved one.{% endif %} <button type="button" class="button button--quiet button--small" data-photograph-cancel>Cancel</button></figcaption>
+				</figure>
+			</div>
+			{% include "studio/components/field.html" with field=photograph_form.file %}
+			{% include "studio/components/field.html" with field=photograph_form.author %}
+			{% include "studio/components/field.html" with field=photograph_form.source_page_url %}
+			{% include "studio/components/field.html" with field=photograph_form.license_name %}
+			{% include "studio/components/field.html" with field=photograph_form.license_url %}
+			{% if photograph_form.credit_reviewed %}
+				<div data-credit-review{% if photograph_form.credit_reviewed.errors %} data-credit-review-invalid{% endif %}>
+					{% include "studio/components/checkbox.html" with field=photograph_form.credit_reviewed %}
+				</div>
+			{% endif %}
+			{% if photograph_form.remove %}
+				{% include "studio/components/checkbox.html" with field=photograph_form.remove %}
+			{% endif %}
+		</fieldset>
+
+		<div class="actions actions--form">
+			<button class="button" type="submit" data-submit>{% if is_new %}Create draft{% else %}Save changes{% endif %}</button>
+			<a class="button button--quiet" href="{% if is_new %}{% url 'studio:mountain_list' %}{% else %}{% url 'studio:mountain_detail' mountain.slug %}{% endif %}">Cancel</a>
+		</div>
+	</form>
+{% endblock %}
+{% block scripts %}
+	<script src="{% static 'studio/unsaved-changes.js' %}" defer></script>
+	<script src="{% static 'studio/photograph-upload.js' %}" defer></script>
+	<script src="{% static 'studio/country-filter.js' %}" defer></script>
+{% endblock %}

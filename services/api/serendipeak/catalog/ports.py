@@ -7,7 +7,9 @@ from uuid import UUID
 from serendipeak.catalog.entities import (
     CandidateMountain,
     CanonicalCamera,
+    Continent,
     Coordinates,
+    Country,
     Mountain,
     MountainStatus,
     PrimaryImage,
@@ -47,6 +49,21 @@ class MountainCatalogReader(Protocol):
 
         Returns None for an unknown slug.
         """
+
+
+@dataclass(frozen=True, slots=True)
+class GeographyOptions:
+    """The reference data an editor chooses from, in no particular order."""
+
+    continents: Sequence[Continent]
+    countries: Sequence[Country]
+    regions: Sequence[MountainRegion]
+
+
+class GeographyOptionsReader(Protocol):
+    def read(self) -> GeographyOptions:
+        """Return every continent, country and region. A table without rows reads as an empty
+        sequence."""
 
 
 class StatusChangeOutcome(StrEnum):

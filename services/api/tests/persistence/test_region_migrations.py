@@ -18,6 +18,7 @@ from tests.support.geography_schema import (
 from tests.support.migrations import (
     applied_head,
     historical_model,
+    latest_head,
     migrate_to,
     migrate_to_latest,
     migrate_to_latest_discarding_catalog,
@@ -323,7 +324,7 @@ class TestFinalValidation:
 
         migrate_to_latest()
 
-        assert applied_head() == "0022_region_cycle_requires_read_committed"
+        assert applied_head() == latest_head()
         assert stored_regions() == []
         assert "range_name" not in column_names()
 

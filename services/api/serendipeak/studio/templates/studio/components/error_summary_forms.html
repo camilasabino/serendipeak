@@ -1,0 +1,10 @@
+{% if has_errors %}
+	<div class="error-summary" tabindex="-1" autofocus aria-labelledby="error-summary-title" data-error-summary>
+		<h2 class="error-summary__title" id="error-summary-title">There is a problem</h2>
+		<ul class="error-summary__list">
+			{% for form in forms %}
+				{% include "studio/components/error_summary_items.html" %}
+			{% endfor %}
+		</ul>
+	</div>
+{% endif %}
