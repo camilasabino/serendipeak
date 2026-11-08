@@ -173,9 +173,9 @@ def test_the_form_asks_for_the_unsaved_changes_guard_and_loads_only_its_own_scri
     assert "data-unsaved-guard" in body
     assert "data-unsaved-on-load" not in body
     assert [script["src"] for script in page.scripts] == [
-        f"/static/studio/{name}" for name in SCRIPTS
+        f"/static/studio/{name}" for name in ("theme.js", *SCRIPTS)
     ]
-    assert all("defer" in script for script in page.scripts)
+    assert all("defer" in script for script in page.scripts if "theme.js" not in script["src"])
     assert not [script for script in page.scripts if "src" not in script], "no inline script"
     assert page.handlers == [], "no inline event handler"
 
@@ -189,7 +189,7 @@ def test_the_guard_does_not_cover_pages_without_edits(catalog, editor_client):
         body = text_of(editor_client.get(reverse(f"studio:{name}", args=args)))
 
         assert "data-unsaved-guard" not in body
-        assert "<script" not in body
+        assert not re.search(r"<script(?![^>]*\ssrc=)", body)
 
 
 @pytest.mark.parametrize("name", SCRIPTS)

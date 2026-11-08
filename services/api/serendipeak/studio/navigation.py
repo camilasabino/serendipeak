@@ -53,3 +53,7 @@ def navigation_for(role: Role) -> tuple[NavigationItem, ...]:
     return tuple(
         item for item in NAVIGATION if item.access is not StudioAccess.EDITOR or role.can_write
     )
+
+
+def sections_for(role: Role) -> tuple[NavigationItem, ...]:
+    return tuple(item for item in navigation_for(role) if item.url_name != "studio:landing")

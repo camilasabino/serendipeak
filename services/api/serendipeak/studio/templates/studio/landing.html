@@ -5,24 +5,22 @@
 		<p class="kicker">Overview</p>
 		<h1 class="page-title">Welcome, {{ user.get_username }}</h1>
 	</header>
-	<div class="grid">
-		<section class="panel" aria-labelledby="access-title">
-			<h2 class="panel__title" id="access-title">Your access</h2>
-			<dl class="ledger">
-				<div class="ledger__row"><dt>Username</dt><dd>{{ user.get_username }}</dd></div>
-				<div class="ledger__row"><dt>Role</dt><dd>{{ user.role|capfirst }}</dd></div>
-				<div class="ledger__row"><dt>Member since</dt><dd class="numeric">{{ user.date_joined|date:"j M Y" }}</dd></div>
-			</dl>
-			<p class="panel__note">
-				{% if user.role == "editor" %}As an Editor you can read and change everything the Studio offers.{% else %}As a Viewer you can read everything the Studio offers. Changes are made by Editors.{% endif %}
-			</p>
-		</section>
-		<section class="panel panel--stage" aria-labelledby="catalog-title">
-			<h2 class="panel__title" id="catalog-title">Catalog editing</h2>
-			<p>Browse and edit the catalog of mountains and the hierarchy of regions here, and read the record of the daily discoveries{% if user.role == "editor" %}, and manage users{% endif %}.</p>
-			<div class="actions">
-				<a class="button button--on-stage" href="{% url 'studio:mountain_list' %}">Browse mountains</a>
-			</div>
-		</section>
-	</div>
+	<nav aria-label="Studio sections">
+		<ul class="section-links">
+			{% for section in sections %}
+				<li><a class="section-link" href="{% url section.url_name %}">{{ section.label }}<span class="section-link__arrow" aria-hidden="true">→</span></a></li>
+			{% endfor %}
+		</ul>
+	</nav>
+	<section class="panel panel--narrow" aria-labelledby="access-title">
+		<h2 class="panel__title" id="access-title">Your access</h2>
+		<dl class="ledger">
+			<div class="ledger__row"><dt>Username</dt><dd>{{ user.get_username }}</dd></div>
+			<div class="ledger__row"><dt>Role</dt><dd>{{ user.role|capfirst }}</dd></div>
+			<div class="ledger__row"><dt>Member since</dt><dd class="numeric">{{ user.date_joined|date:"j M Y" }}</dd></div>
+		</dl>
+		<p class="panel__note">
+			{% if user.role == "editor" %}As an Editor you can read and change everything the Studio offers.{% else %}As a Viewer you can read everything the Studio offers. Changes are made by Editors.{% endif %}
+		</p>
+	</section>
 {% endblock %}

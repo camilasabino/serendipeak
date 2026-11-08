@@ -10,7 +10,7 @@ from serendipeak.accounts.roles import Role
 from serendipeak.catalog.errors import MountainSlugNotFound
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.list_mountains import SEARCH_MAX_LENGTH, ListMountains
-from serendipeak.studio import representations, security_log
+from serendipeak.studio import navigation, representations, security_log
 from serendipeak.studio.access import is_studio_path
 from serendipeak.studio.client_address import client_address
 from serendipeak.studio.forms import StudioAuthenticationForm, StudioPasswordChangeForm
@@ -105,6 +105,12 @@ class StudioPasswordChangeView(PasswordChangeView):
 
 class LandingView(TemplateView):
     template_name = "studio/landing.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["sections"] = navigation.sections_for(Role(self.request.user.role))
+
+        return context
 
 
 class MountainListView(View):

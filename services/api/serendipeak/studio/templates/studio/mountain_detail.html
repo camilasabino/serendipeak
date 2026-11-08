@@ -18,6 +18,7 @@
 				<a class="button button--quiet" href="{% url 'studio:mountain_preview' mountain.slug %}" target="_blank" rel="noopener">Preview<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
 			{% endif %}
 			{% if can_write %}
+				<a class="button button--secondary" href="{{ camera_editor_url }}" rel="noreferrer">Edit camera visually</a>
 				<a class="button" href="{% url 'studio:mountain_edit' mountain.slug %}">Edit</a>
 			{% endif %}
 		</div>
@@ -141,11 +142,6 @@
 				{% if not mountain.camera.framing %}<p>The framing is not set.</p>{% endif %}
 			{% else %}
 				<p>No camera has been saved for this mountain.</p>
-			{% endif %}
-			{% if can_write %}
-				<div class="actions actions--panel">
-					<a class="button button--quiet" href="{{ camera_editor_url }}" rel="noreferrer">Edit camera visually</a>
-				</div>
 			{% endif %}
 		</section>
 

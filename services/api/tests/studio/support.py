@@ -40,6 +40,10 @@ def text_of(response):
     return response.content.decode()
 
 
+def without_theme_switch(body):
+    return re.sub(r'<div class="theme-switch".*?</div>', "", body, flags=re.S)
+
+
 class _MountainFormParser(HTMLParser):
     """The values a browser would post for the mountain form, as the page renders them."""
 

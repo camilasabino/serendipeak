@@ -85,7 +85,7 @@ def test_pages_render_without_inline_styles_or_scripts_so_the_policy_holds(edito
         body = page.content.decode()
 
         assert "<style" not in body
-        assert "<script" not in body
+        assert not re.search(r"<script(?![^>]*\ssrc=)", body)
         assert not re.search(r"\sstyle=", body)
         assert not re.search(r"\son[a-z]+=", body)
         assert "javascript:" not in body

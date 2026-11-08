@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 from django.conf import settings
 from django.test import Client, override_settings
@@ -68,6 +69,37 @@ def test_the_account_area_shows_who_is_signed_in_and_signs_out_with_a_post_form(
 def test_the_overview_tells_each_role_what_it_can_do(editor_client, viewer_client):
     assert "As an Editor you can read and change" in text_of(editor_client.get(LANDING_URL))
     assert "As a Viewer you can read" in text_of(viewer_client.get(LANDING_URL))
+
+
+def overview_sections(response):
+    return re.findall(r'<a class="section-link" href="([^"]+)">([^<]+)<', text_of(response))
+
+
+def test_the_overview_offers_every_section_an_editor_can_use(editor_client):
+    assert overview_sections(editor_client.get(LANDING_URL)) == [
+        (reverse("studio:mountain_list"), "Mountains"),
+        (reverse("studio:region_list"), "Regions"),
+        (reverse("studio:discovery_list"), "Daily discoveries"),
+        (reverse("studio:user_list"), "Users"),
+    ]
+
+
+def test_the_overview_hides_users_from_a_viewer(viewer_client):
+    response = viewer_client.get(LANDING_URL)
+
+    assert [label for _, label in overview_sections(response)] == [
+        "Mountains",
+        "Regions",
+        "Daily discoveries",
+    ]
+    assert reverse("studio:user_list") not in text_of(response).split("</header>", 1)[1]
+
+
+def test_the_overview_has_no_instructional_catalog_copy(editor_client):
+    body = text_of(editor_client.get(LANDING_URL))
+
+    assert "Browse mountains" not in body
+    assert "Catalog editing" not in body
 
 
 def test_the_overview_points_to_the_mountains_and_to_no_other_editorial_interface(editor_client):
@@ -147,3 +179,39 @@ def test_the_forbidden_page_is_rendered_inside_the_shell(editor_client):
     assert "You are not allowed to do that" in body
     assert 'class="app-nav"' in body
     assert "<title>Not allowed · SerendiPeak Studio</title>" in body
+
+
+def test_the_sign_in_page_has_no_explanatory_copy_and_keeps_its_branding(db):
+    body = text_of(Client().get(LOGIN_URL))
+
+    assert "back office" not in body
+    assert "Sign in to review" not in body
+    assert '<span class="brand__name">SerendiPeak</span>' in body
+    assert '<h1 class="page-title" id="sign-in-title">Sign in</h1>' in body
+    assert body.count("<h1") == 1
+
+
+def test_every_page_loads_the_theme_script_before_the_body_and_the_switch_is_labelled(
+    editor_client, db
+):
+    for response in (editor_client.get(LANDING_URL), Client().get(LOGIN_URL)):
+        body = text_of(response)
+        head = body.split("</head>", 1)[0]
+
+        assert re.search(r'<script src="/static/studio/theme\.js"></script>', head)
+        assert 'role="group" aria-label="Theme"' in body
+        assert body.count('data-theme-option="light"') == 1
+        assert body.count('data-theme-option="dark"') == 1
+        assert "<style" not in body
+        assert " onclick=" not in body
+
+
+def test_the_theme_script_stores_only_an_explicit_choice_and_survives_blocked_storage():
+    script = (Path(__file__).parents[2] / "serendipeak/studio/static/studio/theme.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'const STORAGE_KEY = "studio-theme"' in script
+    assert 'apply(readStored() ?? "dark")' in script
+    assert "try {" in script
+    assert "eval(" not in script

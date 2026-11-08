@@ -11,7 +11,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.regions import RegionPath, RegionRef
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
-from tests.studio.support import text_of
+from tests.studio.support import text_of, without_theme_switch
 from tests.support.catalog import (
     CREATED_AT,
     UPDATED_AT,
@@ -289,7 +289,10 @@ def test_the_list_is_private_and_not_indexed(catalog, viewer_client):
 def test_the_list_offers_no_way_to_change_the_catalog(catalog, editor_client):
     body = text_of(editor_client.get(LIST_URL))
 
-    assert re.findall(r"<button[^>]*>([^<]+)</button>", body) == ["Sign out", "Search"]
+    assert re.findall(r"<button[^>]*>([^<]+)</button>", without_theme_switch(body)) == [
+        "Sign out",
+        "Search",
+    ]
     assert re.findall(r'<form[^>]*method="(\w+)"', body) == ["post", "get"]
 
 
@@ -493,5 +496,5 @@ def test_the_detail_costs_two_queries_for_the_session_and_three_for_the_mountain
 def test_a_viewers_detail_has_no_forms_or_change_controls(catalog, viewer_client):
     body = text_of(viewer_client.get(detail_url("ready-draft")))
 
-    assert re.findall(r"<button[^>]*>([^<]+)</button>", body) == ["Sign out"]
+    assert re.findall(r"<button[^>]*>([^<]+)</button>", without_theme_switch(body)) == ["Sign out"]
     assert len(re.findall(r"<form", body)) == 1

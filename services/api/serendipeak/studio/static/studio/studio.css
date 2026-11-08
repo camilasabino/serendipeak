@@ -1,8 +1,8 @@
 /*
  * Tokens. The --sp-* values below the "shared" marker are the web app's brand tokens
  * (apps/web/src/shell/tokens.css) and a test keeps the two files equal. The Studio works on paper,
- * so its roles map the palette the other way round: ink text on paper, stage only for chrome and
- * photograph panels.
+ * Dark is the default theme and the light roles override it under data-theme="light", so a page
+ * without script stays dark. Stage is the chrome and photograph panels in both.
  */
 :root {
 	/* shared with the web app */
@@ -34,6 +34,30 @@
 	--sp-space-6: 2rem;
 	--sp-radius: 2px;
 
+	/* Studio roles, dark by default */
+	--sp-surface-paper: #101a23;
+	--sp-surface-card: #17232e;
+	--sp-text: var(--sp-paper);
+	--sp-text-muted: #a9b8c2;
+	--sp-link: var(--sp-glacier-light);
+	--sp-link-hover: var(--sp-paper-bright);
+	--sp-border-control: #84969f;
+	--sp-rule-on-paper: #2e3d49;
+	--sp-focus-on-paper: var(--sp-glacier-light);
+	--sp-info: var(--sp-glacier-light);
+	--sp-success: #72c99c;
+	--sp-warning: #e6b25e;
+	--sp-danger: #f29593;
+	--sp-button-bg: var(--sp-glacier-light);
+	--sp-button-fg: var(--sp-ink);
+	--sp-inverse-bg: var(--sp-paper-bright);
+	--sp-inverse-fg: var(--sp-ink);
+	--sp-space-7: 3rem;
+	--sp-measure: 72rem;
+	--sp-measure-narrow: 34rem;
+}
+
+:root[data-theme='light'] {
 	/* Studio roles on paper */
 	--sp-surface-paper: var(--sp-paper);
 	--sp-surface-card: var(--sp-paper-bright);
@@ -48,9 +72,10 @@
 	--sp-success: #2a6a45;
 	--sp-warning: #85570a;
 	--sp-danger: #9a2b2b;
-	--sp-space-7: 3rem;
-	--sp-measure: 72rem;
-	--sp-measure-narrow: 34rem;
+	--sp-button-bg: var(--sp-glacier-dark);
+	--sp-button-fg: var(--sp-paper-bright);
+	--sp-inverse-bg: var(--sp-ink);
+	--sp-inverse-fg: var(--sp-paper-bright);
 }
 
 @font-face {
@@ -100,8 +125,12 @@
 }
 
 html {
-	color-scheme: light;
+	color-scheme: dark;
 	-webkit-text-size-adjust: 100%;
+}
+
+html[data-theme='light'] {
+	color-scheme: light;
 }
 
 body {
@@ -149,8 +178,7 @@ summary:focus-visible,
 
 .app-header a:focus-visible,
 .app-header button:focus-visible,
-.panel--stage a:focus-visible,
-.sign-in__intro a:focus-visible {
+.panel--stage a:focus-visible {
 	outline-color: var(--sp-focus);
 }
 
@@ -320,6 +348,64 @@ summary:focus-visible,
 	text-underline-offset: 0.18em;
 }
 
+.theme-switch {
+	display: inline-flex;
+	border: 1px solid var(--sp-border-control);
+	border-radius: var(--sp-radius);
+}
+
+.theme-switch[hidden] {
+	display: none;
+}
+
+.theme-switch__option {
+	min-width: 3.5rem;
+	min-height: 2.75rem;
+	padding: 0 var(--sp-space-3);
+	border: 0;
+	background: transparent;
+	color: var(--sp-text);
+	cursor: pointer;
+	font: inherit;
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+}
+
+.theme-switch__option + .theme-switch__option {
+	border-left: 1px solid var(--sp-border-control);
+}
+
+.theme-switch__option:hover {
+	background: var(--sp-rule-on-paper);
+}
+
+.theme-switch__option[aria-pressed='true'] {
+	background: var(--sp-inverse-bg);
+	color: var(--sp-inverse-fg);
+	font-weight: 600;
+}
+
+.app-header .theme-switch {
+	border-color: var(--sp-mist);
+}
+
+.app-header .theme-switch__option {
+	color: var(--sp-paper);
+}
+
+.app-header .theme-switch__option + .theme-switch__option {
+	border-left-color: var(--sp-mist);
+}
+
+.app-header .theme-switch__option:hover {
+	background: var(--sp-rule);
+}
+
+.app-header .theme-switch__option[aria-pressed='true'] {
+	background: var(--sp-paper-bright);
+	color: var(--sp-ink);
+}
+
 /* Page */
 
 .page {
@@ -349,10 +435,6 @@ summary:focus-visible,
 	text-transform: uppercase;
 }
 
-.kicker--on-stage {
-	color: var(--sp-link-on-stage);
-}
-
 .page-title {
 	font-family: var(--sp-font-display);
 	font-size: 2rem;
@@ -375,6 +457,51 @@ summary:focus-visible,
 
 	.grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.section-links {
+	display: grid;
+	gap: var(--sp-space-4);
+	margin: 0 0 var(--sp-space-5);
+	padding: 0;
+	grid-template-columns: 1fr;
+	list-style: none;
+}
+
+.section-link {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 4.5rem;
+	padding: var(--sp-space-4) var(--sp-space-5);
+	border: 1px solid var(--sp-rule-on-paper);
+	border-radius: var(--sp-radius);
+	background: var(--sp-surface-card);
+	color: var(--sp-text);
+	font-family: var(--sp-font-display);
+	font-size: 1.375rem;
+	text-decoration: none;
+}
+
+.section-link:hover {
+	border-color: var(--sp-link);
+	color: var(--sp-link);
+}
+
+.section-link__arrow {
+	font-family: var(--sp-font-ui);
+}
+
+@media (min-width: 40rem) {
+	.section-links {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (min-width: 64rem) {
+	.section-links {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 	}
 }
 
@@ -449,10 +576,10 @@ summary:focus-visible,
 	justify-content: center;
 	min-height: 2.75rem;
 	padding: 0 var(--sp-space-5);
-	border: 1px solid var(--sp-accent-hover);
+	border: 1px solid var(--sp-button-bg);
 	border-radius: var(--sp-radius);
-	background: var(--sp-accent-hover);
-	color: var(--sp-paper-bright);
+	background: var(--sp-button-bg);
+	color: var(--sp-button-fg);
 	cursor: pointer;
 	font: inherit;
 	font-size: var(--sp-text-ui);
@@ -461,9 +588,15 @@ summary:focus-visible,
 }
 
 .button:hover {
-	border-color: var(--sp-ink);
-	background: var(--sp-ink);
-	color: var(--sp-paper-bright);
+	border-color: var(--sp-inverse-bg);
+	background: var(--sp-inverse-bg);
+	color: var(--sp-inverse-fg);
+}
+
+.button--secondary {
+	border-color: var(--sp-link);
+	background: transparent;
+	color: var(--sp-link);
 }
 
 .button--quiet {
@@ -473,9 +606,27 @@ summary:focus-visible,
 }
 
 .button--quiet:hover {
-	border-color: var(--sp-ink);
+	border-color: var(--sp-text);
 	background: var(--sp-rule-on-paper);
 	color: var(--sp-text);
+}
+
+.button--on-stage {
+	border-color: var(--sp-glacier-light);
+	background: transparent;
+	color: var(--sp-paper-bright);
+}
+
+.panel--stage .button--quiet {
+	border-color: var(--sp-glacier-light);
+	color: var(--sp-paper-bright);
+}
+
+.button--on-stage:hover,
+.panel--stage .button--quiet:hover {
+	border-color: var(--sp-paper-bright);
+	background: var(--sp-paper-bright);
+	color: var(--sp-ink);
 }
 
 .button[aria-disabled="true"],
@@ -485,18 +636,6 @@ summary:focus-visible,
 	color: var(--sp-text-muted);
 	cursor: not-allowed;
 	text-decoration: line-through;
-}
-
-.button--on-stage {
-	border-color: var(--sp-glacier-light);
-	background: transparent;
-	color: var(--sp-paper-bright);
-}
-
-.button--on-stage:hover {
-	border-color: var(--sp-paper-bright);
-	background: var(--sp-paper-bright);
-	color: var(--sp-ink);
 }
 
 .actions {
@@ -656,65 +795,48 @@ form {
 .body--sign-in .page {
 	display: flex;
 	align-items: center;
-	max-width: 64rem;
+	justify-content: center;
 }
 
 .sign-in {
-	display: grid;
 	width: 100%;
-	border: 1px solid var(--sp-rule-on-paper);
-	border-radius: var(--sp-radius);
-	background: var(--sp-surface-card);
-	grid-template-columns: 1fr;
+	max-width: var(--sp-measure-narrow);
 }
 
-.sign-in__intro {
+.sign-in__bar {
 	display: flex;
-	flex-direction: column;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
 	gap: var(--sp-space-3);
-	padding: var(--sp-space-6) var(--sp-space-5);
-	background-color: var(--sp-surface-stage);
-	background-image: repeating-radial-gradient(
-		circle at 100% 100%,
-		transparent 0 1.1rem,
-		var(--sp-rule-quiet) 1.1rem calc(1.1rem + 1px)
-	);
-	color: var(--sp-text-on-stage);
+	margin-bottom: var(--sp-space-4);
 }
 
-.sign-in__intro img {
-	width: 3.5rem;
-	height: 3.5rem;
+.sign-in__brand {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-space-3);
 }
 
-.sign-in__lede {
-	font-family: var(--sp-font-display);
-	font-size: 1.75rem;
-	font-weight: 400;
-	line-height: 1.2;
+.sign-in__brand img {
+	display: block;
+	width: 2.5rem;
+	height: 2.5rem;
 }
 
-.sign-in__intro p:last-child {
-	color: var(--sp-mist);
+.sign-in__brand .brand__product {
+	color: var(--sp-text-muted);
 }
 
 .sign-in__panel {
 	padding: var(--sp-space-6) var(--sp-space-5);
+	border: 1px solid var(--sp-rule-on-paper);
+	border-radius: var(--sp-radius);
+	background: var(--sp-surface-card);
 }
 
 .sign-in__panel .page-title {
 	margin-bottom: var(--sp-space-5);
-}
-
-@media (min-width: 52rem) {
-	.sign-in {
-		grid-template-columns: 5fr 4fr;
-	}
-
-	.sign-in__intro,
-	.sign-in__panel {
-		padding: var(--sp-space-7) var(--sp-space-6);
-	}
 }
 
 /* Mountains */
@@ -766,15 +888,15 @@ form {
 }
 
 .chip:hover {
-	border-color: var(--sp-ink);
+	border-color: var(--sp-text);
 	background: var(--sp-rule-on-paper);
 	color: var(--sp-text);
 }
 
 .chip[aria-current='true'] {
-	border-color: var(--sp-ink);
-	background: var(--sp-ink);
-	color: var(--sp-paper-bright);
+	border-color: var(--sp-inverse-bg);
+	background: var(--sp-inverse-bg);
+	color: var(--sp-inverse-fg);
 }
 
 .chip__count {
@@ -1111,7 +1233,7 @@ form {
 	width: 1.25rem;
 	height: 1.25rem;
 	margin: 0.125rem 0 0;
-	accent-color: var(--sp-glacier-dark);
+	accent-color: var(--sp-button-bg);
 }
 
 .check__label {
@@ -1183,14 +1305,17 @@ form {
 .button--danger {
 	border-color: var(--sp-danger);
 	background: var(--sp-danger);
+	color: var(--sp-button-fg);
 }
 
 .button--danger:hover {
-	border-color: var(--sp-ink);
-	background: var(--sp-ink);
+	border-color: var(--sp-inverse-bg);
+	background: var(--sp-inverse-bg);
+	color: var(--sp-inverse-fg);
 }
 
-.button:disabled {
+.button:disabled,
+.button:disabled:hover {
 	border-color: var(--sp-border-control);
 	background: transparent;
 	color: var(--sp-text-muted);

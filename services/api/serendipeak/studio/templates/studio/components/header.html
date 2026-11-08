@@ -17,6 +17,7 @@
 			</nav>
 		{% endif %}
 		<div class="app-account">
+			{% include "studio/components/theme_switch.html" %}
 			<a class="app-account__link" href="{{ web_origin }}" target="_blank" rel="noopener">View site<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
 			{% if signed_in %}
 				<span class="app-account__who"><span class="visually-hidden">Signed in as </span>{{ username }} <span class="role-tag">{{ role }}</span></span>

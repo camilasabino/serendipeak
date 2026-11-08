@@ -1,3 +1,4 @@
+import re
 from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
@@ -565,7 +566,7 @@ class TestTheEditorLink:
         assert f'href="{unescape(link) if False else link}"'.replace("&", "&amp;") in text_of(
             response
         )
-        assert "Edit camera visually" in text_of(response)
+        assert text_of(response).count("Edit camera visually") == 1
         query = editor_link_query(response)
         assert query["mountain"] == str(entry.mountain.id)
         assert query["slug"] == entry.mountain.slug
@@ -606,7 +607,18 @@ class TestTheEditorLink:
 
         query = editor_link_query(response)
         assert query["mountain"] == str(ACTIVE.mountain.id)
-        assert "edit the camera visually" in text_of(response)
+        body = text_of(response)
+        assert re.search(
+            r'<a class="button button--secondary" href="[^"]+" rel="noreferrer">'
+            r"Edit camera visually</a>",
+            body,
+        )
+        assert body.count("Edit camera visually") == 1
+        assert re.search(
+            r'<a class="button button--quiet" href="[^"]+">'
+            r'<span aria-hidden="true">← </span>Back to mountain</a>',
+            body,
+        )
 
     def test_the_creation_page_has_no_editor_link_because_there_is_no_mountain_yet(
         self, editor_client, db

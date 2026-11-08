@@ -18,7 +18,12 @@ def tokens_of(css):
     return {name: " ".join(value.split()) for name, value in DECLARATION.findall(css)}
 
 
-STUDIO_TOKENS = tokens_of(STUDIO_CSS)
+LIGHT_MARKER = ":root[data-theme='light']"
+DARK_BLOCK, LIGHT_BLOCK = STUDIO_CSS.split("@font-face", 1)[0].split(LIGHT_MARKER)
+
+STUDIO_TOKENS = tokens_of(DARK_BLOCK)
+LIGHT_TOKENS = {**STUDIO_TOKENS, **tokens_of(LIGHT_BLOCK)}
+THEMES = {"dark": STUDIO_TOKENS, "light": LIGHT_TOKENS}
 WEB_TOKEN_VALUES = tokens_of(WEB_CSS)
 
 
@@ -41,8 +46,10 @@ def luminance(hex_color):
     return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
 
 
-def contrast(foreground, background):
-    darker, lighter = sorted((luminance(resolve(foreground)), luminance(resolve(background))))
+def contrast(foreground, background, tokens=STUDIO_TOKENS):
+    darker, lighter = sorted(
+        (luminance(resolve(foreground, tokens)), luminance(resolve(background, tokens)))
+    )
 
     return (lighter + 0.05) / (darker + 0.05)
 
@@ -86,7 +93,10 @@ TEXT_PAIRS = [
     ("--sp-paper", "--sp-surface-stage", 7),
     ("--sp-mist", "--sp-surface-stage", 4.5),
     ("--sp-link-on-stage", "--sp-surface-stage", 4.5),
-    ("--sp-paper-bright", "--sp-accent-hover", 4.5),
+    ("--sp-button-fg", "--sp-button-bg", 4.5),
+    ("--sp-inverse-fg", "--sp-inverse-bg", 7),
+    ("--sp-button-fg", "--sp-danger", 4.5),
+    ("--sp-text", "--sp-rule-on-paper", 4.5),
     ("--sp-paper-bright", "--sp-ink", 7),
     ("--sp-ink", "--sp-paper-bright", 7),
 ]
@@ -101,9 +111,42 @@ CONTROL_PAIRS = [
 ]
 
 
+@pytest.mark.parametrize("theme", sorted(THEMES))
 @pytest.mark.parametrize(("foreground", "background", "minimum"), TEXT_PAIRS + CONTROL_PAIRS)
-def test_text_and_controls_meet_the_wcag_contrast_minimums(foreground, background, minimum):
-    assert contrast(foreground, background) >= minimum, (foreground, background)
+def test_text_and_controls_meet_the_wcag_contrast_minimums(theme, foreground, background, minimum):
+    assert contrast(foreground, background, THEMES[theme]) >= minimum, (
+        theme,
+        foreground,
+        background,
+    )
+
+
+BUTTON_PAIRS = [
+    ("--sp-button-fg", "--sp-button-bg"),
+    ("--sp-inverse-fg", "--sp-inverse-bg"),
+    ("--sp-link", "--sp-surface-paper"),
+    ("--sp-link", "--sp-surface-card"),
+    ("--sp-text", "--sp-surface-card"),
+    ("--sp-text", "--sp-rule-on-paper"),
+    ("--sp-text-muted", "--sp-surface-card"),
+]
+
+
+@pytest.mark.parametrize("theme", sorted(THEMES))
+@pytest.mark.parametrize(("foreground", "background"), BUTTON_PAIRS)
+def test_every_button_state_is_readable_in_both_themes(theme, foreground, background):
+    assert contrast(foreground, background, THEMES[theme]) >= 4.5
+
+
+def test_dark_is_the_default_and_light_is_an_explicit_override():
+    assert "color-scheme: dark;" in STUDIO_CSS
+    assert "html[data-theme='light']" in STUDIO_CSS
+    assert "prefers-color-scheme" not in STUDIO_CSS
+    assert set(tokens_of(LIGHT_BLOCK)) <= set(STUDIO_TOKENS)
+
+
+def test_a_button_in_a_stage_panel_never_takes_the_paper_text_color():
+    assert ".panel--stage .button--quiet {" in STUDIO_CSS
 
 
 def test_the_fonts_are_self_hosted_with_swap_and_their_licenses():
