@@ -22,6 +22,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 VIEWER = Access(Role.VIEWER, True)
 INACTIVE_EDITOR = Access(Role.EDITOR, False)
+INACTIVE_VIEWER = Access(Role.VIEWER, False)
 
 
 def active_editors():
@@ -155,3 +156,96 @@ def test_a_password_set_while_a_demotion_is_in_flight_keeps_the_demotion():
     assert stored.role == "viewer"
     assert stored.check_password("another long passphrase 42")
     assert active_editors() == 1
+
+
+NEW_PASSWORD = "another long passphrase 42"
+
+
+def set_password(actor, target):
+    try:
+        return DjangoUserStore().set_password(actor.id, target.id, NEW_PASSWORD)
+    finally:
+        connection.close()
+
+
+def hold_a_change_then(commit, holds_the_locks, actor, target, desired):
+    try:
+        with transaction.atomic():
+            DjangoUserStore().change_access(actor.id, target.id, desired, access_violation)
+            holds_the_locks.set()
+            assert commit.wait(WAIT_SECONDS)
+    finally:
+        connection.close()
+
+
+def test_a_password_set_by_an_editor_demoted_in_the_meantime_is_refused():
+    demoting = create_user("demoting-editor")
+    demoted = create_user("demoted-editor")
+    target = create_user("viewer", Role.VIEWER)
+    before = UserRecord.objects.get(pk=target.pk).password
+    holds_the_locks = threading.Event()
+    commit = threading.Event()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        holder = pool.submit(hold_a_change_then, commit, holds_the_locks, demoting, demoted, VIEWER)
+        assert holds_the_locks.wait(WAIT_SECONDS)
+        writer = pool.submit(set_password, demoted, target)
+
+        wait_until(a_backend_is_waiting_for_a_row_lock)
+        assert not writer.done()
+        commit.set()
+
+        holder.result(WAIT_SECONDS)
+        change = writer.result(WAIT_SECONDS)
+
+    assert change.violation is AccessViolation.ACTOR_NOT_EDITOR
+    assert UserRecord.objects.get(pk=target.pk).password == before
+
+
+def test_a_password_set_while_the_target_is_being_deactivated_keeps_both_changes():
+    actor = create_user("actor")
+    target = create_user("target", Role.VIEWER)
+    holds_the_locks = threading.Event()
+    commit = threading.Event()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        holder = pool.submit(
+            hold_a_change_then, commit, holds_the_locks, actor, target, INACTIVE_VIEWER
+        )
+        assert holds_the_locks.wait(WAIT_SECONDS)
+        writer = pool.submit(set_password, actor, target)
+
+        wait_until(a_backend_is_waiting_for_a_row_lock)
+        assert not writer.done()
+        commit.set()
+
+        holder.result(WAIT_SECONDS)
+        writer.result(WAIT_SECONDS)
+
+    stored = UserRecord.objects.get(pk=target.pk)
+    assert stored.is_active is False
+    assert stored.check_password(NEW_PASSWORD)
+
+
+def test_editors_setting_each_others_passwords_while_demoting_never_deadlock():
+    first = create_user("first-editor")
+    second = create_user("second-editor")
+    start = threading.Barrier(2)
+
+    def demote_the_other(actor, target):
+        start.wait()
+        return change(actor, target, VIEWER)
+
+    def set_the_others_password(actor, target):
+        start.wait()
+        return set_password(actor, target)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(demote_the_other, first, second),
+            pool.submit(set_the_others_password, second, first),
+        ]
+        for future in futures:
+            future.result(WAIT_SECONDS)
+
+    assert active_editors() >= 1

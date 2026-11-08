@@ -19,8 +19,8 @@
 		</section>
 		<section class="panel panel--stage" aria-labelledby="catalog-title">
 			<h2 class="panel__title" id="catalog-title">Catalog editing</h2>
-			<p>Browse the catalog of mountains here. Daily discoveries and users will appear in the navigation above as they become available in the Studio.</p>
-			<p>Until then, the catalog is edited in the Django Admin.</p>
+			<p>Browse and edit the catalog of mountains here, and read the record of the daily discoveries{% if user.role == "editor" %}, and manage users{% endif %}.</p>
+			<p>The Django Admin stays available until the Studio replaces it.</p>
 			<div class="actions">
 				<a class="button button--on-stage" href="{% url 'studio:mountain_list' %}">Browse mountains</a>
 				<a class="button button--on-stage" href="{% url 'admin:index' %}">Open the Django Admin</a>

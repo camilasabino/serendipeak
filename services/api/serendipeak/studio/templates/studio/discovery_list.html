@@ -1,0 +1,48 @@
+{% extends "studio/base.html" %}
+{% block title %}Daily discoveries{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Catalog</p>
+		<h1 class="page-title">Daily discoveries</h1>
+	</header>
+
+	<p class="lede">The mountain the site showed on each day, newest first. A day's choice never changes once made, so this record is read only. Days before {{ kept_since|date:"j M Y" }} are no longer kept.</p>
+
+	{% if rows %}
+		<p class="result-count" role="status">{{ rows|length }} day{{ rows|length|pluralize }} recorded.</p>
+		<table class="data-table">
+			<caption class="visually-hidden">Daily discoveries, newest first</caption>
+			<thead>
+				<tr>
+					<th scope="col">Date</th>
+					<th scope="col">Mountain</th>
+					<th scope="col">Status now</th>
+					<th scope="col">Recorded</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for row in rows %}
+					<tr>
+						<th scope="row" class="data-table__primary">
+							<time datetime="{{ row.entry.date|date:'Y-m-d' }}">{{ row.entry.date|date:"D j M Y" }}</time>
+							{% if row.is_today %}<span class="role-tag role-tag--paper">Today</span>{% endif %}
+						</th>
+						<td data-label="Mountain">
+							<a href="{% url 'studio:mountain_detail' row.entry.mountain_slug %}">{{ row.entry.mountain_name }}</a>
+							<span class="data-table__sub">{{ row.entry.mountain_slug }}</span>
+						</td>
+						<td data-label="Status now">{% include "studio/components/status_badge.html" with status=row.status %}</td>
+						<td data-label="Recorded" class="numeric">
+							<time datetime="{{ row.entry.recorded_at|date:'c' }}">{{ row.entry.recorded_at|date:"j M Y, H:i" }} UTC</time>
+						</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	{% else %}
+		<section class="panel panel--narrow" aria-labelledby="empty-title">
+			<h2 class="panel__title" id="empty-title">No days recorded yet</h2>
+			<p>The first visit to the site's mountain of the day records it here.</p>
+		</section>
+	{% endif %}
+{% endblock %}

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -47,6 +48,28 @@ class UserStore(Protocol):
 
         APPLIED carries the changed user; REFUSED carries the violation.
         """
+
+    def set_password(self, actor_id: UUID, target_id: UUID, password: str) -> AccessChange:
+        """Store a new hashed password for the target, writing no other column.
+
+        The password policy is applied here and PasswordRejected is raised, with nothing
+        written, when it refuses. The actor must be an active Editor when the write happens:
+        the actor and the target are locked first, so a demotion committed before the write is
+        seen and refuses it (REFUSED with ACTOR_NOT_EDITOR). An unknown target gives NOT_FOUND.
+
+        APPLIED carries the user, whose open sessions end because the session hash follows the
+        password.
+        """
+
+
+class UserReader(Protocol):
+    """Reads for the user screens; none of them carries a password or its hash."""
+
+    def list_all(self) -> Sequence[User]:
+        """Return every user, active or not, in no particular order."""
+
+    def find_by_id(self, user_id: UUID) -> User | None:
+        """Return the user with this id, or None."""
 
 
 @dataclass(frozen=True, slots=True)

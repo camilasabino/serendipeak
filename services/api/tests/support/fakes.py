@@ -46,7 +46,7 @@ from serendipeak.catalog.region_changes import (
 )
 from serendipeak.catalog.regions import MountainRegion, UnknownRegion, build_region_path
 from serendipeak.catalog.relocation import RelocationOutcome
-from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
+from serendipeak.discovery.entities import DailyMountain, DiscoveryHistoryEntry, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 from tests.support.geography import reference as geography_reference
 
@@ -244,6 +244,7 @@ class InMemoryUserStore:
 
     def __init__(self, users=()):
         self._users = {user.id: user for user in users}
+        self.passwords = {}
 
     def create(self, username, role, password):
         if len(password) < self.MINIMUM_PASSWORD_LENGTH:
@@ -292,8 +293,31 @@ class InMemoryUserStore:
 
         return AccessChange(AccessChangeOutcome.APPLIED, user=changed)
 
+    def set_password(self, actor_id, target_id, password):
+        target = self._users.get(target_id)
+        if target is None:
+            return AccessChange(AccessChangeOutcome.NOT_FOUND)
+        if len(password) < self.MINIMUM_PASSWORD_LENGTH:
+            raise PasswordRejected(("This password is too short.",))
+
+        actor = self._users.get(actor_id)
+        if actor is None or not self._access_of(actor).is_active_editor:
+            return AccessChange(
+                AccessChangeOutcome.REFUSED, violation=AccessViolation.ACTOR_NOT_EDITOR
+            )
+
+        self.passwords[target_id] = password
+
+        return AccessChange(AccessChangeOutcome.APPLIED, user=target)
+
     def get(self, user_id):
         return self._users[user_id]
+
+    def list_all(self):
+        return tuple(self._users.values())
+
+    def find_by_id(self, user_id):
+        return self._users.get(user_id)
 
     @staticmethod
     def _access_of(user):
@@ -689,6 +713,24 @@ class InMemoryDailyDiscoveryRepository:
             del self._mountain_ids[day]
 
         return len(expired)
+
+
+class InMemoryDiscoveryHistoryReader:
+    def __init__(self, entries=()):
+        self._entries = tuple(entries)
+
+    def list_between(self, first, last):
+        return tuple(entry for entry in self._entries if first <= entry.date <= last)
+
+
+def discovery_entry(day, slug="aconcagua", status=MountainStatus.ACTIVE):
+    return DiscoveryHistoryEntry(
+        date=day,
+        mountain_slug=slug,
+        mountain_name=slug.replace("-", " ").title(),
+        mountain_status=status,
+        recorded_at=datetime.combine(day, datetime.min.time(), tzinfo=UTC),
+    )
 
 
 @dataclass

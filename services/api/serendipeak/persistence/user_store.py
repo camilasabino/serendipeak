@@ -90,3 +90,45 @@ class DjangoUserStore:
             target.save(update_fields=["role", "is_active"])
 
         return AccessChange(AccessChangeOutcome.APPLIED, user=to_user(target))
+
+    def set_password(self, actor_id: UUID, target_id: UUID, password: str) -> AccessChange:
+        with translate_database_errors():
+            target = UserRecord.objects.filter(pk=target_id).first()
+        if target is None:
+            return AccessChange(AccessChangeOutcome.NOT_FOUND)
+
+        # Validated and hashed before any lock is taken: hashing is slow on purpose and must not
+        # hold up the access changes that queue behind these rows. The username cannot change,
+        # so the similarity check sees the same account the write will reach.
+        try:
+            validate_password(password, target)
+        except ValidationError as error:
+            raise PasswordRejected(tuple(error.messages)) from error
+        hashed = make_password(password)
+
+        with translate_database_errors(), transaction.atomic():
+            # The same primary key order as change_access, so the two never wait for each other
+            # in a cycle.
+            locked = {
+                record.id: record
+                for record in UserRecord.objects.select_for_update()
+                .filter(pk__in=(actor_id, target_id))
+                .order_by("pk")
+            }
+
+            target = locked.get(target_id)
+            if target is None:
+                return AccessChange(AccessChangeOutcome.NOT_FOUND)
+
+            actor = locked.get(actor_id)
+            if actor is None or not _access_of(actor).is_active_editor:
+                return AccessChange(
+                    AccessChangeOutcome.REFUSED, violation=AccessViolation.ACTOR_NOT_EDITOR
+                )
+
+            # Only the password column, so a role or active change committed since the target
+            # was read is not overwritten.
+            target.password = hashed
+            target.save(update_fields=["password"])
+
+        return AccessChange(AccessChangeOutcome.APPLIED, user=to_user(target))

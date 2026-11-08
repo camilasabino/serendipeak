@@ -27,6 +27,13 @@ NAVIGATION = (
             "studio:mountain_delete",
         ),
     ),
+    NavigationItem("Daily discoveries", "studio:discovery_list", StudioAccess.VIEWER),
+    NavigationItem(
+        "Users",
+        "studio:user_list",
+        StudioAccess.EDITOR,
+        section_url_names=("studio:user_edit", "studio:user_password"),
+    ),
 )
 
 

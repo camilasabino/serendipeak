@@ -27,6 +27,8 @@ class AccessViolation(StrEnum):
     SELF_DEACTIVATION = "self_deactivation"
     SELF_DEMOTION = "self_demotion"
     LAST_ACTIVE_EDITOR = "last_active_editor"
+    CHANGED_MEANWHILE = "changed_meanwhile"
+    OWN_PASSWORD = "own_password"
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +39,8 @@ class AccessChangeContext:
     target: Account
     desired: Access
     active_editors: int
+    # What the person editing was shown; set only by callers that must not overwrite a newer change.
+    expected: Access | None = None
 
 
 AccessRule = Callable[[AccessChangeContext], AccessViolation | None]
@@ -47,6 +51,9 @@ def access_violation(context: AccessChangeContext) -> AccessViolation | None:
 
     if not actor.access.is_active_editor:
         return AccessViolation.ACTOR_NOT_EDITOR
+
+    if context.expected is not None and context.expected != target.access:
+        return AccessViolation.CHANGED_MEANWHILE
 
     if actor.id == target.id:
         if target.access.is_active and not desired.is_active:

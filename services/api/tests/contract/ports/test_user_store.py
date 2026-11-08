@@ -178,3 +178,62 @@ def test_a_refusing_rule_writes_nothing(arranged):
 
     assert change.violation is AccessViolation.LAST_ACTIVE_EDITOR
     assert arranged.access_of(target) == VIEWER
+
+
+NEW_PASSWORD = "another long passphrase 42"
+
+
+def test_an_editor_sets_the_password_of_another_user(arranged):
+    actor = arranged.add("actor")
+    target = arranged.add("target", Role.VIEWER)
+
+    change = arranged.store.set_password(actor, target, NEW_PASSWORD)
+
+    assert change.outcome is AccessChangeOutcome.APPLIED
+    assert change.user.id == target
+    assert arranged.access_of(target) == VIEWER
+
+
+@pytest.mark.parametrize("access", [VIEWER, INACTIVE_VIEWER], ids=["viewer", "inactive viewer"])
+def test_only_an_active_editor_sets_a_password(arranged, access):
+    actor = arranged.add("actor", access.role, is_active=access.is_active)
+    target = arranged.add("target", Role.VIEWER)
+
+    change = arranged.store.set_password(actor, target, NEW_PASSWORD)
+
+    assert change.outcome is AccessChangeOutcome.REFUSED
+    assert change.violation is AccessViolation.ACTOR_NOT_EDITOR
+
+
+def test_an_unknown_actor_cannot_set_a_password(arranged):
+    target = arranged.add("target", Role.VIEWER)
+
+    change = arranged.store.set_password(uuid.uuid4(), target, NEW_PASSWORD)
+
+    assert change.violation is AccessViolation.ACTOR_NOT_EDITOR
+
+
+def test_a_password_for_an_unknown_target_is_not_found(arranged):
+    actor = arranged.add("actor")
+
+    change = arranged.store.set_password(actor, uuid.uuid4(), NEW_PASSWORD)
+
+    assert change.outcome is AccessChangeOutcome.NOT_FOUND
+
+
+def test_a_weak_password_is_rejected_and_nothing_is_written(arranged):
+    actor = arranged.add("actor")
+    target = arranged.add("target", Role.VIEWER)
+
+    with pytest.raises(PasswordRejected):
+        arranged.store.set_password(actor, target, "short")
+
+
+def test_a_password_can_be_set_for_an_inactive_user(arranged):
+    actor = arranged.add("actor")
+    target = arranged.add("target", Role.VIEWER, is_active=False)
+
+    change = arranged.store.set_password(actor, target, NEW_PASSWORD)
+
+    assert change.outcome is AccessChangeOutcome.APPLIED
+    assert arranged.access_of(target) == INACTIVE_VIEWER

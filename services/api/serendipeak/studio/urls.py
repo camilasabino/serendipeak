@@ -7,8 +7,10 @@ from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
 from serendipeak.catalog.issue_preview_token import IssuePreviewToken
 from serendipeak.catalog.list_mountains import ListMountains
+from serendipeak.discovery.history import ListDailyDiscoveries
 from serendipeak.studio.access import StudioAccess, declare_access
 from serendipeak.studio.camera_views import CameraConfirmationView
+from serendipeak.studio.discovery_views import DiscoveryListView
 from serendipeak.studio.mountain_views import (
     DeleteDraftView,
     EditMountainView,
@@ -17,6 +19,12 @@ from serendipeak.studio.mountain_views import (
     NewMountainView,
 )
 from serendipeak.studio.preview_views import MountainPreviewView
+from serendipeak.studio.user_views import (
+    UserAdministration,
+    UserEditView,
+    UserListView,
+    UserPasswordView,
+)
 from serendipeak.studio.views import (
     LandingView,
     MountainDetailView,
@@ -38,6 +46,8 @@ def studio_urlpatterns(
     writes: MountainWrites,
     change_camera: ChangeMountainCamera,
     issue_preview: IssuePreviewToken,
+    users: UserAdministration,
+    list_discoveries: ListDailyDiscoveries,
     media_base_url: str,
     web_origin: str,
     max_photograph_bytes: int,
@@ -171,6 +181,36 @@ def studio_urlpatterns(
                 ),
             ),
             name="mountain_delete",
+        ),
+        path(
+            "daily-discoveries/",
+            declare_access(
+                StudioAccess.VIEWER,
+                DiscoveryListView.as_view(
+                    list_discoveries=list_discoveries, http_method_names=["get", "head", "options"]
+                ),
+            ),
+            name="discovery_list",
+        ),
+        path(
+            "users/",
+            declare_access(
+                StudioAccess.EDITOR,
+                UserListView.as_view(
+                    administration=users, http_method_names=["get", "head", "options"]
+                ),
+            ),
+            name="user_list",
+        ),
+        path(
+            "users/<uuid:user_id>/",
+            declare_access(StudioAccess.EDITOR, UserEditView.as_view(administration=users)),
+            name="user_edit",
+        ),
+        path(
+            "users/<uuid:user_id>/password/",
+            declare_access(StudioAccess.EDITOR, UserPasswordView.as_view(administration=users)),
+            name="user_password",
         ),
         path(
             "login/",

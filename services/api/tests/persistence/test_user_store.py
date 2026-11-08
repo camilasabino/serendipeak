@@ -129,3 +129,92 @@ class TestChangeAccess:
 
         with django_assert_num_queries(4):
             store.change_access(actor.id, target.id, Access(Role.EDITOR, True), access_violation)
+
+
+class TestSetPassword:
+    NEW_PASSWORD = "another long passphrase 42"
+
+    def test_the_new_password_is_stored_only_as_a_hash_and_signs_the_user_in(self, store):
+        actor = create_user("actor")
+        target = create_user("target", Role.VIEWER, password=PASSWORD)
+
+        store.set_password(actor.id, target.id, self.NEW_PASSWORD)
+
+        stored = UserRecord.objects.get(pk=target.id).password
+        assert self.NEW_PASSWORD not in stored
+        assert identify_hasher(stored).algorithm == "pbkdf2_sha256"
+        assert authenticate(username="target", password=self.NEW_PASSWORD).pk == target.pk
+        assert authenticate(username="target", password=PASSWORD) is None
+
+    def test_it_reads_the_target_then_locks_both_accounts_and_updates_only_the_password(
+        self, store, django_assert_num_queries
+    ):
+        actor = create_user("actor")
+        target = create_user("target", Role.VIEWER)
+
+        with django_assert_num_queries(5) as captured:
+            store.set_password(actor.id, target.id, self.NEW_PASSWORD)
+
+        statements = [query["sql"] for query in captured.captured_queries]
+        assert statements[0].startswith("SELECT") and '"app_user"."id"' in statements[0]
+        assert statements[1].startswith("SAVEPOINT")
+        assert "FOR UPDATE" in statements[2]
+        assert 'ORDER BY "app_user"."id"' in statements[2]
+        assert statements[3].startswith('UPDATE "app_user" SET "password"')
+        for column in ('"role"', '"is_active"', '"last_login"', '"username"'):
+            assert column not in statements[3].split(" WHERE ")[0]
+        assert statements[4].startswith("RELEASE SAVEPOINT")
+
+    def test_the_cost_does_not_grow_with_the_number_of_users(
+        self, store, django_assert_num_queries
+    ):
+        actor = create_user("actor")
+        target = create_user("target", Role.VIEWER)
+        for index in range(20):
+            create_user(f"editor{index:02d}")
+
+        with django_assert_num_queries(5):
+            store.set_password(actor.id, target.id, self.NEW_PASSWORD)
+
+    def test_a_refused_actor_writes_nothing(self, store, django_assert_num_queries):
+        actor = create_user("actor", Role.VIEWER)
+        target = create_user("target", Role.VIEWER)
+        before = UserRecord.objects.get(pk=target.id).password
+
+        with django_assert_num_queries(4) as captured:
+            store.set_password(actor.id, target.id, self.NEW_PASSWORD)
+
+        assert not any(q["sql"].startswith("UPDATE") for q in captured.captured_queries)
+        assert UserRecord.objects.get(pk=target.id).password == before
+
+    def test_a_rejected_password_takes_no_lock_and_writes_nothing(
+        self, store, django_assert_num_queries
+    ):
+        actor = create_user("actor")
+        target = create_user("target", Role.VIEWER)
+
+        with django_assert_num_queries(1), pytest.raises(PasswordRejected):
+            store.set_password(actor.id, target.id, "short")
+
+    def test_the_password_policy_is_the_one_of_creation(self, store):
+        actor = create_user("actor")
+        target = create_user("camila-sabino", Role.VIEWER)
+
+        for password, reason in [
+            ("password1234", "too common"),
+            ("123456789012345", "entirely numeric"),
+            ("camila-sabino", "too similar"),
+        ]:
+            with pytest.raises(PasswordRejected) as rejected:
+                store.set_password(actor.id, target.id, password)
+            assert reason in str(rejected.value)
+
+    def test_a_database_failure_is_translated(self, store):
+        actor = create_user("actor")
+        target = create_user("target", Role.VIEWER)
+
+        with (
+            mock.patch.object(UserRecord, "save", side_effect=OperationalError),
+            pytest.raises(InfrastructureError),
+        ):
+            store.set_password(actor.id, target.id, self.NEW_PASSWORD)

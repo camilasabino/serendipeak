@@ -17,7 +17,7 @@ ACTIVE_VIEWER = Access(Role.VIEWER, True)
 INACTIVE_VIEWER = Access(Role.VIEWER, False)
 
 
-def judged(actor, target, desired, *, editors, same=False):
+def judged(actor, target, desired, *, editors, same=False, expected=None):
     actor_account = Account(uuid4(), actor)
     target_account = actor_account if same else Account(uuid4(), target)
 
@@ -27,6 +27,7 @@ def judged(actor, target, desired, *, editors, same=False):
             target=target_account,
             desired=desired,
             active_editors=editors,
+            expected=expected,
         )
     )
 
@@ -84,3 +85,29 @@ def test_no_change_may_leave_the_system_without_an_active_editor(desired):
 
 def test_changing_a_user_who_is_not_an_active_editor_never_loses_one():
     assert judged(ACTIVE_EDITOR, ACTIVE_VIEWER, INACTIVE_VIEWER, editors=1) is None
+
+
+def test_a_change_made_from_the_access_the_target_still_has_is_allowed():
+    assert (
+        judged(ACTIVE_EDITOR, ACTIVE_VIEWER, ACTIVE_EDITOR, editors=2, expected=ACTIVE_VIEWER)
+        is None
+    )
+
+
+@pytest.mark.parametrize("expected", [INACTIVE_VIEWER, ACTIVE_EDITOR, INACTIVE_EDITOR])
+def test_a_change_made_from_an_access_the_target_no_longer_has_is_refused(expected):
+    violation = judged(ACTIVE_EDITOR, ACTIVE_VIEWER, ACTIVE_EDITOR, editors=2, expected=expected)
+
+    assert violation is AccessViolation.CHANGED_MEANWHILE
+
+
+def test_no_expectation_means_the_current_state_is_not_compared():
+    assert judged(ACTIVE_EDITOR, ACTIVE_VIEWER, INACTIVE_VIEWER, editors=2) is None
+
+
+def test_who_is_asking_is_judged_before_what_they_saw():
+    violation = judged(
+        ACTIVE_VIEWER, ACTIVE_VIEWER, ACTIVE_EDITOR, editors=2, expected=INACTIVE_VIEWER
+    )
+
+    assert violation is AccessViolation.ACTOR_NOT_EDITOR

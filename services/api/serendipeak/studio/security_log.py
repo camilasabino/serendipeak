@@ -9,13 +9,23 @@ LOGOUT = "logout"
 PASSWORD_CHANGED = "password_changed"
 PASSWORD_CHANGE_REFUSED = "password_change_refused"
 PUBLICATION_CHANGED = "publication_changed"
+USER_ACCESS_CHANGED = "user_access_changed"
+USER_PASSWORD_SET = "user_password_set"
+USER_CHANGE_REFUSED = "user_change_refused"
 PREVIEW_ISSUED = "preview_issued"
 ACCESS_DENIED = "access_denied"
 UNDECLARED_VIEW = "undeclared_view"
 CSRF_FAILED = "csrf_failed"
 
 WARNING_EVENTS = frozenset(
-    {LOGIN_FAILED, LOGIN_THROTTLED, PASSWORD_CHANGE_REFUSED, ACCESS_DENIED, CSRF_FAILED}
+    {
+        LOGIN_FAILED,
+        LOGIN_THROTTLED,
+        PASSWORD_CHANGE_REFUSED,
+        USER_CHANGE_REFUSED,
+        ACCESS_DENIED,
+        CSRF_FAILED,
+    }
 )
 
 

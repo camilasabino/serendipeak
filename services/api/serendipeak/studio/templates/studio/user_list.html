@@ -1,0 +1,44 @@
+{% extends "studio/base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Administration</p>
+		<h1 class="page-title">Users</h1>
+	</header>
+
+	<p class="lede">Editors change everything in the Studio; Viewers only read. A user is never deleted: deactivate the account instead, and it can no longer sign in.</p>
+	<p class="result-count" role="status">{{ total }} user{{ total|pluralize }}, {{ active_editors }} active Editor{{ active_editors|pluralize }}.</p>
+
+	<table class="data-table">
+		<caption class="visually-hidden">Users, by username</caption>
+		<thead>
+			<tr>
+				<th scope="col">Username</th>
+				<th scope="col">Role</th>
+				<th scope="col">Status</th>
+				<th scope="col">Last sign-in</th>
+				<th scope="col">Member since</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in rows %}
+				<tr>
+					<th scope="row" class="data-table__primary">
+						<a href="{% url 'studio:user_edit' row.user.id %}">{{ row.user.username }}</a>
+						{% if row.is_you %}<span class="role-tag role-tag--paper">You</span>{% endif %}
+					</th>
+					<td data-label="Role">{{ row.user.role.value|capfirst }}</td>
+					<td data-label="Status">
+						{% if row.user.is_active %}<span class="status status--active">Active</span>{% else %}<span class="status status--inactive">Inactive</span>{% endif %}
+					</td>
+					<td data-label="Last sign-in" class="numeric">
+						{% if row.user.last_login %}<time datetime="{{ row.user.last_login|date:'c' }}">{{ row.user.last_login|date:"j M Y, H:i" }} UTC</time>{% else %}<span class="empty-value">Never</span>{% endif %}
+					</td>
+					<td data-label="Member since" class="numeric">
+						<time datetime="{{ row.user.date_joined|date:'c' }}">{{ row.user.date_joined|date:"j M Y" }}</time>
+					</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+{% endblock %}

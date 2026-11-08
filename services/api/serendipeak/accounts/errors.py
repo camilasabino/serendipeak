@@ -33,6 +33,10 @@ ACCESS_REFUSAL_MESSAGES = {
     AccessViolation.SELF_DEACTIVATION: "You cannot deactivate your own account.",
     AccessViolation.SELF_DEMOTION: "You cannot change your own role.",
     AccessViolation.LAST_ACTIVE_EDITOR: "The last active Editor cannot be demoted or deactivated.",
+    AccessViolation.CHANGED_MEANWHILE: "Someone else changed this account while you were editing.",
+    AccessViolation.OWN_PASSWORD: (
+        "Change your own password from the account menu, where your current password is asked."
+    ),
 }
 
 

@@ -1245,3 +1245,121 @@ form {
 	color: var(--sp-link);
 	font-weight: 600;
 }
+
+/* Users and daily discoveries */
+
+.role-tag--paper {
+	border-color: var(--sp-link);
+	color: var(--sp-link);
+}
+
+.grid--users {
+	align-items: start;
+}
+
+.grid--users > .panel,
+.stack > .panel {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.stack {
+	display: grid;
+	gap: var(--sp-space-5);
+	min-width: 0;
+}
+
+.user-form {
+	align-self: stretch;
+}
+
+.status--active {
+	--status-color: var(--sp-success);
+}
+
+.status--inactive {
+	--status-color: var(--sp-danger);
+}
+
+.data-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--sp-text-ui);
+}
+
+.data-table th,
+.data-table td {
+	padding: var(--sp-space-3) var(--sp-space-4) var(--sp-space-3) 0;
+	border-bottom: 1px solid var(--sp-rule-on-paper);
+	text-align: left;
+	vertical-align: baseline;
+	overflow-wrap: anywhere;
+}
+
+.data-table thead th {
+	border-top: 1px solid var(--sp-rule-on-paper);
+	color: var(--sp-text-muted);
+	font-weight: 600;
+}
+
+.data-table__primary {
+	font-weight: 500;
+}
+
+.data-table__sub {
+	display: block;
+	color: var(--sp-text-muted);
+	font-size: 0.8125rem;
+}
+
+/* Under 40rem each row becomes a block that names its own cells, so nothing scrolls sideways. */
+@media (max-width: 39.9375rem) {
+	.data-table thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.data-table,
+	.data-table tbody,
+	.data-table tr {
+		display: block;
+	}
+
+	.data-table tr {
+		padding: var(--sp-space-3) 0;
+		border-bottom: 1px solid var(--sp-rule-on-paper);
+	}
+
+	.data-table tbody tr:first-child {
+		border-top: 1px solid var(--sp-rule-on-paper);
+	}
+
+	.data-table th,
+	.data-table td {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0 var(--sp-space-3);
+		padding: 0.125rem 0;
+		border: 0;
+	}
+
+	.data-table td::before {
+		min-width: 7.5rem;
+		color: var(--sp-text-muted);
+		content: attr(data-label);
+	}
+
+	.data-table__sub {
+		display: inline;
+	}
+}
+
+@media (min-width: 52rem) {
+	.grid--users {
+		grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+	}
+}

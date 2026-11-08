@@ -1,0 +1,62 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ account.username }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:user_list' %}">Users</a><span aria-hidden="true"> / </span><span aria-current="page">{{ account.username }}</span>
+	</nav>
+	<header class="page-header page-header--detail">
+		<div>
+			<p class="kicker">User</p>
+			<h1 class="page-title">{{ account.username }}</h1>
+		</div>
+		<div class="page-header__aside">
+			{% if account.is_active %}<span class="status status--active">Active</span>{% else %}<span class="status status--inactive">Inactive</span>{% endif %}
+		</div>
+	</header>
+
+	<div class="grid grid--users">
+		<section class="panel" aria-labelledby="account-title">
+			<h2 class="panel__title" id="account-title">Account</h2>
+			<dl class="ledger">
+				<div class="ledger__row"><dt>Username</dt><dd>{{ account.username }}</dd></div>
+				<div class="ledger__row"><dt>Role</dt><dd>{{ account.role.value|capfirst }}</dd></div>
+				<div class="ledger__row"><dt>Status</dt><dd>{% if account.is_active %}Active{% else %}Inactive{% endif %}</dd></div>
+				<div class="ledger__row"><dt>Last sign-in</dt><dd class="numeric">{% if account.last_login %}<time datetime="{{ account.last_login|date:'c' }}">{{ account.last_login|date:"j M Y, H:i" }} UTC</time>{% else %}<span class="empty-value">Never</span>{% endif %}</dd></div>
+				<div class="ledger__row"><dt>Member since</dt><dd class="numeric"><time datetime="{{ account.date_joined|date:'c' }}">{{ account.date_joined|date:"j M Y, H:i" }} UTC</time></dd></div>
+			</dl>
+			<p class="panel__note">The username cannot change.</p>
+		</section>
+
+		<div class="stack">
+			<section class="panel" aria-labelledby="access-title">
+				<h2 class="panel__title" id="access-title">Access</h2>
+				{% include "studio/components/error_summary.html" %}
+				{% if is_you %}
+					<p>This is your own account. You cannot change your own role or deactivate yourself; another Editor can.</p>
+				{% else %}
+					<form class="user-form" method="post" action="{% url 'studio:user_edit' account.id %}" novalidate>
+						{% csrf_token %}
+						{{ form.shown }}
+						{% include "studio/components/field.html" with field=form.role %}
+						{% include "studio/components/checkbox.html" with field=form.is_active %}
+						<div class="actions actions--form">
+							<button class="button" type="submit">Save</button>
+							<a class="button button--quiet" href="{% url 'studio:user_list' %}">Cancel</a>
+						</div>
+					</form>
+				{% endif %}
+			</section>
+
+			<section class="panel" aria-labelledby="password-title">
+				<h2 class="panel__title" id="password-title">Password</h2>
+				{% if is_you %}
+					<p>Your own password is changed with your current one.</p>
+					<a class="button button--quiet" href="{% url 'studio:password_change' %}">Change your password</a>
+				{% else %}
+					<p>Set a new password for {{ account.username }}. Their open sessions end, and they sign in with the new one.</p>
+					<a class="button button--quiet" href="{% url 'studio:user_password' account.id %}">Set a new password</a>
+				{% endif %}
+			</section>
+		</div>
+	</div>
+{% endblock %}

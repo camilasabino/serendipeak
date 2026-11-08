@@ -7,6 +7,8 @@ from serendipeak.accounts.change_user_access import ChangeUserAccess
 from serendipeak.accounts.clock import SystemUtcClock as AccountsClock
 from serendipeak.accounts.create_user import CreateUser
 from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
+from serendipeak.accounts.read_users import GetUser, ListUsers
+from serendipeak.accounts.set_user_password import SetUserPassword
 from serendipeak.catalog.bootstrap.apply_geography_backfill import ApplyGeographyBackfill
 from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
@@ -38,6 +40,7 @@ from serendipeak.catalog.update_mountain_region import UpdateMountainRegion
 from serendipeak.discovery.clock import SystemUtcClock
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
+from serendipeak.discovery.history import ListDailyDiscoveries
 from serendipeak.discovery.prune_daily_discoveries import PruneDailyDiscoveries
 from serendipeak.media.caching_source_fetcher import CachingSourceImageFetcher
 from serendipeak.media.filesystem_media_store import FilesystemMediaStore
@@ -46,6 +49,7 @@ from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
+from serendipeak.persistence.discovery_history_reader import DjangoDiscoveryHistoryReader
 from serendipeak.persistence.draft_mountain_deletion_store import DjangoDraftMountainDeletionStore
 from serendipeak.persistence.geography_backfill_store import (
     DjangoGeographyBackfillStore,
@@ -63,6 +67,7 @@ from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
+from serendipeak.persistence.user_reader import DjangoUserReader
 from serendipeak.persistence.user_store import DjangoUserStore
 from serendipeak.tokens.signed_preview_tokens import SignedPreviewTokens
 
@@ -215,6 +220,22 @@ def build_create_user() -> CreateUser:
 
 def build_change_user_access() -> ChangeUserAccess:
     return ChangeUserAccess(DjangoUserStore())
+
+
+def build_set_user_password() -> SetUserPassword:
+    return SetUserPassword(DjangoUserStore())
+
+
+def build_list_users() -> ListUsers:
+    return ListUsers(DjangoUserReader())
+
+
+def build_get_user() -> GetUser:
+    return GetUser(DjangoUserReader())
+
+
+def build_list_daily_discoveries() -> ListDailyDiscoveries:
+    return ListDailyDiscoveries(DjangoDiscoveryHistoryReader(), SystemUtcClock())
 
 
 def build_admit_login_attempt() -> AdmitLoginAttempt:

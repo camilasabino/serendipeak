@@ -3,7 +3,7 @@ from datetime import date
 from typing import Protocol
 from uuid import UUID
 
-from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
+from serendipeak.discovery.entities import DailyMountain, DiscoveryHistoryEntry, RecentDiscovery
 
 
 class DailyDiscoveryRepository(Protocol):
@@ -34,4 +34,12 @@ class DailyDiscoveryRepository(Protocol):
         running it again deletes nothing. The database refuses to delete a discovery that
         is inside the retention window whatever cutoff is passed, and that refusal is an
         InfrastructureError that deletes nothing.
+        """
+
+
+class DiscoveryHistoryReader(Protocol):
+    def list_between(self, first: date, last: date) -> Sequence[DiscoveryHistoryEntry]:
+        """Return the discoveries dated from first to last, both inclusive, in no particular order.
+
+        Each carries its mountain's slug, English name and current status, whatever that status.
         """

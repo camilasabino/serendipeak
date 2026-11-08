@@ -15,6 +15,7 @@ VIEWER = "viewer"
 EDITOR = "editor"
 ACTORS = (ANONYMOUS, INACTIVE, VIEWER, EDITOR)
 
+UNKNOWN_USER = "6f1f1f0e-0000-4000-8000-000000000001"
 ALLOWED = ("status", 200)
 FORBIDDEN = ("status", 403)
 
@@ -116,6 +117,40 @@ MATRIX = {
         "declares": StudioAccess.EDITOR,
         ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
         INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:discovery_list": {
+        "method": "get",
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/daily-discoveries/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/daily-discoveries/"),
+        VIEWER: ALLOWED,
+        EDITOR: ALLOWED,
+    },
+    "studio:user_list": {
+        "method": "get",
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/users/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/users/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ALLOWED,
+    },
+    "studio:user_edit": {
+        "method": "get",
+        "kwargs": {"user_id": UNKNOWN_USER},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/users/{UNKNOWN_USER}/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/users/{UNKNOWN_USER}/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:user_password": {
+        "method": "get",
+        "kwargs": {"user_id": UNKNOWN_USER},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/users/{UNKNOWN_USER}/password/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/users/{UNKNOWN_USER}/password/"),
         VIEWER: FORBIDDEN,
         EDITOR: ("status", 404),
     },
@@ -246,3 +281,53 @@ def test_an_anonymous_write_is_sent_to_sign_in_without_a_return_address(db, meth
 
 def test_the_public_api_is_not_behind_the_studio_gate(db):
     assert Client().get("/healthz").status_code in (200, 503)
+
+
+USER_WRITES = (
+    ("studio:user_edit", {"role": "viewer", "is_active": "on", "shown": "viewer:active"}),
+    ("studio:user_password", {"new_password1": "x", "new_password2": "x"}),
+)
+
+
+@pytest.mark.parametrize("actor", [ANONYMOUS, INACTIVE, VIEWER])
+@pytest.mark.parametrize(("name", "data"), USER_WRITES)
+def test_only_an_active_editor_can_post_to_the_user_screens(db, name, data, actor):
+    target = create_user("target", Role.VIEWER)
+    before = UserRecord.objects.values_list("role", "is_active", "password").get(pk=target.pk)
+
+    response = client_for(actor).post(reverse(name, kwargs={"user_id": target.pk}), data)
+
+    assert response.status_code in (302, 403)
+    if response.status_code == 302:
+        assert response.headers["Location"] == LOGIN_URL
+    assert (
+        UserRecord.objects.values_list("role", "is_active", "password").get(pk=target.pk) == before
+    )
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+@pytest.mark.parametrize(
+    ("name", "actor", "status"),
+    [
+        ("studio:discovery_list", VIEWER, 405),
+        ("studio:discovery_list", EDITOR, 405),
+        ("studio:user_list", VIEWER, 403),
+        ("studio:user_list", EDITOR, 405),
+    ],
+)
+def test_daily_discoveries_and_the_user_list_accept_no_write(db, name, actor, status, method):
+    response = getattr(client_for(actor), method)(reverse(name))
+
+    assert response.status_code == status
+
+
+@pytest.mark.parametrize("method", ["put", "patch", "delete"])
+def test_no_user_can_be_deleted_or_replaced_through_the_studio(db, method):
+    target = create_user("target", Role.VIEWER)
+    client = client_for(EDITOR)
+
+    for name in ("studio:user_edit", "studio:user_password"):
+        response = getattr(client, method)(reverse(name, kwargs={"user_id": target.pk}))
+
+        assert response.status_code == 405
+    assert UserRecord.objects.filter(pk=target.pk).exists()
