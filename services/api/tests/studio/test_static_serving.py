@@ -47,6 +47,17 @@ def test_gunicorn_binds_the_port_the_platform_injects(monkeypatch):
     assert run_path(str(GUNICORN_CONFIGURATION))["bind"] == "[::]:4321"
 
 
+def test_gunicorn_creates_no_control_socket_in_the_working_directory():
+    assert run_path(str(GUNICORN_CONFIGURATION))["control_socket_disable"] is True
+
+
+def test_gunicorn_allows_in_flight_requests_to_finish_on_shutdown():
+    configuration = run_path(str(GUNICORN_CONFIGURATION))
+
+    assert configuration["graceful_timeout"] == 30
+    assert configuration["timeout"] == 120
+
+
 def test_gunicorn_never_derives_the_request_scheme_from_a_header(monkeypatch):
     # Django alone decides whether a request is HTTPS, from TRUSTED_PROXY_HOPS.
     assert run_path(str(GUNICORN_CONFIGURATION))["secure_scheme_headers"] == {}

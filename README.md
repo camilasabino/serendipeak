@@ -57,23 +57,35 @@ Production (`APP_ENV` anything but `development`) refuses to start unless HTTPS 
 Checklist for the Railway services:
 
 - API: `DATABASE_URL`, `DJANGO_SECRET_KEY`, `PREVIEW_SIGNING_KEY` (different from the secret key), `ALLOWED_HOSTS` (the public API host plus `healthcheck.railway.app`), `TRUSTED_PROXY_HOPS=1`, `WEB_ORIGIN`, `CORS_ALLOWED_ORIGIN`, `MEDIA_STORE=s3` with its endpoint, credentials, buckets and `MEDIA_PUBLIC_BASE_URL`. Optionally `SECURE_HSTS_SECONDS`.
-- Web: `NEXT_PUBLIC_API_BASE_URL` is inlined at build time, so set it before the build.
+- Web: `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_CESIUM_ION_TOKEN` are inlined at build time (build arguments of the image), so set them before the build.
+- `TRUSTED_PROXY_HOPS=1` is correct only while all of these hold: the API is reached from outside solely through Railway's HTTPS edge, which states `X-Forwarded-Proto: https` and redirects plain HTTP; the API service has no TCP proxy; and the only other callers on the project's private network are services you control, because they can send any header. Any other value of the header, `http` or a list such as `http, https`, makes the request insecure rather than secure, so a proxy that behaves differently breaks Studio form posts instead of weakening them. A proxy added in front of Railway's (a Cloudflare-proxied record for the API host, for example) raises the hop count to 2; see [docs/deployment.md](docs/deployment.md).
 - Reach the API through the public HTTPS domain only. A TCP proxy would deliver plain HTTP without the forwarding headers.
 - Whether a request is HTTPS is decided by Django alone, from `TRUSTED_PROXY_HOPS`. `gunicorn.conf.py` therefore sets `secure_scheme_headers = {}` and needs no `--forwarded-allow-ips`: with the default scheme headers and `*`, Gunicorn would mark a request secure from a header that a caller reaching the service without passing the edge could forge, and Django falls back to that when `TRUSTED_PROXY_HOPS` is `0`.
 - The Studio's cookies are `Secure`, `HttpOnly`, `SameSite=Lax` and scoped to `/studio/`. The preview cookies are set by Next.js, which fixes them to `SameSite=None; Secure` in production, scoped to the previewed mountain and lasting 15 minutes.
 
-#### Build and start commands (Railway, root directory `services/api`)
+#### Images
 
-| Step  | Command |
-| ----- | ------- |
-| Build | `uv sync --no-dev --frozen && uv run --no-dev python manage.py collectstatic --noinput` |
-| Start | `uv run --no-dev gunicorn config.wsgi:application` |
+Each service has a `Dockerfile` in its own directory, and a platform that finds one builds with it (Railway root directories `services/api` and `apps/web`). GeoDjango loads GDAL and GEOS when it starts, and a platform build that only installs Python dependencies does not provide them, so the API image is the one place where the whole runtime is fixed. Both images run as an unprivileged user and start their server in exec form, so the server is PID 1 and receives the platform's `SIGTERM`.
 
-The build step needs the service's environment variables (the settings validate them on load, so `collectstatic` refuses to run without `DJANGO_SECRET_KEY`, `DATABASE_URL` and the rest), but it never connects to the database. Migrations are not part of either command; run them as a separate, deliberate step: `uv run --no-dev python manage.py migrate`.
+| Image | Build | Start |
+| ----- | ----- | ----- |
+| API   | `uv sync --locked --no-dev` (fails when `uv.lock` is stale), then `collectstatic` with placeholder settings | `gunicorn config.wsgi:application` |
+| Web   | `npm ci`, `npm run build` (copies the Cesium assets first), `npm run check:production-gate`, `npm prune --omit=dev` | `next start` |
 
-- **Static files.** `collectstatic` gathers the Studio's stylesheet, fonts, brand image and scripts into `services/api/staticfiles/` (ignored by Git) under content-hashed names, and `WhiteNoiseMiddleware` (second in the stack, production only) serves them with a one-year `immutable` cache and gzip. They must be collected before the process starts: WhiteNoise reads the directory at startup, and the hashed storage has no manifest to resolve `{% static %}` without it. Static requests never reach the Studio's `no-store` headers or sign-in checks, and they follow the same HTTPS redirect as every other path.
-- **Gunicorn** is configured in `gunicorn.conf.py`, which it reads from the working directory. It binds `[::]:$PORT` (Railway injects `PORT`; the IPv6 wildcard also accepts IPv4 and the private network), runs the `gthread` worker class with `WEB_CONCURRENCY` workers (default 2) of 4 threads, and allows 120 s per request so a photograph upload is not cut off.
+```sh
+docker build -t serendipeak-api services/api
+docker build -t serendipeak-web \
+  --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com \
+  --build-arg NEXT_PUBLIC_CESIUM_ION_TOKEN=<token> apps/web
+```
+
+- **API build versus runtime.** `collectstatic` needs no secret and no database: the settings validate the production environment when they load, so the Dockerfile gives them placeholders for that one command, and none reaches the image's environment. Every real variable is read when the container starts. Migrations belong to neither: run `python manage.py migrate --noinput` as the platform's pre-deploy command, or by hand.
+- **Web build versus runtime.** Next inlines the `NEXT_PUBLIC_*` values into the browser bundle at build time, so they are build arguments, and changing one needs a new build. The build fails when `NEXT_PUBLIC_API_BASE_URL` is not an `https` origin or `NEXT_PUBLIC_CESIUM_ION_TOKEN` is empty. `PORT` is the only runtime variable.
+- **Static files.** `collectstatic` gathers the Studio's stylesheet, fonts, brand image and scripts into `services/api/staticfiles/` (ignored by Git) under content-hashed names, and `WhiteNoiseMiddleware` (second in the stack, production only) serves them with a one-year `immutable` cache and gzip. They must be collected before the process starts, which the image build does. Static requests never reach the Studio's `no-store` headers or sign-in checks, and they follow the same HTTPS redirect as every other path.
+- **Gunicorn** is configured in `gunicorn.conf.py`, which it reads from the working directory. It binds `[::]:$PORT` (the IPv6 wildcard also accepts IPv4 and the private network), runs the `gthread` worker class with `WEB_CONCURRENCY` workers (default 2) of 4 threads, allows 120 s per request so a photograph upload is not cut off, gives in-flight requests 30 s to finish after `SIGTERM`, and opens no control socket. One photograph upload decodes up to about 0.6 GiB above the idle worker, so size the service memory for the uploads that can overlap (2 GiB for two editors).
 - **Development is unchanged.** With `APP_ENV=development` there is no WhiteNoise and no collected directory: `runserver` serves the app's static files through `django.contrib.staticfiles`, and Gunicorn is not involved.
+
+The step-by-step procedure for a first production deployment, with its checks and recovery paths, is in [docs/deployment.md](docs/deployment.md).
 
 Django does not load `.env` by itself. Run backend commands with `uv run --env-file ../../.env ...` from `services/api`, or export the variables in your shell.
 

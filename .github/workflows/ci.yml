@@ -112,6 +112,25 @@ jobs:
       - name: Django system checks
         run: uv run python manage.py check
 
+      # Boots the settings, URL configuration and composition with production values and the S3
+      # media store. Every value is a placeholder: `check` neither connects to the database nor
+      # contacts the object store, and needs no catalog.
+      - name: Django system checks (production settings)
+        env:
+          APP_ENV: production
+          ALLOWED_HOSTS: api.example.com,healthcheck.railway.app
+          CORS_ALLOWED_ORIGIN: https://web.example.com
+          WEB_ORIGIN: https://web.example.com
+          TRUSTED_PROXY_HOPS: "1"
+          MEDIA_STORE: s3
+          MEDIA_PUBLIC_BASE_URL: https://media.example.com
+          MEDIA_S3_ENDPOINT_URL: https://objects.example.com
+          MEDIA_S3_ACCESS_KEY_ID: ci-only-access-key-id
+          MEDIA_S3_SECRET_ACCESS_KEY: ci-only-secret-access-key
+          MEDIA_PUBLIC_BUCKET: ci-public
+          MEDIA_ORIGINALS_BUCKET: ci-originals
+        run: uv run python manage.py check
+
       - name: Check migrations are in sync
         run: uv run python manage.py makemigrations --check --dry-run
 

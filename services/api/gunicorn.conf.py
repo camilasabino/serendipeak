@@ -20,5 +20,13 @@ timeout = 120
 # and the decision to SECURE_PROXY_SSL_HEADER.
 secure_scheme_headers = {}
 
+# The control socket would be created in the working directory, which the unprivileged container
+# user cannot write, and nothing operates the server through it.
+control_socket_disable = True
+
+# Gunicorn forwards SIGTERM to the workers and waits this long for in-flight requests before it
+# kills them. The platform's draining window must be at least as long.
+graceful_timeout = 30
+
 accesslog = None
 errorlog = "-"
