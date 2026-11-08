@@ -10,13 +10,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ("catalog", "0012_catalog_pruning"),
     ]
-    # The admin's log table references the user model, and Django resolves that reference to
-    # this app's first migration. Without this ordering a fresh database would create the log
-    # table before the user table exists.
-    run_before = [
-        ("admin", "0001_initial"),
-    ]
-
     operations = [
         migrations.AlterModelOptions(
             name="mountainrecord",

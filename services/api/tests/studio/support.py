@@ -8,7 +8,7 @@ from django.urls import resolve, reverse
 from PIL import Image
 
 from config.composition import (
-    ADMIN_INGESTION_LIMITS,
+    STUDIO_INGESTION_LIMITS,
     build_create_mountain,
     build_update_mountain,
 )
@@ -111,6 +111,25 @@ def form_payload(response, **overrides):
     return {**parser.values, **overrides}
 
 
+class _HiddenInputs(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.values = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "input" and attributes.get("type") == "hidden":
+            self.values[attributes["name"]] = attributes.get("value", "")
+
+
+def hidden_inputs(response):
+    """What a browser posts from a page whose form holds only hidden fields."""
+    parser = _HiddenInputs()
+    parser.feed(response.content.decode())
+
+    return parser.values
+
+
 def jpeg(size=(640, 480), colour=(40, 90, 160)):
     buffer = io.BytesIO()
     Image.new("RGB", size, colour).save(buffer, format="JPEG")
@@ -126,7 +145,7 @@ def use_fake_media_store(monkeypatch, store=None):
     """Make the Studio's creation and edit pages store photographs in a fake, never in the
     configured media store, with the real processor and the Studio's limits."""
     store = store or FakeMediaStore()
-    ingestion = PhotographIngestion(PillowPhotographProcessor(), store, ADMIN_INGESTION_LIMITS)
+    ingestion = PhotographIngestion(PillowPhotographProcessor(), store, STUDIO_INGESTION_LIMITS)
     for name, kwargs in (("studio:mountain_new", {}), ("studio:mountain_edit", {"slug": "any"})):
         initkwargs = resolve(reverse(name, kwargs=kwargs)).func.view_initkwargs
         writes = replace(

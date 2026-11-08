@@ -47,7 +47,7 @@ def test_signing_in_without_a_token_is_refused_inside_the_studio_and_creates_no_
 
     assert response.status_code == 403
     assert "This page expired" in text_of(response)
-    assert "sessionid" not in response.cookies
+    assert settings.SESSION_COOKIE_NAME not in response.cookies
     assert client.get(LANDING_URL).status_code == 302
 
 
@@ -154,7 +154,7 @@ def test_the_csrf_failure_page_does_not_leak_the_reason(db, path):
 
 
 def test_a_csrf_failure_outside_the_studio_keeps_the_framework_page(db):
-    response = enforcing().post("/admin/login/", {})
+    response = enforcing().post("/healthz", {})
 
     assert response.status_code == 403
     assert "CSRF verification failed" in text_of(response)

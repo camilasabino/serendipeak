@@ -6,9 +6,6 @@ from serendipeak.catalog import coordinates
 from serendipeak.catalog.camera import CameraViolation
 from serendipeak.catalog.entities import CameraFraming, CanonicalCamera, Coordinates
 
-# What the camera confirmation says and carries. The Studio and the Django Admin both confirm a
-# camera proposal, so they share these instead of keeping two copies of the wording and parsing.
-
 CAMERA_VIOLATION_MESSAGES = {
     CameraViolation.OUT_OF_BOUNDS: (
         f"The heading is from {camera_bounds.HEADING_MIN_DEGREES:g} to below "

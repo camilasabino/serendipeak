@@ -19,7 +19,7 @@ from serendipeak.persistence.mapping import to_camera
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
-from tests.admin.support import form_payload
+from tests.studio.support import hidden_inputs
 from tests.support.catalog import catalog_mountain, catalog_seed
 from tests.support.concurrency import WAIT_SECONDS, run_while_a_change_holds_the_lock
 from tests.support.users import create_user
@@ -40,11 +40,16 @@ OTHER_CAMERA = replace(PROPOSED_CAMERA, heading_degrees=200.0)
 
 
 def camera_url(entry, query=None):
-    url = reverse("admin:catalog_mountainrecord_camera", args=[entry.mountain.id])
+    url = reverse("studio:mountain_camera", args=[entry.mountain.slug])
     if not query:
         return url
     coordinates = entry.mountain.coordinates
-    located = {"lat": repr(coordinates.latitude), "lon": repr(coordinates.longitude), **query}
+    located = {
+        "lat": repr(coordinates.latitude),
+        "lon": repr(coordinates.longitude),
+        "mountain": str(entry.mountain.id),
+        **query,
+    }
 
     return f"{url}?{urlencode(located)}"
 
@@ -64,13 +69,13 @@ def editor_client():
 
 
 def confirm(client, entry):
-    payload = form_payload(client.get(camera_url(entry, PROPOSED)))
+    payload = hidden_inputs(client.get(camera_url(entry, PROPOSED)))
 
     return lambda: client.post(camera_url(entry), payload)
 
 
-def an_admin_edit_of(entry, **columns):
-    # The lock the Admin change view takes before it reads its forms.
+def an_edit_of(entry, **columns):
+    # The lock the mountain edit takes before it writes.
     def change():
         MountainRecord.objects.select_for_update(no_key=True).filter(pk=entry.mountain.id).get()
         MountainRecord.objects.filter(pk=entry.mountain.id).update(**columns)
@@ -78,10 +83,10 @@ def an_admin_edit_of(entry, **columns):
     return change
 
 
-def test_a_camera_save_waiting_on_an_admin_edit_applies_afterwards(editor_client):
+def test_a_camera_save_waiting_on_an_edit_applies_afterwards(editor_client):
     save = confirm(editor_client, ACTIVE)
 
-    response = run_while_a_change_holds_the_lock(an_admin_edit_of(ACTIVE, name_en="Renamed"), save)
+    response = run_while_a_change_holds_the_lock(an_edit_of(ACTIVE, name_en="Renamed"), save)
 
     assert response.status_code == 302
     record = stored(ACTIVE)

@@ -52,7 +52,7 @@ def test_the_page_is_an_empty_form_with_the_reference_choices(editor_client):
     body = text_of(response)
 
     assert response.status_code == 200
-    assert "<title>New mountain · SerendiPeak Admin</title>" in body
+    assert "<title>New mountain · SerendiPeak Studio</title>" in body
     assert body.count("<h1") == 1
     assert 'enctype="multipart/form-data"' in body
     assert '<option value="" selected>Select a continent</option>' in body

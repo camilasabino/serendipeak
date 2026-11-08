@@ -43,7 +43,7 @@ class TestList:
             response = client.get(LIST_URL)
 
             assert response.status_code == 200
-            assert "<title>Regions · SerendiPeak Admin</title>" in text_of(response)
+            assert "<title>Regions · SerendiPeak Studio</title>" in text_of(response)
 
     def test_the_section_is_in_the_navigation_and_marked_on_its_pages(
         self, taxonomy, viewer_client
@@ -198,7 +198,7 @@ class TestDetail:
     ):
         body = text_of(viewer_client.get(detail_url("andes")))
 
-        assert "<title>Andes · SerendiPeak Admin</title>" in body
+        assert "<title>Andes · SerendiPeak Studio</title>" in body
         assert body.count("<h1") == 1
         assert "Directly in this region" in body
         direct = body.split('id="direct-title"')[1].split('id="descendants-title"')[0]

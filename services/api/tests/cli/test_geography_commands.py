@@ -5,6 +5,7 @@ import stat
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 
 from tests.support.geography import geography_document, invented_id
 from tests.support.geography_schema import (
@@ -67,7 +68,7 @@ class TestApplyGeographyBackfill:
         stdout, stderr = run("apply_geography_backfill", "--input", str(path), "--sha256", sha)
 
         lines = stdout.splitlines()
-        assert lines[0].startswith("Target: database test_serendipeak on ")
+        assert lines[0].startswith(f"Target: database {connection.settings_dict['NAME']} on ")
         assert lines[0].endswith("catalog migration 0017_mountain_continent.")
         assert lines[1:-1] == [
             "Regions: left out, the schema has no region table yet.",

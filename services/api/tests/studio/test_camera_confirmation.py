@@ -11,10 +11,10 @@ from django.urls import reverse
 from django.utils.http import urlencode
 
 from serendipeak.catalog.entities import CameraFraming, CanonicalCamera, MountainStatus
-from serendipeak.persistence.camera_editor_url import camera_editor_url
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mapping import to_camera
 from serendipeak.persistence.models import MountainRecord
+from serendipeak.studio import camera_editor_link
 from tests.studio.support import csrf_token_of, text_of
 from tests.support.catalog import catalog_mountain, catalog_seed
 
@@ -570,18 +570,24 @@ class TestTheEditorLink:
         assert query["mountain"] == str(entry.mountain.id)
         assert query["slug"] == entry.mountain.slug
 
-    def test_it_is_the_link_the_admin_builds_for_the_same_mountain(
+    def test_it_is_the_link_the_link_builder_makes_for_the_stored_mountain(
         self, load_catalog, editor_client
     ):
         load_catalog(ACTIVE, DRAFT)
 
         for entry in (ACTIVE, DRAFT):
-            response = editor_client.get(
-                reverse("studio:mountain_detail", args=[entry.mountain.slug])
-            )
+            mountain = entry.mountain
+            response = editor_client.get(reverse("studio:mountain_detail", args=[mountain.slug]))
 
-            assert response.context["camera_editor_url"] == camera_editor_url(
-                settings.WEB_ORIGIN, stored(entry)
+            assert response.context["camera_editor_url"] == camera_editor_link.camera_editor_url(
+                settings.WEB_ORIGIN,
+                mountain_id=mountain.id,
+                slug=mountain.slug,
+                name=mountain.name.en,
+                latitude=mountain.coordinates.latitude,
+                longitude=mountain.coordinates.longitude,
+                elevation_meters=mountain.elevation_meters,
+                stored=mountain.camera,
             )
 
     def test_a_viewer_is_not_offered_the_editor(self, viewer_client, load_catalog):

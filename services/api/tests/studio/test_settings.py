@@ -3,6 +3,7 @@ from runpy import run_path
 
 import pytest
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 
 SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
@@ -107,3 +108,86 @@ def test_the_preview_signing_key_cannot_be_the_secret_key(load_settings, monkeyp
 
     with pytest.raises(ImproperlyConfigured, match="PREVIEW_SIGNING_KEY"):
         load_settings()
+
+
+def test_the_apps_the_studio_depends_on_are_installed_and_the_admin_is_not():
+    for app in (
+        "django.contrib.auth",
+        "django.contrib.contenttypes",
+        "django.contrib.sessions",
+        "django.contrib.messages",
+        "django.contrib.staticfiles",
+    ):
+        assert app in settings.INSTALLED_APPS
+    assert not [app for app in settings.INSTALLED_APPS if app.startswith("django.contrib.admin")]
+
+
+def test_session_csrf_and_message_middleware_run_after_cors_and_before_the_views():
+    middleware = settings.MIDDLEWARE
+
+    assert middleware[0] == "corsheaders.middleware.CorsMiddleware"
+    for name in (
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+    ):
+        assert name in middleware
+    assert middleware.index("django.contrib.sessions.middleware.SessionMiddleware") < (
+        middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware")
+    )
+
+
+def test_the_user_model_is_the_catalog_user_record():
+    assert settings.AUTH_USER_MODEL == "catalog.UserRecord"
+    assert get_user_model()._meta.label == "catalog.UserRecord"
+
+
+def test_the_password_policy_requires_eight_characters_and_the_three_other_checks():
+    validators = {
+        validator["NAME"].rpartition(".")[2]: validator.get("OPTIONS", {})
+        for validator in settings.AUTH_PASSWORD_VALIDATORS
+    }
+
+    assert validators == {
+        "UserAttributeSimilarityValidator": {},
+        "MinimumLengthValidator": {"min_length": 8},
+        "CommonPasswordValidator": {},
+        "NumericPasswordValidator": {},
+    }
+
+
+def test_the_default_hasher_is_pbkdf2_and_sessions_are_stored_in_the_database():
+    assert settings.PASSWORD_HASHERS[0] == "django.contrib.auth.hashers.PBKDF2PasswordHasher"
+    assert settings.SESSION_ENGINE == "django.contrib.sessions.backends.db"
+
+
+def test_cookies_are_http_only_and_same_site():
+    assert settings.SESSION_COOKIE_HTTPONLY is True
+    assert settings.CSRF_COOKIE_HTTPONLY is True
+    assert settings.SESSION_COOKIE_SAMESITE == "Lax"
+    assert settings.CSRF_COOKIE_SAMESITE == "Lax"
+
+
+@pytest.mark.parametrize(("app_env", "secure"), [("production", True), ("development", False)])
+def test_cookies_are_secure_outside_development(load_settings, monkeypatch, app_env, secure):
+    monkeypatch.setenv("APP_ENV", app_env)
+
+    loaded = load_settings()
+
+    assert loaded["SESSION_COOKIE_SECURE"] is secure
+    assert loaded["CSRF_COOKIE_SECURE"] is secure
+
+
+@pytest.mark.parametrize("app_env", ["production", "development"])
+def test_the_cookie_paths_and_names_do_not_depend_on_the_environment(
+    load_settings, monkeypatch, app_env
+):
+    monkeypatch.setenv("APP_ENV", app_env)
+
+    loaded = load_settings()
+
+    assert loaded["SESSION_COOKIE_PATH"] == loaded["CSRF_COOKIE_PATH"] == "/studio/"
+    assert {loaded["SESSION_COOKIE_NAME"], loaded["CSRF_COOKIE_NAME"]}.isdisjoint(
+        loaded["LEGACY_COOKIE_NAMES"]
+    )

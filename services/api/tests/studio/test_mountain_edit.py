@@ -52,7 +52,7 @@ def stored(slug):
 def test_the_page_starts_from_the_stored_mountain(catalog, editor_client):
     body = text_of(editor_client.get(edit_url("draft-peak")))
 
-    assert "<title>Edit Draft Peak · SerendiPeak Admin</title>" in body
+    assert "<title>Edit Draft Peak · SerendiPeak Studio</title>" in body
     assert 'name="name" value="Draft Peak"' in body
     assert 'name="slug" value="draft-peak"' in body
     assert 'name="elevation_meters" value="6961"' in body

@@ -81,7 +81,7 @@ PHOTOGRAPH_MANIFEST_PATH = SERVICE_ROOT / "seed" / "legacy-photographs-v1.json"
 FROZEN_CATALOG_PATH = SERVICE_ROOT.parents[1] / "contracts" / "v1" / "catalog.json"
 
 MEBIBYTE = 1024 * 1024
-ADMIN_INGESTION_LIMITS = IngestionLimits(max_bytes=30 * MEBIBYTE)
+STUDIO_INGESTION_LIMITS = IngestionLimits(max_bytes=30 * MEBIBYTE)
 # Photographs of the existing catalog come from their sources at full resolution, some well
 # beyond an editor's upload limit, and every one of them must still be stored.
 LEGACY_SOURCE_INGESTION_LIMITS = IngestionLimits(max_bytes=150 * MEBIBYTE)
@@ -200,13 +200,13 @@ def build_change_mountain_location() -> ChangeMountainLocation:
 
 def build_create_mountain(ingestion: PhotographIngestion | None = None) -> CreateMountain:
     return CreateMountain(
-        DjangoMountainCreationStore(), ingestion or build_admin_photograph_ingestion()
+        DjangoMountainCreationStore(), ingestion or build_studio_photograph_ingestion()
     )
 
 
 def build_update_mountain(ingestion: PhotographIngestion | None = None) -> UpdateMountain:
     return UpdateMountain(
-        DjangoMountainUpdateStore(), ingestion or build_admin_photograph_ingestion()
+        DjangoMountainUpdateStore(), ingestion or build_studio_photograph_ingestion()
     )
 
 
@@ -279,11 +279,11 @@ def build_photograph_processor() -> PhotographProcessor:
     return PillowPhotographProcessor()
 
 
-def build_admin_photograph_ingestion() -> PhotographIngestion:
+def build_studio_photograph_ingestion() -> PhotographIngestion:
     return PhotographIngestion(
         build_photograph_processor(),
         build_media_store(),
-        ADMIN_INGESTION_LIMITS,
+        STUDIO_INGESTION_LIMITS,
     )
 
 

@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.test import Client
 from django.utils import timezone
@@ -20,7 +21,7 @@ def signed_in(db):
 
 def test_the_session_lasts_twelve_hours_from_sign_in(signed_in):
     client, response = signed_in
-    cookie = response.cookies["sessionid"]
+    cookie = response.cookies[settings.SESSION_COOKIE_NAME]
     session = Session.objects.get(session_key=cookie.value)
 
     assert cookie["max-age"] == TWELVE_HOURS
@@ -30,7 +31,7 @@ def test_the_session_lasts_twelve_hours_from_sign_in(signed_in):
 
 def test_an_expired_session_no_longer_signs_the_user_in(signed_in):
     client, response = signed_in
-    Session.objects.filter(session_key=response.cookies["sessionid"].value).update(
+    Session.objects.filter(session_key=response.cookies[settings.SESSION_COOKIE_NAME].value).update(
         expire_date=timezone.now()
     )
 
@@ -41,10 +42,8 @@ def test_an_expired_session_no_longer_signs_the_user_in(signed_in):
 
 
 def test_the_session_cookie_is_http_only_same_site_and_secure_outside_development(signed_in):
-    from django.conf import settings
-
     _, response = signed_in
-    cookie = response.cookies["sessionid"]
+    cookie = response.cookies[settings.SESSION_COOKIE_NAME]
 
     assert cookie["httponly"] is True
     assert cookie["samesite"] == "Lax"
@@ -53,7 +52,7 @@ def test_the_session_cookie_is_http_only_same_site_and_secure_outside_developmen
 
 def test_the_session_is_stored_on_the_server_and_the_cookie_holds_only_its_key(signed_in):
     _, response = signed_in
-    value = response.cookies["sessionid"].value
+    value = response.cookies[settings.SESSION_COOKIE_NAME].value
 
     assert Session.objects.filter(session_key=value).exists()
     assert "camila" not in value

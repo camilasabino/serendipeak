@@ -20,13 +20,11 @@ from serendipeak.persistence.models import (
     MountainRecord,
 )
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
-from tests.admin.support import form_payload, jpeg, upload, use_fake_media_store
+from tests.studio.support import form_payload, jpeg, upload, use_fake_media_store
 from tests.support.catalog import catalog_mountain, catalog_seed
 from tests.support.concurrency import (
     WAIT_SECONDS,
-    a_backend_is_waiting_for_a_row_lock,
     run_while_a_change_holds_the_lock,
-    wait_until,
 )
 from tests.support.fakes import FakeMediaStore
 from tests.support.users import create_user
@@ -36,16 +34,16 @@ pytestmark = pytest.mark.django_db(transaction=True)
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 ACTIVE = catalog_mountain("aconcagua")
 INACTIVE = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
-CHANGE_URL = reverse("admin:catalog_mountainrecord_change", args=[DRAFT.mountain.id])
-DELETE_URL = reverse("admin:catalog_mountainrecord_delete", args=[DRAFT.mountain.id])
+CHANGE_URL = reverse("studio:mountain_edit", args=[DRAFT.mountain.slug])
+DELETE_URL = reverse("studio:mountain_delete", args=[DRAFT.mountain.slug])
 
 
 # A replacement that keeps the previous credit has to say it reviewed it.
-REPLACEMENT = {"image-0-credit_reviewed": "on"}
+REPLACEMENT = {"photograph-credit_reviewed": "on"}
 
 
 def change_url(entry):
-    return reverse("admin:catalog_mountainrecord_change", args=[entry.mountain.id])
+    return reverse("studio:mountain_edit", args=[entry.mountain.slug])
 
 
 def stored(entry):
@@ -89,7 +87,7 @@ def media_store(monkeypatch):
 def test_a_credit_edit_posted_against_a_draft_is_saved_after_the_publication_it_waited_for(
     editor_client,
 ):
-    payload = form_payload(editor_client.get(CHANGE_URL), **{"image-0-author": "New Author"})
+    payload = form_payload(editor_client.get(CHANGE_URL), **{"photograph-author": "New Author"})
 
     response = run_while_a_publication_holds_the_lock(
         lambda: editor_client.post(CHANGE_URL, payload)
@@ -107,7 +105,7 @@ def test_a_replacement_posted_against_a_draft_is_stored_after_the_publication_it
 ):
     data = jpeg((1200, 900))
     payload = form_payload(
-        editor_client.get(CHANGE_URL), **REPLACEMENT | {"image-0-photograph_file": upload(data)}
+        editor_client.get(CHANGE_URL), **REPLACEMENT | {"photograph-file": upload(data)}
     )
 
     response = run_while_a_publication_holds_the_lock(
@@ -126,7 +124,7 @@ def test_a_replacement_is_judged_against_the_camera_committed_while_it_waited(
 ):
     payload = form_payload(
         editor_client.get(change_url(INACTIVE)),
-        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg())},
+        **REPLACEMENT | {"photograph-file": upload(jpeg())},
     )
     framing_removal = locked_update(INACTIVE, camera_framing_x=None, camera_framing_y=None)
 
@@ -135,7 +133,7 @@ def test_a_replacement_is_judged_against_the_camera_committed_while_it_waited(
     )
 
     assert response.status_code == 200
-    assert "the camera framing is missing" in response.content.decode()
+    assert "The camera framing is missing." in response.content.decode()
     image = MountainImageRecord.objects.get(pk=INACTIVE.mountain.id)
     assert image.original_sha256 == INACTIVE.mountain.primary_image.media.original_sha256
 
@@ -143,17 +141,16 @@ def test_a_replacement_is_judged_against_the_camera_committed_while_it_waited(
 def test_a_deletion_posted_against_a_draft_is_refused_once_the_publication_it_waited_for_commits(
     editor_client,
 ):
-    response = run_while_a_publication_holds_the_lock(
-        lambda: editor_client.post(DELETE_URL, {"post": "yes"})
-    )
+    response = run_while_a_publication_holds_the_lock(lambda: editor_client.post(DELETE_URL))
 
-    assert response.status_code == 403
+    assert response.status_code == 302
+    assert response["Location"] != reverse("studio:mountain_list")
     assert MountainRecord.objects.get(pk=DRAFT.mountain.id).status == "active"
     assert MountainImageRecord.objects.filter(pk=DRAFT.mountain.id).exists()
 
 
 def test_a_camera_committed_while_an_edit_waits_survives_the_edit(editor_client):
-    payload = form_payload(editor_client.get(change_url(ACTIVE)), name_en="Renamed")
+    payload = form_payload(editor_client.get(change_url(ACTIVE)), name="Renamed")
     camera_change = locked_update(ACTIVE, camera_heading_degrees=10.0, camera_framing_x=0.1)
 
     response = run_while_a_change_holds_the_lock(
@@ -167,7 +164,7 @@ def test_a_camera_committed_while_an_edit_waits_survives_the_edit(editor_client)
 
 
 def test_an_edit_is_judged_against_the_camera_committed_while_it_waited(editor_client):
-    payload = form_payload(editor_client.get(change_url(INACTIVE)), name_en="Renamed")
+    payload = form_payload(editor_client.get(change_url(INACTIVE)), name="Renamed")
     framing_removal = locked_update(INACTIVE, camera_framing_x=None, camera_framing_y=None)
 
     response = run_while_a_change_holds_the_lock(
@@ -175,7 +172,7 @@ def test_an_edit_is_judged_against_the_camera_committed_while_it_waited(editor_c
     )
 
     assert response.status_code == 200
-    assert "the camera framing is missing" in response.content.decode()
+    assert "The camera framing is missing." in response.content.decode()
     assert stored(INACTIVE).name_en == INACTIVE.mountain.name.en
 
 
@@ -196,7 +193,7 @@ class StoreHeldOpen(FakeMediaStore):
 def post_a_replacement_held_in_the_store(pool, client, store):
     payload = form_payload(
         client.get(change_url(ACTIVE)),
-        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg((1200, 900)))},
+        **REPLACEMENT | {"photograph-file": upload(jpeg((1200, 900)))},
     )
 
     def post():
@@ -236,13 +233,13 @@ def test_an_upload_in_flight_does_not_block_the_daily_discovery_of_its_mountain(
     assert DailyDiscoveryRecord.objects.filter(date=day).count() == 1
 
 
-def test_a_publication_waits_for_an_upload_in_flight_on_the_same_mountain(
+def test_a_publication_is_not_held_up_by_an_upload_in_flight_on_the_same_mountain(
     editor_client, monkeypatch
 ):
     store = use_fake_media_store(monkeypatch, StoreHeldOpen())
     payload = form_payload(
         editor_client.get(CHANGE_URL),
-        **REPLACEMENT | {"image-0-photograph_file": upload(jpeg((1200, 900)))},
+        **REPLACEMENT | {"photograph-file": upload(jpeg((1200, 900)))},
     )
 
     def post():
@@ -262,15 +259,13 @@ def test_a_publication_waits_for_an_upload_in_flight_on_the_same_mountain(
     with ThreadPoolExecutor(max_workers=2) as pool:
         upload_in_flight = pool.submit(post)
         assert store.write_started.wait(WAIT_SECONDS)
-        publication = pool.submit(publish)
         try:
-            wait_until(a_backend_is_waiting_for_a_row_lock)
-            assert not publication.done()
+            publication = pool.submit(publish).result(WAIT_SECONDS)
         finally:
             store.release.set()
 
         assert upload_in_flight.result(WAIT_SECONDS).status_code == 302
-        assert publication.result(WAIT_SECONDS).outcome is StatusChangeOutcome.APPLIED
 
+    assert publication.outcome is StatusChangeOutcome.APPLIED
     image = MountainImageRecord.objects.get(pk=DRAFT.mountain.id)
     assert {image.page_key, image.viewer_key} <= set(store.public)

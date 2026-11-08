@@ -4,9 +4,8 @@ from django.conf import settings
 from django.urls import include, path, re_path
 from django.views.static import serve
 
-from config.admin import build_admin_site
 from config.composition import (
-    ADMIN_INGESTION_LIMITS,
+    STUDIO_INGESTION_LIMITS,
     build_admit_login_attempt,
     build_change_mountain_camera,
     build_change_mountain_location,
@@ -67,7 +66,6 @@ def development_media_urlpatterns(*, debug: bool, media_store: str, media_root: 
 
 urlpatterns = [
     path("healthz", healthz),
-    path("admin/", build_admin_site().urls),
     path(
         STUDIO_PATH_PREFIX.lstrip("/"),
         include(
@@ -108,7 +106,7 @@ urlpatterns = [
                     list_discoveries=build_list_daily_discoveries(),
                     media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
                     web_origin=settings.WEB_ORIGIN,
-                    max_photograph_bytes=ADMIN_INGESTION_LIMITS.max_bytes,
+                    max_photograph_bytes=STUDIO_INGESTION_LIMITS.max_bytes,
                 ),
                 "studio",
             )

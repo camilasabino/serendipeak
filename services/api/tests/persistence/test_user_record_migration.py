@@ -28,33 +28,13 @@ def back_to_the_latest_schema():
     migrate_to_latest_discarding_catalog()
 
 
-def test_a_fresh_database_creates_the_user_table_before_the_admin_log_that_references_it():
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT name FROM django_migrations WHERE (app, name) IN "
-            "(('catalog', %s), ('admin', '0001_initial')) ORDER BY id",
-            [AFTER[1]],
-        )
-        order = [row[0] for row in cursor.fetchall()]
-
-    assert order == [AFTER[1], "0001_initial"]
-
-
 def test_the_default_user_tables_are_not_created():
     assert "app_user" in tables()
     assert not {"auth_user", "auth_user_groups", "auth_user_user_permissions"} & tables()
 
 
-def test_the_admin_log_references_the_user_table():
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT confrelid::regclass::text FROM pg_constraint "
-            "WHERE conrelid = 'django_admin_log'::regclass AND contype = 'f' "
-            "AND conname LIKE '%user_id%'"
-        )
-        referenced = [row[0] for row in cursor.fetchall()]
-
-    assert referenced == ["app_user"]
+def test_a_fresh_database_has_no_admin_log_table():
+    assert "django_admin_log" not in tables()
 
 
 def test_the_publish_permission_no_longer_exists():
@@ -68,7 +48,6 @@ def test_the_migration_reverses_without_touching_the_catalog_and_applies_again()
 
     assert applied_head() == BEFORE[1]
     assert "app_user" not in tables()
-    assert "django_admin_log" not in tables()
     assert "mountain" in tables()
 
     # Going back through the geography migrations dropped the continent, which an older schema

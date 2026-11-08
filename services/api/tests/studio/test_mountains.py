@@ -70,7 +70,7 @@ def test_a_viewer_and_an_editor_read_the_list(catalog, viewer_client, editor_cli
         response = client.get(LIST_URL)
 
         assert response.status_code == 200
-        assert "<title>Mountains · SerendiPeak Admin</title>" in text_of(response)
+        assert "<title>Mountains · SerendiPeak Studio</title>" in text_of(response)
 
 
 def test_the_list_is_marked_in_the_navigation_and_is_one_h1_plus_one_h2_per_mountain(
@@ -301,7 +301,7 @@ def test_the_detail_shows_the_content_geography_photograph_and_camera(catalog, v
     body = text_of(response)
 
     assert response.status_code == 200
-    assert "<title>Aconcagua · SerendiPeak Admin</title>" in body
+    assert "<title>Aconcagua · SerendiPeak Studio</title>" in body
     assert body.count("<h1") == 1
     assert "Highest mountain outside Asia." in body
     assert "6961 m" in body

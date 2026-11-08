@@ -20,7 +20,7 @@ from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
-from tests.admin.support import form_payload
+from tests.studio.support import form_payload, hidden_inputs
 from tests.support.catalog import catalog_mountain, catalog_seed
 from tests.support.concurrency import WAIT_SECONDS, run_while_a_change_holds_the_lock
 from tests.support.users import create_user
@@ -54,17 +54,22 @@ def stored(entry):
 
 
 def camera_url(entry, query=None):
-    url = reverse("admin:catalog_mountainrecord_camera", args=[entry.mountain.id])
+    url = reverse("studio:mountain_camera", args=[entry.mountain.slug])
     if not query:
         return url
     coordinates = entry.mountain.coordinates
-    located = {"lat": repr(coordinates.latitude), "lon": repr(coordinates.longitude), **query}
+    located = {
+        "lat": repr(coordinates.latitude),
+        "lon": repr(coordinates.longitude),
+        "mountain": str(entry.mountain.id),
+        **query,
+    }
 
     return f"{url}?{urlencode(located)}"
 
 
 def change_url(entry):
-    return reverse("admin:catalog_mountainrecord_change", args=[entry.mountain.id])
+    return reverse("studio:mountain_edit", args=[entry.mountain.slug])
 
 
 @pytest.fixture
@@ -86,7 +91,7 @@ def moved_and_cleared(entry):
 def test_a_camera_save_waiting_on_a_move_is_refused_even_when_no_camera_is_involved(
     editor_client, entry
 ):
-    payload = form_payload(editor_client.get(camera_url(entry, PROPOSED)))
+    payload = hidden_inputs(editor_client.get(camera_url(entry, PROPOSED)))
 
     def save():
         return editor_client.post(camera_url(entry), payload)
@@ -164,7 +169,8 @@ def test_an_edit_moving_the_coordinates_waiting_on_a_reactivation_is_refused(edi
         reactivate, lambda: editor_client.post(change_url(INACTIVE), payload)
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 302
+    assert response["Location"] == change_url(INACTIVE)
     record = stored(INACTIVE)
     assert record.status == MountainStatus.ACTIVE.value
     assert to_coordinates(record) == INACTIVE.mountain.coordinates

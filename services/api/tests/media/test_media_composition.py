@@ -4,16 +4,16 @@ from urllib.parse import urlsplit
 import pytest
 
 from config.composition import (
-    ADMIN_INGESTION_LIMITS,
     LEGACY_SOURCE_INGESTION_LIMITS,
     PHOTOGRAPH_MANIFEST_PATH,
     SOURCE_FETCH_ALLOWED_HOSTS,
-    build_admin_photograph_ingestion,
+    STUDIO_INGESTION_LIMITS,
     build_check_photograph_media,
     build_legacy_photograph_ingestion,
     build_materialize_photographs,
     build_media_store,
     build_source_image_fetcher,
+    build_studio_photograph_ingestion,
 )
 from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotographMedia
 from serendipeak.catalog.bootstrap.materialize_photographs import MaterializePhotographs
@@ -50,7 +50,7 @@ def test_the_s3_store_is_built_from_its_settings_without_contacting_it(settings)
 
 
 def test_editors_and_the_existing_catalog_have_their_own_byte_limits():
-    assert ADMIN_INGESTION_LIMITS.max_bytes == 30 * MEBIBYTE
+    assert STUDIO_INGESTION_LIMITS.max_bytes == 30 * MEBIBYTE
     assert LEGACY_SOURCE_INGESTION_LIMITS.max_bytes == 150 * MEBIBYTE
 
 
@@ -58,7 +58,7 @@ def test_each_ingestion_is_built_with_its_limit(settings, tmp_path):
     settings.MEDIA_STORE = "filesystem"
     settings.MEDIA_ROOT = tmp_path
 
-    assert build_admin_photograph_ingestion()._limits is ADMIN_INGESTION_LIMITS
+    assert build_studio_photograph_ingestion()._limits is STUDIO_INGESTION_LIMITS
     assert build_legacy_photograph_ingestion()._limits is LEGACY_SOURCE_INGESTION_LIMITS
 
 

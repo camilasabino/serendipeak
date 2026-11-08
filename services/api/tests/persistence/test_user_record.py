@@ -1,7 +1,6 @@
 import pytest
 from django.db import connection
 
-from serendipeak.accounts.roles import Role
 from serendipeak.persistence.models import UserRecord
 from tests.support.records import insert_error
 from tests.support.users import create_user
@@ -74,51 +73,3 @@ def test_a_new_user_is_active_and_joined_now():
     assert user.is_active is True
     assert user.last_login is None
     assert user.date_joined is not None
-
-
-class TestRoleAuthorization:
-    @pytest.mark.parametrize(
-        "permission",
-        [
-            "catalog.view_mountainrecord",
-            "catalog.view_dailydiscoveryrecord",
-            "catalog.view_userrecord",
-        ],
-    )
-    def test_both_roles_may_view(self, permission):
-        assert create_user("editor", Role.EDITOR).has_perm(permission)
-        assert create_user("viewer", Role.VIEWER).has_perm(permission)
-
-    @pytest.mark.parametrize(
-        "permission",
-        [
-            "catalog.add_mountainrecord",
-            "catalog.change_mountainrecord",
-            "catalog.delete_mountainrecord",
-            "catalog.change_userrecord",
-            "catalog.publish_mountain",
-        ],
-    )
-    def test_only_an_editor_may_write(self, permission):
-        assert create_user("editor", Role.EDITOR).has_perm(permission)
-        assert not create_user("viewer", Role.VIEWER).has_perm(permission)
-
-    @pytest.mark.parametrize("role", list(Role))
-    def test_an_inactive_user_has_no_permission_at_all(self, role):
-        user = create_user("inactive", role, is_active=False)
-
-        assert not user.has_perm("catalog.view_mountainrecord")
-        assert not user.has_module_perms("catalog")
-        assert not user.is_staff
-
-    @pytest.mark.parametrize("role", list(Role))
-    def test_an_active_user_of_either_role_may_enter_the_admin(self, role):
-        user = create_user("active", role)
-
-        assert user.is_staff
-        assert user.has_module_perms("catalog")
-
-    def test_no_object_level_permission_is_granted_beyond_the_role(self):
-        viewer = create_user("viewer", Role.VIEWER)
-
-        assert not viewer.has_perm("catalog.change_mountainrecord", obj=object())

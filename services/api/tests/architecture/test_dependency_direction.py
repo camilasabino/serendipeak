@@ -297,8 +297,6 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/persistence/daily_discovery_repository.py" in files
     assert "tools/export_legacy_catalog.py" in files
     assert "config/health.py" in files
-    assert "config/admin.py" in files
-    assert "serendipeak/persistence/admin.py" in files
     assert "serendipeak/persistence/mountain_status_store.py" in files
     assert "serendipeak/catalog/publish_mountain.py" in files
     assert "serendipeak/catalog/media/ingestion.py" in files

@@ -109,3 +109,33 @@ class StudioSecurityHeadersMiddleware:
         add_never_cache_headers(response)
 
         return response
+
+
+class LegacyCookieCleanupMiddleware:
+    """Expires the site-wide session and CSRF cookies that an earlier deployment issued.
+
+    Those cookies were scoped to "/" under the framework's default names and are sent to every
+    path, the public API included. The Studio now uses cookies of its own name and path, so the
+    old ones are never read; this only removes them from the browser. It runs for Studio paths
+    alone because the public API must never set a cookie. A deletion matches by name, domain and
+    path, so it cannot touch the Studio's own cookies.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if not is_studio_path(request.path_info):
+            return response
+
+        for name in settings.LEGACY_COOKIE_NAMES:
+            if name in request.COOKIES:
+                response.delete_cookie(
+                    name,
+                    path="/",
+                    domain=settings.SESSION_COOKIE_DOMAIN,
+                    samesite=settings.SESSION_COOKIE_SAMESITE,
+                )
+
+        return response

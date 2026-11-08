@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.test import Client
 
@@ -50,11 +51,11 @@ def test_signing_in_replaces_the_session_key_so_a_planted_one_is_useless(db):
         session_data=Session.objects.encode({}),
         expire_date="2099-01-01T00:00:00Z",
     )
-    client.cookies["sessionid"] = planted.session_key
+    client.cookies[settings.SESSION_COOKIE_NAME] = planted.session_key
 
     sign_in(client)
 
-    assert client.cookies["sessionid"].value != planted.session_key
+    assert client.cookies[settings.SESSION_COOKIE_NAME].value != planted.session_key
     assert not Session.objects.filter(session_key=planted.session_key).exists()
 
 
@@ -164,7 +165,7 @@ def test_an_anonymous_visitor_is_sent_to_sign_in_and_brought_back(db):
 
 
 def test_signing_out_ends_the_session_and_returns_to_sign_in_with_a_message(editor_client):
-    key = editor_client.cookies["sessionid"].value
+    key = editor_client.cookies[settings.SESSION_COOKIE_NAME].value
 
     response = editor_client.post(LOGOUT_URL, follow=True)
 

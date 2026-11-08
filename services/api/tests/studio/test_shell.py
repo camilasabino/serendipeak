@@ -23,7 +23,7 @@ def test_the_overview_has_the_page_skeleton_of_an_accessible_document(editor_cli
     assert '<html lang="en">' in body
     assert '<meta name="viewport" content="width=device-width, initial-scale=1">' in body
     assert '<meta name="robots" content="noindex, nofollow">' in body
-    assert "<title>Overview · SerendiPeak Admin</title>" in body
+    assert "<title>Overview · SerendiPeak Studio</title>" in body
     assert '<a class="skip-link" href="#content">' in body
     assert '<main id="content"' in body
     assert body.count("<h1") == 1
@@ -34,7 +34,7 @@ def test_the_header_names_the_product_and_marks_the_current_page(editor_client):
     body = text_of(editor_client.get(LANDING_URL))
 
     assert "SerendiPeak" in body
-    assert '<span class="brand__product">Admin</span>' in body
+    assert '<span class="brand__product">Studio</span>' in body
     assert '<nav class="app-nav" aria-label="Studio">' in body
     assert re.search(
         r'<a class="app-nav__link" href="/studio/" aria-current="page">Overview</a>', body
@@ -70,18 +70,18 @@ def test_the_overview_tells_each_role_what_it_can_do(editor_client, viewer_clien
     assert "As a Viewer you can read" in text_of(viewer_client.get(LANDING_URL))
 
 
-def test_the_overview_points_to_the_mountains_and_to_the_admin(editor_client):
+def test_the_overview_points_to_the_mountains_and_to_no_other_editorial_interface(editor_client):
     body = text_of(editor_client.get(LANDING_URL))
 
-    assert f'href="{reverse("admin:index")}"' in body
     assert f'href="{reverse("studio:mountain_list")}"' in body
-    assert "The Django Admin stays available" in body
+    assert "Django Admin" not in body
+    assert "/admin/" not in body
 
 
 def test_the_sign_in_page_has_no_navigation_and_labels_its_fields(db):
     body = text_of(Client().get(LOGIN_URL))
 
-    assert "<title>Sign in · SerendiPeak Admin</title>" in body
+    assert "<title>Sign in · SerendiPeak Studio</title>" in body
     assert 'class="app-nav"' not in body
     assert "Sign out" not in body
     assert re.search(r'<label class="field__label" for="id_username">Username</label>', body)
@@ -146,4 +146,4 @@ def test_the_forbidden_page_is_rendered_inside_the_shell(editor_client):
     assert response.status_code == 403
     assert "You are not allowed to do that" in body
     assert 'class="app-nav"' in body
-    assert "<title>Not allowed · SerendiPeak Admin</title>" in body
+    assert "<title>Not allowed · SerendiPeak Studio</title>" in body

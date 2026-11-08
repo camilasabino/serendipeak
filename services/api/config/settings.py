@@ -44,8 +44,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # No autodiscovery: config.admin builds the one admin site and injects the use cases.
-    "django.contrib.admin.apps.SimpleAdminConfig",
     "corsheaders",
     "rest_framework",
     "serendipeak.persistence",
@@ -56,6 +54,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "serendipeak.studio.middleware.StudioSecurityHeadersMiddleware",
+    "serendipeak.studio.middleware.LegacyCookieCleanupMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -67,7 +66,6 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "config" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -95,10 +93,18 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = "studio:login"
 LOGIN_REDIRECT_URL = "studio:landing"
 
-# Only the Studio and the Admin set cookies. They carry the editor's identity, so they never
-# travel over plain HTTP outside local development. The cookies keep the default path "/" because
-# the Admin at /admin/ shares them with the Studio at /studio/; one path cannot cover both
-# without covering the API too, and the API never reads or sets them.
+# Only the Studio sets cookies. They carry the editor's identity, so they never travel over plain
+# HTTP outside local development, and they are scoped to the Studio's path so that the public API
+# and the health check never receive them. The names differ from the framework defaults on
+# purpose: an earlier deployment issued "sessionid" and "csrftoken" for the whole site, and a
+# browser still holding those would send both to the Studio, where the one with the wider path
+# can shadow the new one. Under their own names the old cookies are never read, and the Studio
+# expires them (LegacyCookieCleanupMiddleware).
+SESSION_COOKIE_NAME = "studio_sessionid"
+CSRF_COOKIE_NAME = "studio_csrftoken"
+SESSION_COOKIE_PATH = "/studio/"
+CSRF_COOKIE_PATH = "/studio/"
+LEGACY_COOKIE_NAMES = ("sessionid", "csrftoken")
 SESSION_COOKIE_AGE = 12 * 60 * 60
 CSRF_FAILURE_VIEW = "serendipeak.studio.views.csrf_failure"
 SESSION_COOKIE_SECURE = not DEBUG
@@ -145,7 +151,7 @@ def web_origin(name, *, allow_http):
         parts.port  # noqa: B018 - reading it is what validates a malformed port
     except ValueError:
         parts = None
-    # Admin links are built by appending a path, so anything but a bare origin would corrupt them.
+    # Studio links are built by appending a path, so anything but a bare origin would corrupt them.
     if (
         parts is None
         or parts.scheme not in schemes
@@ -163,7 +169,7 @@ def web_origin(name, *, allow_http):
 
 
 # Where the visual camera editor is served. Deliberately independent of CORS_ALLOWED_ORIGIN: the
-# two answer different questions (who may read the API, where the Admin sends editors) and may
+# two answer different questions (who may read the API, where the Studio sends editors) and may
 # diverge.
 WEB_ORIGIN = web_origin("WEB_ORIGIN", allow_http=DEBUG)
 

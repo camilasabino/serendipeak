@@ -13,6 +13,11 @@ PASSWORD_ENVIRONMENT_VARIABLE = "SERENDIPEAK_EDITOR_PASSWORD"
 
 
 class Command(BaseCommand):
+    """Also the base of create_viewer: the Studio has no screen that creates an account, so the
+    two commands are how every account comes to exist."""
+
+    role = Role.EDITOR
+    password_variable = PASSWORD_ENVIRONMENT_VARIABLE
     help = (
         "Create an active Editor. The password is read from the environment variable "
         f"{PASSWORD_ENVIRONMENT_VARIABLE} when it is set, and otherwise prompted for twice. "
@@ -29,7 +34,7 @@ class Command(BaseCommand):
         password = self._password()
 
         try:
-            user = composition.build_create_user().execute(username, Role.EDITOR, password)
+            user = composition.build_create_user().execute(username, self.role, password)
         except InvalidUsername as error:
             raise CommandError(error.rule) from error
         except PasswordRejected as error:
@@ -39,17 +44,15 @@ class Command(BaseCommand):
         except InfrastructureError as error:
             raise command_error(error) from error
 
-        self.stdout.write(f"Created the Editor {user.username!r}.")
+        self.stdout.write(f"Created the {self.role.value.capitalize()} {user.username!r}.")
 
     def _password(self):
-        password = os.environ.get(PASSWORD_ENVIRONMENT_VARIABLE)
+        password = os.environ.get(self.password_variable)
         if password:
             return password
 
         if not sys.stdin.isatty():
-            raise CommandError(
-                f"Set {PASSWORD_ENVIRONMENT_VARIABLE}: there is no terminal to prompt on."
-            )
+            raise CommandError(f"Set {self.password_variable}: there is no terminal to prompt on.")
 
         password = getpass("Password: ")
         if getpass("Password (again): ") != password:

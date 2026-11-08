@@ -18,7 +18,7 @@ interface ContractTarget {
 
 const TARGET = fixture<ContractTarget>('mountain-complete.json');
 const DESKTOP = { width: 1280, height: 800 };
-const ADMIN_PATH = `/admin/catalog/mountainrecord/${TARGET.id}`;
+const STUDIO_PATH = `/studio/mountains/${ACONCAGUA.slug}`;
 
 // The legacy tolerances for a saved camera: the reading of a view opened on a camera, and the
 // values saved from it, must agree with that camera this closely. They are tighter than the
@@ -74,18 +74,18 @@ async function expectReadyStage(page: Page) {
 	await expect(page.getByText('Ready to save.')).toBeVisible({ timeout: 60_000 });
 }
 
-// Stands in for the Admin: the editor only ever navigates there, and the test reads where.
-async function interceptAdmin(page: Page): Promise<{ (): URL | undefined; all(): URL[] }> {
+// Stands in for the Studio: the editor only ever navigates there, and the test reads where.
+async function interceptStudio(page: Page): Promise<{ (): URL | undefined; all(): URL[] }> {
 	const requests: { url: URL; method: string }[] = [];
-	await page.route(`${STUB_API_URL}${ADMIN_PATH}/**`, async (route) => {
+	await page.route(`${STUB_API_URL}${STUDIO_PATH}/**`, async (route) => {
 		requests.push({ url: new URL(route.request().url()), method: route.request().method() });
 		await route.fulfill({
 			contentType: 'text/html',
-			body: '<title>Admin</title><p>confirmation</p>'
+			body: '<title>Studio</title><p>confirmation</p>'
 		});
 	});
 	const reached = () => requests.at(-1)?.url;
-	// The editor writes nothing, so everything it sends the Admin is a read.
+	// The editor writes nothing, so everything it sends the Studio is a read.
 	reached.all = () => {
 		expect(requests.map(({ method }) => method)).toEqual(requests.map(() => 'GET'));
 		return requests.map(({ url }) => url);
@@ -199,8 +199,8 @@ test.describe('@webgl camera editor', () => {
 		await expect(readout(page, 'Heading')).not.toHaveText(before!);
 	});
 
-	test('saves by navigating to the Admin with the quantized live camera', async ({ page }) => {
-		const reached = await interceptAdmin(page);
+	test('saves by navigating to the Studio with the quantized live camera', async ({ page }) => {
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
@@ -210,7 +210,7 @@ test.describe('@webgl camera editor', () => {
 
 		await page.getByRole('button', { name: 'Save camera…' }).click();
 
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 		const url = reached()!;
 		expect(url.origin).toBe(STUB_API_URL);
 		expectSaved(url, reading);
@@ -220,17 +220,19 @@ test.describe('@webgl camera editor', () => {
 			'heading',
 			'lat',
 			'lon',
+			'mountain',
 			'pitch',
 			'range'
 		]);
+		expect(url.searchParams.get('mountain')).toBe(TARGET.id);
 		expect(Number(url.searchParams.get('lat'))).toBe(TARGET.coordinates.latitude);
 		expect(Number(url.searchParams.get('lon'))).toBe(TARGET.coordinates.longitude);
-		// The editor wrote nothing: the Admin form is what saves.
+		// The editor wrote nothing: the Studio form is what saves.
 		await expect(page.getByText('confirmation')).toBeVisible();
 	});
 
 	test('reopening on the saved values reproduces the same view', async ({ page }) => {
-		const reached = await interceptAdmin(page);
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
@@ -238,7 +240,7 @@ test.describe('@webgl camera editor', () => {
 		await untilStill(page);
 		const beforeSaving = (await cameraReading(page))!;
 		await page.getByRole('button', { name: 'Save camera…' }).click();
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 		const camera = savedCamera(reached()!);
 
 		await page.goto(editorUrl(camera));
@@ -255,7 +257,7 @@ test.describe('@webgl camera editor', () => {
 	});
 
 	test('saving without moving keeps the stored camera', async ({ page }) => {
-		const reached = await interceptAdmin(page);
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
@@ -263,14 +265,14 @@ test.describe('@webgl camera editor', () => {
 
 		await page.getByRole('button', { name: 'Save camera…' }).click();
 
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 		expectWithin(savedCamera(reached()!), ACONCAGUA.camera);
 	});
 
-	test('a double click on Save only reads the Admin confirmation, twice at most', async ({
+	test('a double click on Save only reads the Studio confirmation, twice at most', async ({
 		page
 	}) => {
-		const reached = await interceptAdmin(page);
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
@@ -278,7 +280,7 @@ test.describe('@webgl camera editor', () => {
 
 		await page.getByRole('button', { name: 'Save camera…' }).dblclick();
 
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 		await expect(page.getByText('confirmation')).toBeVisible();
 		const urls = reached.all().map(String);
 		expect(urls.length).toBeLessThanOrEqual(2);
@@ -286,7 +288,7 @@ test.describe('@webgl camera editor', () => {
 	});
 
 	test('does not save a pose that is still returning to the presented camera', async ({ page }) => {
-		const reached = await interceptAdmin(page);
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
@@ -307,10 +309,10 @@ test.describe('@webgl camera editor', () => {
 		expect(new URL(page.url()).pathname).toBe('/editorial/camera');
 
 		await page.getByRole('button', { name: 'Save camera…' }).click();
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/camera/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 	});
 
-	test('opens on a proposal sent back by the Admin and says it is not saved', async ({ page }) => {
+	test('opens on a proposal sent back by the Studio and says it is not saved', async ({ page }) => {
 		await page.goto(editorUrl(ACONCAGUA.camera, { proposal: true }));
 		await expectReadyStage(page);
 
@@ -369,14 +371,14 @@ test.describe('@webgl camera editor', () => {
 		await expect.poll(async () => (await cameraReading(page))?.framing).toBeDefined();
 	});
 
-	test('goes back to the mountain in the Admin without saving anything', async ({ page }) => {
-		const reached = await interceptAdmin(page);
+	test('goes back to the mountain in the Studio without saving anything', async ({ page }) => {
+		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 
 		await page.getByRole('link', { name: 'Back to the mountain' }).click();
 
-		await expect.poll(() => reached()?.pathname).toBe(`${ADMIN_PATH}/change/`);
+		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/`);
 		expect(reached()!.search).toBe('');
 	});
 

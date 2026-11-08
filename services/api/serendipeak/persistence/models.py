@@ -492,7 +492,6 @@ class DailyDiscoveryRecord(models.Model):
 
 
 ROLES = tuple(role.value for role in Role)
-VIEW_PERMISSION_PREFIX = "view_"
 
 
 class UserManager(BaseUserManager):
@@ -503,8 +502,8 @@ class UserManager(BaseUserManager):
 
 
 class UserRecord(AbstractBaseUser):
-    """An editorial account. Authorization derives from the role alone: there are no per-user
-    permissions or groups, and the framework tables that hold them stay unused."""
+    """An editorial account. The Studio derives authorization from the role alone: there are no
+    per-user permissions or groups, and the framework tables that hold them stay unused."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     username = models.TextField()
@@ -533,22 +532,6 @@ class UserRecord(AbstractBaseUser):
             CheckConstraint(condition=Q(role__in=ROLES), name="user_role_valid"),
             CheckConstraint(condition=~Q(password=""), name="user_password_not_blank"),
         ]
-
-    # The admin site only reads this flag to decide who may enter, and both roles may.
-    @property
-    def is_staff(self):
-        return self.is_active
-
-    def has_perm(self, perm, obj=None):
-        if not self.is_active:
-            return False
-
-        return Role(self.role).can_write or perm.rpartition(".")[2].startswith(
-            VIEW_PERMISSION_PREFIX
-        )
-
-    def has_module_perms(self, app_label):
-        return self.is_active
 
 
 class LoginAttemptRecord(models.Model):
