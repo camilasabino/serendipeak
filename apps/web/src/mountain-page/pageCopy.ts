@@ -35,7 +35,7 @@ export function documentTitle(title: string): string {
 export function pageTitle(model: PageModel): string {
 	switch (model.kind) {
 		case 'mountain':
-			return documentTitle(model.mountain.name);
+			return documentTitle(model.preview ? `Preview: ${model.mountain.name}` : model.mountain.name);
 		case 'daily':
 			return documentTitle(`Today's discovery: ${model.daily.mountain.name}`);
 		case 'error':
@@ -43,6 +43,8 @@ export function pageTitle(model: PageModel): string {
 	}
 }
 
+export const PREVIEW_NOTICE =
+	'Preview of the saved draft. This mountain is not published, so visitors cannot see this page.';
 export const DAILY_EYEBROW = "Today's discovery";
 export const DAILY_CUE = 'Tomorrow, another mountain.';
 export const TODAY_LINK_LABEL = "Today's mountain";

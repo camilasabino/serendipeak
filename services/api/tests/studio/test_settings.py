@@ -21,6 +21,7 @@ MEDIA_ENVIRONMENT = {
 def load_settings(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("WEB_ORIGIN", "https://web.example")
+    monkeypatch.setenv("PREVIEW_SIGNING_KEY", "p" * 40)
     for name, value in MEDIA_ENVIRONMENT.items():
         monkeypatch.setenv(name, value)
 
@@ -76,4 +77,33 @@ def test_a_malformed_number_of_trusted_proxies_is_refused(load_settings, monkeyp
     monkeypatch.setenv("TRUSTED_PROXY_HOPS", value)
 
     with pytest.raises(ImproperlyConfigured, match="TRUSTED_PROXY_HOPS"):
+        load_settings()
+
+
+def test_the_preview_signing_key_is_read_from_the_environment(load_settings, monkeypatch):
+    monkeypatch.setenv("PREVIEW_SIGNING_KEY", "a-dedicated-preview-key-of-sufficient-length")
+
+    assert load_settings()["PREVIEW_SIGNING_KEY"] == "a-dedicated-preview-key-of-sufficient-length"
+
+
+@pytest.mark.parametrize("value", ["", "short", "x" * 31])
+def test_a_missing_or_short_preview_signing_key_is_refused(load_settings, monkeypatch, value):
+    monkeypatch.setenv("PREVIEW_SIGNING_KEY", value)
+
+    with pytest.raises(ImproperlyConfigured, match="PREVIEW_SIGNING_KEY"):
+        load_settings()
+
+
+def test_an_absent_preview_signing_key_is_refused(load_settings, monkeypatch):
+    monkeypatch.delenv("PREVIEW_SIGNING_KEY")
+
+    with pytest.raises(ImproperlyConfigured, match="PREVIEW_SIGNING_KEY"):
+        load_settings()
+
+
+def test_the_preview_signing_key_cannot_be_the_secret_key(load_settings, monkeypatch):
+    monkeypatch.setenv("DJANGO_SECRET_KEY", "s" * 50)
+    monkeypatch.setenv("PREVIEW_SIGNING_KEY", "s" * 50)
+
+    with pytest.raises(ImproperlyConfigured, match="PREVIEW_SIGNING_KEY"):
         load_settings()

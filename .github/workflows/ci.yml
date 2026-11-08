@@ -70,6 +70,7 @@ jobs:
       ALLOWED_HOSTS: localhost,127.0.0.1
       CORS_ALLOWED_ORIGIN: http://localhost:3000
       WEB_ORIGIN: http://localhost:3000
+      PREVIEW_SIGNING_KEY: ci-only-insecure-preview-signing-key
       MEDIA_STORE: filesystem
       MEDIA_ROOT: .media
       MEDIA_PUBLIC_BASE_URL: http://localhost:8000/media

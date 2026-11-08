@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from serendipeak.catalog.entities import MountainStatus
@@ -55,3 +57,19 @@ def test_finding_a_mountain_is_three_queries_and_an_unknown_one_is_one(django_as
 
     with django_assert_num_queries(1):
         assert DjangoMountainCatalogReader().find_by_slug("unknown-peak") is None
+
+
+def test_finding_by_id_returns_any_status_in_three_queries_and_an_unknown_id_in_one(
+    django_assert_num_queries,
+):
+    populate(3)
+    stored = {mountain.slug: mountain for mountain in DjangoMountainCatalogReader().list_all()}
+
+    for slug, expected in stored.items():
+        with django_assert_num_queries(3):
+            assert DjangoMountainCatalogReader().find_by_id(expected.id) == expected, slug
+
+    assert {mountain.status for mountain in stored.values()} == set(MountainStatus)
+
+    with django_assert_num_queries(1):
+        assert DjangoMountainCatalogReader().find_by_id(uuid.uuid4()) is None

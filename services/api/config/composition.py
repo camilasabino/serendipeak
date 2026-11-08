@@ -25,6 +25,8 @@ from serendipeak.catalog.delete_mountain_region import DeleteMountainRegion
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
+from serendipeak.catalog.get_mountain_preview import GetMountainPreview
+from serendipeak.catalog.issue_preview_token import IssuePreviewToken
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
@@ -62,6 +64,7 @@ from serendipeak.persistence.mountain_status_store import DjangoMountainStatusSt
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
 from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
 from serendipeak.persistence.user_store import DjangoUserStore
+from serendipeak.tokens.signed_preview_tokens import SignedPreviewTokens
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 SEED_PATH = SERVICE_ROOT / "seed" / "legacy-catalog-v1.json"
@@ -120,6 +123,22 @@ def build_get_mountain_detail() -> GetMountainDetail:
 
 def build_get_mountain_form_options() -> GetMountainFormOptions:
     return GetMountainFormOptions(DjangoGeographyOptionsReader())
+
+
+def build_issue_preview_token() -> IssuePreviewToken:
+    return IssuePreviewToken(
+        DjangoMountainCatalogReader(),
+        SignedPreviewTokens(settings.PREVIEW_SIGNING_KEY),
+        AccountsClock(),
+    )
+
+
+def build_get_mountain_preview() -> GetMountainPreview:
+    return GetMountainPreview(
+        DjangoMountainCatalogReader(),
+        SignedPreviewTokens(settings.PREVIEW_SIGNING_KEY),
+        AccountsClock(),
+    )
 
 
 def build_get_todays_mountain() -> GetTodaysMountain:

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -49,6 +50,28 @@ class MountainCatalogReader(Protocol):
 
         Returns None for an unknown slug.
         """
+
+    def find_by_id(self, mountain_id: UUID) -> Mountain | None:
+        """Return the mountain with this id, whatever its status.
+
+        Returns None for an unknown id.
+        """
+
+
+class Clock(Protocol):
+    def now(self) -> datetime:
+        """Return the current instant as an aware UTC datetime."""
+
+
+class PreviewTokens(Protocol):
+    """Capability tokens that let the holder read one mountain's saved draft for a short time."""
+
+    def issue(self, mountain_id: UUID, now: datetime) -> str:
+        """Return a token for this mountain that stops working after the preview lifetime."""
+
+    def verify(self, token: str, now: datetime) -> UUID | None:
+        """Return the mountain the token names, or None when it is forged, malformed, expired or
+        of another kind. The reasons are deliberately not distinguished."""
 
 
 @dataclass(frozen=True, slots=True)

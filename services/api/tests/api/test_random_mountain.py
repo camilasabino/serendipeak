@@ -27,7 +27,7 @@ from tests.support.contract_fixtures import (
     load_frozen_catalog,
     served_by_serendipeak,
 )
-from tests.support.fakes import FixedClock
+from tests.support.fakes import FixedClock, unused_preview
 
 CONTENT_TYPE = "application/json; charset=utf-8"
 PATH = "/api/v1/mountains/random"
@@ -57,6 +57,7 @@ urlpatterns = mountain_urlpatterns(
         FixedClock(None),
     ),
     get_random_mountain=GetRandomMountain(DjangoMountainRepository(), pick_index),
+    get_preview=unused_preview(),
     media_base_url=MEDIA_BASE_URL,
 )
 

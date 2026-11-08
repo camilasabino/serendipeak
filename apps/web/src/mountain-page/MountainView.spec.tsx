@@ -10,10 +10,10 @@ const complete = contractFixture('mountain-complete.json') as Mountain;
 const sparse = contractFixture('mountain-sparse.json') as Mountain;
 const minimal = contractFixture('mountain-minimal.json') as Mountain;
 
-function render(mountain: Mountain, daily = false): string {
+function render(mountain: Mountain, daily = false, preview = false): string {
 	return renderToStaticMarkup(
 		<TestExperience>
-			<MountainView mountain={mountain} daily={daily} />
+			<MountainView mountain={mountain} daily={daily} preview={preview} />
 		</TestExperience>
 	);
 }
@@ -174,5 +174,25 @@ describe('sheet', () => {
 
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
 		expect(textsOf(html, 'button')).toEqual(['View photo fullscreen']);
+	});
+});
+
+describe('preview', () => {
+	it('tells the editor the page is an unpublished draft', () => {
+		const html = render(complete, false, true);
+
+		expect(html).toContain('role="note"');
+		expect(html).toContain('This mountain is not published');
+	});
+
+	it('shows no notice on a public page', () => {
+		expect(render(complete)).not.toContain('not published');
+	});
+
+	it('renders a draft without camera, photograph or sources like the minimal fixture', () => {
+		const html = render(minimal, false, true);
+
+		expect(textsOf(html, 'h1')).toEqual([minimal.name]);
+		expect(html).toContain('This mountain is not published');
 	});
 });

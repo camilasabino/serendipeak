@@ -167,6 +167,14 @@ def web_origin(name, *, allow_http):
 # diverge.
 WEB_ORIGIN = web_origin("WEB_ORIGIN", allow_http=DEBUG)
 
+# Signs the draft-preview tokens. Kept apart from SECRET_KEY so that rotating one never decides
+# the other: changing it ends every outstanding preview and nothing else.
+PREVIEW_SIGNING_KEY = os.environ.get("PREVIEW_SIGNING_KEY", "")
+if len(PREVIEW_SIGNING_KEY) < 32 or PREVIEW_SIGNING_KEY == SECRET_KEY:
+    raise ImproperlyConfigured(
+        "PREVIEW_SIGNING_KEY must be at least 32 characters and differ from DJANGO_SECRET_KEY"
+    )
+
 MEDIA_STORES = ("filesystem", "s3")
 
 

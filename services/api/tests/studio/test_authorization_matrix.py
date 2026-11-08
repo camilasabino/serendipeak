@@ -74,6 +74,15 @@ MATRIX = {
         VIEWER: FORBIDDEN,
         EDITOR: ("status", 404),
     },
+    "studio:mountain_preview": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/preview/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/preview/"),
+        VIEWER: ("status", 404),
+        EDITOR: ("status", 404),
+    },
     "studio:mountain_publish": {
         "method": "post",
         "kwargs": {"slug": "no-such-peak"},

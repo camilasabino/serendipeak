@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from uuid import UUID
 
 from serendipeak.catalog.entities import Mountain
 from serendipeak.persistence.errors import translate_database_errors
@@ -19,6 +20,16 @@ class DjangoMountainCatalogReader:
             record = (
                 with_geography(MountainRecord.objects.select_related("image"))
                 .filter(slug=slug)
+                .first()
+            )
+
+        return None if record is None else to_mountain(record)
+
+    def find_by_id(self, mountain_id: UUID) -> Mountain | None:
+        with translate_database_errors():
+            record = (
+                with_geography(MountainRecord.objects.select_related("image"))
+                .filter(id=mountain_id)
                 .first()
             )
 

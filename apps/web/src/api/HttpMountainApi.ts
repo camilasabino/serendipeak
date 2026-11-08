@@ -5,7 +5,8 @@ import type {
 	RandomMountainResult,
 	Unreachable
 } from './contract';
-import type { MountainApi } from './MountainApi';
+import type { PreviewGrant } from '../editorial/preview/previewGrant';
+import type { MountainApi, MountainPreviewApi } from './MountainApi';
 import { hasErrorCode, isDailyMountain, isMountain } from './schema';
 
 export const DEFAULT_TIMEOUT_MS = 5_000;
@@ -21,7 +22,7 @@ export interface HttpMountainApiOptions {
 
 type Exchange = Unreachable | { kind: 'response'; status: number; ok: boolean; body: unknown };
 
-export class HttpMountainApi implements MountainApi {
+export class HttpMountainApi implements MountainApi, MountainPreviewApi {
 	private readonly baseUrl: string;
 	private readonly fetchFn: typeof globalThis.fetch;
 	private readonly timeoutMs: number;
@@ -40,6 +41,22 @@ export class HttpMountainApi implements MountainApi {
 		const exchange = await this.get(`/api/v1/mountains/${encodeURIComponent(slug)}`, {
 			noStore: false
 		});
+		if (exchange.kind === 'unreachable') {
+			return exchange;
+		}
+
+		if (exchange.status === 404 && hasErrorCode(exchange.body, MOUNTAIN_NOT_FOUND)) {
+			return { kind: 'not-found' };
+		}
+		if (exchange.ok && isMountain(exchange.body)) {
+			return { kind: 'found', mountain: exchange.body };
+		}
+
+		return apiError(exchange.status);
+	}
+
+	async getMountainPreview(token: string): Promise<MountainResult> {
+		const exchange = await this.get('/api/v1/previews/mountain', { noStore: true, bearer: token });
 		if (exchange.kind === 'unreachable') {
 			return exchange;
 		}
@@ -87,11 +104,17 @@ export class HttpMountainApi implements MountainApi {
 		return apiError(exchange.status);
 	}
 
-	private async get(path: string, { noStore }: { noStore: boolean }): Promise<Exchange> {
+	private async get(
+		path: string,
+		{ noStore, bearer }: { noStore: boolean; bearer?: string }
+	): Promise<Exchange> {
 		// The signal stays armed while the body streams, so a stalled body also times out.
 		const init: RequestInit = { signal: AbortSignal.timeout(this.timeoutMs) };
 		if (noStore) {
 			init.cache = 'no-store';
+		}
+		if (bearer !== undefined) {
+			init.headers = { Authorization: `Bearer ${bearer}` };
 		}
 
 		let response: Response;
@@ -121,4 +144,33 @@ function parseJson(text: string): unknown {
 	} catch {
 		return undefined;
 	}
+}
+
+export type PreviewExchange = 'started' | 'rejected' | 'failed';
+
+// Trades the grant for the web origin's own Preview Mode cookie. It goes to this site's server, not
+// to the mountain API, and the token travels in the body so it never appears in a URL.
+export async function startPreviewSession(
+	grant: PreviewGrant,
+	fetchFn: typeof globalThis.fetch = (input, init) => globalThis.fetch(input, init)
+): Promise<PreviewExchange> {
+	let response: Response;
+	try {
+		response = await fetchFn('/api/preview', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(grant),
+			cache: 'no-store',
+			credentials: 'same-origin',
+			referrerPolicy: 'no-referrer'
+		});
+	} catch {
+		return 'failed';
+	}
+
+	if (response.ok) {
+		return 'started';
+	}
+
+	return response.status === 400 ? 'rejected' : 'failed';
 }

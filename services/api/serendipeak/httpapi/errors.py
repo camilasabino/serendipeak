@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
-from serendipeak.catalog.errors import MountainNotFound
+from serendipeak.catalog.errors import InvalidPreviewToken, MountainNotFound, PreviewUnavailable
 from serendipeak.discovery.errors import NoEligibleMountains
 from serendipeak.errors import ApplicationError
 
@@ -14,6 +14,9 @@ INTERNAL_ERROR = (500, "INTERNAL_ERROR", "Internal server error")
 
 APPLICATION_ERROR_RESPONSES: Mapping[type[ApplicationError], tuple[int, str, str]] = {
     MountainNotFound: (404, "MOUNTAIN_NOT_FOUND", "Mountain not found"),
+    # One answer for every way a token can be wrong, so a caller learns nothing about why.
+    InvalidPreviewToken: (401, "PREVIEW_NOT_AUTHORIZED", "Preview is not authorized"),
+    PreviewUnavailable: (404, "MOUNTAIN_NOT_FOUND", "Mountain not found"),
     NoEligibleMountains: (503, "NO_ELIGIBLE_MOUNTAINS", "No mountains are available for discovery"),
 }
 

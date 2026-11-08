@@ -5,7 +5,7 @@ export type FailureReason = 'not-found' | 'unreachable' | 'no-eligible-mountains
 export type FailureStatus = 404 | 502 | 503;
 
 export type PageModel =
-	| { kind: 'mountain'; mountain: Mountain }
+	| { kind: 'mountain'; mountain: Mountain; preview?: true }
 	| { kind: 'daily'; daily: DailyMountain }
 	| { kind: 'error'; reason: FailureReason };
 
@@ -19,6 +19,7 @@ export interface PageLoad {
 	model: PageModel;
 	status: 200 | FailureStatus;
 	cacheControl?: string;
+	noindex?: true;
 }
 
 export function pageModelOf(pageProps: object): PageModel | undefined {
@@ -30,6 +31,7 @@ export function pageModelOf(pageProps: object): PageModel | undefined {
 }
 
 export const NO_STORE = 'no-store';
+export const PRIVATE_NO_STORE = 'private, no-store';
 
 const FAILURE_STATUS: Record<FailureReason, FailureStatus> = {
 	'not-found': 404,
@@ -44,6 +46,15 @@ export function classifyFailure(reason: FailureReason): FailureStatus {
 
 export function foundLoad(model: PageModel, cacheControl?: string): PageLoad {
 	return withCacheControl({ model, status: 200 }, cacheControl);
+}
+
+export function previewLoad(mountain: Mountain): PageLoad {
+	return {
+		model: { kind: 'mountain', mountain, preview: true },
+		status: 200,
+		cacheControl: PRIVATE_NO_STORE,
+		noindex: true
+	};
 }
 
 export function failedLoad(reason: FailureReason, cacheControl?: string): PageLoad {

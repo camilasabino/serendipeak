@@ -180,3 +180,22 @@ class UnknownCountries(ApplicationError):
     def __init__(self, codes: tuple[str, ...]):
         super().__init__(f"no country has these codes: {', '.join(codes)}")
         self.codes = codes
+
+
+class MountainNotInDraft(ApplicationError):
+    def __init__(self, slug: str):
+        super().__init__(f"the mountain {slug!r} is not a draft")
+        self.slug = slug
+
+
+class InvalidPreviewToken(ApplicationError):
+    def __init__(self):
+        super().__init__("the preview token is not valid")
+
+
+class PreviewUnavailable(ApplicationError):
+    """The token is valid but its mountain was deleted or is no longer a draft."""
+
+    def __init__(self, mountain_id: UUID):
+        super().__init__(f"no draft mountain has the id {mountain_id}")
+        self.mountain_id = mountain_id

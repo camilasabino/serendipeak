@@ -478,6 +478,15 @@ summary:focus-visible,
 	color: var(--sp-text);
 }
 
+.button[aria-disabled="true"],
+.button[aria-disabled="true"]:hover {
+	border-color: var(--sp-border-control);
+	background: transparent;
+	color: var(--sp-text-muted);
+	cursor: not-allowed;
+	text-decoration: line-through;
+}
+
 .button--on-stage {
 	border-color: var(--sp-glacier-light);
 	background: transparent;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readPublicConfig } from '../config/readPublicConfig';
-import { DEFAULT_TIMEOUT_MS, HttpMountainApi } from './HttpMountainApi';
+import { DEFAULT_TIMEOUT_MS, HttpMountainApi, startPreviewSession } from './HttpMountainApi';
 import { contractFixture } from './test-support/contractFixtures';
 import {
 	BASE_URL,
@@ -265,5 +265,99 @@ describe('HttpMountainApi failures', () => {
 				status: 200
 			});
 		}
+	});
+});
+
+describe('HttpMountainApi preview', () => {
+	it('sends the token as a bearer credential, never in the URL, and asks for no caching', async () => {
+		const fetch = serving(mountain);
+
+		const result = await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountainPreview(
+			'abc:def'
+		);
+
+		expect(result.kind).toBe('found');
+		expect(requestedUrl(fetch)).toBe(`${BASE_URL}/api/v1/previews/mountain`);
+		expect(requestedInit(fetch).headers).toEqual({ Authorization: 'Bearer abc:def' });
+		expect(requestedInit(fetch).cache).toBe('no-store');
+	});
+
+	it('sends no credential on the public routes', async () => {
+		const fetch = serving(mountain);
+
+		await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountain('aconcagua');
+
+		expect(requestedInit(fetch).headers).toBeUndefined();
+	});
+
+	it('maps a deleted or published draft to not-found', async () => {
+		const fetch = serving({ error: { code: 'MOUNTAIN_NOT_FOUND', message: 'x' } }, 404);
+
+		expect(await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountainPreview('t')).toEqual(
+			{
+				kind: 'not-found'
+			}
+		);
+	});
+
+	it('maps a refused token to an api-error', async () => {
+		const fetch = serving({ error: { code: 'PREVIEW_NOT_AUTHORIZED', message: 'x' } }, 401);
+
+		expect(await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountainPreview('t')).toEqual(
+			{
+				kind: 'api-error',
+				status: 401
+			}
+		);
+	});
+
+	it('maps a network failure to unreachable', async () => {
+		const fetch = stubFetch(async () => {
+			throw new TypeError('offline');
+		});
+
+		expect(await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountainPreview('t')).toEqual(
+			{
+				kind: 'unreachable'
+			}
+		);
+	});
+});
+
+const previewGrant = { token: 'abc:def', slug: 'draft-peak' };
+
+describe('startPreviewSession', () => {
+	it('posts the grant as JSON to this site, never in a URL', async () => {
+		const fetch = stubFetch(async () => new Response(null, { status: 204 }));
+
+		expect(await startPreviewSession(previewGrant, fetch)).toBe('started');
+
+		expect(requestedUrl(fetch)).toBe('/api/preview');
+		const init = requestedInit(fetch);
+		expect(init.method).toBe('POST');
+		expect(init.body).toBe(JSON.stringify(previewGrant));
+		expect(init.referrerPolicy).toBe('no-referrer');
+		expect(init.credentials).toBe('same-origin');
+		expect(requestedUrl(fetch)).not.toContain(previewGrant.token);
+	});
+
+	it('reports a refused grant', async () => {
+		const fetch = stubFetch(async () => new Response(null, { status: 400 }));
+
+		expect(await startPreviewSession(previewGrant, fetch)).toBe('rejected');
+	});
+
+	it.each([[500], [415], [405]])('reports a %i as a failure', async (status) => {
+		const fetch = stubFetch(async () => new Response(null, { status }));
+
+		expect(await startPreviewSession(previewGrant, fetch)).toBe('failed');
+	});
+
+	it('reports a network failure', async () => {
+		const fetch = stubFetch(async () => {
+			throw new TypeError('offline');
+		});
+
+		expect(await startPreviewSession(previewGrant, fetch)).toBe('failed');
 	});
 });

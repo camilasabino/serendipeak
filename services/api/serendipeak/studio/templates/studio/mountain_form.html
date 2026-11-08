@@ -14,6 +14,9 @@
 		{% if status %}
 			<div class="page-header__aside">
 				{% include "studio/components/status_badge.html" with status=status %}
+				{% if is_draft %}
+					<a class="button button--quiet" href="{% url 'studio:mountain_preview' mountain.slug %}" target="_blank" rel="noopener" data-saved-only aria-describedby="preview-note">Preview<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
+				{% endif %}
 			</div>
 		{% endif %}
 	</header>
@@ -22,6 +25,10 @@
 		<p class="lede">A new mountain starts as a draft. Add its camera with the camera editor, then publish it from the mountain page.</p>
 	{% else %}
 		<p class="lede">Saving does not change the status or the camera; <a href="{{ camera_editor_url }}" rel="noreferrer">edit the camera visually</a> after saving any other changes. Publish, unlist or list again from <a href="{% url 'studio:mountain_detail' mountain.slug %}">the mountain page</a>, which judges the saved mountain.{% if reasons and not is_draft %} <strong>It does not meet the publication rules:</strong> {{ reasons|join:" " }}{% endif %}</p>
+	{% endif %}
+
+	{% if is_draft and not is_new %}
+		<p class="panel__note" id="preview-note"><span data-when-saved>The preview shows the saved mountain, not what is typed below.</span><span data-when-unsaved hidden>The preview shows the saved mountain. Save your changes to see them in it.</span></p>
 	{% endif %}
 
 	{% include "studio/components/error_summary_forms.html" %}

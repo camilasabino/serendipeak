@@ -29,6 +29,36 @@ const guard = (form) => {
 
   const hasUnsavedEdits = () => unsavedOnLoad || signature(form) !== saved;
 
+  // A link that opens the saved mountain elsewhere is held back while the form has edits: the
+  // preview would show the old values and look like a bug.
+  const savedOnly = document.querySelectorAll("a[data-saved-only]");
+  const savedNote = document.querySelector("[data-when-saved]");
+  const unsavedNote = document.querySelector("[data-when-unsaved]");
+  const syncSavedOnly = () => {
+    const unsaved = hasUnsavedEdits();
+    savedOnly.forEach((link) => {
+      if (unsaved) {
+        link.setAttribute("aria-disabled", "true");
+      } else {
+        link.removeAttribute("aria-disabled");
+      }
+    });
+    if (savedNote && unsavedNote) {
+      savedNote.hidden = unsaved;
+      unsavedNote.hidden = !unsaved;
+    }
+  };
+  savedOnly.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (link.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+      }
+    });
+  });
+  form.addEventListener("input", syncSavedOnly);
+  form.addEventListener("change", syncSavedOnly);
+  syncSavedOnly();
+
   form.addEventListener("submit", (event) => {
     if (submitting) {
       event.preventDefault();

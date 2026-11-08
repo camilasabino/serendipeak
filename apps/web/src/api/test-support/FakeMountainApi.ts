@@ -1,14 +1,16 @@
 import type { DailyMountainResult, MountainResult, RandomMountainResult } from '../contract';
-import type { MountainApi } from '../MountainApi';
+import type { MountainApi, MountainPreviewApi } from '../MountainApi';
 
 export interface FakeMountainApiResults {
 	mountain?: MountainResult;
 	daily?: DailyMountainResult;
 	random?: RandomMountainResult;
+	preview?: MountainResult;
 }
 
-export class FakeMountainApi implements MountainApi {
+export class FakeMountainApi implements MountainApi, MountainPreviewApi {
 	readonly getMountainCalls: string[] = [];
+	readonly getMountainPreviewCalls: string[] = [];
 	getDailyMountainCalls = 0;
 	readonly getRandomMountainCalls: (string | undefined)[] = [];
 
@@ -17,6 +19,11 @@ export class FakeMountainApi implements MountainApi {
 	async getMountain(slug: string): Promise<MountainResult> {
 		this.getMountainCalls.push(slug);
 		return this.results.mountain ?? { kind: 'unreachable' };
+	}
+
+	async getMountainPreview(token: string): Promise<MountainResult> {
+		this.getMountainPreviewCalls.push(token);
+		return this.results.preview ?? { kind: 'unreachable' };
 	}
 
 	async getDailyMountain(): Promise<DailyMountainResult> {

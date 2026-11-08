@@ -5,6 +5,7 @@ from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
+from serendipeak.catalog.issue_preview_token import IssuePreviewToken
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.studio.access import StudioAccess, declare_access
 from serendipeak.studio.camera_views import CameraConfirmationView
@@ -15,6 +16,7 @@ from serendipeak.studio.mountain_views import (
     MountainWrites,
     NewMountainView,
 )
+from serendipeak.studio.preview_views import MountainPreviewView
 from serendipeak.studio.views import (
     LandingView,
     MountainDetailView,
@@ -35,6 +37,7 @@ def studio_urlpatterns(
     get_mountain_form_options: GetMountainFormOptions,
     writes: MountainWrites,
     change_camera: ChangeMountainCamera,
+    issue_preview: IssuePreviewToken,
     media_base_url: str,
     web_origin: str,
     max_photograph_bytes: int,
@@ -100,6 +103,18 @@ def studio_urlpatterns(
                 ),
             ),
             name="mountain_camera",
+        ),
+        path(
+            "mountains/<str:slug>/preview/",
+            declare_access(
+                StudioAccess.VIEWER,
+                MountainPreviewView.as_view(
+                    issue_preview=issue_preview,
+                    web_origin=web_origin,
+                    http_method_names=["get", "options"],
+                ),
+            ),
+            name="mountain_preview",
         ),
         path(
             "mountains/<str:slug>/publish/",

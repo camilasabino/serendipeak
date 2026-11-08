@@ -27,6 +27,7 @@ from serendipeak.catalog.errors import (
     UnknownCountries,
     UnknownMountain,
 )
+from serendipeak.catalog.get_mountain_preview import GetMountainPreview
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
@@ -186,6 +187,12 @@ class InMemoryMountainCatalogReader:
 
     def find_by_slug(self, slug):
         return self._mountains.get(slug)
+
+    def find_by_id(self, mountain_id):
+        return next(
+            (mountain for mountain in self._mountains.values() if mountain.id == mountain_id),
+            None,
+        )
 
 
 class InMemoryGeographyOptionsReader:
@@ -792,3 +799,8 @@ class FakeSourceImageFetcher:
             raise self.failures[url]
 
         return self.files[url]
+
+
+def unused_preview():
+    """A preview use case for routes under test that never reach it."""
+    return GetMountainPreview(InMemoryMountainCatalogReader(), object(), ManualClock(None))

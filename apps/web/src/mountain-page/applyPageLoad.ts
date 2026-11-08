@@ -14,5 +14,9 @@ export function applyPageLoad(
 		response.setHeader('Cache-Control', load.cacheControl);
 	}
 
+	if (load.noindex) {
+		response.setHeader('X-Robots-Tag', 'noindex');
+	}
+
 	return { props: { model: load.model } };
 }

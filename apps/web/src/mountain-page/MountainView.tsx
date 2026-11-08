@@ -4,18 +4,24 @@ import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
-import { DAILY_CUE, DAILY_EYEBROW, TODAY_LINK_LABEL } from './pageCopy';
+import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE, TODAY_LINK_LABEL } from './pageCopy';
 
 interface MountainViewProps {
 	mountain: Mountain;
 	daily: boolean;
+	preview?: boolean;
 }
 
-export function MountainView({ mountain, daily }: MountainViewProps) {
+export function MountainView({ mountain, daily, preview = false }: MountainViewProps) {
 	const { primaryImage, sources } = mountain;
 
 	return (
 		<div className={styles.sheet}>
+			{preview && (
+				<p className={styles.preview} role="note">
+					{PREVIEW_NOTICE}
+				</p>
+			)}
 			{!daily && (
 				<p className={styles.return}>
 					<Link href="/">{TODAY_LINK_LABEL}</Link>

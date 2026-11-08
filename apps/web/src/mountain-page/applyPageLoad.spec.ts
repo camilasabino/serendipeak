@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyPageLoad } from './applyPageLoad';
-import { failedLoad, NO_STORE } from './pageModel';
+import { contractFixture } from '../api/test-support/contractFixtures';
+import type { Mountain } from '../api/contract';
+import { failedLoad, NO_STORE, previewLoad } from './pageModel';
 
 function fakeResponse() {
 	return { statusCode: 200, setHeader: vi.fn() };
@@ -25,5 +27,15 @@ describe('applyPageLoad', () => {
 
 		expect(response.statusCode).toBe(404);
 		expect(response.setHeader).not.toHaveBeenCalled();
+	});
+
+	it('marks a preview private, uncached and unindexed', () => {
+		const response = fakeResponse();
+
+		applyPageLoad(response, previewLoad(contractFixture('mountain-complete.json') as Mountain));
+
+		expect(response.statusCode).toBe(200);
+		expect(response.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+		expect(response.setHeader).toHaveBeenCalledWith('X-Robots-Tag', 'noindex');
 	});
 });

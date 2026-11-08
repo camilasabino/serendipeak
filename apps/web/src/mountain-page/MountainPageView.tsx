@@ -9,6 +9,9 @@ export function MountainPageView({ model }: MountainPageProps) {
 		<>
 			<Head>
 				<title>{pageTitle(model)}</title>
+				{model.kind === 'mountain' && model.preview && (
+					<meta name="robots" content="noindex, nofollow" />
+				)}
 			</Head>
 			{renderBody(model)}
 		</>
@@ -18,7 +21,9 @@ export function MountainPageView({ model }: MountainPageProps) {
 function renderBody(model: MountainPageProps['model']) {
 	switch (model.kind) {
 		case 'mountain':
-			return <MountainView mountain={model.mountain} daily={false} />;
+			return (
+				<MountainView mountain={model.mountain} daily={false} preview={model.preview === true} />
+			);
 		case 'daily':
 			return <MountainView mountain={model.daily.mountain} daily />;
 		case 'error':
