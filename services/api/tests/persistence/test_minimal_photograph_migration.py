@@ -1,14 +1,13 @@
 import pytest
 from django.db import IntegrityError, connection, transaction
 
-from tests.support.catalog import load_seed_document
 from tests.support.migrations import (
     applied_head,
     historical_model,
     migrate_to,
     migrate_to_latest_discarding_catalog,
 )
-from tests.support.records import load_committed_catalog_at
+from tests.support.records import legacy_image_records, load_fixture_catalog_at
 
 BEFORE = ("catalog", "0010_renditions_share_version")
 AFTER = ("catalog", "0011_minimal_photograph")
@@ -23,7 +22,7 @@ def back_to_the_latest_schema():
 
 
 def raw_images():
-    return {raw["slug"]: raw["image"] for raw in load_seed_document()["content"]["mountains"]}
+    return legacy_image_records()
 
 
 def image_columns():
@@ -45,7 +44,7 @@ def migrated_images():
 
 
 def test_the_credit_of_each_of_the_73_photographs_becomes_its_author():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
 
     images = migrated_images()
 
@@ -57,7 +56,7 @@ def test_the_credit_of_each_of_the_73_photographs_becomes_its_author():
 
 
 def test_the_other_credits_of_the_73_photographs_and_their_files_are_kept():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
 
     images = migrated_images()
 
@@ -71,7 +70,7 @@ def test_the_other_credits_of_the_73_photographs_and_their_files_are_kept():
 
 
 def test_the_photograph_row_keeps_only_what_visitors_and_editors_use():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
 
     migrate_to(AFTER)
 
@@ -94,7 +93,7 @@ def test_the_photograph_row_keeps_only_what_visitors_and_editors_use():
 
 
 def test_a_photograph_needs_neither_a_source_page_nor_a_license_but_a_license_url_needs_its_name():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
     migrate_to(AFTER)
     model = historical_model(AFTER, "MountainImageRecord")
 
@@ -113,7 +112,7 @@ def test_a_photograph_needs_neither_a_source_page_nor_a_license_but_a_license_ur
 
 
 def test_reversing_restores_the_credit_and_leaves_the_dropped_records_empty():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
     migrate_to(AFTER)
 
     migrate_to(BEFORE)
@@ -128,7 +127,7 @@ def test_reversing_restores_the_credit_and_leaves_the_dropped_records_empty():
 
 
 def test_reversing_fails_and_changes_nothing_while_a_photograph_has_no_source_page():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
     migrate_to(AFTER)
     model = historical_model(AFTER, "MountainImageRecord")
     model.objects.filter(mountain__slug="aconcagua").update(source_page_url=None)

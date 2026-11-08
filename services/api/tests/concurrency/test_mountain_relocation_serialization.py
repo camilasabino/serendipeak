@@ -21,7 +21,7 @@ from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraSt
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from tests.studio.support import form_payload, hidden_inputs
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.concurrency import WAIT_SECONDS, run_while_a_change_holds_the_lock
 from tests.support.users import create_user
 
@@ -74,7 +74,7 @@ def change_url(entry):
 
 @pytest.fixture
 def editor_client():
-    DjangoCatalogStore().load(catalog_seed(ACTIVE, FRAMED_DRAFT, CAMERALESS_DRAFT, INACTIVE))
+    DjangoCatalogStore().load(catalog_of(ACTIVE, FRAMED_DRAFT, CAMERALESS_DRAFT, INACTIVE))
     client = Client()
     client.force_login(create_user("editor"))
 

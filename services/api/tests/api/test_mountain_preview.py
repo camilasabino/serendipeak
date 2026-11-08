@@ -10,7 +10,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.draft_mountain_deletion_store import DjangoDraftMountainDeletionStore
 from serendipeak.tokens.signed_preview_tokens import SignedPreviewTokens
-from tests.support.catalog import catalog_mountain, catalog_seed, committed_seed_with_media
+from tests.support.catalog import catalog_mountain, catalog_of, fixture_catalog_with_media
 from tests.support.contract_fixtures import load_fixture
 
 URL = "/api/v1/previews/mountain"
@@ -28,7 +28,7 @@ PUBLISHED = catalog_mountain("published-peak")
 @pytest.fixture
 def catalog(db):
     DjangoCatalogStore().load(
-        catalog_seed(*committed_seed_with_media().mountains, COMPLETE, BARE, PUBLISHED)
+        catalog_of(*fixture_catalog_with_media().mountains, COMPLETE, BARE, PUBLISHED)
     )
 
 

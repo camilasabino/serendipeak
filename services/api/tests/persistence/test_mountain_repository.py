@@ -5,7 +5,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.django_db
 
@@ -16,7 +16,7 @@ DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 
 @pytest.fixture
 def repository():
-    DjangoCatalogStore().load(catalog_seed(WITH_IMAGE, WITHOUT_IMAGE, DRAFT))
+    DjangoCatalogStore().load(catalog_of(WITH_IMAGE, WITHOUT_IMAGE, DRAFT))
     return DjangoMountainRepository()
 
 

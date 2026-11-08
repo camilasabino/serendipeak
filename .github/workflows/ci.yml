@@ -118,43 +118,6 @@ jobs:
       - name: Apply migrations
         run: uv run python manage.py migrate --noinput
 
-      - name: Bootstrap catalog
-        run: uv run python manage.py bootstrap_catalog
-
-      - name: Check catalog
-        run: uv run python manage.py check_catalog
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-
-      - name: Verify the live API against the frozen contract
-        id: live-api
-        env:
-          APP_ENV: production
-          MEDIA_STORE: s3
-          MEDIA_PUBLIC_BASE_URL: https://media.serendipeak.test
-          MEDIA_S3_ENDPOINT_URL: https://r2.serendipeak.test
-          MEDIA_S3_ACCESS_KEY_ID: ci-only-access-key
-          MEDIA_S3_SECRET_ACCESS_KEY: ci-only-secret-key
-          MEDIA_PUBLIC_BUCKET: ci-photographs-public
-          MEDIA_ORIGINALS_BUCKET: ci-photographs-originals
-          API_BASE_URL: http://127.0.0.1:8000
-        run: |
-          uv run python manage.py runserver 127.0.0.1:8000 --noreload > "$RUNNER_TEMP/api.log" 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2> /dev/null || true' EXIT
-          for attempt in $(seq 1 30); do
-            curl --silent --fail "$API_BASE_URL/healthz" > /dev/null && break
-            sleep 1
-          done
-          # The CI database is discarded with the job, so persisting today's discovery is safe.
-          node ../../scripts/verify-api.mjs "$API_BASE_URL" --include-stateful-today
-
-      - name: Show the API server log
-        if: failure() && steps.live-api.outcome == 'failure'
-        run: cat "$RUNNER_TEMP/api.log"
-
       - name: Test
         run: uv run pytest
 

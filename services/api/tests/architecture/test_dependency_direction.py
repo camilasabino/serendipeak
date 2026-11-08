@@ -16,10 +16,7 @@ HTTP_CLIENT_MODULES = (
     "http.client",
     "aiohttp",
 )
-# Only the source fetcher downloads, through the standard library's urllib transport.
-HTTP_CLIENT_ALLOWED_BY_FILE = {
-    "serendipeak/media/http_source_fetcher.py": ("urllib.request", "http.client"),
-}
+HTTP_CLIENT_ALLOWED_BY_FILE: dict[str, tuple[str, ...]] = {}
 OFFLINE_TOOLING_MODULES = ("tools", "yaml")
 MEDIA_VENDOR_MODULES = ("PIL", "boto3", "botocore")
 DYNAMIC_IMPORT_CALLS = ("import_module", "__import__")
@@ -90,7 +87,7 @@ PERMITTED_BY_PACKAGE = {
         "serendipeak.catalog",
         "serendipeak.errors",
     ),
-    "tools": ("psycopg", "yaml", "serendipeak.catalog.bootstrap.seed"),
+    "tools": ("psycopg", "yaml"),
 }
 FORBIDDEN_BY_PACKAGE = {
     "serendipeak.persistence": (
@@ -285,9 +282,9 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/accounts/change_user_access.py" in files
     assert "serendipeak/persistence/user_store.py" in files
     assert "serendipeak/cli/management/commands/create_editor.py" in files
-    assert "serendipeak/catalog/bootstrap/seed.py" in files
+    assert "serendipeak/catalog/bootstrap/catalog_snapshot.py" in files
     assert "serendipeak/persistence/models.py" in files
-    assert "serendipeak/cli/management/commands/bootstrap_catalog.py" in files
+    assert "serendipeak/cli/management/commands/load_catalog_snapshot.py" in files
     assert "serendipeak/httpapi/views.py" in files
     assert "serendipeak/studio/middleware.py" in files
     assert "serendipeak/accounts/login_throttle.py" in files
@@ -295,7 +292,7 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/discovery/get_todays_mountain.py" in files
     assert "serendipeak/discovery/get_random_mountain.py" in files
     assert "serendipeak/persistence/daily_discovery_repository.py" in files
-    assert "tools/export_legacy_catalog.py" in files
+    assert "tools/generate_geography_reference.py" in files
     assert "config/health.py" in files
     assert "serendipeak/persistence/mountain_status_store.py" in files
     assert "serendipeak/catalog/publish_mountain.py" in files
@@ -303,9 +300,6 @@ def test_scan_covers_the_application_packages():
     assert "serendipeak/media/pillow_processor.py" in files
     assert "serendipeak/media/s3_media_store.py" in files
     assert "serendipeak/media/filesystem_media_store.py" in files
-    assert "serendipeak/media/http_source_fetcher.py" in files
-    assert "serendipeak/persistence/photograph_media_writer.py" in files
-    assert "serendipeak/catalog/bootstrap/materialize_photographs.py" in files
 
 
 @pytest.mark.parametrize("relative_path", source_files())
@@ -409,9 +403,9 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak.persistence.catalog_store imports httpx",
         ),
         (
-            "serendipeak/cli/management/commands/bootstrap_catalog.py",
-            "from tools.export_legacy_catalog import export",
-            "serendipeak.cli.management.commands.bootstrap_catalog imports tools",
+            "serendipeak/cli/management/commands/load_catalog_snapshot.py",
+            "from tools.generate_geography_reference import main",
+            "serendipeak.cli.management.commands.load_catalog_snapshot imports tools",
         ),
         (
             "config/composition.py",
@@ -465,7 +459,7 @@ def test_imports_follow_the_dependency_direction(relative_path):
         ),
         (
             "serendipeak/httpapi/views.py",
-            "from serendipeak.media.http_source_fetcher import HttpSourceImageFetcher",
+            "from serendipeak.media.s3_media_store import S3MediaStore",
             "serendipeak.httpapi.views imports serendipeak.media",
         ),
         (
@@ -527,24 +521,24 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "serendipeak.discovery.clock imports django.utils",
         ),
         (
-            "tools/export_legacy_catalog.py",
+            "tools/generate_geography_reference.py",
             "from serendipeak.catalog.entities import Mountain",
-            "tools.export_legacy_catalog imports serendipeak.catalog.entities",
+            "tools.generate_geography_reference imports serendipeak.catalog.entities",
         ),
         (
-            "tools/export_legacy_catalog.py",
+            "tools/generate_geography_reference.py",
             "from serendipeak.persistence import models",
-            "tools.export_legacy_catalog imports serendipeak.persistence",
+            "tools.generate_geography_reference imports serendipeak.persistence",
         ),
         (
-            "tools/export_legacy_catalog.py",
+            "tools/generate_geography_reference.py",
             "import django",
-            "tools.export_legacy_catalog imports django",
+            "tools.generate_geography_reference imports django",
         ),
         (
-            "tools/export_legacy_catalog.py",
+            "tools/generate_geography_reference.py",
             "import httpx",
-            "tools.export_legacy_catalog imports httpx",
+            "tools.generate_geography_reference imports httpx",
         ),
         (
             "serendipeak/cli/management/commands/check_catalog.py",
@@ -621,26 +615,6 @@ def test_imports_follow_the_dependency_direction(relative_path):
             "from django.conf import settings",
             "serendipeak.media.s3_media_store imports django.conf",
         ),
-        (
-            "serendipeak/media/caching_source_fetcher.py",
-            "import urllib.request",
-            "serendipeak.media.caching_source_fetcher imports urllib.request",
-        ),
-        (
-            "serendipeak/catalog/bootstrap/materialize_photographs.py",
-            "from urllib.request import urlopen",
-            "serendipeak.catalog.bootstrap.materialize_photographs imports urllib.request",
-        ),
-        (
-            "serendipeak/media/http_source_fetcher.py",
-            "import httpx",
-            "serendipeak.media.http_source_fetcher imports httpx",
-        ),
-        (
-            "serendipeak/media/http_source_fetcher.py",
-            "import urllib3",
-            "serendipeak.media.http_source_fetcher imports urllib3",
-        ),
     ],
 )
 def test_detects_forbidden_imports(relative_path, source, expected):
@@ -659,7 +633,7 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         ("serendipeak/cli/management/commands/check_catalog.py", "from config import composition"),
         ("serendipeak/catalog/entities.py", "from dataclasses import dataclass"),
         ("serendipeak/catalog/__init__.py", "from serendipeak import errors"),
-        ("serendipeak/catalog/bootstrap/seed.py", "from ..entities import Mountain"),
+        ("serendipeak/catalog/bootstrap/catalog_snapshot.py", "from ..entities import Mountain"),
         ("serendipeak/discovery/selection.py", "from serendipeak.catalog.entities import Mountain"),
         ("serendipeak/errors.py", "from __future__ import annotations"),
         ("serendipeak/discovery/clock.py", "from datetime import UTC, date, datetime"),
@@ -668,12 +642,6 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         ("serendipeak/persistence/mapping.py", "from serendipeak.discovery import entities"),
         ("serendipeak/httpapi/views.py", "from serendipeak.discovery import get_todays_mountain"),
         ("config/composition.py", "import secrets"),
-        ("tools/export_legacy_catalog.py", "import os\nimport subprocess\nimport yaml"),
-        ("tools/export_legacy_catalog.py", "from psycopg.rows import dict_row"),
-        (
-            "tools/export_legacy_catalog.py",
-            "from serendipeak.catalog.bootstrap.seed import content_sha256",
-        ),
         ("serendipeak/cli/apps.py", "from django.apps import AppConfig"),
         (
             "serendipeak/cli/management/commands/check_catalog.py",
@@ -687,10 +655,6 @@ def test_detects_forbidden_imports(relative_path, source, expected):
         (
             "config/composition.py",
             "from serendipeak.media.s3_media_store import S3MediaStore",
-        ),
-        (
-            "serendipeak/media/http_source_fetcher.py",
-            "import urllib.request\nfrom http.client import HTTPException",
         ),
     ],
 )
@@ -721,7 +685,7 @@ def test_allows_permitted_imports(relative_path, source):
     [
         "serendipeak/discovery/get_todays_mountain.py",
         "serendipeak/catalog/get_mountain_by_slug.py",
-        "serendipeak/catalog/bootstrap/bootstrap_catalog.py",
+        "serendipeak/catalog/bootstrap/load_catalog_snapshot.py",
     ],
 )
 def test_use_cases_cannot_read_the_clock_or_generate_identifiers(relative_path, source, expected):

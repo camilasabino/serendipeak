@@ -14,8 +14,8 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
+    catalog_of,
+    fixture_catalog,
     primary_image,
 )
 from tests.support.fakes import InMemoryCatalogStore
@@ -65,7 +65,7 @@ def test_a_new_store_holds_no_catalog(store):
 
 def test_load_preserves_every_row_and_orders_the_snapshot(store):
     later = DAY + datetime.timedelta(days=1)
-    seed = catalog_seed(
+    catalog = catalog_of(
         MONTA,
         SPARSE_DRAFT,
         INACTIVE_UNFRAMED,
@@ -75,7 +75,7 @@ def test_load_preserves_every_row_and_orders_the_snapshot(store):
         discoveries=[catalog_discovery(later, MONTA), catalog_discovery(DAY, ACONCAGUA)],
     )
 
-    store.load(seed)
+    store.load(catalog)
 
     snapshot = store.snapshot()
     assert [entry.mountain.slug for entry in snapshot.mountains] == [
@@ -86,21 +86,21 @@ def test_load_preserves_every_row_and_orders_the_snapshot(store):
         "old-peak",
         "unsourced-peak",
     ]
-    assert set(snapshot.mountains) == set(seed.mountains)
+    assert set(snapshot.mountains) == set(catalog.mountains)
     assert snapshot.discoveries == (
         catalog_discovery(DAY, ACONCAGUA),
         catalog_discovery(later, MONTA),
     )
 
 
-def test_load_round_trips_the_committed_seed(store):
-    seed = committed_seed()
+def test_load_round_trips_a_full_catalog(store):
+    catalog = fixture_catalog()
 
-    store.load(seed)
+    store.load(catalog)
 
     snapshot = store.snapshot()
-    assert snapshot.mountains == seed.mountains
-    assert snapshot.discoveries == seed.discoveries
+    assert snapshot.mountains == catalog.mountains
+    assert snapshot.discoveries == catalog.discoveries
 
 
 def test_float_values_round_trip_exactly(store):
@@ -115,30 +115,30 @@ def test_float_values_round_trip_exactly(store):
         ),
     )
 
-    store.load(catalog_seed(entry))
+    store.load(catalog_of(entry))
 
     assert store.snapshot().mountains == (entry,)
 
 
 @pytest.mark.parametrize(
-    "seed",
+    "catalog",
     [
-        catalog_seed(ACONCAGUA),
-        catalog_seed(catalog_mountain("mont-blanc", id=ACONCAGUA.mountain.id)),
-        catalog_seed(catalog_mountain("aconcagua", id=MONTA.mountain.id)),
-        catalog_seed(MONT_BLANC, discoveries=[catalog_discovery(DAY, MONT_BLANC)]),
-        catalog_seed(
+        catalog_of(ACONCAGUA),
+        catalog_of(catalog_mountain("mont-blanc", id=ACONCAGUA.mountain.id)),
+        catalog_of(catalog_mountain("aconcagua", id=MONTA.mountain.id)),
+        catalog_of(MONT_BLANC, discoveries=[catalog_discovery(DAY, MONT_BLANC)]),
+        catalog_of(
             MONT_BLANC,
             discoveries=[catalog_discovery(DAY + datetime.timedelta(days=1), MONT_BLANC)],
         ),
     ],
     ids=["same-rows", "same-id", "same-slug", "same-discovery-date", "disjoint-rows"],
 )
-def test_load_refuses_any_non_empty_store_and_changes_nothing(store, seed):
-    store.load(catalog_seed(ACONCAGUA, discoveries=[catalog_discovery(DAY, ACONCAGUA)]))
+def test_load_refuses_any_non_empty_store_and_changes_nothing(store, catalog):
+    store.load(catalog_of(ACONCAGUA, discoveries=[catalog_discovery(DAY, ACONCAGUA)]))
     before = store.snapshot()
 
     with pytest.raises(CatalogAlreadyPopulated):
-        store.load(seed)
+        store.load(catalog)
 
     assert store.snapshot() == before

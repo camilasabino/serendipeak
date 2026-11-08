@@ -11,7 +11,12 @@ from serendipeak.catalog.publication import (
     publication_violations,
     unsafe_public_links,
 )
-from tests.support.catalog import committed_seed, committed_seed_with_media, mountain, primary_image
+from tests.support.catalog import (
+    fixture_catalog,
+    fixture_catalog_with_media,
+    mountain,
+    primary_image,
+)
 
 CAMERA = mountain().camera
 
@@ -20,16 +25,16 @@ def test_a_complete_mountain_is_publishable():
     assert publication_violations(mountain()) == ()
 
 
-def test_every_materialized_committed_seed_mountain_is_publishable():
+def test_every_fixture_mountain_with_media_is_publishable():
     assert [
         (entry.mountain.slug, publication_violations(entry.mountain))
-        for entry in committed_seed_with_media().mountains
+        for entry in fixture_catalog_with_media().mountains
         if publication_violations(entry.mountain)
     ] == []
 
 
-def test_a_committed_seed_mountain_only_lacks_the_media_that_materialization_adds():
-    assert {publication_violations(entry.mountain) for entry in committed_seed().mountains} == {
+def test_a_fixture_mountain_only_lacks_the_media_that_an_upload_adds():
+    assert {publication_violations(entry.mountain) for entry in fixture_catalog().mountains} == {
         (PublicationViolation.IMAGE_MEDIA_MISSING,)
     }
 

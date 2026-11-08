@@ -5,7 +5,7 @@ import pytest
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.discovery_history_reader import DjangoDiscoveryHistoryReader
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 from tests.support.fakes import InMemoryDiscoveryHistoryReader, discovery_entry
 
 ACONCAGUA = catalog_mountain("aconcagua")
@@ -28,7 +28,7 @@ def reader_holding(request):
         )
 
     def arrange(*discoveries):
-        DjangoCatalogStore().load(catalog_seed(ACONCAGUA, RETIRED, discoveries=discoveries))
+        DjangoCatalogStore().load(catalog_of(ACONCAGUA, RETIRED, discoveries=discoveries))
 
         return DjangoDiscoveryHistoryReader()
 

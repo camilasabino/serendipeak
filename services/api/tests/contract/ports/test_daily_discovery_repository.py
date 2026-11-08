@@ -8,7 +8,7 @@ from serendipeak.discovery.entities import DailyMountain, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 from tests.support.fakes import InMemoryDailyDiscoveryRepository
 
 ACONCAGUA = catalog_mountain("aconcagua")
@@ -43,7 +43,7 @@ def repository_holding(request):
         )
 
     def arrange(*discoveries):
-        DjangoCatalogStore().load(catalog_seed(*CATALOG, discoveries=discoveries))
+        DjangoCatalogStore().load(catalog_of(*CATALOG, discoveries=discoveries))
         return DjangoDailyDiscoveryRepository()
 
     return arrange

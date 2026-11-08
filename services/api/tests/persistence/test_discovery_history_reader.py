@@ -4,7 +4,7 @@ import pytest
 
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.discovery_history_reader import DjangoDiscoveryHistoryReader
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.django_db
 
@@ -17,7 +17,7 @@ def load(count):
         catalog_discovery(DAY - datetime.timedelta(days=offset), MOUNTAINS[offset % len(MOUNTAINS)])
         for offset in range(count)
     )
-    DjangoCatalogStore().load(catalog_seed(*MOUNTAINS, discoveries=discoveries))
+    DjangoCatalogStore().load(catalog_of(*MOUNTAINS, discoveries=discoveries))
 
 
 @pytest.mark.parametrize("count", [0, 1, 366])

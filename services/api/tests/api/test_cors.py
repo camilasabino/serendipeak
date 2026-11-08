@@ -5,7 +5,7 @@ from django.conf import settings
 
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import committed_seed_with_media
+from tests.support.catalog import fixture_catalog_with_media
 from tests.support.contract_fixtures import load_fixture
 
 pytestmark = pytest.mark.django_db
@@ -21,7 +21,7 @@ CONTRACT_PATHS = [
 
 @pytest.fixture
 def catalog():
-    DjangoCatalogStore().load(committed_seed_with_media())
+    DjangoCatalogStore().load(fixture_catalog_with_media())
 
 
 def vary_tokens(response):

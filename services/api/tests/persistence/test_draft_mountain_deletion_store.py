@@ -15,7 +15,7 @@ from serendipeak.persistence.models import (
     MountainRecord,
     MountainRegionRecord,
 )
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.regions import region_path
 
 pytestmark = pytest.mark.django_db
@@ -29,7 +29,7 @@ ID = DRAFT.mountain.id
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(DRAFT, OTHER_DRAFT, ACTIVE))
+    DjangoCatalogStore().load(catalog_of(DRAFT, OTHER_DRAFT, ACTIVE))
     MountainCountryRecord.objects.get_or_create(mountain_id=ID, country_id="CL")
 
     return DjangoDraftMountainDeletionStore()

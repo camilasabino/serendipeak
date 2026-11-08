@@ -10,7 +10,7 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.models import DailyDiscoveryRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.fakes import FixedClock
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -36,7 +36,7 @@ def run_together(call):
 
 @pytest.fixture
 def catalog():
-    DjangoCatalogStore().load(catalog_seed(*MOUNTAINS))
+    DjangoCatalogStore().load(catalog_of(*MOUNTAINS))
 
 
 @pytest.mark.parametrize("attempt", range(3))

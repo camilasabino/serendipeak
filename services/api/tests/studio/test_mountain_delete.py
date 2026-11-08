@@ -13,7 +13,7 @@ from serendipeak.persistence.models import (
     MountainRecord,
 )
 from tests.studio.support import csrf_token_of, text_of
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 from tests.support.geography import countries
 
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, countries=countries("AR", "CL"))
@@ -26,7 +26,7 @@ LIST_URL = reverse("studio:mountain_list")
 @pytest.fixture
 def catalog(db):
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             DRAFT,
             SHOWN,
             PUBLISHED,

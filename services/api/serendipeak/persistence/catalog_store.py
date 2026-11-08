@@ -1,7 +1,7 @@
 from django.db import connection, transaction
 from django.db.models.functions import Collate
 
-from serendipeak.catalog.bootstrap.ports import CatalogSeed, CatalogSnapshot
+from serendipeak.catalog.bootstrap.ports import CatalogSnapshot
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
 from serendipeak.catalog.regions import build_region_path
 from serendipeak.persistence.errors import translate_database_errors
@@ -26,13 +26,13 @@ from serendipeak.persistence.models import (
 
 
 class DjangoCatalogStore:
-    def load(self, seed: CatalogSeed) -> None:
-        regions = [region_record(region) for region in seed.regions]
-        region_ids = {region.slug: region.id for region in seed.regions}
-        mountains = [mountain_record(entry, region_ids) for entry in seed.mountains]
-        links = [link for entry in seed.mountains for link in country_link_records(entry)]
-        images = [record for entry in seed.mountains if (record := image_record(entry))]
-        discoveries = [discovery_record(discovery) for discovery in seed.discoveries]
+    def load(self, catalog: CatalogSnapshot) -> None:
+        regions = [region_record(region) for region in catalog.regions]
+        region_ids = {region.slug: region.id for region in catalog.regions}
+        mountains = [mountain_record(entry, region_ids) for entry in catalog.mountains]
+        links = [link for entry in catalog.mountains for link in country_link_records(entry)]
+        images = [record for entry in catalog.mountains if (record := image_record(entry))]
+        discoveries = [discovery_record(discovery) for discovery in catalog.discoveries]
 
         # Foreign keys are deferred, so their violations surface when atomic() commits:
         # the translation has to enclose the whole block, not sit inside it.

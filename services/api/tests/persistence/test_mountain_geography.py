@@ -8,7 +8,7 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.models import MountainCountryRecord, MountainRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.geography import continent, countries, reference
 
 pytestmark = pytest.mark.django_db
@@ -17,7 +17,7 @@ ALL_CODES = sorted(reference().countries)
 
 
 def load(*entries):
-    DjangoCatalogStore().load(catalog_seed(*entries))
+    DjangoCatalogStore().load(catalog_of(*entries))
 
 
 @pytest.mark.parametrize("how_many", [0, 1, 3, 12, 40])

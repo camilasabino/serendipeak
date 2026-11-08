@@ -2,7 +2,7 @@ import pytest
 
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.geography_options_reader import DjangoGeographyOptionsReader
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.fakes import InMemoryGeographyOptionsReader
 from tests.support.geography import reference
 from tests.support.regions import region_path, regions_of
@@ -19,7 +19,7 @@ def reader_holding(request):
 
     def arrange(*paths):
         DjangoCatalogStore().load(
-            catalog_seed(
+            catalog_of(
                 *(
                     catalog_mountain(f"peak-{index}", region=path)
                     for index, path in enumerate(paths)

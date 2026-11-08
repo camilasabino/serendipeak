@@ -10,7 +10,7 @@ from serendipeak.persistence.models import (
     MountainRecord,
 )
 from tests.studio.support import csrf_token_of, form_payload, text_of, upload
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.regions import region_path
 
 pytestmark = pytest.mark.usefixtures("media_store")
@@ -114,7 +114,7 @@ def test_a_draft_can_be_created_without_a_photograph(editor_client, media_store)
 
 def test_the_region_is_chosen_from_the_whole_taxonomy(editor_client, db):
     DjangoCatalogStore().load(
-        catalog_seed(catalog_mountain("other-peak", region=region_path("Alps", "Pennine Alps")))
+        catalog_of(catalog_mountain("other-peak", region=region_path("Alps", "Pennine Alps")))
     )
     page = editor_client.get(NEW_URL)
     assert "Alps › Pennine Alps" in text_of(page)
@@ -153,7 +153,7 @@ def test_every_error_is_shown_at_once_and_what_was_typed_is_kept(editor_client):
 
 
 def test_a_taken_slug_is_a_field_error_and_the_typed_values_stay(editor_client, db):
-    DjangoCatalogStore().load(catalog_seed(catalog_mountain("new-peak")))
+    DjangoCatalogStore().load(catalog_of(catalog_mountain("new-peak")))
 
     response = create(editor_client, name="Another Peak")
     body = text_of(response)
@@ -236,7 +236,7 @@ def test_the_list_offers_the_creation_to_an_editor_and_not_to_a_viewer(
 
 
 def test_a_mountain_called_new_keeps_its_own_address(editor_client, db):
-    DjangoCatalogStore().load(catalog_seed(catalog_mountain("new")))
+    DjangoCatalogStore().load(catalog_of(catalog_mountain("new")))
 
     assert editor_client.get(detail_url("new")).status_code == 200
     assert reverse("studio:mountain_new") == "/studio/new-mountain/"

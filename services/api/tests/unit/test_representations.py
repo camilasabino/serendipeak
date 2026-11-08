@@ -11,7 +11,7 @@ from serendipeak.httpapi.renderers import ContractJSONRenderer
 from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
 from tests.support.catalog import (
     bare_mountain,
-    committed_mountain,
+    fixture_mountain,
     media_of,
     mountain,
     photograph_media,
@@ -42,8 +42,8 @@ def rendered(representation):
 @pytest.mark.parametrize(
     ("entity", "fixture"),
     [
-        (committed_mountain("aconcagua"), "mountain-complete.json"),
-        (committed_mountain("mount-olympus"), "mountain-sparse.json"),
+        (fixture_mountain("aconcagua"), "mountain-complete.json"),
+        (fixture_mountain("mount-olympus"), "mountain-sparse.json"),
         (bare_mountain(), "mountain-minimal.json"),
     ],
 )
@@ -62,9 +62,7 @@ def test_the_representation_matches_the_frozen_fixture_except_the_approved_diver
 
 
 def test_the_daily_representation_matches_the_frozen_fixture():
-    daily = DailyMountain(
-        date=datetime.date(2026, 10, 12), mountain=committed_mountain("aconcagua")
-    )
+    daily = DailyMountain(date=datetime.date(2026, 10, 12), mountain=fixture_mountain("aconcagua"))
 
     owned = replace(daily, mountain=with_media_of(daily.mountain))
 

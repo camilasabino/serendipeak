@@ -5,7 +5,7 @@ import pytest
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mountain_catalog_reader import DjangoMountainCatalogReader
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.regions import region_path
 
 pytestmark = pytest.mark.django_db
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.django_db
 def populate(count):
     statuses = list(MountainStatus)
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             *(
                 catalog_mountain(
                     f"peak-{index}",

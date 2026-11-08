@@ -8,7 +8,7 @@ from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.daily_discovery_repository import DjangoDailyDiscoveryRepository
 from serendipeak.persistence.models import DailyDiscoveryRecord
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 
 DAY = datetime.date(2026, 10, 20)
 NEXT_DAY = DAY + datetime.timedelta(days=1)
@@ -19,7 +19,7 @@ FOREIGN_KEY_VIOLATION = "23503"
 
 def arrange():
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             ACONCAGUA,
             DENALI,
             discoveries=(

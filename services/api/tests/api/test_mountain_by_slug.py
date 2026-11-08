@@ -17,8 +17,8 @@ from tests.support.catalog import (
     UPDATED_AT,
     bare_mountain,
     catalog_mountain,
-    catalog_seed,
-    committed_seed_with_media,
+    catalog_of,
+    fixture_catalog_with_media,
     media_of,
 )
 from tests.support.contract_fixtures import load_fixture, served_by_serendipeak
@@ -38,7 +38,7 @@ def catalog(db):
     )
     draft = catalog_mountain("draft-peak", status=MountainStatus.DRAFT)
 
-    DjangoCatalogStore().load(catalog_seed(*committed_seed_with_media().mountains, bare, draft))
+    DjangoCatalogStore().load(catalog_of(*fixture_catalog_with_media().mountains, bare, draft))
 
 
 def body(response):
@@ -223,7 +223,7 @@ GEOGRAPHY_PEAKS = [
 @pytest.fixture
 def geography_catalog(db):
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             *(
                 catalog_mountain(slug, continent=continent(code), countries=countries(*codes))
                 for slug, code, codes in GEOGRAPHY_PEAKS

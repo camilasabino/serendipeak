@@ -19,8 +19,8 @@ from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,
-    catalog_seed,
-    committed_seed_with_media,
+    catalog_of,
+    fixture_catalog_with_media,
     media_of,
 )
 from tests.support.contract_fixtures import load_fixture, served_by_serendipeak
@@ -63,13 +63,13 @@ def on_day():
 
 @pytest.fixture
 def catalog(db):
-    seed = committed_seed_with_media()
-    aconcagua = next(entry for entry in seed.mountains if entry.mountain.slug == "aconcagua")
-    history = [discovery for discovery in seed.discoveries if discovery.date != FIXTURE_DAY]
+    catalog = fixture_catalog_with_media()
+    aconcagua = next(entry for entry in catalog.mountains if entry.mountain.slug == "aconcagua")
+    history = [discovery for discovery in catalog.discoveries if discovery.date != FIXTURE_DAY]
 
     DjangoCatalogStore().load(
-        catalog_seed(
-            *seed.mountains,
+        catalog_of(
+            *catalog.mountains,
             discoveries=(*history, catalog_discovery(FIXTURE_DAY, aconcagua)),
         )
     )
@@ -149,7 +149,7 @@ def test_no_active_mountain_answers_no_eligible_without_writing(
     caplog,
 ):
     DjangoCatalogStore().load(
-        catalog_seed(catalog_mountain("old-peak", status=MountainStatus.INACTIVE))
+        catalog_of(catalog_mountain("old-peak", status=MountainStatus.INACTIVE))
     )
     on_day(NEW_DAY)
 

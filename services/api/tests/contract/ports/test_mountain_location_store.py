@@ -8,7 +8,7 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mapping import to_mountain
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
-from tests.support.catalog import catalog_mountain, catalog_seed, mountain
+from tests.support.catalog import catalog_mountain, catalog_of, mountain
 from tests.support.fakes import InMemoryMountainLocationStore
 
 pytestmark = pytest.mark.django_db
@@ -48,7 +48,7 @@ def arranged(request):
         return Arrangement(store, store.mountain)
 
     request.getfixturevalue("db")
-    DjangoCatalogStore().load(catalog_seed(*CATALOG))
+    DjangoCatalogStore().load(catalog_of(*CATALOG))
 
     return Arrangement(
         DjangoMountainLocationStore(),

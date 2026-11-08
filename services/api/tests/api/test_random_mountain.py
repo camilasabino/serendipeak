@@ -18,8 +18,8 @@ from serendipeak.persistence.models import DailyDiscoveryRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from tests.support.catalog import (
     catalog_mountain,
-    catalog_seed,
-    committed_seed_with_media,
+    catalog_of,
+    fixture_catalog_with_media,
     media_of,
 )
 from tests.support.contract_fixtures import (
@@ -72,13 +72,13 @@ def fresh_pick_index():
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(committed_seed_with_media())
+    DjangoCatalogStore().load(fixture_catalog_with_media())
 
 
 @pytest.fixture
 def small_catalog(db):
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             catalog_mountain("alpha"),
             catalog_mountain("bravo"),
             catalog_mountain("charlie"),
@@ -179,7 +179,7 @@ def test_the_exclusion_is_not_normalized_and_never_reaches_the_database(
 
 def test_the_sole_active_mountain_is_served_even_when_excluded(db, client):
     DjangoCatalogStore().load(
-        catalog_seed(
+        catalog_of(
             catalog_mountain("alpha"),
             catalog_mountain("retired-peak", status=MountainStatus.INACTIVE),
         )
@@ -195,7 +195,7 @@ def test_no_active_mountain_answers_no_eligible_with_one_query(
     db, client, django_assert_num_queries
 ):
     DjangoCatalogStore().load(
-        catalog_seed(catalog_mountain("old-peak", status=MountainStatus.INACTIVE))
+        catalog_of(catalog_mountain("old-peak", status=MountainStatus.INACTIVE))
     )
 
     with django_assert_num_queries(1):

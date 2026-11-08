@@ -17,7 +17,7 @@ from tests.support.catalog import (
     UPDATED_AT,
     bare_mountain,
     catalog_mountain,
-    catalog_seed,
+    catalog_of,
     photograph_media,
     primary_image,
 )
@@ -33,7 +33,7 @@ def detail_url(slug):
 
 
 def load(*entries):
-    DjangoCatalogStore().load(catalog_seed(*entries))
+    DjangoCatalogStore().load(catalog_of(*entries))
 
 
 def draft(slug="draft-peak", **overrides):

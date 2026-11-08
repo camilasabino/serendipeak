@@ -8,7 +8,7 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.draft_mountain_deletion_store import DjangoDraftMountainDeletionStore
 from serendipeak.persistence.mapping import to_mountain
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.fakes import InMemoryDraftMountainDeletionStore
 from tests.support.regions import region_path
 
@@ -40,7 +40,7 @@ def arranged(request):
         return Arrangement(store, lambda entry: store.mountain(entry.mountain.id))
 
     request.getfixturevalue("db")
-    DjangoCatalogStore().load(catalog_seed(*ENTRIES))
+    DjangoCatalogStore().load(catalog_of(*ENTRIES))
     DailyDiscoveryRecord.objects.create(date="2026-01-01", mountain_id=REFERENCED.mountain.id)
 
     def mountain_of(entry):

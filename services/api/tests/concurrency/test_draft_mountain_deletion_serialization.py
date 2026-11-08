@@ -9,7 +9,7 @@ from serendipeak.persistence.draft_mountain_deletion_store import DjangoDraftMou
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.concurrency import run_while_a_change_holds_the_lock
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -20,7 +20,7 @@ ID = DRAFT.mountain.id
 
 @pytest.fixture(autouse=True)
 def catalog():
-    DjangoCatalogStore().load(catalog_seed(DRAFT))
+    DjangoCatalogStore().load(catalog_of(DRAFT))
 
 
 def delete():

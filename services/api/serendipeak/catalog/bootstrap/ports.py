@@ -1,11 +1,10 @@
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime
-from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
-from serendipeak.catalog.entities import ImageDimensions, Mountain, PhotographMedia
+from serendipeak.catalog.entities import Mountain
 from serendipeak.catalog.geography import GeographyReference
 from serendipeak.catalog.geography_input import BackfillPlan, GeographyInput, StoredGeography
 from serendipeak.catalog.regions import MountainRegion
@@ -26,19 +25,6 @@ class CatalogDiscovery:
 
 
 @dataclass(frozen=True, slots=True)
-class CatalogSeed:
-    """The mountains and discoveries to load. A parsed seed names the v1 country text and range
-    name of each mountain in legacy_country_names and legacy_range_names; a seed ready to load
-    holds real geography and the regions, parents first, instead."""
-
-    mountains: tuple[CatalogMountain, ...]
-    discoveries: tuple[CatalogDiscovery, ...]
-    legacy_country_names: Mapping[UUID, tuple[str, ...]] = field(default_factory=dict)
-    legacy_range_names: Mapping[UUID, str | None] = field(default_factory=dict)
-    regions: tuple[MountainRegion, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class CatalogSnapshot:
     mountains: tuple[CatalogMountain, ...]
     discoveries: tuple[CatalogDiscovery, ...]
@@ -46,37 +32,14 @@ class CatalogSnapshot:
 
 
 class CatalogStore(Protocol):
-    def load(self, seed: CatalogSeed) -> None:
-        """Load the seed atomically into a store without mountains, its regions included.
+    def load(self, catalog: CatalogSnapshot) -> None:
+        """Load the catalog atomically into a store without mountains, its regions included.
 
         Raises CatalogAlreadyPopulated and changes nothing when the store holds a mountain,
         including one stored by a concurrent load.
         """
 
     def snapshot(self) -> CatalogSnapshot: ...
-
-
-class AttachOutcome(StrEnum):
-    APPLIED = "applied"
-    ALREADY_ATTACHED = "already_attached"
-    STALE = "stale"
-    NOT_FOUND = "not_found"
-
-
-class PhotographMediaWriter(Protocol):
-    def attach_media(
-        self,
-        mountain_id: UUID,
-        expected_dimensions: ImageDimensions,
-        media: PhotographMedia,
-    ) -> AttachOutcome:
-        """Atomically attach media to the photograph of a mountain that has none yet.
-
-        Applied only while the photograph still has expected_dimensions, the ones the media
-        was verified against. ALREADY_ATTACHED when it already holds exactly this media, STALE
-        when it holds other media or its dimensions changed, NOT_FOUND when the mountain or its
-        photograph is gone. Nothing else about the mountain changes, its updated_at included.
-        """
 
 
 class GeographyReferenceReader(Protocol):

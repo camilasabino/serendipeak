@@ -20,7 +20,7 @@ from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from tests.studio.support import hidden_inputs
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.concurrency import WAIT_SECONDS, run_while_a_change_holds_the_lock
 from tests.support.users import create_user
 
@@ -60,7 +60,7 @@ def stored(entry):
 
 @pytest.fixture
 def editor_client():
-    DjangoCatalogStore().load(catalog_seed(ACTIVE, CAMERALESS_DRAFT, FRAMED_DRAFT))
+    DjangoCatalogStore().load(catalog_of(ACTIVE, CAMERALESS_DRAFT, FRAMED_DRAFT))
     editor = create_user("editor")
     client = Client()
     client.force_login(editor)

@@ -9,7 +9,7 @@ from django.urls import reverse
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.studio.support import text_of
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 
 LOGGER = "serendipeak.security"
 
@@ -21,7 +21,7 @@ UNLISTED = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(catalog_seed(DRAFT, BARE, PUBLISHED, UNLISTED))
+    DjangoCatalogStore().load(catalog_of(DRAFT, BARE, PUBLISHED, UNLISTED))
 
 
 def preview_url(slug):

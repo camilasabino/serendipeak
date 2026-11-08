@@ -17,7 +17,7 @@ from serendipeak.persistence.mapping import to_camera
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.studio import camera_editor_link
 from tests.studio.support import csrf_token_of, text_of
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 
 DRAFT = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, camera=None)
 ACTIVE = catalog_mountain("aconcagua")
@@ -48,7 +48,7 @@ MOVED = {"lat": "-33.25", "lon": "-70.75"}
 @pytest.fixture
 def load_catalog(db):
     def load(*entries):
-        DjangoCatalogStore().load(catalog_seed(*entries))
+        DjangoCatalogStore().load(catalog_of(*entries))
 
     return load
 

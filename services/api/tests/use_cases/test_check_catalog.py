@@ -3,29 +3,29 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.publication import PublicationViolation
 from tests.support.catalog import (
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
-    committed_seed_with_media,
+    catalog_of,
+    fixture_catalog,
+    fixture_catalog_with_media,
     primary_image,
 )
 from tests.support.fakes import InMemoryCatalogStore
 
 
-def check(seed):
+def check(catalog):
     store = InMemoryCatalogStore()
-    store.load(seed)
+    store.load(catalog)
     return CheckCatalog(store).execute()
 
 
-def test_the_materialized_committed_seed_satisfies_every_publication_invariant():
-    report = check(committed_seed_with_media())
+def test_the_fixture_catalog_with_media_satisfies_every_publication_invariant():
+    report = check(fixture_catalog_with_media())
 
     assert report.checked == 73
     assert report.violations == ()
 
 
-def test_the_unmaterialized_committed_seed_lacks_media_for_every_photograph():
-    report = check(committed_seed())
+def test_the_fixture_catalog_without_media_lacks_it_for_every_photograph():
+    report = check(fixture_catalog())
 
     assert report.checked == 73
     assert {violation.violation for violation in report.violations} == {
@@ -36,7 +36,7 @@ def test_the_unmaterialized_committed_seed_lacks_media_for_every_photograph():
 
 def test_violations_of_active_mountains_are_reported_in_slug_order():
     report = check(
-        catalog_seed(
+        catalog_of(
             catalog_mountain("mont-blanc", primary_image=None),
             catalog_mountain("aconcagua", camera=None, primary_image=primary_image(media=None)),
         )
@@ -52,7 +52,7 @@ def test_violations_of_active_mountains_are_reported_in_slug_order():
 
 def test_draft_and_inactive_mountains_are_not_checked():
     report = check(
-        catalog_seed(
+        catalog_of(
             catalog_mountain("draft-peak", status=MountainStatus.DRAFT, primary_image=None),
             catalog_mountain("old-peak", status=MountainStatus.INACTIVE, camera=None),
         )

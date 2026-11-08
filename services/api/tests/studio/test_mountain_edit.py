@@ -7,7 +7,7 @@ from serendipeak.catalog.errors import ActiveMountainLocationLocked, UnknownMoun
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainCountryRecord, MountainRecord
 from tests.studio.support import csrf_token_of, form_payload, text_of
-from tests.support.catalog import catalog_mountain, catalog_seed, primary_image
+from tests.support.catalog import catalog_mountain, catalog_of, primary_image
 from tests.support.geography import countries
 from tests.support.regions import region_path
 
@@ -27,7 +27,7 @@ UNLISTED = catalog_mountain("old-peak", status=MountainStatus.INACTIVE)
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(catalog_seed(DRAFT, PUBLISHED, UNLISTED))
+    DjangoCatalogStore().load(catalog_of(DRAFT, PUBLISHED, UNLISTED))
 
 
 def edit_url(slug):
@@ -216,7 +216,7 @@ def test_an_unlisted_mountain_can_be_moved_with_the_confirmation(catalog, editor
 
 def test_a_mountain_on_the_site_must_stay_publishable(db, editor_client):
     DjangoCatalogStore().load(
-        catalog_seed(catalog_mountain("seeded-peak", primary_image=primary_image(media=None)))
+        catalog_of(catalog_mountain("seeded-peak", primary_image=primary_image(media=None)))
     )
 
     response = save(editor_client, "seeded-peak", name="Renamed")

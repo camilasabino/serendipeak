@@ -8,11 +8,7 @@ from serendipeak.catalog.publication import PublicationViolation
 from serendipeak.errors import ApplicationError, DomainError, InfrastructureError
 
 
-class InvalidCatalogSeed(ApplicationError):
-    pass
-
-
-class InvalidFrozenCatalog(ApplicationError):
+class InvalidCatalogSnapshot(ApplicationError):
     pass
 
 
@@ -127,16 +123,6 @@ class ActiveMountainLocationLocked(DomainError):
         super().__init__("an active mountain must be deactivated before its coordinates change")
 
 
-class UnknownPhotographs(ApplicationError):
-    def __init__(self, slugs: tuple[str, ...]):
-        super().__init__(f"no selected photograph has these slugs: {', '.join(slugs)}")
-        self.slugs = slugs
-
-
-class InvalidPhotographManifest(ApplicationError):
-    pass
-
-
 class PhotographRejection(StrEnum):
     TOO_MANY_BYTES = "too_many_bytes"
     TOO_MANY_PIXELS = "too_many_pixels"
@@ -144,8 +130,6 @@ class PhotographRejection(StrEnum):
     NOT_AN_IMAGE = "not_an_image"
     CORRUPT = "corrupt"
     ANIMATED = "animated"
-    DIMENSIONS_DIFFER = "dimensions_differ"
-    CHECKSUM_DIFFERS = "checksum_differs"
 
 
 class PhotographNotStored(InfrastructureError):

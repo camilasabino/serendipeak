@@ -21,7 +21,7 @@ from serendipeak.persistence.models import (
 )
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from tests.studio.support import form_payload, jpeg, upload, use_fake_media_store
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.concurrency import (
     WAIT_SECONDS,
     run_while_a_change_holds_the_lock,
@@ -52,7 +52,7 @@ def stored(entry):
 
 @pytest.fixture
 def editor_client():
-    DjangoCatalogStore().load(catalog_seed(DRAFT, ACTIVE, INACTIVE))
+    DjangoCatalogStore().load(catalog_of(DRAFT, ACTIVE, INACTIVE))
     editor = create_user("editor")
     client = Client()
     client.force_login(editor)

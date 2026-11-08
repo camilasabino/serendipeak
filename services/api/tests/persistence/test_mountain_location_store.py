@@ -9,7 +9,7 @@ from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
-from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_seed
+from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.django_db
 
@@ -36,7 +36,7 @@ def force(status, stored):
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(ACTIVE, INACTIVE, DRAFT))
+    DjangoCatalogStore().load(catalog_of(ACTIVE, INACTIVE, DRAFT))
     return DjangoMountainLocationStore()
 
 

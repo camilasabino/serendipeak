@@ -2,7 +2,7 @@ import pytest
 from django.db import IntegrityError, connection, transaction
 
 from serendipeak.persistence.mapping import mountain_record as mountain_record_of
-from tests.support.catalog import committed_seed, load_seed_document, media_of
+from tests.support.catalog import fixture_catalog, media_of
 from tests.support.migrations import (
     applied_head,
     historical_model,
@@ -12,6 +12,7 @@ from tests.support.migrations import (
 from tests.support.records import (
     columns_at_schema,
     legacy_country_names,
+    legacy_image_records,
     legacy_range_name,
     pre_minimal_photograph_columns,
     region_ids_of,
@@ -37,14 +38,14 @@ def image_columns():
 
 
 def raw_images():
-    return {raw["slug"]: raw["image"] for raw in load_seed_document()["content"]["mountains"]}
+    return legacy_image_records()
 
 
 def load_committed_catalog_before_the_migration(*, with_media):
     mountain_model = historical_model(BEFORE, "MountainRecord")
     image_model = historical_model(BEFORE, "MountainImageRecord")
     raw = raw_images()
-    entries = committed_seed().mountains
+    entries = fixture_catalog().mountains
 
     mountain_model.objects.bulk_create(
         mountain_model(
@@ -74,7 +75,7 @@ def load_committed_catalog_before_the_migration(*, with_media):
     image_model.objects.bulk_create(images)
 
 
-def test_the_73_photographs_keep_the_seed_url_as_their_legacy_file_url_and_lose_the_thumbnail():
+def test_the_73_photographs_keep_the_import_url_as_their_legacy_file_url_and_lose_the_thumbnail():
     migrate_to(BEFORE)
     load_committed_catalog_before_the_migration(with_media=False)
 
@@ -88,7 +89,7 @@ def test_the_73_photographs_keep_the_seed_url_as_their_legacy_file_url_and_lose_
     assert not {"url", "thumbnail_url"} & image_columns()
 
 
-def test_materialized_media_survives_the_migration():
+def test_stored_media_survives_the_migration():
     migrate_to(BEFORE)
     load_committed_catalog_before_the_migration(with_media=True)
 

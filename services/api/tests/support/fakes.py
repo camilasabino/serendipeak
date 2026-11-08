@@ -6,7 +6,7 @@ from serendipeak.accounts.access import Access, AccessChangeContext, AccessViola
 from serendipeak.accounts.entities import User
 from serendipeak.accounts.errors import PasswordRejected, UsernameTaken
 from serendipeak.accounts.ports import AccessChange, AccessChangeOutcome, RecordedLoginAttempt
-from serendipeak.catalog.bootstrap.ports import AttachOutcome, CatalogSeed, CatalogSnapshot
+from serendipeak.catalog.bootstrap.ports import CatalogSnapshot
 from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
     CandidateMountain,
@@ -117,13 +117,13 @@ class InMemoryCatalogStore:
         self._discoveries = {}
         self._regions = ()
 
-    def load(self, seed: CatalogSeed):
+    def load(self, catalog: CatalogSnapshot):
         if self._mountains:
             raise CatalogAlreadyPopulated()
 
-        self._regions = seed.regions
-        self._mountains.update((entry.mountain.id, entry) for entry in seed.mountains)
-        self._discoveries.update((discovery.date, discovery) for discovery in seed.discoveries)
+        self._regions = catalog.regions
+        self._mountains.update((entry.mountain.id, entry) for entry in catalog.mountains)
+        self._discoveries.update((discovery.date, discovery) for discovery in catalog.discoveries)
 
     def snapshot(self):
         return CatalogSnapshot(
@@ -133,25 +133,6 @@ class InMemoryCatalogStore:
             discoveries=tuple(sorted(self._discoveries.values(), key=lambda item: item.date)),
             regions=self._regions,
         )
-
-    def attach_media(self, mountain_id, expected_dimensions, media):
-        entry = self._mountains.get(mountain_id)
-        image = None if entry is None else entry.mountain.primary_image
-        if image is None:
-            return AttachOutcome.NOT_FOUND
-        if image.media is not None:
-            return AttachOutcome.ALREADY_ATTACHED if image.media == media else AttachOutcome.STALE
-        if image.dimensions != expected_dimensions:
-            return AttachOutcome.STALE
-
-        self.replace(
-            replace(
-                entry,
-                mountain=replace(entry.mountain, primary_image=replace(image, media=media)),
-            )
-        )
-
-        return AttachOutcome.APPLIED
 
     def replace(self, entry):
         self._mountains[entry.mountain.id] = entry
@@ -856,20 +837,6 @@ class SyntheticPhotographProcessor:
             page_jpeg=b"page " + data,
             viewer_jpeg=b"viewer " + data,
         )
-
-
-class FakeSourceImageFetcher:
-    def __init__(self, files=None, failures=None):
-        self.files = dict(files or {})
-        self.failures = dict(failures or {})
-        self.fetched = []
-
-    def fetch(self, url):
-        self.fetched.append(url)
-        if url in self.failures:
-            raise self.failures[url]
-
-        return self.files[url]
 
 
 def unused_preview():

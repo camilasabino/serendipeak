@@ -6,7 +6,7 @@ from serendipeak.catalog.summary import (
     normalize_summary,
     summary_violations,
 )
-from tests.support.catalog import committed_seed
+from tests.support.catalog import fixture_catalog
 
 CAPITALIZATION = {
     "common noun": ("volcano in Japan.", "Volcano in Japan."),
@@ -158,7 +158,7 @@ def test_normalize_summary_is_idempotent(text):
 def test_every_committed_summary_is_already_in_sentence_form():
     summaries = [
         entry.mountain.summary.en
-        for entry in committed_seed().mountains
+        for entry in fixture_catalog().mountains
         if entry.mountain.summary is not None
     ]
 

@@ -5,7 +5,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from tests.studio.support import form_payload, jpeg, text_of, upload
-from tests.support.catalog import catalog_mountain, catalog_seed, primary_image
+from tests.support.catalog import catalog_mountain, catalog_of, primary_image
 
 pytestmark = pytest.mark.usefixtures("media_store")
 
@@ -17,7 +17,7 @@ PUBLISHED = catalog_mountain("aconcagua")
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(catalog_seed(DRAFT, BARE_DRAFT, PUBLISHED))
+    DjangoCatalogStore().load(catalog_of(DRAFT, BARE_DRAFT, PUBLISHED))
 
 
 def edit_url(slug):

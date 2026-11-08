@@ -10,7 +10,7 @@ from django.urls import reverse
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from tests.studio.support import form_payload, text_of, upload
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.usefixtures("media_store")
 
@@ -22,7 +22,7 @@ SCRIPTS = ("unsaved-changes.js", "photograph-upload.js", "country-filter.js")
 @pytest.fixture
 def catalog(db):
     DjangoCatalogStore().load(
-        catalog_seed(catalog_mountain("draft-peak", status=MountainStatus.DRAFT))
+        catalog_of(catalog_mountain("draft-peak", status=MountainStatus.DRAFT))
     )
 
 

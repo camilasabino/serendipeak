@@ -12,7 +12,7 @@ from serendipeak.discovery.retention import RETENTION_DAYS
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.discovery_history_reader import DjangoDiscoveryHistoryReader
 from tests.studio.support import text_of
-from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_discovery, catalog_mountain, catalog_of
 from tests.support.fakes import FixedClock
 
 URL = reverse("studio:discovery_list")
@@ -38,7 +38,7 @@ def today_is_fixed(monkeypatch):
 
 def load(discoveries, *mountains):
     DjangoCatalogStore().load(
-        catalog_seed(*(mountains or (ACONCAGUA, DENALI)), discoveries=discoveries)
+        catalog_of(*(mountains or (ACONCAGUA, DENALI)), discoveries=discoveries)
     )
 
 

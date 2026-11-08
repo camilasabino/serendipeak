@@ -2,20 +2,16 @@ import importlib
 import uuid
 from functools import cache
 
-from serendipeak.catalog.bootstrap.ports import CatalogSeed
-from serendipeak.catalog.country_aliases import ANTARCTICA_CODE, codes_of_legacy_names
 from serendipeak.catalog.entities import Continent, Country
 from serendipeak.catalog.geography import GeographyReference
 from serendipeak.catalog.geography_input import (
     GEOGRAPHY_FORMAT,
     GEOGRAPHY_FORMAT_VERSION,
-    GeographyInput,
     geography_content_sha256,
     parse_geography_input,
 )
 from serendipeak.catalog.localization import LocalizedText
-from serendipeak.catalog.regions import derive_region_slug
-from tests.support.regions import region_documents, region_path, regions_of
+from tests.support.regions import region_documents
 
 CONTINENT_MIGRATION = "serendipeak.persistence.migrations.0015_continent_reference"
 COUNTRY_MIGRATION = "serendipeak.persistence.migrations.0016_country_reference"
@@ -142,41 +138,6 @@ def document_of(geography, mountains=None):
 
 def parse_document(document):
     return parse_geography_input(document, expected_sha256=document["content_sha256"])
-
-
-def synthetic_geography(seed: CatalogSeed) -> GeographyInput:
-    """A geography input for a parsed seed, by a rule that is not editorial.
-
-    It exists so tests can load the seed: the countries are the seed's v1 names through the
-    alias table (Antarctica when there are none), the continent is the reference continent
-    of the first of them, and the region is a root named by the seed's range name. Real
-    assignments live in the private input and are never tested against.
-    """
-    entries = []
-    paths = []
-    for entry in seed.mountains:
-        mountain = entry.mountain
-        names = seed.legacy_country_names[mountain.id]
-        codes = sorted(codes_of_legacy_names(names)) or [ANTARCTICA_CODE]
-        first = sorted(names)[0] if names else None
-        continent_code = (
-            "AN"
-            if first is None
-            else country(sorted(codes_of_legacy_names([first]))[0]).continent_code
-        )
-        range_name = seed.legacy_range_names.get(mountain.id)
-        paths.append(None if range_name is None else region_path(range_name))
-        entries.append(
-            (
-                mountain.id,
-                mountain.slug,
-                continent_code,
-                codes,
-                *(() if range_name is None else (derive_region_slug(range_name),)),
-            )
-        )
-
-    return parse_document(geography_document(entries, regions_of(*paths)))
 
 
 def invented_id(label):

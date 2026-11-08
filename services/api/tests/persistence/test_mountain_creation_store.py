@@ -18,7 +18,7 @@ from serendipeak.persistence.mountain_creation_store import DjangoMountainCreati
 from tests.support.catalog import (
     UPDATED_AT,
     catalog_mountain,
-    catalog_seed,
+    catalog_of,
     photograph_media,
     primary_image,
 )
@@ -63,7 +63,7 @@ def table_counts():
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(TAKEN))
+    DjangoCatalogStore().load(catalog_of(TAKEN))
     return DjangoMountainCreationStore()
 
 

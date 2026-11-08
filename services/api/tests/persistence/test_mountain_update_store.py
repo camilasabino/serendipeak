@@ -20,7 +20,7 @@ from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateSt
 from tests.support.catalog import (
     UPDATED_AT,
     catalog_mountain,
-    catalog_seed,
+    catalog_of,
     photograph_media,
     primary_image,
 )
@@ -73,7 +73,7 @@ def update_of(**overrides):
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(TARGET, OTHER))
+    DjangoCatalogStore().load(catalog_of(TARGET, OTHER))
     return DjangoMountainUpdateStore()
 
 
@@ -251,7 +251,7 @@ def test_a_summary_that_breaks_the_rule_is_rejected_on_a_public_mountain(store):
 
 def test_a_draft_keeps_its_status_and_may_break_the_publication_rules():
     draft = catalog_mountain("draft-peak", status=MountainStatus.DRAFT, camera=None)
-    DjangoCatalogStore().load(catalog_seed(draft))
+    DjangoCatalogStore().load(catalog_of(draft))
 
     DjangoMountainUpdateStore().update(
         draft.mountain.id,

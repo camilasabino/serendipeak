@@ -2,7 +2,6 @@ from django.contrib.gis.geos import Point
 from django.db import IntegrityError, transaction
 
 from serendipeak.catalog.country_aliases import legacy_name_of_code
-from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.catalog.regions import region_id_for_slug
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 
@@ -49,25 +48,41 @@ def insert_error(record):
     raise AssertionError("insert was accepted")
 
 
-def attach_committed_media():
-    """Materializes every stored photograph the way the command does: through the writer."""
-    from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
-    from tests.support.catalog import media_of
+def legacy_image_record(entry):
+    """The v1 record of a photograph, as the migrations of the schema before the minimal
+    photograph kept it. The catalog no longer holds this evidence, so tests derive it."""
+    image = entry.mountain.primary_image
+    title = image.source_page_url.rsplit("File:", 1)[-1]
 
-    writer = DjangoPhotographMediaWriter()
-    for image in MountainImageRecord.objects.select_related("mountain"):
-        outcome = writer.attach_media(
-            image.mountain_id,
-            ImageDimensions(image.width, image.height),
-            media_of(image.mountain.slug),
-        )
-        assert outcome.value == "applied"
+    return {
+        "source_identifier": f"File:{title}",
+        "url": f"https://upload.wikimedia.org/wikipedia/commons/test/{title}",
+        "thumbnail_url": f"https://thumb.wikimedia.org/wikipedia/commons/thumb/test/{title}",
+        "creator": image.author,
+        "attribution": image.author,
+        "license_name": image.license_name,
+        "license_url": image.license_url,
+        "license_reported": image.license_name,
+        "license_election_basis_url": None,
+        "approved_on": "2026-10-01",
+        "source_page_url": image.source_page_url,
+        "width": image.dimensions.width,
+        "height": image.dimensions.height,
+    }
+
+
+def legacy_image_records():
+    from tests.support.catalog import fixture_catalog
+
+    return {
+        entry.mountain.slug: legacy_image_record(entry) for entry in fixture_catalog().mountains
+    }
 
 
 def pre_minimal_photograph_columns(entry, raw_image, model):
-    """The columns of a seeded photograph as the schema before the minimal photograph kept it.
+    """The columns of a photograph as the schema before the minimal photograph kept it.
 
-    The seed's own image record supplies what the photograph row no longer holds, and the
+    The v1 record of the photograph supplies what the photograph row no longer holds, and the
     columns the historical model does not have yet are left out.
     """
     image = entry.mountain.primary_image
@@ -135,22 +150,22 @@ def legacy_country_names(entry):
     ]
 
 
-def load_committed_catalog_at(target, *, with_media):
-    """Loads the committed seed into the schema as of a migration before the minimal photograph.
+def load_fixture_catalog_at(target, *, with_media):
+    """Loads the fixture catalog into the schema as of a migration before the minimal photograph.
 
     The schema is migrated to target first and the rows go in through the historical models, so
     a migration test starts from the data that schema could hold instead of from the current
-    one. The seed's own image record fills the columns the photograph row no longer has.
+    one. The v1 record of each photograph fills the columns the photograph row no longer has.
     """
     from serendipeak.persistence.mapping import mountain_record as mountain_record_of
-    from tests.support.catalog import committed_seed, load_seed_document, media_of
+    from tests.support.catalog import fixture_catalog, media_of
     from tests.support.migrations import historical_model, migrate_to
 
     migrate_to(target)
     mountain_model = historical_model(target, "MountainRecord")
     image_model = historical_model(target, "MountainImageRecord")
-    raw = {raw["slug"]: raw["image"] for raw in load_seed_document()["content"]["mountains"]}
-    entries = committed_seed().mountains
+    raw = legacy_image_records()
+    entries = fixture_catalog().mountains
 
     mountain_model.objects.bulk_create(
         mountain_model(

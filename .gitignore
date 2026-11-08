@@ -30,7 +30,7 @@ playwright-report/
 test-results/
 apps/web/public/cesium/
 
-# Local cache of downloaded legacy photograph source files (materialize_photographs --cache-dir).
+# Local cache of photograph source files downloaded by hand.
 .photograph-cache/
 
 # Local dev logs

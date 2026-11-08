@@ -7,19 +7,14 @@ from serendipeak.catalog.bootstrap.check_photograph_media import (
     CheckPhotographMedia,
     MediaProblem,
 )
-from serendipeak.catalog.bootstrap.photograph_manifest import (
-    ManifestPhotograph,
-    PhotographManifest,
-)
-from serendipeak.catalog.entities import ImageDimensions
 from serendipeak.catalog.media import keys
 from serendipeak.catalog.media.ports import PhotographFormat
 from serendipeak.errors import InfrastructureError
 from tests.support.catalog import (
     catalog_mountain,
-    catalog_seed,
+    catalog_of,
+    mountain_without_media,
     photograph_media,
-    seeded_mountain,
     with_mountain,
 )
 from tests.support.fakes import FakeMediaStore, InMemoryCatalogStore
@@ -34,32 +29,16 @@ def with_media(slug, media):
 
 
 ATTACHED = with_media("aconcagua", photograph_media(DIGEST))
-UNATTACHED = seeded_mountain("fuji")
+UNATTACHED = mountain_without_media("fuji")
 BARE = catalog_mountain("bare-peak", primary_image=None)
 
 
-def pin(entry, sha256=DIGEST, **overrides):
-    image = entry.mountain.primary_image
-    fields = {
-        "mountain_id": entry.mountain.id,
-        "slug": entry.mountain.slug,
-        "file_url": "https://upload.wikimedia.org/wikipedia/commons/4/4e/Aconcagua2016.jpg",
-        "sha256": sha256,
-        "bytes": len(ORIGINAL),
-        "dimensions": image.dimensions,
-    }
-    fields.update(overrides)
-
-    return ManifestPhotograph(**fields)
-
-
 class Arrangement:
-    def __init__(self, *entries, pinned=None):
+    def __init__(self, *entries):
         self.catalog = InMemoryCatalogStore()
-        self.catalog.load(catalog_seed(*entries))
+        self.catalog.load(catalog_of(*entries))
         self.media_store = FakeMediaStore()
-        manifest = None if pinned is None else PhotographManifest(pinned)
-        self.use_case = CheckPhotographMedia(self.catalog, self.media_store, manifest)
+        self.use_case = CheckPhotographMedia(self.catalog, self.media_store)
 
     def store_all(self, original=ORIGINAL):
         media = photograph_media(DIGEST)
@@ -206,90 +185,3 @@ def test_a_photograph_is_checked_the_same_whoever_uploaded_it():
         "fuji",
         "fuji",
     ]
-
-
-class TestAgainstTheImportManifest:
-    """The import proof: a separate, opt-in comparison with what the manifest pinned."""
-
-    def test_media_that_is_the_pinned_one_passes(self):
-        assert Arrangement(ATTACHED, pinned=[pin(ATTACHED)]).use_case.execute().problems == ()
-
-    def test_media_of_another_file_is_reported_even_when_it_is_consistent(self):
-        pinned = pin(ATTACHED, sha256=hashlib.sha256(b"the file the manifest pinned").hexdigest())
-        arranged = Arrangement(ATTACHED, pinned=[pinned])
-        arranged.store_all()
-
-        report = arranged.use_case.execute(deep=True, checksums=True)
-
-        assert report.problems == (
-            MediaProblem("aconcagua", "the stored original is not the one in the manifest"),
-        )
-
-    def test_without_a_manifest_nothing_is_compared_with_a_pin(self):
-        arranged = Arrangement(ATTACHED)
-        arranged.store_all()
-
-        assert arranged.use_case.execute(deep=True, checksums=True).problems == ()
-
-    def test_other_dimensions_are_reported(self):
-        pinned = pin(ATTACHED, dimensions=ImageDimensions(10, 10))
-
-        report = Arrangement(ATTACHED, pinned=[pinned]).use_case.execute()
-
-        assert report.problems == (MediaProblem("aconcagua", "the manifest pins other dimensions"),)
-
-    def test_every_difference_is_reported(self):
-        pinned = pin(ATTACHED, sha256="b" * 64, dimensions=ImageDimensions(10, 10))
-
-        report = Arrangement(ATTACHED, pinned=[pinned]).use_case.execute()
-
-        assert [problem.problem for problem in report.problems] == [
-            "the stored original is not the one in the manifest",
-            "the manifest pins other dimensions",
-        ]
-
-    def test_a_pinned_photograph_missing_from_the_catalog_is_reported(self):
-        gone = pin(catalog_mountain("k2"))
-
-        report = Arrangement(ATTACHED, pinned=[pin(ATTACHED), gone]).use_case.execute()
-
-        assert report.checked == 1
-        assert report.problems == (
-            MediaProblem("k2", "the manifest photograph is not in the catalog"),
-        )
-
-    def test_a_pinned_mountain_without_a_photograph_is_reported(self):
-        arranged = Arrangement(BARE, pinned=[pin(catalog_mountain("bare-peak"))])
-
-        assert arranged.use_case.execute().problems == (
-            MediaProblem("bare-peak", "the manifest photograph is not in the catalog"),
-        )
-
-    def test_a_pinned_photograph_without_media_is_reported_once(self):
-        arranged = Arrangement(UNATTACHED, pinned=[pin(UNATTACHED)])
-
-        assert arranged.use_case.execute().problems == (MediaProblem("fuji", "no media"),)
-
-    def test_a_photograph_outside_the_manifest_is_compared_with_nothing(self):
-        other = with_media("fuji", photograph_media("c" * 64))
-
-        arranged = Arrangement(ATTACHED, other, pinned=[pin(ATTACHED)])
-
-        assert arranged.use_case.execute().problems == ()
-
-    def test_a_replacement_differs_from_its_pin_by_design(self):
-        replaced = with_mountain(
-            ATTACHED,
-            primary_image=replace(
-                ATTACHED.mountain.primary_image,
-                media=photograph_media("c" * 64),
-                dimensions=ImageDimensions(4000, 3000),
-            ),
-        )
-        arranged = Arrangement(replaced, pinned=[pin(ATTACHED)])
-
-        assert [problem.problem for problem in arranged.use_case.execute().problems] == [
-            "the stored original is not the one in the manifest",
-            "the manifest pins other dimensions",
-        ]
-        assert Arrangement(replaced).use_case.execute().problems == ()

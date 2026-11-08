@@ -7,7 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainRecord, MountainRegionRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.records import mountain_record
 from tests.support.regions import region_path
 
@@ -310,7 +310,7 @@ class TestReferentialIntegrity:
 
 
 def load(*entries):
-    DjangoCatalogStore().load(catalog_seed(*entries))
+    DjangoCatalogStore().load(catalog_of(*entries))
 
 
 class TestReading:

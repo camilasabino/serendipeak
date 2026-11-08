@@ -9,8 +9,8 @@ from tests.support.catalog import (
     UPDATED_AT,
     bare_mountain,
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
+    catalog_of,
+    fixture_catalog,
 )
 from tests.support.fakes import InMemoryMountainCatalogReader
 from tests.support.geography import continent, countries
@@ -38,7 +38,7 @@ def reader_holding(request):
     request.getfixturevalue("db")
 
     def arrange(*entries):
-        DjangoCatalogStore().load(catalog_seed(*entries))
+        DjangoCatalogStore().load(catalog_of(*entries))
         return DjangoMountainCatalogReader()
 
     return arrange
@@ -55,9 +55,9 @@ def test_lists_every_mountain_of_every_status_with_every_field(reader_holding):
 
 
 def test_lists_every_committed_mountain_exactly(reader_holding):
-    expected = {entry.mountain.slug: entry.mountain for entry in committed_seed().mountains}
+    expected = {entry.mountain.slug: entry.mountain for entry in fixture_catalog().mountains}
 
-    listed = reader_holding(*committed_seed().mountains).list_all()
+    listed = reader_holding(*fixture_catalog().mountains).list_all()
 
     assert {mountain.slug: mountain for mountain in listed} == expected
 

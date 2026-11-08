@@ -10,13 +10,12 @@ from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFai
 from serendipeak.accounts.read_users import GetUser, ListUsers
 from serendipeak.accounts.set_user_password import SetUserPassword
 from serendipeak.catalog.bootstrap.apply_geography_backfill import ApplyGeographyBackfill
-from serendipeak.catalog.bootstrap.bootstrap_catalog import BootstrapCatalog
 from serendipeak.catalog.bootstrap.check_catalog import CheckCatalog
 from serendipeak.catalog.bootstrap.check_photograph_media import CheckPhotographMedia
-from serendipeak.catalog.bootstrap.materialize_photographs import MaterializePhotographs
-from serendipeak.catalog.bootstrap.photograph_manifest import PhotographManifest
+from serendipeak.catalog.bootstrap.export_catalog_snapshot import ExportCatalogSnapshot
+from serendipeak.catalog.bootstrap.load_catalog_snapshot import LoadCatalogSnapshot
 from serendipeak.catalog.bootstrap.prepare_geography_input import PrepareGeographyInput
-from serendipeak.catalog.bootstrap.verify_catalog import VerifyCatalog
+from serendipeak.catalog.bootstrap.verify_catalog_snapshot import VerifyCatalogSnapshot
 from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.change_mountain_location import ChangeMountainLocation
 from serendipeak.catalog.create_mountain import CreateMountain
@@ -34,7 +33,7 @@ from serendipeak.catalog.issue_preview_token import IssuePreviewToken
 from serendipeak.catalog.list_mountain_regions import ListMountainRegions
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
-from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
+from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor
 from serendipeak.catalog.move_mountain_region import MoveMountainRegion
 from serendipeak.catalog.publish_mountain import PublishMountain
 from serendipeak.catalog.reactivate_mountain import ReactivateMountain
@@ -45,9 +44,7 @@ from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
 from serendipeak.discovery.history import ListDailyDiscoveries
 from serendipeak.discovery.prune_daily_discoveries import PruneDailyDiscoveries
-from serendipeak.media.caching_source_fetcher import CachingSourceImageFetcher
 from serendipeak.media.filesystem_media_store import FilesystemMediaStore
-from serendipeak.media.http_source_fetcher import HttpSourceImageFetcher
 from serendipeak.media.pillow_processor import PillowPhotographProcessor
 from serendipeak.media.s3_media_store import S3MediaStore
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
@@ -70,40 +67,37 @@ from serendipeak.persistence.mountain_region_store import DjangoMountainRegionSt
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
-from serendipeak.persistence.photograph_media_writer import DjangoPhotographMediaWriter
 from serendipeak.persistence.user_reader import DjangoUserReader
 from serendipeak.persistence.user_store import DjangoUserStore
 from serendipeak.tokens.signed_preview_tokens import SignedPreviewTokens
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
-SEED_PATH = SERVICE_ROOT / "seed" / "legacy-catalog-v1.json"
-PHOTOGRAPH_MANIFEST_PATH = SERVICE_ROOT / "seed" / "legacy-photographs-v1.json"
-FROZEN_CATALOG_PATH = SERVICE_ROOT.parents[1] / "contracts" / "v1" / "catalog.json"
 
 MEBIBYTE = 1024 * 1024
 STUDIO_INGESTION_LIMITS = IngestionLimits(max_bytes=30 * MEBIBYTE)
-# Photographs of the existing catalog come from their sources at full resolution, some well
-# beyond an editor's upload limit, and every one of them must still be stored.
-LEGACY_SOURCE_INGESTION_LIMITS = IngestionLimits(max_bytes=150 * MEBIBYTE)
-# Wikimedia asks automated clients for a descriptive User-Agent that identifies the project.
-SOURCE_FETCH_USER_AGENT = (
-    "SerendiPeakPhotographMaterializer/1.0 (https://serendipeak.com) Python-urllib"
-)
-# Where the seed's photographs are published. A redirect elsewhere is refused.
-SOURCE_FETCH_ALLOWED_HOSTS = ("upload.wikimedia.org",)
-# Per socket operation: a slow but progressing download of a large original is not cut.
-SOURCE_FETCH_TIMEOUT_SECONDS = 60
 
 
-def build_bootstrap_catalog() -> BootstrapCatalog:
+def describe_database() -> str:
+    database = settings.DATABASES["default"]
+    host = database["HOST"] or "local socket"
+    port = database["PORT"] or "default"
+
+    return f"database {database['NAME']} on {host}:{port}"
+
+
+def build_export_catalog_snapshot() -> ExportCatalogSnapshot:
+    return ExportCatalogSnapshot(DjangoCatalogStore(), DjangoGeographyReference())
+
+
+def build_verify_catalog_snapshot() -> VerifyCatalogSnapshot:
+    return VerifyCatalogSnapshot(DjangoCatalogStore(), DjangoGeographyReference())
+
+
+def build_load_catalog_snapshot() -> LoadCatalogSnapshot:
     store = DjangoCatalogStore()
     reference = DjangoGeographyReference()
 
-    return BootstrapCatalog(store, VerifyCatalog(store, reference), reference)
-
-
-def build_verify_catalog() -> VerifyCatalog:
-    return VerifyCatalog(DjangoCatalogStore(), DjangoGeographyReference())
+    return LoadCatalogSnapshot(store, reference, VerifyCatalogSnapshot(store, reference))
 
 
 def build_apply_geography_backfill() -> ApplyGeographyBackfill:
@@ -287,37 +281,5 @@ def build_studio_photograph_ingestion() -> PhotographIngestion:
     )
 
 
-def build_legacy_photograph_ingestion() -> PhotographIngestion:
-    return PhotographIngestion(
-        build_photograph_processor(),
-        build_media_store(),
-        LEGACY_SOURCE_INGESTION_LIMITS,
-    )
-
-
-def build_source_image_fetcher(cache_dir: Path | None = None) -> SourceImageFetcher:
-    fetcher = HttpSourceImageFetcher(
-        max_bytes=LEGACY_SOURCE_INGESTION_LIMITS.max_bytes,
-        user_agent=SOURCE_FETCH_USER_AGENT,
-        timeout_seconds=SOURCE_FETCH_TIMEOUT_SECONDS,
-        allowed_hosts=SOURCE_FETCH_ALLOWED_HOSTS,
-    )
-    if cache_dir is None:
-        return fetcher
-
-    return CachingSourceImageFetcher(fetcher, cache_dir)
-
-
-def build_materialize_photographs(cache_dir: Path | None = None) -> MaterializePhotographs:
-    return MaterializePhotographs(
-        DjangoCatalogStore(),
-        build_source_image_fetcher(cache_dir),
-        build_legacy_photograph_ingestion(),
-        DjangoPhotographMediaWriter(),
-    )
-
-
-def build_check_photograph_media(
-    manifest: PhotographManifest | None = None,
-) -> CheckPhotographMedia:
-    return CheckPhotographMedia(DjangoCatalogStore(), build_media_store(), manifest)
+def build_check_photograph_media() -> CheckPhotographMedia:
+    return CheckPhotographMedia(DjangoCatalogStore(), build_media_store())

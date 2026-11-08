@@ -6,7 +6,7 @@ import datetime
 import pytest
 from django.urls import reverse
 
-from config.composition import build_check_catalog, build_verify_catalog
+from config.composition import build_check_catalog
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import DailyDiscoveryRecord, MountainRecord
@@ -14,13 +14,11 @@ from tests.studio.support import form_payload
 from tests.support.catalog import (
     catalog_discovery,
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
-    frozen_catalog,
-    parsed_committed_seed,
+    catalog_of,
+    fixture_catalog,
+    fixture_catalog_with_media,
     primary_image,
 )
-from tests.support.records import attach_committed_media
 
 pytestmark = pytest.mark.usefixtures("media_store")
 
@@ -37,7 +35,7 @@ DAY = datetime.date(2026, 10, 3)
 
 
 def load(*entries, discoveries=()):
-    DjangoCatalogStore().load(catalog_seed(*entries, discoveries=discoveries))
+    DjangoCatalogStore().load(catalog_of(*entries, discoveries=discoveries))
 
 
 def post(client, name, entry):
@@ -110,15 +108,35 @@ class TestPublicVisibility:
         assert status_of(entry) == entry.mountain.status.value
 
 
-class TestCommittedCatalogParity:
-    @pytest.fixture
-    def seeded(self, db):
-        DjangoCatalogStore().load(committed_seed())
-        attach_committed_media()
+def identity(mountain):
+    """What editorial edits through the Studio form must leave as it was."""
+    image = mountain.primary_image
 
-    def test_editorial_edits_leave_the_73_mountains_equal_to_the_frozen_catalog(
-        self, editor_client, seeded
+    return (
+        mountain.slug,
+        mountain.name,
+        mountain.coordinates,
+        mountain.elevation_meters,
+        mountain.camera,
+        mountain.osm_node_id,
+        mountain.wikidata_id,
+        image.source_page_url,
+        image.dimensions,
+    )
+
+
+class TestFullCatalogEdits:
+    @pytest.fixture
+    def stored(self, db):
+        DjangoCatalogStore().load(fixture_catalog_with_media())
+
+    def test_editorial_edits_leave_the_identity_of_all_73_mountains_untouched(
+        self, editor_client, stored
     ):
+        before = {
+            entry.mountain.slug: identity(entry.mountain) for entry in fixture_catalog().mountains
+        }
+
         for record in MountainRecord.objects.order_by("slug"):
             url = reverse("studio:mountain_edit", args=[record.slug])
             payload = form_payload(
@@ -132,15 +150,15 @@ class TestCommittedCatalogParity:
 
             assert editor_client.post(url, payload).status_code == 302
 
-        report = build_verify_catalog().execute(parsed_committed_seed(), frozen_catalog())
-        assert report.mountains == 73
-        assert report.frozen.matched == report.frozen.total == 73
-        assert report.frozen.mismatches == ()
+        after = DjangoCatalogStore().snapshot().mountains
+        assert {entry.mountain.slug: identity(entry.mountain) for entry in after} == before
+        assert len(after) == 73
         assert build_check_catalog().execute().violations == ()
 
-    def test_unlisting_and_listing_again_the_committed_catalog_restores_it(
-        self, editor_client, seeded
+    def test_unlisting_and_listing_again_every_mountain_restores_the_catalog(
+        self, editor_client, stored
     ):
+        before = DjangoCatalogStore().snapshot()
         slugs = list(MountainRecord.objects.filter(status="active").values_list("slug", flat=True))
 
         for name in ("mountain_unlist", "mountain_relist"):
@@ -149,5 +167,6 @@ class TestCommittedCatalogParity:
                 assert response.status_code == 302
 
         assert MountainRecord.objects.filter(status="active").count() == len(slugs) == 73
-        report = build_verify_catalog().execute(parsed_committed_seed(), frozen_catalog())
-        assert report.frozen.mismatches == ()
+        statuses = {entry.mountain.slug: entry.mountain.status for entry in before.mountains}
+        after = DjangoCatalogStore().snapshot().mountains
+        assert {entry.mountain.slug: entry.mountain.status for entry in after} == statuses

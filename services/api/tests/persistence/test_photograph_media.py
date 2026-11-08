@@ -8,11 +8,11 @@ from serendipeak.persistence.models import MountainImageRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from tests.support.catalog import (
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
+    catalog_of,
+    fixture_catalog,
+    mountain_without_media,
     photograph_media,
     primary_image,
-    seeded_mountain,
 )
 from tests.support.records import image_record, insert_error, mountain_record
 
@@ -146,7 +146,7 @@ def test_two_images_may_share_the_same_photograph(mountain, db):
 def test_photograph_media_round_trips_through_the_catalog_store_and_repository():
     media = photograph_media(DIGEST)
     entry = catalog_mountain(primary_image=primary_image(media=media))
-    DjangoCatalogStore().load(catalog_seed(entry))
+    DjangoCatalogStore().load(catalog_of(entry))
 
     snapshot = DjangoCatalogStore().snapshot()
     found = DjangoMountainRepository().find_public_by_slug("aconcagua")
@@ -157,15 +157,15 @@ def test_photograph_media_round_trips_through_the_catalog_store_and_repository()
 
 @pytest.mark.django_db
 def test_an_image_without_photograph_media_reads_back_without_it():
-    entry = seeded_mountain(status=MountainStatus.ACTIVE)
-    DjangoCatalogStore().load(catalog_seed(entry))
+    entry = mountain_without_media(status=MountainStatus.ACTIVE)
+    DjangoCatalogStore().load(catalog_of(entry))
 
     assert DjangoCatalogStore().snapshot().mountains[0].mountain.primary_image.media is None
 
 
 @pytest.mark.django_db
 def test_the_committed_seed_loads_every_image_without_photograph_media():
-    DjangoCatalogStore().load(committed_seed())
+    DjangoCatalogStore().load(fixture_catalog())
 
     images = MountainImageRecord.objects.all()
     assert images.count() == 73

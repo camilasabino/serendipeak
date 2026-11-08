@@ -14,7 +14,7 @@ from serendipeak.persistence.models import (
 )
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
-from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media, primary_image
+from tests.support.catalog import catalog_mountain, catalog_of, photograph_media, primary_image
 from tests.support.concurrency import run_while_a_change_holds_the_lock
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -45,7 +45,7 @@ def save(entry=TARGET, gate=public_edit_violations, **overrides):
 
 @pytest.fixture(autouse=True)
 def catalog():
-    DjangoCatalogStore().load(catalog_seed(TARGET, OTHER))
+    DjangoCatalogStore().load(catalog_of(TARGET, OTHER))
 
 
 def links_of(entry):

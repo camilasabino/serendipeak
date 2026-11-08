@@ -6,8 +6,8 @@ from serendipeak.errors import InfrastructureError
 
 class Command(BaseCommand):
     help = (
-        "Check the publication invariants of every active mountain in the catalog. Safe to run"
-        " at any time; it does not compare the catalog with the seed."
+        "Check the publication invariants of every active mountain in the catalog. Read-only and"
+        " safe to run at any time."
     )
 
     def handle(self, *args, **options):

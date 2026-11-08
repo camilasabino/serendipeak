@@ -23,7 +23,7 @@ from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_update_store import DjangoMountainUpdateStore
 from tests.support.catalog import (
     catalog_mountain,
-    catalog_seed,
+    catalog_of,
     photograph_media,
     primary_image,
 )
@@ -96,7 +96,7 @@ def arranged(request):
         return Arrangement(store, lambda mountain: store.mountain(mountain.id))
 
     request.getfixturevalue("db")
-    DjangoCatalogStore().load(catalog_seed(*ENTRIES))
+    DjangoCatalogStore().load(catalog_of(*ENTRIES))
 
     return Arrangement(
         DjangoMountainUpdateStore(),

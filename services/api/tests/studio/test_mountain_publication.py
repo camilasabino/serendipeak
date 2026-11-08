@@ -9,7 +9,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainRecord
 from tests.studio.support import csrf_token_of, text_of
-from tests.support.catalog import catalog_mountain, catalog_seed, primary_image
+from tests.support.catalog import catalog_mountain, catalog_of, primary_image
 
 LOGGER = "serendipeak.security"
 
@@ -24,7 +24,7 @@ UNLISTED_BLOCKED = catalog_mountain(
 
 @pytest.fixture
 def catalog(db):
-    DjangoCatalogStore().load(catalog_seed(READY, BLOCKED, PUBLISHED, UNLISTED, UNLISTED_BLOCKED))
+    DjangoCatalogStore().load(catalog_of(READY, BLOCKED, PUBLISHED, UNLISTED, UNLISTED_BLOCKED))
 
 
 @pytest.fixture

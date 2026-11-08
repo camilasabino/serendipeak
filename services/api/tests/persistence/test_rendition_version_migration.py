@@ -8,7 +8,7 @@ from tests.support.migrations import (
     migrate_to,
     migrate_to_latest_discarding_catalog,
 )
-from tests.support.records import load_committed_catalog_at
+from tests.support.records import load_fixture_catalog_at
 
 BEFORE = ("catalog", "0008_source_agnostic_photograph")
 AFTER = ("catalog", "0010_renditions_share_version")
@@ -29,7 +29,7 @@ def stored_keys(target):
 
 
 def test_the_73_photographs_published_under_r1_keep_their_keys_in_both_directions():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
     before = stored_keys(BEFORE)
 
     migrate_to(AFTER)
@@ -42,7 +42,7 @@ def test_the_73_photographs_published_under_r1_keep_their_keys_in_both_direction
 
 
 def test_reversing_fails_and_changes_nothing_once_a_photograph_has_r2_renditions():
-    load_committed_catalog_at(BEFORE, with_media=True)
+    load_fixture_catalog_at(BEFORE, with_media=True)
     migrate_to(AFTER)
     image_model = historical_model(AFTER, "MountainImageRecord")
     image = image_model.objects.order_by("mountain__slug").first()

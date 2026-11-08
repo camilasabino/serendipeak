@@ -9,7 +9,7 @@ from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
-from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_seed
+from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.django_db
 
@@ -25,7 +25,7 @@ NEW_CAMERA = CanonicalCamera(
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(ACTIVE, CAMERALESS_DRAFT))
+    DjangoCatalogStore().load(catalog_of(ACTIVE, CAMERALESS_DRAFT))
     return DjangoMountainCameraStore()
 
 

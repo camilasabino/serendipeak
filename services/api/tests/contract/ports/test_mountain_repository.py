@@ -9,8 +9,8 @@ from tests.support.catalog import (
     UPDATED_AT,
     bare_mountain,
     catalog_mountain,
-    catalog_seed,
-    committed_seed,
+    catalog_of,
+    fixture_catalog,
     primary_image,
 )
 from tests.support.fakes import InMemoryMountainRepository
@@ -44,7 +44,7 @@ def repository_holding(request):
     request.getfixturevalue("db")
 
     def arrange(*entries):
-        DjangoCatalogStore().load(catalog_seed(*entries))
+        DjangoCatalogStore().load(catalog_of(*entries))
         return DjangoMountainRepository()
 
     return arrange
@@ -62,8 +62,8 @@ def test_finds_an_active_or_inactive_mountain_with_every_field(repository_holdin
 
 
 def test_finds_every_committed_mountain_exactly(repository_holding):
-    mountains = [entry.mountain for entry in committed_seed().mountains]
-    repository = repository_holding(*committed_seed().mountains)
+    mountains = [entry.mountain for entry in fixture_catalog().mountains]
+    repository = repository_holding(*fixture_catalog().mountains)
 
     assert [repository.find_public_by_slug(entity.slug) for entity in mountains] == mountains
 
@@ -104,7 +104,7 @@ def test_active_candidates_are_the_active_mountains_in_code_point_order(reposito
 
 
 def test_every_committed_active_mountain_is_a_candidate(repository_holding):
-    entries = committed_seed().mountains
+    entries = fixture_catalog().mountains
 
     candidates = repository_holding(*entries).list_active_candidates()
 

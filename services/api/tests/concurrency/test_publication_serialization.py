@@ -12,7 +12,7 @@ from serendipeak.catalog.status_transitions import PUBLISH
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainImageRecord, MountainRecord
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
-from tests.support.catalog import catalog_mountain, catalog_seed
+from tests.support.catalog import catalog_mountain, catalog_of
 from tests.support.concurrency import (
     WAIT_SECONDS,
     a_backend_is_waiting_for_a_row_lock,
@@ -27,7 +27,7 @@ CALLERS = 8
 
 @pytest.fixture
 def catalog():
-    DjangoCatalogStore().load(catalog_seed(DRAFT))
+    DjangoCatalogStore().load(catalog_of(DRAFT))
 
 
 def test_a_publication_waits_for_an_edit_in_flight_and_judges_what_it_committed(catalog):

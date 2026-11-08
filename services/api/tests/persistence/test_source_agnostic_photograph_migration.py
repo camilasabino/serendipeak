@@ -7,7 +7,7 @@ from tests.support.migrations import (
     migrate_to,
     migrate_to_latest_discarding_catalog,
 )
-from tests.support.records import load_committed_catalog_at
+from tests.support.records import load_fixture_catalog_at
 
 BEFORE = ("catalog", "0007_owned_photograph_delivery")
 AFTER = ("catalog", "0008_source_agnostic_photograph")
@@ -28,8 +28,8 @@ def nullable_image_columns():
     return {column.name for column in description if column.null_ok}
 
 
-def test_the_73_materialized_photographs_comply_in_both_directions():
-    load_committed_catalog_at(BEFORE, with_media=True)
+def test_the_73_photographs_with_media_comply_in_both_directions():
+    load_fixture_catalog_at(BEFORE, with_media=True)
     assert applied_head() == BEFORE[1]
 
     migrate_to(AFTER)
@@ -43,7 +43,7 @@ def test_the_73_materialized_photographs_comply_in_both_directions():
 
 
 def test_reversing_fails_and_changes_nothing_once_a_photograph_was_uploaded():
-    image_model = load_committed_catalog_at(BEFORE, with_media=True)
+    image_model = load_fixture_catalog_at(BEFORE, with_media=True)
     migrate_to(AFTER)
     image_model = historical_model(AFTER, "MountainImageRecord")
     image_model.objects.filter(mountain__slug="aconcagua").update(

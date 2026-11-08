@@ -9,7 +9,7 @@ from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
-from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_seed
+from tests.support.catalog import UPDATED_AT, catalog_mountain, catalog_of
 
 pytestmark = pytest.mark.django_db
 
@@ -22,7 +22,7 @@ INCOMPLETE_DRAFT = catalog_mountain(
 
 @pytest.fixture
 def store():
-    DjangoCatalogStore().load(catalog_seed(DRAFT, ACTIVE, INCOMPLETE_DRAFT))
+    DjangoCatalogStore().load(catalog_of(DRAFT, ACTIVE, INCOMPLETE_DRAFT))
     return DjangoMountainStatusStore()
 
 

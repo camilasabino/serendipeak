@@ -9,7 +9,7 @@ from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mapping import to_mountain
 from serendipeak.persistence.models import MountainRecord
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
-from tests.support.catalog import catalog_mountain, catalog_seed, photograph_media, primary_image
+from tests.support.catalog import catalog_mountain, catalog_of, photograph_media, primary_image
 from tests.support.fakes import InMemoryMountainCreationStore
 from tests.support.geography import continent, countries
 from tests.support.regions import region_path, regions_of
@@ -56,7 +56,7 @@ def arranged(request):
         return Arrangement(store, store.mountain)
 
     request.getfixturevalue("db")
-    DjangoCatalogStore().load(catalog_seed(catalog_mountain("taken-peak", region=PATH)))
+    DjangoCatalogStore().load(catalog_of(catalog_mountain("taken-peak", region=PATH)))
 
     def stored(slug):
         record = MountainRecord.objects.filter(slug=slug).first()

@@ -1,7 +1,7 @@
 import pytest
 
 from serendipeak.catalog.public_link import is_public_link
-from tests.support.catalog import committed_seed
+from tests.support.catalog import fixture_catalog
 from tests.support.public_links import PUBLIC_LINK_CASES
 
 
@@ -22,7 +22,7 @@ def test_rejects_exactly_the_unicode_whitespace_characters_in_the_path():
 
 def test_every_committed_seed_link_is_a_public_link():
     links = []
-    for entry in committed_seed().mountains:
+    for entry in fixture_catalog().mountains:
         mountain = entry.mountain
         image = mountain.primary_image
         links.extend([image.source_page_url, image.license_url])
