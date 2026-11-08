@@ -1,0 +1,12 @@
+{% extends "studio/base.html" %}
+{% block title %}Region not found{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Error 404</p>
+		<h1 class="page-title">Region not found</h1>
+	</header>
+	<section class="panel panel--narrow">
+		<p>No region has this address. It may have been deleted, or the link may be mistyped.</p>
+		<a class="button" href="{% url 'studio:region_list' %}">Back to the regions</a>
+	</section>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "studio/base.html" %}
+{% block title %}Confirm moving {{ region.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:region_list' %}">Regions</a><span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' region.slug %}">{{ region.name.en }}</a>
+	</nav>
+	<header class="page-header">
+		<p class="kicker">{{ region.slug }}</p>
+		<h1 class="page-title">Move {{ region.name.en }}?</h1>
+	</header>
+
+	<section class="panel panel--narrow" aria-labelledby="impact-title">
+		<h2 class="panel__title" id="impact-title">What changes</h2>
+		<dl class="ledger ledger--stacked">
+			<div class="ledger__row"><dt>Now</dt><dd>{{ old_path }}</dd></div>
+			<div class="ledger__row"><dt>After the move</dt><dd>{{ new_path }}{% if moves_to_root %} <span class="empty-value">(a root region)</span>{% endif %}</dd></div>
+		</dl>
+		<h3 class="panel__subtitle">What travels with it</h3>
+		<ul class="plain-list">
+			<li>{% if descendant_regions %}{{ child_regions }} below it, at any depth, keep their places inside it.{% else %}It has no regions below it.{% endif %}</li>
+			<li>{% if subtree_mountains %}{{ mountains }} in it and below it keep their region. The path of each starts with “{{ new_path }}” instead of “{{ old_path }}”.{% else %}No mountain is in it or below it, so no mountain path changes.{% endif %}</li>
+		</ul>
+		<p class="panel__note">Slugs do not change, so nothing that points at a region by its slug breaks.</p>
+		<form method="post" action="{% url 'studio:region_move' region.slug %}">
+			{% csrf_token %}
+			<input type="hidden" name="parent" value="{{ form.parent.value }}">
+			<input type="hidden" name="confirmed" value="yes">
+			<div class="actions">
+				<button class="button" type="submit">Move region</button>
+				<a class="button button--quiet" href="{% url 'studio:region_move' region.slug %}">Choose another destination</a>
+				<a class="button button--quiet" href="{% url 'studio:region_detail' region.slug %}">Cancel</a>
+			</div>
+		</form>
+	</section>
+{% endblock %}

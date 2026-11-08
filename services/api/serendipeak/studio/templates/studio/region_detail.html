@@ -1,0 +1,105 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ region.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:region_list' %}">Regions</a>{% for ancestor in ancestors %}<span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' ancestor.slug %}">{{ ancestor.region.name.en }}</a>{% endfor %}<span aria-hidden="true"> / </span><span aria-current="page">{{ region.name.en }}</span>
+	</nav>
+	<header class="page-header page-header--detail">
+		<div>
+			<p class="kicker">{{ region.slug }}</p>
+			<h1 class="page-title">{{ region.name.en }}</h1>
+			{% include "studio/components/localized.html" with items=translations %}
+		</div>
+		{% if can_write %}
+			<div class="page-header__aside">
+				<a class="button" href="{% url 'studio:region_edit' region.slug %}">Edit</a>
+				<a class="button button--quiet" href="{% url 'studio:region_move' region.slug %}">Move</a>
+				<a class="button button--quiet" href="{% url 'studio:region_delete' region.slug %}">Delete</a>
+			</div>
+		{% endif %}
+	</header>
+
+	<div class="grid grid--detail">
+		<section class="panel" aria-labelledby="place-title">
+			<h2 class="panel__title" id="place-title">Place in the hierarchy</h2>
+			<dl class="ledger">
+				<div class="ledger__row">
+					<dt>Path</dt>
+					<dd>
+						<ol class="path" aria-label="Region path">
+							{% for ancestor in ancestors %}<li><a href="{% url 'studio:region_detail' ancestor.slug %}">{{ ancestor.region.name.en }}</a></li>{% endfor %}
+							<li>{{ region.name.en }}</li>
+						</ol>
+					</dd>
+				</div>
+				<div class="ledger__row">
+					<dt>Parent</dt>
+					<dd>{% if ancestors %}{% with parent=ancestors|last %}<a href="{% url 'studio:region_detail' parent.slug %}">{{ parent.region.name.en }}</a>{% endwith %}{% else %}<span class="empty-value">None: a root region</span>{% endif %}</dd>
+				</div>
+				<div class="ledger__row"><dt>Level</dt><dd class="numeric">{{ summary.depth|add:1 }}</dd></div>
+				<div class="ledger__row"><dt>Siblings</dt><dd class="numeric">{{ sibling_count }}</dd></div>
+				<div class="ledger__row"><dt>Slug</dt><dd>{{ region.slug }}</dd></div>
+				<div class="ledger__row">
+					<dt>Wikidata</dt>
+					<dd>{% if wikidata_url %}<a href="{{ wikidata_url }}" target="_blank" rel="noopener">{{ region.wikidata_id }}<span aria-hidden="true"> ↗</span><span class="visually-hidden"> on Wikidata (opens in a new tab)</span></a>{% else %}<span class="empty-value">None</span>{% endif %}</dd>
+				</div>
+			</dl>
+			<p class="panel__note">The slug is permanent. The parent changes only through Move, which shows what travels with the region first.</p>
+		</section>
+
+		<section class="panel" aria-labelledby="counts-title">
+			<h2 class="panel__title" id="counts-title">Counts</h2>
+			<dl class="ledger">
+				<div class="ledger__row"><dt>Mountains directly in this region</dt><dd class="numeric">{{ summary.direct_mountains }}</dd></div>
+				<div class="ledger__row"><dt>Mountains in total, with every region below</dt><dd class="numeric">{{ summary.subtree_mountains }}</dd></div>
+				<div class="ledger__row"><dt>Child regions</dt><dd class="numeric">{{ summary.child_regions }}</dd></div>
+				<div class="ledger__row"><dt>Regions below, at any depth</dt><dd class="numeric">{{ summary.descendant_regions }}</dd></div>
+			</dl>
+		</section>
+	</div>
+
+	<section class="panel panel--wide" aria-labelledby="children-title">
+		<h2 class="panel__title" id="children-title">Child regions</h2>
+		{% if children %}
+			<ul class="region-children">
+				{% for child in children %}
+					<li class="region-child">
+						<a href="{% url 'studio:region_detail' child.slug %}">{{ child.region.name.en }}</a>
+						<span class="region-node__slug">{{ child.slug }}</span>
+						<span class="region-node__meta">
+							<span class="region-node__count"><span class="numeric">{{ child.direct_mountains }}</span> direct</span>
+							<span class="region-node__count"><span class="numeric">{{ child.subtree_mountains }}</span> in total</span>
+						</span>
+					</li>
+				{% endfor %}
+			</ul>
+		{% else %}
+			<p class="empty-value">This region has no child regions.</p>
+		{% endif %}
+		{% if can_write %}<a class="button button--quiet" href="{% url 'studio:region_new' %}?parent={{ region.slug }}">Add a child region</a>{% endif %}
+	</section>
+
+	<section class="panel panel--wide" aria-labelledby="direct-title">
+		<h2 class="panel__title" id="direct-title">Directly in this region</h2>
+		{% if directly %}
+			{% include "studio/components/region_mountains.html" with items=directly %}
+		{% else %}
+			<p class="empty-value">No mountain points at this region itself.</p>
+		{% endif %}
+		<p class="panel__note">A mountain is placed in a region from its own edit page; there is no bulk assignment.</p>
+	</section>
+
+	<section class="panel panel--wide" aria-labelledby="descendants-title">
+		<h2 class="panel__title" id="descendants-title">In descendant regions</h2>
+		{% if in_descendants %}
+			{% for group in in_descendants %}
+				<div class="region-group">
+					<h3 class="region-group__title"><a href="{% url 'studio:region_detail' group.region.slug %}">{{ group.path }}</a> <span class="region-node__slug">{{ group.region.slug }}</span></h3>
+					{% include "studio/components/region_mountains.html" with items=group.mountains %}
+				</div>
+			{% endfor %}
+		{% else %}
+			<p class="empty-value">{% if summary.descendant_regions %}No mountain points at a region below this one.{% else %}This region has no regions below it.{% endif %}</p>
+		{% endif %}
+	</section>
+{% endblock %}

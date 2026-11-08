@@ -1,0 +1,11 @@
+<span class="region-node__main">
+	<a class="region-node__name" href="{% url 'studio:region_detail' row.summary.slug %}">{{ row.summary.region.name.en }}</a>
+	<span class="region-node__slug">{{ row.summary.slug }}</span>
+</span>
+{% include "studio/components/localized.html" with items=row.translations %}
+<span class="region-node__meta">
+	<span class="region-node__count"><span class="numeric">{{ row.summary.direct_mountains }}</span> direct</span>
+	<span class="region-node__count"><span class="numeric">{{ row.summary.subtree_mountains }}</span> in total</span>
+	{% if row.summary.child_regions %}<span class="region-node__count"><span class="numeric">{{ row.summary.child_regions }}</span> child region{{ row.summary.child_regions|pluralize }}</span>{% endif %}
+	{% if row.wikidata_url %}<a class="region-node__wikidata" href="{{ row.wikidata_url }}" target="_blank" rel="noopener">{{ row.summary.region.wikidata_id }}<span class="visually-hidden"> on Wikidata (opens in a new tab)</span></a>{% endif %}
+</span>

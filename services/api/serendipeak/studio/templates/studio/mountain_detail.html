@@ -119,7 +119,7 @@
 					<dd>
 						{% if region_refs %}
 							<ol class="path" aria-label="Region path">
-								{% for ref in region_refs %}<li>{{ ref.name.en }}</li>{% endfor %}
+								{% for ref in region_refs %}<li><a href="{% url 'studio:region_detail' ref.slug %}">{{ ref.name.en }}</a></li>{% endfor %}
 							</ol>
 							{% include "studio/components/localized.html" with items=region_translations %}
 						{% else %}

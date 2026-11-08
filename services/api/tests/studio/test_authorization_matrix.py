@@ -3,10 +3,12 @@ from django.test import Client, RequestFactory, override_settings
 from django.urls import get_resolver, reverse
 
 from serendipeak.accounts.roles import Role
-from serendipeak.persistence.models import UserRecord
+from serendipeak.persistence.models import MountainRegionRecord, UserRecord
 from serendipeak.studio.access import ACCESS_ATTRIBUTE, StudioAccess, declare_access
 from serendipeak.studio.middleware import StudioAccessMiddleware
+from tests.studio.region_support import parents, region_of, seed
 from tests.studio.support import LOGIN_URL
+from tests.support.region_taxonomy import region
 from tests.support.users import create_user
 
 ANONYMOUS = "anonymous"
@@ -117,6 +119,58 @@ MATRIX = {
         "declares": StudioAccess.EDITOR,
         ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
         INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/delete/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:region_list": {
+        "method": "get",
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/regions/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/regions/"),
+        VIEWER: ALLOWED,
+        EDITOR: ALLOWED,
+    },
+    "studio:region_new": {
+        "method": "get",
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/new-region/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/new-region/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ALLOWED,
+    },
+    "studio:region_detail": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-range"},
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/"),
+        VIEWER: ("status", 404),
+        EDITOR: ("status", 404),
+    },
+    "studio:region_edit": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-range"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/edit/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/edit/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:region_move": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-range"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/move/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/move/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
+    "studio:region_delete": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-range"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/delete/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/regions/no-such-range/delete/"),
         VIEWER: FORBIDDEN,
         EDITOR: ("status", 404),
     },
@@ -303,6 +357,66 @@ def test_only_an_active_editor_can_post_to_the_user_screens(db, name, data, acto
     assert (
         UserRecord.objects.values_list("role", "is_active", "password").get(pk=target.pk) == before
     )
+
+
+REGION_WRITES = (
+    ("studio:region_new", {}, {"name_en": "Karakoram"}),
+    ("studio:region_edit", {"slug": "lone-range"}, {"name_en": "Renamed"}),
+    ("studio:region_move", {"slug": "lone-range"}, {"parent": "root", "confirmed": "yes"}),
+    ("studio:region_delete", {"slug": "lone-range"}, {}),
+)
+
+
+@pytest.mark.parametrize("actor", [ANONYMOUS, INACTIVE, VIEWER])
+@pytest.mark.parametrize(("name", "kwargs", "data"), REGION_WRITES)
+def test_only_an_active_editor_can_post_to_the_region_screens(db, name, kwargs, data, actor):
+    seed([region("andes"), region("lone-range")])
+    before = (parents(), region_of("lone-range").name_en, MountainRegionRecord.objects.count())
+
+    response = client_for(actor).post(reverse(name, kwargs=kwargs), data)
+
+    assert response.status_code in (302, 403)
+    if response.status_code == 302:
+        assert response.headers["Location"] == LOGIN_URL
+    assert (
+        parents(),
+        region_of("lone-range").name_en,
+        MountainRegionRecord.objects.count(),
+    ) == before
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+@pytest.mark.parametrize(
+    ("name", "actor", "status"),
+    [
+        ("studio:region_list", VIEWER, 405),
+        ("studio:region_list", EDITOR, 405),
+        ("studio:region_detail", VIEWER, 405),
+        ("studio:region_detail", EDITOR, 405),
+    ],
+)
+def test_the_region_list_and_pages_accept_no_write(db, name, actor, status, method):
+    seed([region("andes")])
+    kwargs = {"slug": "andes"} if name == "studio:region_detail" else None
+
+    response = getattr(client_for(actor), method)(reverse(name, kwargs=kwargs))
+
+    assert response.status_code == status
+
+
+@pytest.mark.parametrize("method", ["put", "patch", "delete"])
+@pytest.mark.parametrize(
+    "name",
+    ["studio:region_new", "studio:region_edit", "studio:region_move", "studio:region_delete"],
+)
+def test_no_region_can_be_replaced_or_deleted_by_a_bare_http_verb(db, name, method):
+    seed([region("andes"), region("lone-range")])
+    kwargs = None if name == "studio:region_new" else {"slug": "lone-range"}
+
+    response = getattr(client_for(EDITOR), method)(reverse(name, kwargs=kwargs))
+
+    assert response.status_code == 405
+    assert MountainRegionRecord.objects.filter(slug="lone-range").exists()
 
 
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])

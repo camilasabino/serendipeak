@@ -1,0 +1,51 @@
+{% extends "studio/base.html" %}
+{% block title %}Regions{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Catalog</p>
+		<h1 class="page-title">Regions</h1>
+		{% if can_write %}<a class="button" href="{% url 'studio:region_new' %}">New region</a>{% endif %}
+	</header>
+
+	<p class="lede">The geographic hierarchy that mountains belong to. A mountain points at one region, and its path is that region with the ones above it. “Direct” counts the mountains of the region itself; “in total” adds those of every region below it.</p>
+
+	<form class="search" method="get" action="{% url 'studio:region_list' %}" role="search">
+		<label class="field__label" for="region-search">Search by name in any language, or by slug</label>
+		<div class="search__controls">
+			<input id="region-search" name="q" type="search" value="{{ search }}" maxlength="100" autocomplete="off">
+			<button class="button" type="submit">Search</button>
+			{% if search %}<a class="button button--quiet" href="{% url 'studio:region_list' %}">Clear search</a>{% endif %}
+		</div>
+	</form>
+
+	<p class="result-count" role="status">{% if rows %}{% if search %}{{ matches }} region{{ matches|pluralize }} match{{ matches|pluralize:"es," }} “{{ search }}”, shown with the regions above {{ matches|pluralize:"it,them" }}.{% else %}{{ total }} region{{ total|pluralize }}.{% endif %}{% endif %}</p>
+
+	{% if rows %}
+		<ul class="region-tree" aria-label="Regions">
+			{% for row in rows %}
+				<li class="region-node{% if row.matched %} region-node--match{% endif %}">
+					{% if row.has_children %}
+						<details class="region-node__details"{% if search %} open{% endif %}>
+							<summary class="region-node__row">{% include "studio/components/region_row.html" %}</summary>
+							<ul class="region-tree__children">
+					{% else %}
+						<div class="region-node__row">{% include "studio/components/region_row.html" %}</div>
+						</li>
+					{% endif %}
+				{% for _ in row.closers %}</ul></details></li>{% endfor %}
+			{% endfor %}
+		</ul>
+	{% elif search %}
+		<section class="panel panel--narrow" aria-labelledby="empty-title">
+			<h2 class="panel__title" id="empty-title">No regions match</h2>
+			<p>No region has this text in a name or in its slug.</p>
+			<a class="button button--quiet" href="{% url 'studio:region_list' %}">Show all regions</a>
+		</section>
+	{% else %}
+		<section class="panel panel--narrow" aria-labelledby="empty-title">
+			<h2 class="panel__title" id="empty-title">There are no regions yet</h2>
+			<p>Create the first region, then place the others under it.</p>
+			{% if can_write %}<a class="button" href="{% url 'studio:region_new' %}">New region</a>{% endif %}
+		</section>
+	{% endif %}
+{% endblock %}

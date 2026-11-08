@@ -1,0 +1,12 @@
+<ul class="region-mountains">
+	{% for item in items %}
+		<li class="region-mountain">
+			<span class="region-mountain__name">
+				<a href="{% url 'studio:mountain_detail' item.mountain.slug %}">{{ item.mountain.name }}</a>
+				<span class="region-mountain__slug">{{ item.mountain.slug }}</span>
+			</span>
+			{% include "studio/components/status_badge.html" with status=item.status %}
+			{% if can_write %}<a class="button button--quiet button--small" href="{% url 'studio:mountain_edit' item.mountain.slug %}">Edit<span class="visually-hidden"> {{ item.mountain.name }}</span></a>{% endif %}
+		</li>
+	{% endfor %}
+</ul>

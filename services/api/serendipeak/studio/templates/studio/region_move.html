@@ -1,0 +1,34 @@
+{% extends "studio/base.html" %}
+{% block title %}Move {{ region.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:region_list' %}">Regions</a>{% for ancestor in ancestors %}<span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' ancestor.slug %}">{{ ancestor.region.name.en }}</a>{% endfor %}<span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' region.slug %}">{{ region.name.en }}</a>
+	</nav>
+	<header class="page-header">
+		<p class="kicker">{{ region.slug }}</p>
+		<h1 class="page-title">Move {{ region.name.en }}</h1>
+	</header>
+
+	<p class="lede">Choose the region it goes under, or none to make it a root. Everything below it moves with it, and so does the path of every mountain in it. Nothing is written until you confirm on the next page.</p>
+
+	{% include "studio/components/error_summary.html" %}
+
+	<section class="panel panel--narrow" aria-labelledby="move-title">
+		<h2 class="panel__title" id="move-title">Destination</h2>
+		<form class="region-form" method="post" novalidate>
+			{% csrf_token %}
+			{% include "studio/components/field.html" with field=form.parent %}
+			<div class="actions actions--form">
+				<button class="button" type="submit">Review the move</button>
+				<a class="button button--quiet" href="{% url 'studio:region_detail' region.slug %}">Cancel</a>
+			</div>
+		</form>
+		<h3 class="panel__subtitle">Why a destination is unavailable</h3>
+		<ul class="plain-list">
+			<li>The region itself, and any region below it: it would end up inside itself.</li>
+			<li>Its current parent: nothing would change.</li>
+			<li>A region that already has a child with the same name: sibling names must differ.</li>
+		</ul>
+		<p class="panel__note">Unavailable destinations stay in the menu, greyed out, with the reason beside them. {{ form.unavailable_count }} of them {{ form.unavailable_count|pluralize:"is,are" }} unavailable now.</p>
+	</section>
+{% endblock %}

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -275,3 +275,32 @@ class MountainRegionStore(Protocol):
         Raises UnknownRegion and RegionInUse, with the number of its child regions and
         mountains, when either exists. Nothing is moved or cascaded.
         """
+
+
+@dataclass(frozen=True, slots=True)
+class CountedRegion:
+    region: MountainRegion
+    # Mountains whose own region is this one, of any status; descendants are not counted.
+    direct_mountains: int
+
+
+@dataclass(frozen=True, slots=True)
+class RegionMountain:
+    id: UUID
+    slug: str
+    # English: the only language the Studio shows a mountain in.
+    name: str
+    status: MountainStatus
+    region_id: UUID
+
+
+class MountainRegionReader(Protocol):
+    """Reads of the taxonomy for the editorial screens. Neither operation locks."""
+
+    def read_all(self) -> Sequence[CountedRegion]:
+        """Return every region with the number of mountains that point at it, in no particular
+        order. Returns an empty sequence for an empty taxonomy."""
+
+    def list_mountains(self, region_ids: Collection[UUID]) -> Sequence[RegionMountain]:
+        """Return the mountains of any status whose region is one of region_ids, in no particular
+        order. Returns an empty sequence for no ids."""

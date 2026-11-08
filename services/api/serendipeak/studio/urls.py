@@ -19,6 +19,15 @@ from serendipeak.studio.mountain_views import (
     NewMountainView,
 )
 from serendipeak.studio.preview_views import MountainPreviewView
+from serendipeak.studio.region_views import (
+    DeleteRegionView,
+    EditRegionView,
+    MoveRegionView,
+    NewRegionView,
+    RegionAdministration,
+    RegionDetailView,
+    RegionListView,
+)
 from serendipeak.studio.user_views import (
     UserAdministration,
     UserEditView,
@@ -46,6 +55,7 @@ def studio_urlpatterns(
     writes: MountainWrites,
     change_camera: ChangeMountainCamera,
     issue_preview: IssuePreviewToken,
+    regions: RegionAdministration,
     users: UserAdministration,
     list_discoveries: ListDailyDiscoveries,
     media_base_url: str,
@@ -181,6 +191,67 @@ def studio_urlpatterns(
                 ),
             ),
             name="mountain_delete",
+        ),
+        path(
+            "regions/",
+            declare_access(
+                StudioAccess.VIEWER,
+                RegionListView.as_view(
+                    administration=regions, http_method_names=["get", "head", "options"]
+                ),
+            ),
+            name="region_list",
+        ),
+        # Outside regions/ because any valid slug, "new" included, is a region's address there.
+        path(
+            "new-region/",
+            declare_access(
+                StudioAccess.EDITOR,
+                NewRegionView.as_view(
+                    administration=regions, http_method_names=["get", "post", "options"]
+                ),
+            ),
+            name="region_new",
+        ),
+        path(
+            "regions/<str:slug>/",
+            declare_access(
+                StudioAccess.VIEWER,
+                RegionDetailView.as_view(
+                    administration=regions, http_method_names=["get", "head", "options"]
+                ),
+            ),
+            name="region_detail",
+        ),
+        path(
+            "regions/<str:slug>/edit/",
+            declare_access(
+                StudioAccess.EDITOR,
+                EditRegionView.as_view(
+                    administration=regions, http_method_names=["get", "post", "options"]
+                ),
+            ),
+            name="region_edit",
+        ),
+        path(
+            "regions/<str:slug>/move/",
+            declare_access(
+                StudioAccess.EDITOR,
+                MoveRegionView.as_view(
+                    administration=regions, http_method_names=["get", "post", "options"]
+                ),
+            ),
+            name="region_move",
+        ),
+        path(
+            "regions/<str:slug>/delete/",
+            declare_access(
+                StudioAccess.EDITOR,
+                DeleteRegionView.as_view(
+                    administration=regions, http_method_names=["get", "post", "options"]
+                ),
+            ),
+            name="region_delete",
         ),
         path(
             "daily-discoveries/",

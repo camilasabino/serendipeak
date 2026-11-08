@@ -1363,3 +1363,181 @@ form {
 		grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
 	}
 }
+
+/* Regions */
+
+.panel--wide {
+	align-self: stretch;
+	margin-top: var(--sp-space-5);
+}
+
+.panel__subtitle {
+	margin-top: var(--sp-space-2);
+	color: var(--sp-text-muted);
+	font-size: var(--sp-text-ui);
+	font-weight: 600;
+}
+
+.region-tree,
+.region-tree__children {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.region-tree {
+	border-top: 1px solid var(--sp-rule-on-paper);
+}
+
+.region-tree__children {
+	margin-left: var(--sp-space-3);
+	padding-left: var(--sp-space-3);
+	border-left: 1px solid var(--sp-rule-on-paper);
+}
+
+.region-node {
+	border-bottom: 1px solid var(--sp-rule-on-paper);
+}
+
+.region-tree__children > .region-node:last-child {
+	border-bottom: 0;
+}
+
+.region-node--match > .region-node__row,
+.region-node--match > .region-node__details > .region-node__row {
+	background: color-mix(in srgb, var(--sp-glacier-light) 22%, transparent);
+}
+
+.region-node__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem var(--sp-space-4);
+	padding: var(--sp-space-3) var(--sp-space-2);
+}
+
+.region-node__row::before {
+	flex: 0 0 1rem;
+	color: var(--sp-text-muted);
+	content: '';
+}
+
+summary.region-node__row {
+	cursor: pointer;
+}
+
+summary.region-node__row::before {
+	content: '▸' / '';
+}
+
+details[open] > summary.region-node__row::before {
+	content: '▾' / '';
+}
+
+summary.region-node__row:focus-visible {
+	outline: 2px solid var(--sp-focus-on-paper);
+	outline-offset: -2px;
+}
+
+.region-node__main {
+	display: flex;
+	flex: 1 1 14rem;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0 var(--sp-space-3);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.region-node__name {
+	font-weight: 600;
+}
+
+.region-node__slug {
+	color: var(--sp-text-muted);
+	font-size: 0.8125rem;
+}
+
+.region-node__meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--sp-space-3);
+	color: var(--sp-text-muted);
+	font-size: var(--sp-text-ui);
+}
+
+.region-node__wikidata {
+	font-size: 0.8125rem;
+}
+
+.region-children,
+.region-mountains {
+	align-self: stretch;
+	margin: 0;
+	padding: 0;
+	border-top: 1px solid var(--sp-rule-on-paper);
+	list-style: none;
+}
+
+.region-child,
+.region-mountain {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem var(--sp-space-4);
+	padding: var(--sp-space-3) 0;
+	border-bottom: 1px solid var(--sp-rule-on-paper);
+	overflow-wrap: anywhere;
+}
+
+.region-mountain {
+	align-items: center;
+}
+
+.region-mountain__name {
+	flex: 1 1 12rem;
+	min-width: 0;
+}
+
+.region-mountain__slug {
+	display: block;
+	color: var(--sp-text-muted);
+	font-size: 0.8125rem;
+}
+
+.region-group {
+	align-self: stretch;
+}
+
+.region-group__title {
+	margin-bottom: var(--sp-space-2);
+	font-size: 1rem;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.region-form {
+	align-self: stretch;
+}
+
+.notice {
+	display: grid;
+	gap: var(--sp-space-3);
+	padding: var(--sp-space-4);
+	border: 1px solid var(--sp-warning);
+	border-radius: var(--sp-radius);
+	background: var(--sp-surface-card);
+}
+
+.notice__title {
+	color: var(--sp-warning);
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+@media (max-width: 39.9375rem) {
+	.region-tree__children {
+		margin-left: 0.25rem;
+		padding-left: var(--sp-space-2);
+	}
+}

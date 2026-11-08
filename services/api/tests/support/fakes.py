@@ -33,6 +33,7 @@ from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
 from serendipeak.catalog.ports import (
     CameraChange,
+    CountedRegion,
     GeographyOptions,
     StatusChange,
     StatusChangeOutcome,
@@ -678,6 +679,34 @@ class InMemoryMountainRegionStore:
             for other in self._regions.values()
         ):
             raise RegionWikidataTaken(wikidata_id)
+
+
+class InMemoryMountainRegionReader:
+    """Holds the regions and the mountains it is given, as a RegionMountain each. read_all and
+    list_mountains count the calls, so a test can see how many reads a screen made."""
+
+    def __init__(self, regions=(), mountains=()):
+        self._regions = tuple(regions)
+        self._mountains = tuple(mountains)
+        self.reads = 0
+        self.mountain_reads = 0
+
+    def read_all(self):
+        self.reads += 1
+
+        return tuple(
+            CountedRegion(
+                region=region,
+                direct_mountains=sum(1 for item in self._mountains if item.region_id == region.id),
+            )
+            for region in self._regions
+        )
+
+    def list_mountains(self, region_ids):
+        self.mountain_reads += 1
+        wanted = set(region_ids)
+
+        return tuple(item for item in self._mountains if item.region_id in wanted)
 
 
 class InMemoryDailyDiscoveryRepository:

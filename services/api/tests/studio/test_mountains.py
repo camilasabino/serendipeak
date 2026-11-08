@@ -308,9 +308,12 @@ def test_the_detail_shows_the_content_geography_photograph_and_camera(catalog, v
     assert "-32.65315, -70.01196" in body
     assert "South America" in body
     assert "Argentina" in body and "Chile" in body
-    assert "<li>Andes</li><li>Southern Andes</li><li>Central Andes</li>" in body.replace(
-        "\n", ""
-    ).replace("\t", "")
+    path = body.replace("\n", "").replace("\t", "")
+    assert (
+        '<li><a href="/studio/regions/andes/">Andes</a></li>'
+        '<li><a href="/studio/regions/southern-andes/">Southern Andes</a></li>'
+        '<li><a href="/studio/regions/central-andes/">Central Andes</a></li>'
+    ) in path
     assert '<dt>Heading</dt><dd class="numeric">66.87°</dd>' in body
     assert '<dt>Range</dt><dd class="numeric">17,132 m</dd>' in body
     assert "x -0.0587, y 0.3857" in body

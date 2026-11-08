@@ -1,17 +1,8 @@
 from dataclasses import dataclass
-from uuid import UUID
 
 from serendipeak.catalog.entities import Continent, Country
 from serendipeak.catalog.ports import GeographyOptionsReader
-from serendipeak.catalog.regions import regions_in_tree_order
-
-
-@dataclass(frozen=True, slots=True)
-class RegionOption:
-    id: UUID
-    slug: str
-    # The names from the root, so two regions with the same name tell apart.
-    label: str
+from serendipeak.catalog.regions import RegionOption, regions_in_tree_order
 
 
 @dataclass(frozen=True, slots=True)

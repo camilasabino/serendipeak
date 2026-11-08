@@ -13,29 +13,37 @@ from config.composition import (
     build_change_user_access,
     build_clear_login_failures,
     build_create_mountain,
+    build_create_mountain_region,
     build_deactivate_mountain,
     build_delete_draft_mountain,
+    build_delete_mountain_region,
     build_get_mountain_by_slug,
     build_get_mountain_detail,
     build_get_mountain_form_options,
     build_get_mountain_preview,
+    build_get_mountain_region,
     build_get_random_mountain,
+    build_get_region_directory,
     build_get_todays_mountain,
     build_get_user,
     build_issue_preview_token,
     build_list_daily_discoveries,
+    build_list_mountain_regions,
     build_list_mountains,
     build_list_users,
+    build_move_mountain_region,
     build_publish_mountain,
     build_reactivate_mountain,
     build_set_user_password,
     build_update_mountain,
+    build_update_mountain_region,
 )
 from config.health import healthz
 from serendipeak.httpapi.urls import mountain_urlpatterns
 from serendipeak.media.filesystem_media_store import PUBLIC_DIRECTORY
 from serendipeak.studio.access import STUDIO_PATH_PREFIX
 from serendipeak.studio.mountain_views import MountainWrites
+from serendipeak.studio.region_views import RegionAdministration
 from serendipeak.studio.urls import studio_urlpatterns
 from serendipeak.studio.user_views import UserAdministration
 
@@ -82,6 +90,15 @@ urlpatterns = [
                     ),
                     change_camera=build_change_mountain_camera(),
                     issue_preview=build_issue_preview_token(),
+                    regions=RegionAdministration(
+                        list_regions=build_list_mountain_regions(),
+                        get_region=build_get_mountain_region(),
+                        get_directory=build_get_region_directory(),
+                        create=build_create_mountain_region(),
+                        update=build_update_mountain_region(),
+                        move=build_move_mountain_region(),
+                        delete=build_delete_mountain_region(),
+                    ),
                     users=UserAdministration(
                         list_users=build_list_users(),
                         get_user=build_get_user(),

@@ -1,0 +1,78 @@
+{% extends "studio/base.html" %}
+{% load static %}
+{% block title %}{% if is_new %}New region{% else %}Edit {{ region.name.en }}{% endif %}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:region_list' %}">Regions</a>
+		{% if not is_new %}{% for ancestor in ancestors %}<span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' ancestor.slug %}">{{ ancestor.region.name.en }}</a>{% endfor %}<span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' region.slug %}">{{ region.name.en }}</a>{% endif %}
+	</nav>
+	<header class="page-header page-header--detail">
+		<div>
+			<p class="kicker">{% if is_new %}Catalog{% else %}{{ region.slug }}{% endif %}</p>
+			<h1 class="page-title">{% if is_new %}New region{% else %}Edit {{ region.name.en }}{% endif %}</h1>
+		</div>
+	</header>
+
+	{% if is_new %}
+		<p class="lede">A region is a node of the hierarchy. Choose where it sits, name it in English and, if you know them, in Spanish and Portuguese. Once saved, its slug cannot change and its parent changes only through Move.</p>
+	{% else %}
+		<p class="lede">Names and the Wikidata item can change here. The slug is permanent and the parent changes only through <a href="{% url 'studio:region_move' region.slug %}">Move</a>, which shows what travels with the region first.</p>
+	{% endif %}
+
+	{% include "studio/components/error_summary.html" %}
+
+	<form class="region-form" method="post" novalidate data-unsaved-guard>
+		{% csrf_token %}
+
+		{% if is_new %}
+			<fieldset class="form-section">
+				<legend class="form-section__title">Place</legend>
+				{% include "studio/components/field.html" with field=form.parent %}
+			</fieldset>
+		{% endif %}
+
+		<fieldset class="form-section">
+			<legend class="form-section__title">Names</legend>
+			{% include "studio/components/field.html" with field=form.name_en %}
+			<div class="field-pair">
+				{% include "studio/components/field.html" with field=form.name_es %}
+				{% include "studio/components/field.html" with field=form.name_pt %}
+			</div>
+		</fieldset>
+
+		<fieldset class="form-section">
+			<legend class="form-section__title">Identity</legend>
+			{% if is_new %}
+				{% include "studio/components/field.html" with field=form.slug %}
+			{% else %}
+				<dl class="ledger">
+					<div class="ledger__row"><dt>Slug</dt><dd>{{ region.slug }}</dd></div>
+				</dl>
+				<p class="field__help">The slug is the permanent address of the region and cannot be changed.</p>
+			{% endif %}
+			{% include "studio/components/field.html" with field=form.wikidata_id %}
+		</fieldset>
+
+		{% if is_new and form.homonyms %}
+			<section class="notice" aria-labelledby="same-name-title">
+				<h2 class="notice__title" id="same-name-title">Other regions have this name</h2>
+				<p>The slug cannot change after saving, so qualify it with the country or the range this region belongs to, or confirm that it is a different region from these.</p>
+				<ul class="plain-list">
+					{% for option in form.homonyms %}
+						<li><a href="{% url 'studio:region_detail' option.slug %}" target="_blank" rel="noopener">{{ option.label }}<span class="visually-hidden"> (opens in a new tab)</span></a> <span class="region-node__slug">{{ option.slug }}</span></li>
+					{% endfor %}
+				</ul>
+				{% if form.slug_suggestions %}<p>Free slugs for this name: {{ form.slug_suggestions|join:", " }}.</p>{% endif %}
+				{% include "studio/components/checkbox.html" with field=form.confirm_same_name %}
+			</section>
+		{% endif %}
+
+		<div class="actions actions--form">
+			<button class="button" type="submit" data-submit>{% if is_new %}Create region{% else %}Save changes{% endif %}</button>
+			<a class="button button--quiet" href="{% if is_new %}{% url 'studio:region_list' %}{% else %}{% url 'studio:region_detail' region.slug %}{% endif %}">Cancel</a>
+		</div>
+	</form>
+{% endblock %}
+{% block scripts %}
+	<script src="{% static 'studio/unsaved-changes.js' %}" defer></script>
+{% endblock %}

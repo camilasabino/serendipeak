@@ -1,0 +1,46 @@
+{% extends "studio/base.html" %}
+{% block title %}Delete {{ region.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:region_list' %}">Regions</a><span aria-hidden="true"> / </span><a href="{% url 'studio:region_detail' region.slug %}">{{ region.name.en }}</a>
+	</nav>
+	<header class="page-header">
+		<p class="kicker">{{ region.slug }}</p>
+		<h1 class="page-title">{% if blocked %}{{ region.name.en }} cannot be deleted yet{% else %}Delete {{ region.name.en }}?{% endif %}</h1>
+	</header>
+
+	<section class="panel panel--narrow" aria-labelledby="delete-title">
+		<h2 class="panel__title" id="delete-title">What depends on it</h2>
+		<dl class="ledger">
+			<div class="ledger__row"><dt>Child regions</dt><dd class="numeric">{{ summary.child_regions }}</dd></div>
+			<div class="ledger__row"><dt>Mountains directly in it</dt><dd class="numeric">{{ summary.direct_mountains }}</dd></div>
+		</dl>
+
+		{% if children %}
+			<h3 class="panel__subtitle">Child regions</h3>
+			<ul class="plain-list">
+				{% for child in children %}<li><a href="{% url 'studio:region_detail' child.slug %}">{{ child.region.name.en }}</a> <span class="region-node__slug">{{ child.slug }}</span></li>{% endfor %}
+			</ul>
+		{% endif %}
+		{% if directly %}
+			<h3 class="panel__subtitle">Mountains</h3>
+			{% include "studio/components/region_mountains.html" with items=directly can_write=True %}
+		{% endif %}
+
+		{% if blocked %}
+			<p>A region with child regions or mountains is never deleted, and nothing is moved or deleted for you. Move or delete each child region, and place each mountain in another region from its edit page, then come back.</p>
+			<div class="actions">
+				<a class="button" href="{% url 'studio:region_detail' region.slug %}">Back to the region</a>
+			</div>
+		{% else %}
+			<p>It has no child regions and no mountains. Deleting it removes the region and frees its slug <strong>{{ region.slug }}</strong>. This cannot be undone.</p>
+			<form method="post" action="{% url 'studio:region_delete' region.slug %}">
+				{% csrf_token %}
+				<div class="actions">
+					<button class="button button--danger" type="submit">Delete region</button>
+					<a class="button button--quiet" href="{% url 'studio:region_detail' region.slug %}">Cancel</a>
+				</div>
+			</form>
+		{% endif %}
+	</section>
+{% endblock %}

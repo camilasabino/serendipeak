@@ -28,7 +28,10 @@ from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
 from serendipeak.catalog.get_mountain_preview import GetMountainPreview
+from serendipeak.catalog.get_mountain_region import GetMountainRegion
+from serendipeak.catalog.get_region_directory import GetRegionDirectory
 from serendipeak.catalog.issue_preview_token import IssuePreviewToken
+from serendipeak.catalog.list_mountain_regions import ListMountainRegions
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
@@ -62,6 +65,7 @@ from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraSt
 from serendipeak.persistence.mountain_catalog_reader import DjangoMountainCatalogReader
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
+from serendipeak.persistence.mountain_region_reader import DjangoMountainRegionReader
 from serendipeak.persistence.mountain_region_store import DjangoMountainRegionStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from serendipeak.persistence.mountain_status_store import DjangoMountainStatusStore
@@ -128,6 +132,18 @@ def build_get_mountain_detail() -> GetMountainDetail:
 
 def build_get_mountain_form_options() -> GetMountainFormOptions:
     return GetMountainFormOptions(DjangoGeographyOptionsReader())
+
+
+def build_list_mountain_regions() -> ListMountainRegions:
+    return ListMountainRegions(DjangoMountainRegionReader())
+
+
+def build_get_mountain_region() -> GetMountainRegion:
+    return GetMountainRegion(DjangoMountainRegionReader())
+
+
+def build_get_region_directory() -> GetRegionDirectory:
+    return GetRegionDirectory(DjangoMountainRegionReader())
 
 
 def build_issue_preview_token() -> IssuePreviewToken:

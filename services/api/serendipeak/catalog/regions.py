@@ -27,6 +27,12 @@ class RegionCycle(DomainError):
         self.region_id = region_id
 
 
+class RegionSlugNotFound(ApplicationError):
+    def __init__(self, slug: str):
+        super().__init__(f"no region has the slug {slug!r}")
+        self.slug = slug
+
+
 @dataclass(frozen=True, slots=True)
 class MountainRegion:
     id: UUID
@@ -48,6 +54,14 @@ class RegionPath:
 
     region: RegionRef
     ancestors: tuple[RegionRef, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RegionOption:
+    id: UUID
+    slug: str
+    # The names from the root, so two regions with the same name tell apart.
+    label: str
 
 
 def region_id_for_slug(slug: str) -> UUID:

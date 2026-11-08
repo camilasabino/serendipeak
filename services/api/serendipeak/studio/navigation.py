@@ -27,6 +27,18 @@ NAVIGATION = (
             "studio:mountain_delete",
         ),
     ),
+    NavigationItem(
+        "Regions",
+        "studio:region_list",
+        StudioAccess.VIEWER,
+        section_url_names=(
+            "studio:region_detail",
+            "studio:region_new",
+            "studio:region_edit",
+            "studio:region_move",
+            "studio:region_delete",
+        ),
+    ),
     NavigationItem("Daily discoveries", "studio:discovery_list", StudioAccess.VIEWER),
     NavigationItem(
         "Users",

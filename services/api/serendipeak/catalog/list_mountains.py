@@ -1,7 +1,7 @@
-import unicodedata
 from dataclasses import dataclass
 
 from serendipeak.catalog.entities import Mountain, MountainStatus
+from serendipeak.catalog.folding import fold
 from serendipeak.catalog.ports import MountainCatalogReader
 from serendipeak.catalog.publication import PublicationViolation, publication_violations
 
@@ -46,13 +46,6 @@ class ListMountains:
             counts=counts,
             total=len(matching),
         )
-
-
-def fold(text: str) -> str:
-    """Lowercase, accent-free and whitespace-trimmed, so "Mönch" is found by "monch"."""
-    decomposed = unicodedata.normalize("NFKD", text.strip())
-
-    return "".join(char for char in decomposed if not unicodedata.combining(char)).casefold()
 
 
 def _matches(mountain: Mountain, needle: str) -> bool:
