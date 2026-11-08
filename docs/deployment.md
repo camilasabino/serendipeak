@@ -20,6 +20,7 @@ Nothing in this file is a credential. Values in `<angle brackets>` are chosen by
 | `api` | image built from `services/api/Dockerfile` | `<api-host>` |
 | `web` | image built from `apps/web/Dockerfile` | `<web-origin>` |
 | `prune` | cron service, same image and variables as `api` | never |
+| `backup` | cron service built from `services/backup`; daily `pg_dump` to the private R2 bucket `serendipeak-db-backups` | never |
 | R2 bucket `<public-bucket>` | public photograph renditions | `<media-host>` (custom domain) |
 | R2 bucket `<originals-bucket>` | private original photographs | never |
 
@@ -40,7 +41,7 @@ export OPERATOR_ENV=<path to the operator environment file>   # outside the repo
 prod() { env -i PATH="$PATH" HOME="$HOME" uv run --env-file "$OPERATOR_ENV" "$@"; }
 ```
 
-The file holds the same variable names as the `api` service (see step 1) with the *public* database URL of the temporary proxy window and the production media settings, plus `PGSSLMODE=require`, plus `GDAL_LIBRARY_PATH` and `GEOS_LIBRARY_PATH` on macOS. `APP_ENV` is `production`. Use a dedicated R2 token for it and revoke the token when the work is done.
+The file holds the same variable names as the `api` service (see step 1) with the database URL of the SSH tunnel (`127.0.0.1` and its local port) and the production media settings, plus `GDAL_LIBRARY_PATH` and `GEOS_LIBRARY_PATH` on macOS. `APP_ENV` is `production`. Use a dedicated R2 token for it and revoke the token when the work is done.
 
 Before each production session:
 
@@ -51,7 +52,7 @@ cd services/api
 prod python -c "import os,urllib.parse as u; d=u.urlsplit(os.environ['DATABASE_URL']); print(d.hostname, d.path)"
 ```
 
-The printed host and database must be the production proxy host and database, not `localhost`.
+The printed host and database must be the tunnel's local address and the production database name; check that the tunnel, not a development database, is what listens on that port.
 
 ## Order of execution
 
@@ -62,8 +63,8 @@ The printed host and database must be the production proxy host and database, no
 | 3 | R2 buckets, media domain and their backups | Cloudflare |
 | 4, 5, 6 | Export, checksum and review, dry run | no (development and a disposable database) |
 | 9a | First `api` deploy, which migrates | Railway, database |
-| 7, 8 | Catalog import and R2 transfer, inside one database proxy window | database, R2 |
-| 9b | Initial Editor, close the proxy window, `web` deploy | database, Railway |
+| 7, 8 | Catalog import and R2 transfer, inside one SSH tunnel session | database, R2 |
+| 9b | Initial Editor, close the tunnel, `web` deploy | database, Railway |
 | 10 | Smoke tests on the staging names | read-only, plus one Studio session |
 | 11 | Switch, rollback and recovery | DNS |
 
@@ -91,7 +92,7 @@ The printed host and database must be the production proxy host and database, no
    | `CORS_ALLOWED_ORIGIN`, `WEB_ORIGIN` | the web origin in use (`https://…`, no path or trailing slash) |
    | `TRUSTED_PROXY_HOPS` | `1`, only while the conditions of "Trusting forwarded headers" hold |
    | `MEDIA_STORE` | `s3` |
-   | `MEDIA_PUBLIC_BASE_URL` | `https://<media-host>` |
+   | `MEDIA_PUBLIC_BASE_URL` | `https://media.serendipeak.camilasabino.dev` |
    | `MEDIA_S3_ENDPOINT_URL`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | R2 endpoint and a token scoped to the two production buckets only |
    | `MEDIA_PUBLIC_BUCKET`, `MEDIA_ORIGINALS_BUCKET` | `<public-bucket>`, `<originals-bucket>` |
    | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `35` (Gunicorn waits up to 30 s for in-flight requests) |
@@ -125,27 +126,65 @@ The printed host and database must be the production proxy host and database, no
 Railway's default PostgreSQL service may not ship PostGIS. Use a PostGIS-enabled PostgreSQL service (the PostGIS template, or the `postgis/postgis` image at the CI version) and prove it:
 
 ```sh
-psql "$DATABASE_PUBLIC_URL" -c "select version();" \
+psql "$DATABASE_URL" -c "select version();" \
   -c "select name, default_version from pg_available_extensions where name = 'postgis';" \
   -c "select rolsuper from pg_roles where rolname = current_user;"
 ```
 
-The `postgis` extension must be available and the role must be a superuser: the first migration runs `CREATE EXTENSION postgis`. Attach a volume as the service requires; the `api` and `web` services have none.
+The `postgis` extension must be available and the role must be a superuser: the first migration runs `CREATE EXTENSION postgis`. Attach a volume as the service requires; the `api` and `web` services have none. With the `postgis/postgis` image at major 18 the volume mounts at `/var/lib/postgresql` (the data directory is a versioned subdirectory), not at `/var/lib/postgresql/data`. The image offers no TLS, which is fine because nothing connects to it over the public internet (see "Operator access").
 
-The database is then reached from the `api` service over the private network (`DATABASE_URL` reference). The public proxy exists only inside the windows of steps 7 and 8 and is removed afterwards.
+The database is reached from the `api` service over the private network (`DATABASE_URL` reference) and from the operator's machine through an SSH tunnel. It never gets a TCP proxy.
+
+**Operator access.** The Railway CLI looks for a `DATABASE_URL` variable on the service, so give `postgres` one built from references to its own variables (private domain, port 5432). Register an SSH key with `railway ssh keys`, then open the tunnel and read the local address it prints (host `127.0.0.1`, an ephemeral or `-P` port); it stays open until interrupted, and the first connection can take about half a minute:
+
+```sh
+railway connect postgres --tunnel-only -P <local-port>
+```
+
+The tunnel is encrypted by SSH, so neither a TCP proxy nor server-side TLS is needed. The client must be PostgreSQL 18; Docker provides one without installing anything (`host.docker.internal` reaches the tunnel from a container on macOS). Close the tunnel when done: the `ssh` process it spawns survives an interrupted parent, so confirm the port no longer listens.
 
 **Backups**, which together must make a restore possible without Railway:
 
-- **Provider backups**: enable the scheduled volume backups if the plan offers them, and take a manual one before step 7.
-- **Logical dumps**: `pg_dump --format=custom` through the proxy window (also available at any later time by reopening it), before step 7 and before every deploy that ships a migration; weekly otherwise. Store dumps outside Railway, in the directory the owner backs up, with their SHA-256.
+- **Provider backups**: scheduled and manual volume backups exist only on a plan that offers them (the entry-level plan rejects them), and point-in-time recovery supports only the provider's own PostgreSQL images, not the PostGIS one. Without them, the logical dumps below are the only database backup; do not treat the volume as one.
+- **Logical dumps**: `pg_dump --format=custom` through the tunnel, before step 7 and before every deploy that ships a migration; weekly otherwise. Store dumps outside Railway, in the directory the owner backs up, with their SHA-256.
 
   ```sh
-  pg_dump --format=custom --no-owner --file "<custody>/serendipeak-<date>.dump" "$DATABASE_PUBLIC_URL"
+  docker run --rm -e PGPASSWORD -v "<custody>":/out postgis/postgis:18-3.6 \
+    pg_dump -h host.docker.internal -p <local-port> -U <user> -d <database> \
+    --format=custom --no-owner --file /out/serendipeak-<date>.dump
   shasum -a 256 "<custody>/serendipeak-<date>.dump"
   ```
 
 - **Catalog snapshots**: `export_catalog_snapshot` is read-only and verifies itself; exporting production regularly gives an editorial backup that the tooling can load and verify. It holds no users and no sessions.
 - **Proof**: a backup counts only after it has been restored once into a disposable database and `check_catalog` passed on it (step 6 does this for the first dump).
+
+### Automated database backups
+
+The `backup` service is a Railway cron service built from `services/backup` (root directory `services/backup`, Dockerfile builder). It runs `pg_dump --format=custom` against `postgres` over the private network, checks the archive with `pg_restore --list`, writes a SHA-256 file next to it and uploads both to the private R2 bucket `serendipeak-db-backups` under `daily/`. On Sundays (UTC) it also writes `weekly/`. Each upload is checked by size. Retention is the bucket's lifecycle rules, not the job: `daily/` expires after 14 days and `weekly/` after 60 days, so the job holds no delete permission. R2 applies lifecycle rules asynchronously, so an object can outlive its limit by about a day.
+
+| Setting | Value |
+| ------- | ----- |
+| Schedule | `30 3 * * *` (UTC) |
+| Restart policy | never (a cron service must exit; the next run is the retry) |
+| Public domain, TCP proxy | none |
+| `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | references to `postgres` (`RAILWAY_PRIVATE_DOMAIN`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) |
+| `PGPORT` | `5432` |
+| `BACKUP_S3_ENDPOINT_URL` | `https://<account-id>.r2.cloudflarestorage.com` |
+| `BACKUP_BUCKET` | `serendipeak-db-backups` |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | an R2 API token with Object Read & Write on `serendipeak-db-backups` only. It must not reach the media buckets |
+
+- **No overlap.** Railway does not start a scheduled run while the previous one is still active, and `pg_dump` is bounded by `BACKUP_DUMP_TIMEOUT_SECONDS` (default 1500), so a hung run ends before it can block the next days for long.
+- **Failure is visible.** Any error (database unreachable, dump or upload failure, size mismatch) exits non-zero and Railway shows the run as failed. Enable deploy-failure notifications for the project (project settings, notifications) so it reaches the owner by email.
+- **A missed run produces no failure**, so look for it: `backup check` fails unless the newest `daily/` dump is at most `BACKUP_MAX_AGE_SECONDS` old (default 36 h), its checksum matches and `pg_restore --list` reads it. Run it at least weekly, and after any change to the service, from any machine with Docker and the backup token (it needs no database access):
+
+  ```sh
+  docker build -t serendipeak-backup services/backup
+  docker run --rm --env-file <file with BACKUP_S3_* and BACKUP_BUCKET> serendipeak-backup check
+  ```
+
+  The R2 dashboard (bucket, objects) shows the same thing: one `daily/` dump and checksum per day. Nothing alerts on its own when the job stops being scheduled; the weekly check is the control for that.
+- **Restore.** Download a dump and its `.sha256` from the bucket (dashboard or any S3 client), run `shasum -a 256 -c` on it, then restore into an empty PostGIS 18 database (`pg_restore --no-owner --exit-on-error --dbname <target> <file>`). The archive carries the `postgis` extension and no roles. Run `check_catalog` on the result before relying on it.
+- **Credentials.** Rotate the R2 token by creating a new one, updating the two variables and running the service once; then revoke the old one.
 
 **Gate:** extension and superuser checks pass; the backup mode and the dump location are recorded (decision 4).
 
@@ -238,14 +277,14 @@ Drop the disposable databases and delete the dry-run files.
 
 ## 7. Controlled production snapshot import
 
-Do this only after step 9a (the schema exists and the `api` service is healthy with an empty catalog and no public domain) and keep the proxy window open through step 8.
+Do this only after step 9a (the schema exists and the `api` service is healthy with an empty catalog and no public domain) and keep the tunnel open through step 8.
 
 1. Take a provider backup and a `pg_dump` of the migrated, empty database (step 2).
-2. Open the window: enable a TCP proxy on the `postgres` service only. Put its URL in `OPERATOR_ENV` as `DATABASE_URL`. Repeat the "Before each production session" checks.
+2. Open the tunnel ("Operator access"). Put its local URL in `OPERATOR_ENV` as `DATABASE_URL`. Repeat the "Before each production session" checks.
 3. Confirm the target is empty:
 
    ```sh
-   psql "$DATABASE_PUBLIC_URL" -tAc "select count(*) from mountain"        # 0
+   psql "$DATABASE_URL" -tAc "select count(*) from mountain"        # 0
    ```
 
 4. Import and verify. `load_catalog_snapshot` prints the database it is about to write; read it.
@@ -299,7 +338,7 @@ Copy exactly the objects the snapshot references, nothing else. A development bu
 
    Expect `200`, `image/jpeg` and `public, max-age=31536000, immutable`. If `cache-control` is missing, repeat the public copy with `--header-upload "Cache-Control: public, max-age=31536000, immutable"` for the objects of `public.txt`. The original must not be readable through the media host.
 
-5. Delete the scratch lists. Close the proxy window only after step 9b's Editor creation, or now and reopen it.
+5. Delete the scratch lists. Close the tunnel only after step 9b's Editor creation, or now and reopen it.
 
 **Gate:** `rclone check` clean for both lists and `check_photograph_media --deep --checksums` exits 0.
 
@@ -313,9 +352,9 @@ Copy exactly the objects the snapshot references, nothing else. A development bu
 
 **Every later deploy** runs the same migrations before the new version starts, while the previous version keeps serving. A migration therefore must be compatible with the version that is still running (add before use, remove after). Take a dump first for any deploy that ships a migration. `migrate` is forward-only; a rollback of the image does not undo it.
 
-### 9b. Initial Editor, close the window, `web`
+### 9b. Initial Editor, close the tunnel, `web`
 
-1. Create the first Editor from the operator shell, inside the proxy window. The password comes from the environment, never from an argument or the screen:
+1. Create the first Editor from the operator shell, inside the tunnel session. The password comes from the environment, never from an argument or the screen:
 
    ```sh
    cd services/api
@@ -324,7 +363,7 @@ Copy exactly the objects the snapshot references, nothing else. A development bu
    unset SERENDIPEAK_EDITOR_PASSWORD
    ```
 
-2. **Close the proxy window**: remove the TCP proxy from `postgres`, delete the proxy URL from `OPERATOR_ENV`, revoke the operator R2 token if no further transfer is planned. Check: `railway status` lists no TCP proxy on the database.
+2. **Close the tunnel**: stop it and confirm its port no longer listens, delete the tunnel URL from `OPERATOR_ENV`, revoke the operator R2 token if no further transfer is planned. Check: the database has no TCP proxy and no domain.
 3. Give `api` its public domain `<api-host>`. `curl -i https://<api-host>/healthz` answers 200.
 4. Deploy `web` (its build arguments were set in step 1) and give it the staging or final hostname that `WEB_ORIGIN` and `CORS_ALLOWED_ORIGIN` name.
 5. Create the `prune` cron service (same root directory `services/api`, same variables, start command `python manage.py prune_daily_discoveries`, schedule `0 1 * * *` UTC) before the switch. Nothing fails without it; the discovery table just keeps growing by one row a day.
@@ -393,7 +432,7 @@ node scripts/verify-api.mjs "$API"
 | The import is wrong or half done | Recreate the database: new `postgres` service or empty database, `migrate`, repeat steps 7 to 8. Never patch a loaded catalog. |
 | The database is lost or corrupt | Restore the latest provider backup or `pg_dump` into a new database, point `DATABASE_URL` at it, then run `check_catalog`. Users and sessions come back with the dump; from a snapshot only, run `create_editor` again. |
 | Photographs are missing or damaged | Re-copy the referenced keys from the second copy or the development buckets (step 8), then `check_photograph_media --deep --checksums`. |
-| No usable Editor | `create_editor` from the operator shell through a new proxy window; close it again. |
+| No usable Editor | `create_editor` from the operator shell through a new tunnel; close it again. |
 | A secret is exposed | `DJANGO_SECRET_KEY`: replace and redeploy (ends every Studio session). `PREVIEW_SIGNING_KEY`: replace (ends outstanding previews). R2 token: create a new one, update the variables, redeploy, revoke the old one. Database password: rotate in Railway and redeploy every service that references it. |
 
 Reversing `catalog.0001_initial` drops the `postgis` extension and fails if other objects depend on it; do not migrate backwards on a database that holds data. The way back is a restore.
@@ -403,7 +442,7 @@ Reversing `catalog.0001_initial` drops the `postgis` extension and fails if othe
 Django believes `X-Forwarded-Proto` only when `TRUSTED_PROXY_HOPS` is above `0` (`SECURE_PROXY_SSL_HEADER`), and uses the same value to pick the client address out of `X-Forwarded-For`. Gunicorn is configured not to derive the scheme from any header, `X-Forwarded-Host` is never trusted, and `ALLOWED_HOSTS` is an exact list. On Railway, `TRUSTED_PROXY_HOPS=1` is correct while **all** of these are true:
 
 1. **Every outside request passes through Railway's HTTP edge.** The edge states `X-Forwarded-Proto: https` for what it forwards and redirects plain HTTP (a plain POST is turned into a GET and redirected), so a request that reaches the service from the internet was received over HTTPS. The `api` service has no TCP proxy and no other public route.
-2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `prune`). `web` calls the API through its public HTTPS address, not through the private one.
+2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `prune`, `backup`). `web` calls the API through its public HTTPS address, not through the private one.
 3. **The edge replaces the header; Django fails closed otherwise.** Django compares the whole header value with `https`. `http`, an empty value or a list such as `http, https` make the request insecure, which turns into a redirect or a refused form post, never into a request treated as secure. A forged `X-Forwarded-Proto: https` from the internet is harmless, because the edge only forwards requests that really arrived over HTTPS. The smoke test of step 10 checks that the edge does not pass a client's `http` through.
 4. **The hop count matches the proxies that append to `X-Forwarded-For`.** One for Railway's edge. Django reads the entry that many places from the right, so a client-supplied left-hand entry is ignored. Railway's documentation does not say whether the edge strips or appends client-supplied `X-Forwarded-For` values; reading from the right works in both cases. Adding another proxy in front (a Cloudflare-proxied record for the API host) makes it `2`. A wrong count is visible in the step 10 throttle check.
 5. **The health check needs none of this.** It arrives over plain HTTP from `healthcheck.railway.app`, carries no forwarding header, and is exempt from the redirect.
