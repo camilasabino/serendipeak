@@ -35,6 +35,20 @@ class MountainRepository(Protocol):
         """
 
 
+class MountainCatalogReader(Protocol):
+    """Reads for the editorial screens: every status is visible, drafts included."""
+
+    def list_all(self) -> Sequence[Mountain]:
+        """Return every mountain with its image, continent, countries and region path, in no
+        particular order. Returns an empty sequence for an empty catalog."""
+
+    def find_by_slug(self, slug: str) -> Mountain | None:
+        """Return the mountain whose slug equals slug exactly, whatever its status.
+
+        Returns None for an unknown slug.
+        """
+
+
 class StatusChangeOutcome(StrEnum):
     APPLIED = "applied"
     NOT_FOUND = "not_found"

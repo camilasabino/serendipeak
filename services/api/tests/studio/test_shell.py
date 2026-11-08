@@ -70,11 +70,12 @@ def test_the_overview_tells_each_role_what_it_can_do(editor_client, viewer_clien
     assert "As a Viewer you can read" in text_of(viewer_client.get(LANDING_URL))
 
 
-def test_the_overview_points_to_the_admin_while_the_catalog_screens_do_not_exist(editor_client):
+def test_the_overview_points_to_the_mountains_and_to_the_admin_for_editing(editor_client):
     body = text_of(editor_client.get(LANDING_URL))
 
     assert f'href="{reverse("admin:index")}"' in body
-    assert "No catalog sections are listed here yet" in body
+    assert f'href="{reverse("studio:mountain_list")}"' in body
+    assert "the catalog is edited in the Django Admin" in body
 
 
 def test_the_sign_in_page_has_no_navigation_and_labels_its_fields(db):

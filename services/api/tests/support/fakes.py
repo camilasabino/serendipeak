@@ -172,6 +172,17 @@ class InMemoryMountainRepository:
         )
 
 
+class InMemoryMountainCatalogReader:
+    def __init__(self, mountains=()):
+        self._mountains = {mountain.slug: mountain for mountain in mountains}
+
+    def list_all(self):
+        return tuple(self._mountains.values())
+
+    def find_by_slug(self, slug):
+        return self._mountains.get(slug)
+
+
 class InMemoryMountainStatusStore:
     def __init__(self, mountains=()):
         self._mountains = {mountain.id: mountain for mountain in mountains}

@@ -1,0 +1,1 @@
+{% if items %}<span class="localized">{% for item in items %}<span class="localized__item"><span class="localized__code">{{ item.code|upper }}</span> <span lang="{{ item.code }}">{{ item.text }}</span></span>{% endfor %}</span>{% endif %}

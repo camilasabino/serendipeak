@@ -23,6 +23,8 @@ from serendipeak.catalog.deactivate_mountain import DeactivateMountain
 from serendipeak.catalog.delete_draft_mountain import DeleteDraftMountain
 from serendipeak.catalog.delete_mountain_region import DeleteMountainRegion
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.catalog.get_mountain_detail import GetMountainDetail
+from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.catalog.media.ingestion import IngestionLimits, PhotographIngestion
 from serendipeak.catalog.media.ports import MediaStore, PhotographProcessor, SourceImageFetcher
 from serendipeak.catalog.move_mountain_region import MoveMountainRegion
@@ -49,6 +51,7 @@ from serendipeak.persistence.geography_backfill_store import (
 from serendipeak.persistence.geography_reference import DjangoGeographyReference
 from serendipeak.persistence.login_attempt_log import DjangoLoginAttemptLog
 from serendipeak.persistence.mountain_camera_store import DjangoMountainCameraStore
+from serendipeak.persistence.mountain_catalog_reader import DjangoMountainCatalogReader
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from serendipeak.persistence.mountain_location_store import DjangoMountainLocationStore
 from serendipeak.persistence.mountain_region_store import DjangoMountainRegionStore
@@ -103,6 +106,14 @@ def build_check_catalog() -> CheckCatalog:
 
 def build_get_mountain_by_slug() -> GetMountainBySlug:
     return GetMountainBySlug(DjangoMountainRepository())
+
+
+def build_list_mountains() -> ListMountains:
+    return ListMountains(DjangoMountainCatalogReader())
+
+
+def build_get_mountain_detail() -> GetMountainDetail:
+    return GetMountainDetail(DjangoMountainCatalogReader())
 
 
 def build_get_todays_mountain() -> GetTodaysMountain:

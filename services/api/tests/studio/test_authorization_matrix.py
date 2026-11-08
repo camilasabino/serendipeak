@@ -31,6 +31,23 @@ MATRIX = {
         VIEWER: ALLOWED,
         EDITOR: ALLOWED,
     },
+    "studio:mountain_list": {
+        "method": "get",
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/"),
+        VIEWER: ALLOWED,
+        EDITOR: ALLOWED,
+    },
+    "studio:mountain_detail": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.VIEWER,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/"),
+        VIEWER: ("status", 404),
+        EDITOR: ("status", 404),
+    },
     "studio:login": {
         "method": "get",
         "declares": StudioAccess.PUBLIC,
@@ -112,7 +129,7 @@ def test_each_caller_gets_the_outcome_the_matrix_lists(db, name, actor):
     row = MATRIX[name]
     client = client_for(actor)
 
-    response = getattr(client, row["method"])(reverse(name))
+    response = getattr(client, row["method"])(reverse(name, kwargs=row.get("kwargs")))
 
     assert_outcome(response, row[actor])
 

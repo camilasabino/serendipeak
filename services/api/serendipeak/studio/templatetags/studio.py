@@ -24,7 +24,7 @@ def studio_header(context):
                 {
                     "label": item.label,
                     "url_name": item.url_name,
-                    "current": item.url_name == current,
+                    "current": current in (item.url_name, *item.section_url_names),
                 }
                 for item in navigation_for(Role(user.role))
             ]

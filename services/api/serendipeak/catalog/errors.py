@@ -51,6 +51,12 @@ class MountainNotFound(ApplicationError):
         self.slug = slug
 
 
+class MountainSlugNotFound(ApplicationError):
+    def __init__(self, slug: str):
+        super().__init__(f"no mountain has the slug {slug!r}")
+        self.slug = slug
+
+
 class UnknownMountain(ApplicationError):
     def __init__(self, mountain_id: UUID):
         super().__init__(f"no mountain has the id {mountain_id}")

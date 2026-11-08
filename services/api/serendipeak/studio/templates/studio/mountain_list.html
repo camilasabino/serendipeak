@@ -1,0 +1,79 @@
+{% extends "studio/base.html" %}
+{% block title %}Mountains{% endblock %}
+{% block content %}
+	<header class="page-header">
+		<p class="kicker">Catalog</p>
+		<h1 class="page-title">Mountains</h1>
+	</header>
+
+	<form class="search" method="get" action="{% url 'studio:mountain_list' %}" role="search">
+		<label class="field__label" for="mountain-search">Search by name or slug</label>
+		<div class="search__controls">
+			<input id="mountain-search" name="q" type="search" value="{{ search }}" maxlength="100" autocomplete="off">
+			{% if status_key %}<input type="hidden" name="status" value="{{ status_key }}">{% endif %}
+			<button class="button" type="submit">Search</button>
+			{% if search %}<a class="button button--quiet" href="{% url 'studio:mountain_list' %}{% if status_key %}?status={{ status_key }}{% endif %}">Clear search</a>{% endif %}
+		</div>
+	</form>
+
+	<nav class="chips" aria-label="Filter by status">
+		<ul class="chips__list">
+			{% for chip in chips %}
+				<li>
+					<a class="chip" href="{% url 'studio:mountain_list' %}{% if chip.query %}?{{ chip.query }}{% endif %}"{% if chip.current %} aria-current="true"{% endif %}>{{ chip.label }} <span class="chip__count numeric">{{ chip.count }}</span></a>
+				</li>
+			{% endfor %}
+		</ul>
+	</nav>
+
+	<p class="result-count" role="status">{% if rows %}Showing {{ rows|length }} of {{ total }} mountain{{ total|pluralize }}{% if search %} matching “{{ search }}”{% endif %}.{% endif %}</p>
+
+	{% if rows %}
+		<ul class="mountain-rows">
+			{% for row in rows %}
+				<li class="mountain-row">
+					<div class="mountain-row__thumb">
+						{% if row.thumbnail %}
+							<img src="{{ row.thumbnail }}" alt="" width="96" height="72" loading="lazy" decoding="async">
+						{% else %}
+							<span class="mountain-row__no-photo">No photograph</span>
+						{% endif %}
+					</div>
+					<div class="mountain-row__main">
+						<h2 class="mountain-row__name"><a href="{% url 'studio:mountain_detail' row.slug %}">{{ row.name }}</a></h2>
+						<p class="mountain-row__slug">{{ row.slug }}</p>
+						<p class="mountain-row__place">
+							{{ row.continent }}{% if row.region %} · {{ row.region }}{% endif %}
+						</p>
+						<p class="mountain-row__place">{% if row.countries %}{{ row.countries|join:", " }}{% else %}No country{% endif %}</p>
+					</div>
+					<div class="mountain-row__facts">
+						{% include "studio/components/status_badge.html" with status=row.status %}
+						<p class="numeric">{{ row.elevation }} m</p>
+						{% if row.is_draft %}
+							{% if row.reasons %}
+								<p class="readiness readiness--blocked">Not ready: {{ row.reasons|length }} issue{{ row.reasons|length|pluralize }}</p>
+								<ul class="readiness__list">
+									{% for reason in row.reasons %}<li>{{ reason }}</li>{% endfor %}
+								</ul>
+							{% else %}
+								<p class="readiness readiness--ready">Ready to publish</p>
+							{% endif %}
+						{% endif %}
+					</div>
+				</li>
+			{% endfor %}
+		</ul>
+	{% elif filtered %}
+		<section class="panel panel--narrow" aria-labelledby="empty-title">
+			<h2 class="panel__title" id="empty-title">No mountains match</h2>
+			<p>Nothing in the catalog matches this search and filter. Try a different name or show all statuses.</p>
+			<a class="button button--quiet" href="{% url 'studio:mountain_list' %}">Show all mountains</a>
+		</section>
+	{% else %}
+		<section class="panel panel--narrow" aria-labelledby="empty-title">
+			<h2 class="panel__title" id="empty-title">The catalog is empty</h2>
+			<p>No mountains have been added yet.</p>
+		</section>
+	{% endif %}
+{% endblock %}

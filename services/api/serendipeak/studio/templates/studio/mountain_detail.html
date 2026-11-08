@@ -1,0 +1,124 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ mountain.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:mountain_list' %}">Mountains</a>
+	</nav>
+	<header class="page-header page-header--detail">
+		<div>
+			<p class="kicker">{{ mountain.slug }}</p>
+			<h1 class="page-title">{{ mountain.name.en }}</h1>
+			{% include "studio/components/localized.html" with items=name_translations %}
+		</div>
+		<div class="page-header__aside">
+			{% include "studio/components/status_badge.html" with status=status %}
+			{% if site_url %}
+				<a class="button button--quiet" href="{{ site_url }}" target="_blank" rel="noopener">View on site<span aria-hidden="true"> ↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>
+			{% endif %}
+		</div>
+	</header>
+
+	<div class="grid grid--detail">
+		<section class="panel panel--stage panel--photo" aria-labelledby="photo-title">
+			<h2 class="panel__title" id="photo-title">Photograph</h2>
+			{% if photograph.url %}
+				<img class="photo" src="{{ photograph.url }}" alt="Photograph of {{ mountain.name.en }}"{% if photograph.width %} width="{{ photograph.width }}" height="{{ photograph.height }}"{% endif %}>
+			{% elif photograph %}
+				<p class="photo-missing">The photograph record has no stored file yet.</p>
+			{% else %}
+				<p class="photo-missing">This mountain has no photograph.</p>
+			{% endif %}
+			{% if photograph %}
+				<dl class="ledger ledger--on-stage">
+					<div class="ledger__row"><dt>Credit</dt><dd>{{ photograph.author }}</dd></div>
+					<div class="ledger__row"><dt>License</dt><dd>{% if photograph.license_name %}{% if photograph.license_url %}<a href="{{ photograph.license_url }}" target="_blank" rel="noopener">{{ photograph.license_name }}<span class="visually-hidden"> (opens in a new tab)</span></a>{% else %}{{ photograph.license_name }}{% endif %}{% else %}Not stated{% endif %}</dd></div>
+					<div class="ledger__row"><dt>Source page</dt><dd>{% if photograph.source_page_url %}<a href="{{ photograph.source_page_url }}" target="_blank" rel="noopener">Open the source<span class="visually-hidden"> (opens in a new tab)</span></a>{% else %}Not stated{% endif %}</dd></div>
+					{% if photograph.width %}<div class="ledger__row"><dt>Dimensions</dt><dd class="numeric">{{ photograph.width }} × {{ photograph.height }} px</dd></div>{% endif %}
+				</dl>
+			{% endif %}
+		</section>
+
+		<section class="panel" aria-labelledby="publication-title">
+			<h2 class="panel__title" id="publication-title">Publication</h2>
+			<dl class="ledger">
+				<div class="ledger__row"><dt>Status</dt><dd>{{ status.label }}</dd></div>
+			</dl>
+			<p class="panel__note">{{ status.meaning }}</p>
+			{% if reasons %}
+				<p class="readiness readiness--blocked">{% if is_draft %}Not ready to publish{% else %}Does not meet the publication rules{% endif %}</p>
+				<ul class="readiness__list">
+					{% for reason in reasons %}<li>{{ reason }}</li>{% endfor %}
+				</ul>
+			{% else %}
+				<p class="readiness readiness--ready">{% if is_draft %}Ready to publish{% else %}Meets the publication rules{% endif %}</p>
+			{% endif %}
+		</section>
+
+		<section class="panel" aria-labelledby="content-title">
+			<h2 class="panel__title" id="content-title">Content</h2>
+			{% if mountain.summary %}
+				<p class="summary">{{ mountain.summary.en }}</p>
+				{% include "studio/components/localized.html" with items=summary_translations %}
+			{% else %}
+				<p class="empty-value">No summary yet.</p>
+			{% endif %}
+			<dl class="ledger">
+				<div class="ledger__row"><dt>Elevation</dt><dd class="numeric">{{ mountain.elevation_meters }} m</dd></div>
+				<div class="ledger__row"><dt>Coordinates</dt><dd class="numeric">{{ latitude }}, {{ longitude }}</dd></div>
+				<div class="ledger__row"><dt>Wikidata</dt><dd>{% if wikidata_url %}<a href="{{ wikidata_url }}" target="_blank" rel="noopener">{{ mountain.wikidata_id }}<span class="visually-hidden"> (opens in a new tab)</span></a>{% else %}<span class="empty-value">None</span>{% endif %}</dd></div>
+				<div class="ledger__row"><dt>OpenStreetMap node</dt><dd class="numeric">{% if mountain.osm_node_id %}{{ mountain.osm_node_id }}{% else %}<span class="empty-value">None</span>{% endif %}</dd></div>
+			</dl>
+		</section>
+
+		<section class="panel" aria-labelledby="geography-title">
+			<h2 class="panel__title" id="geography-title">Geography</h2>
+			<dl class="ledger ledger--stacked">
+				<div class="ledger__row">
+					<dt>Continent</dt>
+					<dd>{{ mountain.continent.name.en }} {% include "studio/components/localized.html" with items=continent_translations %}</dd>
+				</div>
+				<div class="ledger__row">
+					<dt>Countries</dt>
+					<dd>
+						{% if mountain.countries %}
+							<ul class="plain-list">
+								{% for country in mountain.countries %}
+									<li>{{ country.name.en }} <span class="country-code">{{ country.code }}</span><br><span class="localized"><span class="localized__item"><span class="localized__code">ES</span> <span lang="es">{{ country.name.es }}</span></span><span class="localized__item"><span class="localized__code">PT</span> <span lang="pt">{{ country.name.pt }}</span></span></span></li>
+								{% endfor %}
+							</ul>
+						{% else %}
+							<span class="empty-value">No country</span>
+						{% endif %}
+					</dd>
+				</div>
+				<div class="ledger__row">
+					<dt>Region</dt>
+					<dd>
+						{% if region_refs %}
+							<ol class="path" aria-label="Region path">
+								{% for ref in region_refs %}<li>{{ ref.name.en }}</li>{% endfor %}
+							</ol>
+							{% include "studio/components/localized.html" with items=region_translations %}
+						{% else %}
+							<span class="empty-value">No region</span>
+						{% endif %}
+					</dd>
+				</div>
+			</dl>
+		</section>
+
+		<section class="panel panel--stage" aria-labelledby="camera-title">
+			<h2 class="panel__title" id="camera-title">Camera</h2>
+			{% if camera_rows %}
+				<dl class="ledger ledger--on-stage">
+					{% for label, value in camera_rows %}
+						<div class="ledger__row"><dt>{{ label }}</dt><dd class="numeric">{{ value }}</dd></div>
+					{% endfor %}
+				</dl>
+				{% if not mountain.camera.framing %}<p>The framing is not set.</p>{% endif %}
+			{% else %}
+				<p>No camera has been saved for this mountain.</p>
+			{% endif %}
+		</section>
+	</div>
+{% endblock %}

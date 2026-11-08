@@ -9,8 +9,10 @@ from config.composition import (
     build_admit_login_attempt,
     build_clear_login_failures,
     build_get_mountain_by_slug,
+    build_get_mountain_detail,
     build_get_random_mountain,
     build_get_todays_mountain,
+    build_list_mountains,
 )
 from config.health import healthz
 from serendipeak.httpapi.urls import mountain_urlpatterns
@@ -47,6 +49,10 @@ urlpatterns = [
                     admit_login_attempt=build_admit_login_attempt(),
                     clear_login_failures=build_clear_login_failures(),
                     trusted_proxy_hops=settings.TRUSTED_PROXY_HOPS,
+                    list_mountains=build_list_mountains(),
+                    get_mountain_detail=build_get_mountain_detail(),
+                    media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
+                    web_origin=settings.WEB_ORIGIN,
                 ),
                 "studio",
             )

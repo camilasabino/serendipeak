@@ -3,10 +3,13 @@ from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.views import csrf
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, View
 
 from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
-from serendipeak.studio import security_log
+from serendipeak.catalog.errors import MountainSlugNotFound
+from serendipeak.catalog.get_mountain_detail import GetMountainDetail
+from serendipeak.catalog.list_mountains import SEARCH_MAX_LENGTH, ListMountains
+from serendipeak.studio import representations, security_log
 from serendipeak.studio.access import is_studio_path
 from serendipeak.studio.client_address import client_address
 from serendipeak.studio.forms import StudioAuthenticationForm, StudioPasswordChangeForm
@@ -101,6 +104,49 @@ class StudioPasswordChangeView(PasswordChangeView):
 
 class LandingView(TemplateView):
     template_name = "studio/landing.html"
+
+
+class MountainListView(View):
+    list_mountains: ListMountains | None = None
+    media_base_url: str = ""
+
+    def get(self, request):
+        search = request.GET.get("q", "").strip()[:SEARCH_MAX_LENGTH]
+        status = representations.STATUS_BY_KEY.get(request.GET.get("status", ""))
+        listing = self.list_mountains.execute(status=status, search=search)
+
+        return render(
+            request,
+            "studio/mountain_list.html",
+            {
+                "rows": representations.list_rows(listing, self.media_base_url),
+                "chips": representations.filter_chips(listing, status, search),
+                "search": search,
+                "status_key": ""
+                if status is None
+                else representations.status_presentation(status).key,
+                "total": listing.total,
+                "filtered": bool(search or status),
+            },
+        )
+
+
+class MountainDetailView(View):
+    get_mountain_detail: GetMountainDetail | None = None
+    media_base_url: str = ""
+    web_origin: str = ""
+
+    def get(self, request, slug):
+        try:
+            detail = self.get_mountain_detail.execute(slug)
+        except MountainSlugNotFound:
+            return render(request, "studio/mountain_not_found.html", status=404)
+
+        context = representations.detail_context(
+            detail, media_base_url=self.media_base_url, web_origin=self.web_origin
+        )
+
+        return render(request, "studio/mountain_detail.html", context)
 
 
 def csrf_failure(request, reason=""):
