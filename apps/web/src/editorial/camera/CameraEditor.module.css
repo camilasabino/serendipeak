@@ -7,20 +7,21 @@
 	min-width: 0;
 }
 
-/* The camera is saved relative to the stage's aspect, so the stage is always framed at the
-   reference aspect, whatever the screen, and the saved view means the same on every page. */
+/* The camera is saved relative to the stage's aspect. The stage fills the workspace like the
+   public one, down to the narrowest aspect that frames the same range as the reference
+   widescreen window; a narrower workspace letterboxes it at that aspect. */
 .workspace {
 	container-type: size;
 	display: grid;
 	place-items: center;
-	height: clamp(16rem, 52dvh, 34rem);
+	aspect-ratio: var(--frame-aspect);
 	min-width: 0;
 	background: var(--sp-stage);
 }
 
 .frame {
-	width: min(100cqw, calc(100cqh * var(--frame-aspect)));
-	aspect-ratio: var(--frame-aspect);
+	width: 100cqw;
+	height: min(100cqh, calc(100cqw / var(--frame-min-aspect)));
 }
 
 @media (min-width: 56rem) {
@@ -31,7 +32,7 @@
 	}
 
 	.workspace {
-		height: auto;
+		aspect-ratio: auto;
 		min-height: 0;
 	}
 }

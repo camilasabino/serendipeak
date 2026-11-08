@@ -25,10 +25,12 @@ const STUDIO_PATH = `/studio/mountains/${ACONCAGUA.slug}`;
 // 0.5 degree, 0.5 percent and 0.01 that a rendered public pose is held to.
 const SAVE_TOLERANCE = { angleDegrees: 0.05, rangeMeters: 1, framing: 0.0005 } as const;
 
-// The reference aspect the editor frames its stage at, where the range needs no compensation.
-const REFERENCE_ASPECT = 1.35;
+// The narrowest stage aspect the editor frames, where the range scale already sits at its 0.85
+// floor; a wider workspace is filled.
+const MIN_FILL_ASPECT = 1.35 / 0.85;
+const REFERENCE_RANGE_SCALE = 0.85;
 
-// Viewports from a phone to an ultrawide screen: the editor frames the same aspect on all.
+// Viewports from a phone to an ultrawide screen: the editor frames the same range on all.
 const SCREENS = [
 	{ name: 'laptop', width: 1280, height: 800 },
 	{ name: 'full HD', width: 1920, height: 1080 },
@@ -326,9 +328,7 @@ test.describe('@webgl camera editor', () => {
 	});
 
 	for (const screen of SCREENS) {
-		test(`frames the stage at the reference aspect on a ${screen.name} screen`, async ({
-			page
-		}) => {
+		test(`frames the stage at the reference range on a ${screen.name} screen`, async ({ page }) => {
 			await page.setViewportSize(screen);
 			await page.goto(editorUrl(ACONCAGUA.camera));
 			await expectReadyStage(page);
@@ -337,11 +337,11 @@ test.describe('@webgl camera editor', () => {
 
 			const reading = (await cameraReading(page))!;
 			const aspect = reading.stage.width / reading.stage.height;
-			expect(Math.abs(aspect - REFERENCE_ASPECT)).toBeLessThanOrEqual(0.01);
-			// At the reference aspect the displayed range is the saved range: nothing is compensated.
-			expect(Math.abs(reading.displayRangeMeters / reading.rangeMeters - 1)).toBeLessThanOrEqual(
-				0.01
-			);
+			expect(aspect).toBeGreaterThanOrEqual(MIN_FILL_ASPECT - 0.01);
+			// The displayed range is the saved range times the public page's own scale at this aspect.
+			expect(
+				Math.abs(reading.displayRangeMeters / reading.rangeMeters - REFERENCE_RANGE_SCALE)
+			).toBeLessThanOrEqual(0.01);
 			expectWithin(reading, ACONCAGUA.camera);
 			const box = (await page.locator('canvas').first().boundingBox())!;
 			expect(box.width).toBeLessThanOrEqual(screen.width);

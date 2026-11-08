@@ -5,6 +5,10 @@ import {
 	createTerrainCameraSession,
 	editorialPoseFromOffset,
 	poseForStage,
+	previewOffset,
+	STAGE_FILL_MIN_ASPECT,
+	STAGE_REFERENCE_ASPECT,
+	stageAspectScale,
 	type GeographicPosition,
 	type TerrainCameraQuery,
 	type TerrainHeightSource
@@ -627,6 +631,54 @@ describe('poseForStage', () => {
 		expect(fallback.rangeMeters).toBe(11_000);
 		expect(fallback.headingDegrees).toBe(0);
 		expect(fallback.source).toBe('fallback');
+	});
+});
+
+describe('editor reference stage', () => {
+	const saved = { headingDegrees: 66.87, pitchDegrees: -19.85, rangeMeters: 17_132 };
+	const REFERENCE_WIDTH = 1_600;
+	const REFERENCE_HEIGHT = REFERENCE_WIDTH / STAGE_REFERENCE_ASPECT;
+
+	it('frames the stage where the range scale is clamped, so sub-pixel aspect jitter is inert', () => {
+		const scale = stageAspectScale(REFERENCE_WIDTH, REFERENCE_HEIGHT);
+
+		expect(scale).toBe(0.85);
+		expect(stageAspectScale(REFERENCE_WIDTH + 1, REFERENCE_HEIGHT)).toBe(scale);
+		expect(stageAspectScale(REFERENCE_WIDTH - 1, REFERENCE_HEIGHT)).toBe(scale);
+	});
+
+	it('lets a stage fill down to the narrowest aspect that keeps the reference range', () => {
+		expect(stageAspectScale(REFERENCE_WIDTH, REFERENCE_WIDTH / STAGE_FILL_MIN_ASPECT)).toBeCloseTo(
+			0.85,
+			10
+		);
+		expect(stageAspectScale(1_000, 1_000 / (STAGE_FILL_MIN_ASPECT - 0.05))).toBeGreaterThan(0.85);
+	});
+
+	it.each([
+		['full HD window', 1_472, 836],
+		['2560 x 1440 window', 2_112, 1_186],
+		['ultrawide window', 2_992, 1_186]
+	])('previews the range a visitor on a %s is shown', (_name, width, height) => {
+		const preview = previewOffset(saved, REFERENCE_WIDTH, REFERENCE_HEIGHT);
+		const visitor = previewOffset(saved, width, height);
+
+		expect(preview.rangeMeters).toBeCloseTo(visitor.rangeMeters, 6);
+		expect(preview.headingRadians).toBe(visitor.headingRadians);
+		expect(preview.pitchRadians).toBe(visitor.pitchRadians);
+	});
+
+	it('round-trips a saved range through the reference stage', () => {
+		const shown = previewOffset(saved, REFERENCE_WIDTH, REFERENCE_HEIGHT);
+		const read = editorialPoseFromOffset(
+			0,
+			shown.rangeMeters,
+			0,
+			REFERENCE_WIDTH,
+			REFERENCE_HEIGHT
+		);
+
+		expect(read.rangeMeters).toBeCloseTo(saved.rangeMeters, 6);
 	});
 });
 

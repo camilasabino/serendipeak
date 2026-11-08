@@ -4,7 +4,7 @@ import { StageShell } from '../../mountain-page/StageShell';
 import type { StageController } from '../../stage/MountainScene';
 import { SceneStore } from '../../stage/SceneStore';
 import { StageBoundary } from '../../stage/StageBoundary';
-import { STAGE_REFERENCE_ASPECT } from '../../stage/globe/terrainCamera';
+import { STAGE_FILL_MIN_ASPECT, STAGE_REFERENCE_ASPECT } from '../../stage/globe/terrainCamera';
 import { useTransitionCoordinator } from '../../stage/TransitionCoordinatorContext';
 import styles from './CameraEditor.module.css';
 import { CameraPanel, type PanelState } from './CameraPanel';
@@ -59,7 +59,12 @@ export function CameraEditor({ request, studioBaseUrl }: CameraEditorProps) {
 	return (
 		<main
 			className={styles.editor}
-			style={{ '--frame-aspect': STAGE_REFERENCE_ASPECT } as CSSProperties}
+			style={
+				{
+					'--frame-aspect': STAGE_REFERENCE_ASPECT,
+					'--frame-min-aspect': STAGE_FILL_MIN_ASPECT
+				} as CSSProperties
+			}
 		>
 			<div className={styles.workspace}>
 				<StageShell store={store} daily={false} className={styles.frame}>
