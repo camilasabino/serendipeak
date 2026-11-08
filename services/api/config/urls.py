@@ -8,6 +8,7 @@ from config.admin import build_admin_site
 from config.composition import (
     ADMIN_INGESTION_LIMITS,
     build_admit_login_attempt,
+    build_change_mountain_camera,
     build_change_mountain_location,
     build_clear_login_failures,
     build_create_mountain,
@@ -71,6 +72,7 @@ urlpatterns = [
                         deactivate=build_deactivate_mountain(),
                         reactivate=build_reactivate_mountain(),
                     ),
+                    change_camera=build_change_mountain_camera(),
                     media_base_url=settings.MEDIA_PUBLIC_BASE_URL,
                     web_origin=settings.WEB_ORIGIN,
                     max_photograph_bytes=ADMIN_INGESTION_LIMITS.max_bytes,

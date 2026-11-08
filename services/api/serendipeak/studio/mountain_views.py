@@ -76,6 +76,7 @@ class MountainFormView(View):
     get_form_options: GetMountainFormOptions | None = None
     writes: MountainWrites | None = None
     media_base_url: str = ""
+    web_origin: str = ""
     max_photograph_bytes: int = 0
 
     def _forms(self, request, options, mountain):
@@ -108,6 +109,7 @@ class MountainFormView(View):
             mountain=mountain,
             violations=() if detail is None else detail.violations,
             media_base_url=self.media_base_url,
+            web_origin=self.web_origin,
         )
 
         return render(request, self.template_name, context)

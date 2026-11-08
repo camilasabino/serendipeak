@@ -8,17 +8,18 @@ import { STAGE_REFERENCE_ASPECT } from '../../stage/globe/terrainCamera';
 import { useTransitionCoordinator } from '../../stage/TransitionCoordinatorContext';
 import styles from './CameraEditor.module.css';
 import { CameraPanel, type PanelState } from './CameraPanel';
-import { mountainAdminUrl, saveDestination } from './handoff';
+import { mountainStudioUrl, saveDestination } from './handoff';
 import type { EditorRequest } from './editorQuery';
 import { useCameraReadout } from './useCameraReadout';
 
 interface CameraEditorProps {
 	request: EditorRequest;
-	adminBaseUrl: string;
+	studioBaseUrl: string;
 }
 
-export function CameraEditor({ request, adminBaseUrl }: CameraEditorProps) {
+export function CameraEditor({ request, studioBaseUrl }: CameraEditorProps) {
 	const { mountainId, target, cameraOrigin } = request;
+	const mountain = { id: mountainId, slug: target.slug };
 	const [store] = useState(() => new SceneStore());
 	const coordinator = useTransitionCoordinator();
 	const controller = useRef<StageController>(null);
@@ -46,15 +47,10 @@ export function CameraEditor({ request, adminBaseUrl }: CameraEditorProps) {
 
 	function save() {
 		// The panel may show a pose from up to a sample ago: the value that is saved is read now.
-		const destination = saveDestination(
-			controller.current?.readCamera(),
-			adminBaseUrl,
-			mountainId,
-			{
-				latitude: target.latitude,
-				longitude: target.longitude
-			}
-		);
+		const destination = saveDestination(controller.current?.readCamera(), studioBaseUrl, mountain, {
+			latitude: target.latitude,
+			longitude: target.longitude
+		});
 		if (destination) {
 			window.location.assign(destination);
 		}
@@ -82,7 +78,7 @@ export function CameraEditor({ request, adminBaseUrl }: CameraEditorProps) {
 				cameraOrigin={cameraOrigin}
 				state={panelState}
 				canRestore={state.status === 'ready' && settled}
-				backHref={mountainAdminUrl(adminBaseUrl, mountainId)}
+				backHref={mountainStudioUrl(studioBaseUrl, target.slug)}
 				onSave={save}
 				onRestore={() => controller.current?.resetView()}
 			/>

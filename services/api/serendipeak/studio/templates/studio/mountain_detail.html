@@ -128,7 +128,7 @@
 			</dl>
 		</section>
 
-		<section class="panel panel--stage" aria-labelledby="camera-title">
+		<section class="panel panel--stage" id="camera" aria-labelledby="camera-title">
 			<h2 class="panel__title" id="camera-title">Camera</h2>
 			{% if camera_rows %}
 				<dl class="ledger ledger--on-stage">
@@ -139,6 +139,11 @@
 				{% if not mountain.camera.framing %}<p>The framing is not set.</p>{% endif %}
 			{% else %}
 				<p>No camera has been saved for this mountain.</p>
+			{% endif %}
+			{% if can_write %}
+				<div class="actions actions--panel">
+					<a class="button button--quiet" href="{{ camera_editor_url }}" rel="noreferrer">Edit camera visually</a>
+				</div>
 			{% endif %}
 		</section>
 

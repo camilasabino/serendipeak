@@ -21,7 +21,7 @@ function render(
 			cameraOrigin={overrides.origin ?? 'saved'}
 			state={state}
 			canRestore={overrides.canRestore ?? true}
-			backHref="http://localhost:8000/admin/catalog/mountainrecord/abc/change/"
+			backHref="http://localhost:8000/studio/mountains/aconcagua/"
 			onSave={() => {}}
 			onRestore={() => {}}
 		/>
@@ -37,12 +37,12 @@ function button(html: string, label: string): string {
 }
 
 describe('CameraPanel', () => {
-	it('names the mountain and links back to its Admin page', () => {
+	it('names the mountain and links back to its Studio page', () => {
 		const html = render({ kind: 'ready', assessment: VALID });
 
 		expect(html).toContain('>Aconcagua</h1>');
 		expect(html).toMatch(
-			/<a[^>]*href="http:\/\/localhost:8000\/admin\/catalog\/mountainrecord\/abc\/change\/"[^>]*>Back to the mountain<\/a>/
+			/<a[^>]*href="http:\/\/localhost:8000\/studio\/mountains\/aconcagua\/"[^>]*>Back to the mountain<\/a>/
 		);
 	});
 

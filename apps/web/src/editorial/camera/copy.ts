@@ -7,11 +7,10 @@ export const SAVE_LABEL = 'Save camera…';
 export const BACK_LABEL = 'Back to the mountain';
 
 export const INVALID_LINK_TITLE = 'This camera link is not valid';
-export const INVALID_LINK_MESSAGE =
-	'Open the camera editor again from the mountain in the editorial Admin.';
+export const INVALID_LINK_MESSAGE = 'Open the camera editor again from the mountain in the Studio.';
 export const MISSING_CONFIG_TITLE = 'The camera editor is not configured';
 export const MISSING_CONFIG_MESSAGE =
-	'The Admin address is missing from this site’s configuration.';
+	'The Studio address is missing from this site’s configuration.';
 export const OPENING_LABEL = 'Opening the camera editor…';
 
 const RESTORE_LABEL: Record<CameraOrigin, string> = {

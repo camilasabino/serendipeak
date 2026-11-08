@@ -65,6 +65,15 @@ MATRIX = {
         VIEWER: FORBIDDEN,
         EDITOR: ("status", 404),
     },
+    "studio:mountain_camera": {
+        "method": "get",
+        "kwargs": {"slug": "no-such-peak"},
+        "declares": StudioAccess.EDITOR,
+        ANONYMOUS: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/camera/"),
+        INACTIVE: ("redirect", f"{LOGIN_URL}?next=/studio/mountains/no-such-peak/camera/"),
+        VIEWER: FORBIDDEN,
+        EDITOR: ("status", 404),
+    },
     "studio:mountain_publish": {
         "method": "post",
         "kwargs": {"slug": "no-such-peak"},

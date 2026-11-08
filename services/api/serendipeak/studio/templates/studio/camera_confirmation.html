@@ -1,0 +1,75 @@
+{% extends "studio/base.html" %}
+{% load l10n %}
+{% block title %}Camera of {{ mountain.name.en }}{% endblock %}
+{% block content %}
+	<nav class="breadcrumb" aria-label="Breadcrumb">
+		<a href="{% url 'studio:mountain_list' %}">Mountains</a><span aria-hidden="true"> / </span><a href="{{ detail_url }}">{{ mountain.name.en }}</a>
+	</nav>
+	<header class="page-header">
+		<p class="kicker">{{ mountain.slug }}</p>
+		<h1 class="page-title">{% if stale_location %}The camera cannot be saved{% else %}Save the new camera of {{ mountain.name.en }}?{% endif %}</h1>
+	</header>
+
+	{% if stale_location %}
+		<section class="panel panel--narrow" role="alert" aria-labelledby="stale-title">
+			<h2 class="panel__title" id="stale-title">The mountain moved</h2>
+			<p>{{ stale_location }}</p>
+			<div class="actions">
+				<a class="button" href="{{ editor_url }}" rel="noreferrer">Reopen the camera editor</a>
+				<a class="button button--quiet" href="{{ detail_url }}">Back to the mountain</a>
+			</div>
+		</section>
+	{% else %}
+		<section class="panel" aria-labelledby="comparison-title">
+			<h2 class="panel__title" id="comparison-title">Current and proposed camera</h2>
+			{% if unreadable %}
+				<p class="readiness readiness--blocked" role="alert">{{ unreadable_message }}</p>
+			{% elif is_public %}
+				<p class="panel__note">This mountain is on the site: the camera changes on its page as soon as you save.</p>
+			{% else %}
+				<p class="panel__note">This mountain is a draft: the camera is saved, and visitors see it once the mountain is published.</p>
+			{% endif %}
+
+			<table class="comparison">
+				<thead>
+					<tr><th scope="col">Value</th><th scope="col">Current</th><th scope="col">Proposed</th></tr>
+				</thead>
+				<tbody>
+					{% for row in rows %}
+						<tr{% if row.changed and not unreadable %} class="comparison__changed"{% endif %}>
+							<th scope="row">{{ row.label }}</th>
+							<td class="numeric">{% if row.current is None %}Not set{% else %}{{ row.current|unlocalize }}{% endif %}</td>
+							<td class="numeric">{% if unreadable %}Unknown{% elif row.proposed is None %}Not set{% else %}{{ row.proposed|unlocalize }}{% endif %}{% if row.changed and not unreadable %}<span class="visually-hidden"> (changed)</span>{% endif %}</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+
+			{% if problems %}
+				<div class="error-summary" role="alert" aria-labelledby="problems-title">
+					<h3 class="error-summary__title" id="problems-title">The proposed camera cannot be saved</h3>
+					<ul class="error-summary__list">{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+				</div>
+			{% endif %}
+
+			{% if proposed_form %}
+				<form method="post" action="{% url 'studio:mountain_camera' mountain.slug %}">
+					{% csrf_token %}
+					{% for field in proposed_form %}{{ field }}{% endfor %}
+					{% for field in expected_form %}{{ field }}{% endfor %}
+					{% for field in composed_form %}{{ field }}{% endfor %}
+					<div class="actions">
+						<button class="button" type="submit">Save camera</button>
+						<a class="button button--quiet" href="{{ detail_url }}">Cancel</a>
+						<a class="button button--quiet" href="{{ editor_url }}" rel="noreferrer">Back to the editor</a>
+					</div>
+				</form>
+			{% else %}
+				<div class="actions">
+					<a class="button" href="{{ editor_url }}" rel="noreferrer">Back to the editor</a>
+					<a class="button button--quiet" href="{{ detail_url }}">Back to the mountain</a>
+				</div>
+			{% endif %}
+		</section>
+	{% endif %}
+{% endblock %}

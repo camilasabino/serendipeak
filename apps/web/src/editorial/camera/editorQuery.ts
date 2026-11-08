@@ -110,7 +110,7 @@ export function parseEditorQuery(query: EditorQuery): EditorQueryResult {
 	if ('invalid' in camera) {
 		return { ok: false, invalid: camera.invalid };
 	}
-	// Only the Admin confirmation sends it, to say the camera is a proposal and not what is stored.
+	// Only the Studio confirmation sends it, to say the camera is a proposal and not what is stored.
 	const proposal = single(query, 'proposal');
 	if (query.proposal !== undefined && (proposal !== '1' || !camera.value)) {
 		return { ok: false, invalid: 'proposal' };

@@ -19,6 +19,7 @@ from serendipeak.catalog.publication import (
 )
 from serendipeak.catalog.regions import PATH_SEPARATOR, RegionPath, RegionRef
 from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH
+from serendipeak.studio import camera_editor_link
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +205,19 @@ def photograph_context(mountain: Mountain, media_base_url: str) -> dict | None:
     }
 
 
+def camera_editor_url(web_origin: str, mountain: Mountain) -> str:
+    return camera_editor_link.camera_editor_url(
+        web_origin,
+        mountain_id=mountain.id,
+        slug=mountain.slug,
+        name=mountain.name.en,
+        latitude=mountain.coordinates.latitude,
+        longitude=mountain.coordinates.longitude,
+        elevation_meters=mountain.elevation_meters,
+        stored=mountain.camera,
+    )
+
+
 def detail_context(
     detail: MountainDetail, *, media_base_url: str, web_origin: str, can_write: bool
 ) -> dict:
@@ -230,6 +244,7 @@ def detail_context(
         "reasons": violation_reasons(mountain, detail.violations),
         "photograph": photograph_context(mountain, media_base_url),
         "camera_rows": camera_rows(mountain.camera),
+        "camera_editor_url": camera_editor_url(web_origin, mountain),
         "site_url": site_url(web_origin, mountain),
         "latitude": f"{mountain.coordinates.latitude:.5f}",
         "longitude": f"{mountain.coordinates.longitude:.5f}",
@@ -248,6 +263,7 @@ def form_context(
     mountain: Mountain | None,
     violations,
     media_base_url: str,
+    web_origin: str,
 ) -> dict:
     """The creation page (no mountain) or the edit page of a stored one."""
     is_new = mountain is None
@@ -268,6 +284,7 @@ def form_context(
         # A page that comes back refused already holds edits the server does not have.
         "unsaved_on_load": any(form.is_bound and form.errors for form in forms),
         "max_summary_length": SUMMARY_MAX_LENGTH,
+        "camera_editor_url": None if is_new else camera_editor_url(web_origin, mountain),
     }
 
 

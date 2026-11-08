@@ -153,7 +153,7 @@ describe('parseEditorQuery', () => {
 		expect(parseEditorQuery({ ...BASE, ...rest })).toEqual({ ok: false, invalid: 'fy' });
 	});
 
-	describe('a proposal sent back by the Admin confirmation', () => {
+	describe('a proposal sent back by the Studio confirmation', () => {
 		it('opens on the proposed camera and says so', () => {
 			const result = parseEditorQuery({ ...BASE, ...CAMERA, proposal: '1' });
 

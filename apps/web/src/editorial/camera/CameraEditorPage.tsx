@@ -14,9 +14,9 @@ import {
 import { EditorNotice } from './EditorNotice';
 import { parseEditorQuery } from './editorQuery';
 
-// Next inlines NEXT_PUBLIC_* only for literal reads. The Admin is served by the API's Django, so
+// Next inlines NEXT_PUBLIC_* only for literal reads. The Studio is served by the API's Django, so
 // its address is the API base URL.
-function adminBaseUrl(): string | undefined {
+function studioBaseUrl(): string | undefined {
 	try {
 		return readPublicConfig({ NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL })
 			.apiBaseUrl;
@@ -51,10 +51,10 @@ function Body({ query }: { query: ReturnType<typeof useRouter>['query'] }) {
 	if (!parsed.ok) {
 		return <EditorNotice title={INVALID_LINK_TITLE} message={INVALID_LINK_MESSAGE} />;
 	}
-	const base = adminBaseUrl();
+	const base = studioBaseUrl();
 	if (!base) {
 		return <EditorNotice title={MISSING_CONFIG_TITLE} message={MISSING_CONFIG_MESSAGE} />;
 	}
 
-	return <CameraEditor request={parsed.request} adminBaseUrl={base} />;
+	return <CameraEditor request={parsed.request} studioBaseUrl={base} />;
 }

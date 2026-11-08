@@ -1,11 +1,13 @@
 from django.urls import path
 
 from serendipeak.accounts.login_throttle import AdmitLoginAttempt, ClearLoginFailures
+from serendipeak.catalog.change_mountain_camera import ChangeMountainCamera
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
 from serendipeak.catalog.list_mountains import ListMountains
 from serendipeak.studio.access import StudioAccess, declare_access
+from serendipeak.studio.camera_views import CameraConfirmationView
 from serendipeak.studio.mountain_views import (
     DeleteDraftView,
     EditMountainView,
@@ -32,6 +34,7 @@ def studio_urlpatterns(
     get_mountain_detail: GetMountainDetail,
     get_mountain_form_options: GetMountainFormOptions,
     writes: MountainWrites,
+    change_camera: ChangeMountainCamera,
     media_base_url: str,
     web_origin: str,
     max_photograph_bytes: int,
@@ -42,6 +45,7 @@ def studio_urlpatterns(
         "get_form_options": get_mountain_form_options,
         "writes": writes,
         "media_base_url": media_base_url,
+        "web_origin": web_origin,
         "max_photograph_bytes": max_photograph_bytes,
     }
 
@@ -83,6 +87,19 @@ def studio_urlpatterns(
             "mountains/<str:slug>/edit/",
             declare_access(StudioAccess.EDITOR, EditMountainView.as_view(**mountain_form)),
             name="mountain_edit",
+        ),
+        path(
+            "mountains/<str:slug>/camera/",
+            declare_access(
+                StudioAccess.EDITOR,
+                CameraConfirmationView.as_view(
+                    get_mountain_detail=get_mountain_detail,
+                    change_camera=change_camera,
+                    web_origin=web_origin,
+                    http_method_names=["get", "post", "options"],
+                ),
+            ),
+            name="mountain_camera",
         ),
         path(
             "mountains/<str:slug>/publish/",
