@@ -11,6 +11,20 @@ DEBUG = APP_ENV == "development"
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 ALLOWED_HOSTS = [host for host in os.environ.get("ALLOWED_HOSTS", "").split(",") if host]
+FORBIDDEN_HOST_CHARACTERS = frozenset("*/:@ ")
+# An empty list in production makes every request answer 400, the platform's health check
+# included, and a wildcard accepts any Host header; both are refused at startup instead.
+if not DEBUG and (
+    not ALLOWED_HOSTS
+    or any(
+        FORBIDDEN_HOST_CHARACTERS & set(host) or host.startswith(".") or not host.isascii()
+        for host in ALLOWED_HOSTS
+    )
+):
+    raise ImproperlyConfigured(
+        "ALLOWED_HOSTS must list the exact host names served, without wildcards, "
+        "leading dots, ports or schemes"
+    )
 
 
 def database_from_url(url):
@@ -52,6 +66,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "serendipeak.studio.middleware.StudioSecurityHeadersMiddleware",
     "serendipeak.studio.middleware.LegacyCookieCleanupMiddleware",
@@ -143,8 +158,7 @@ CORS_ALLOWED_ORIGINS = [CORS_ALLOWED_ORIGIN]
 CORS_ALLOW_METHODS = ["GET", "OPTIONS"]
 
 
-def web_origin(name, *, allow_http):
-    value = os.environ.get(name, "")
+def explicit_origin(name, value, *, allow_http):
     schemes = ("https", "http") if allow_http else ("https",)
     parts = urlsplit(value)
     try:
@@ -168,10 +182,79 @@ def web_origin(name, *, allow_http):
     return value
 
 
+def web_origin(name, *, allow_http):
+    return explicit_origin(name, os.environ.get(name, ""), allow_http=allow_http)
+
+
+def explicit_origins(name, *, allow_http):
+    entries = [entry for entry in os.environ.get(name, "").split(",") if entry]
+
+    return [explicit_origin(name, entry, allow_http=allow_http) for entry in entries]
+
+
 # Where the visual camera editor is served. Deliberately independent of CORS_ALLOWED_ORIGIN: the
 # two answer different questions (who may read the API, where the Studio sends editors) and may
 # diverge.
 WEB_ORIGIN = web_origin("WEB_ORIGIN", allow_http=DEBUG)
+
+# Behind a TLS-terminating proxy the service receives plain HTTP, and the framework then expects
+# "Origin: http://host" from a form that the browser posted to "https://host", so every Studio
+# POST fails the CSRF check. The proxy's X-Forwarded-Proto is believed only when a trusted proxy
+# is declared, because anything that reaches the service without passing through the proxy
+# (another service over a private network, for instance) can send that header itself. Nothing
+# configured here trusts X-Forwarded-Host, so the Host header stays what ALLOWED_HOSTS judges.
+FORWARDED_PROTO_TRUSTED = TRUSTED_PROXY_HOPS > 0
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if FORWARDED_PROTO_TRUSTED else None
+
+# An explicit list of origins whose form posts are accepted, for a deployment whose proxy cannot
+# be trusted to declare HTTPS. Exact origins only: there is no wildcard form.
+CSRF_TRUSTED_ORIGINS = explicit_origins("CSRF_TRUSTED_ORIGINS", allow_http=DEBUG)
+if not DEBUG and not (FORWARDED_PROTO_TRUSTED or CSRF_TRUSTED_ORIGINS):
+    raise ImproperlyConfigured(
+        "Production needs HTTPS to be recognised: set TRUSTED_PROXY_HOPS to the number of "
+        "proxies in front of the service, or CSRF_TRUSTED_ORIGINS to the public origin. "
+        "Without either, every Studio form post is refused"
+    )
+
+
+def boolean_setting(name, *, default):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    if value not in ("0", "1"):
+        raise ImproperlyConfigured(f"{name} must be 0 or 1")
+
+    return value == "1"
+
+
+# Redirecting needs to know which requests were already HTTPS. Without a trusted proxy header
+# every request would look insecure and the redirect would never end, so it is refused rather
+# than allowed to loop. The platform health check calls over plain HTTP and is exempt.
+SECURE_SSL_REDIRECT = boolean_setting(
+    "SECURE_SSL_REDIRECT", default=FORWARDED_PROTO_TRUSTED and not DEBUG
+)
+if SECURE_SSL_REDIRECT and not FORWARDED_PROTO_TRUSTED:
+    raise ImproperlyConfigured(
+        "SECURE_SSL_REDIRECT requires TRUSTED_PROXY_HOPS above 0, or it would redirect forever"
+    )
+SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
+
+# Browsers remember HSTS for the whole period and for every path of the host, so it is opt-in and
+# meant to be raised in steps. The framework sends it on secure requests only, which without a
+# trusted proxy header means never; that silent no-op is refused.
+SECURE_HSTS_SECONDS = non_negative_integer("SECURE_HSTS_SECONDS")
+if SECURE_HSTS_SECONDS and (DEBUG or not FORWARDED_PROTO_TRUSTED):
+    raise ImproperlyConfigured(
+        "SECURE_HSTS_SECONDS needs a production deployment with TRUSTED_PROXY_HOPS above 0"
+    )
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+
+# The security middleware only redirects and sends HSTS. Its other response headers would reach
+# the public API, whose headers are part of the contract; the Studio sets its own.
+SECURE_CONTENT_TYPE_NOSNIFF = False
+SECURE_REFERRER_POLICY = None
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # Signs the draft-preview tokens. Kept apart from SECRET_KEY so that rotating one never decides
 # the other: changing it ends every outstanding preview and nothing else.

@@ -1,4 +1,3 @@
-from pathlib import Path
 from runpy import run_path
 
 import pytest
@@ -6,24 +5,12 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 
-SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
-MEDIA_ENVIRONMENT = {
-    "MEDIA_STORE": "s3",
-    "MEDIA_PUBLIC_BASE_URL": "https://media.example",
-    "MEDIA_S3_ENDPOINT_URL": "https://account.r2.cloudflarestorage.example",
-    "MEDIA_S3_ACCESS_KEY_ID": "access-key",
-    "MEDIA_S3_SECRET_ACCESS_KEY": "secret-key",
-    "MEDIA_PUBLIC_BUCKET": "photographs-public",
-    "MEDIA_ORIGINALS_BUCKET": "photographs-originals",
-}
+from tests.studio.production_settings import PRODUCTION_ENVIRONMENT, SETTINGS_FILE
 
 
 @pytest.fixture
 def load_settings(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("WEB_ORIGIN", "https://web.example")
-    monkeypatch.setenv("PREVIEW_SIGNING_KEY", "p" * 40)
-    for name, value in MEDIA_ENVIRONMENT.items():
+    for name, value in PRODUCTION_ENVIRONMENT.items():
         monkeypatch.setenv(name, value)
 
     return lambda: run_path(str(SETTINGS_FILE))
@@ -69,6 +56,7 @@ def test_the_number_of_trusted_proxies_is_read_from_the_environment(
     load_settings, monkeypatch, value, expected
 ):
     monkeypatch.setenv("TRUSTED_PROXY_HOPS", value)
+    monkeypatch.setenv("CSRF_TRUSTED_ORIGINS", "https://api.example")
 
     assert load_settings()["TRUSTED_PROXY_HOPS"] == expected
 
@@ -125,7 +113,8 @@ def test_the_apps_the_studio_depends_on_are_installed_and_the_admin_is_not():
 def test_session_csrf_and_message_middleware_run_after_cors_and_before_the_views():
     middleware = settings.MIDDLEWARE
 
-    assert middleware[0] == "corsheaders.middleware.CorsMiddleware"
+    assert middleware[0] == "django.middleware.security.SecurityMiddleware"
+    assert middleware[1] == "corsheaders.middleware.CorsMiddleware"
     for name in (
         "django.contrib.sessions.middleware.SessionMiddleware",
         "django.middleware.csrf.CsrfViewMiddleware",

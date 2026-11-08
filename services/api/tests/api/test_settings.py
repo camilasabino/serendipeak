@@ -35,9 +35,11 @@ SETTINGS_FILE = Path(__file__).resolve().parents[2] / "config" / "settings.py"
 
 
 @pytest.fixture(autouse=True)
-def production_safe_web_origin(monkeypatch):
-    """Loading the settings outside development also needs an https web origin."""
+def production_safe_deployment(monkeypatch):
+    """Loading the settings outside development also needs these to be valid for production."""
     monkeypatch.setenv("WEB_ORIGIN", "https://web.example")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    monkeypatch.setenv("ALLOWED_HOSTS", "api.example")
 
 
 @pytest.mark.parametrize(
