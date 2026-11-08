@@ -67,6 +67,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Development serves static files through django.contrib.staticfiles; WhiteNoise is the
+    # production server and would only warn about the missing collected directory there.
+    *([] if DEBUG else ["whitenoise.middleware.WhiteNoiseMiddleware"]),
     "corsheaders.middleware.CorsMiddleware",
     "serendipeak.studio.middleware.StudioSecurityHeadersMiddleware",
     "serendipeak.studio.middleware.LegacyCookieCleanupMiddleware",
@@ -130,6 +133,21 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 
 STATIC_URL = "static/"
+# collectstatic gathers the Studio's assets here; WhiteNoise serves them from this directory.
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        # Production serves content-hashed names that are cached for a year, so a deploy never
+        # leaves a browser with stale CSS. Development keeps the plain storage: the hashed one
+        # needs a collected manifest.
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
+}
 
 
 def non_negative_integer(name):

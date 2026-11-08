@@ -35,3 +35,6 @@ apps/web/public/cesium/
 
 # Local dev logs
 .dev-logs/
+
+# Output of collectstatic.
+services/api/staticfiles/

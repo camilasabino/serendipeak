@@ -60,10 +60,21 @@ Checklist for the Railway services:
 - API: `DATABASE_URL`, `DJANGO_SECRET_KEY`, `PREVIEW_SIGNING_KEY` (different from the secret key), `ALLOWED_HOSTS` (the public API host plus `healthcheck.railway.app`), `TRUSTED_PROXY_HOPS=1`, `WEB_ORIGIN`, `CORS_ALLOWED_ORIGIN`, `MEDIA_STORE=s3` with its endpoint, credentials, buckets and `MEDIA_PUBLIC_BASE_URL`. Optionally `SECURE_HSTS_SECONDS`.
 - Web: `NEXT_PUBLIC_API_BASE_URL` is inlined at build time, so set it before the build.
 - Reach the API through the public HTTPS domain only. A TCP proxy would deliver plain HTTP without the forwarding headers.
-- The WSGI server must trust the proxy's forwarding headers, for example Gunicorn with `--forwarded-allow-ips`.
+- Whether a request is HTTPS is decided by Django alone, from `TRUSTED_PROXY_HOPS`. `gunicorn.conf.py` therefore sets `secure_scheme_headers = {}` and needs no `--forwarded-allow-ips`: with the default scheme headers and `*`, Gunicorn would mark a request secure from a header that a caller reaching the service without passing the edge could forge, and Django falls back to that when `TRUSTED_PROXY_HOPS` is `0`.
 - The Studio's cookies are `Secure`, `HttpOnly`, `SameSite=Lax` and scoped to `/studio/`. The preview cookies are set by Next.js, which fixes them to `SameSite=None; Secure` in production, scoped to the previewed mountain and lasting 15 minutes.
 
-WhiteNoise (static files, including the Studio stylesheet) and Gunicorn (WSGI server) are the intended minimal production pair. Neither is a dependency yet, so the repository has no production static-file or WSGI serving until they are added.
+#### Build and start commands (Railway, root directory `services/api`)
+
+| Step  | Command |
+| ----- | ------- |
+| Build | `uv sync --no-dev --frozen && uv run --no-dev python manage.py collectstatic --noinput` |
+| Start | `uv run --no-dev gunicorn config.wsgi:application` |
+
+The build step needs the service's environment variables (the settings validate them on load, so `collectstatic` refuses to run without `DJANGO_SECRET_KEY`, `DATABASE_URL` and the rest), but it never connects to the database. Migrations are not part of either command; run them as a separate, deliberate step: `uv run --no-dev python manage.py migrate`.
+
+- **Static files.** `collectstatic` gathers the Studio's stylesheet, fonts, brand image and scripts into `services/api/staticfiles/` (ignored by Git) under content-hashed names, and `WhiteNoiseMiddleware` (second in the stack, production only) serves them with a one-year `immutable` cache and gzip. They must be collected before the process starts: WhiteNoise reads the directory at startup, and the hashed storage has no manifest to resolve `{% static %}` without it. Static requests never reach the Studio's `no-store` headers or sign-in checks, and they follow the same HTTPS redirect as every other path.
+- **Gunicorn** is configured in `gunicorn.conf.py`, which it reads from the working directory. It binds `[::]:$PORT` (Railway injects `PORT`; the IPv6 wildcard also accepts IPv4 and the private network), runs the `gthread` worker class with `WEB_CONCURRENCY` workers (default 2) of 4 threads, and allows 120 s per request so a photograph upload is not cut off.
+- **Development is unchanged.** With `APP_ENV=development` there is no WhiteNoise and no collected directory: `runserver` serves the app's static files through `django.contrib.staticfiles`, and Gunicorn is not involved.
 
 Django does not load `.env` by itself. Run backend commands with `uv run --env-file ../../.env ...` from `services/api`, or export the variables in your shell.
 
