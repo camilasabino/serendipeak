@@ -49,6 +49,9 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/next.config.ts ./next.config.ts
+# `next start` transpiles next.config.ts at boot and resolves its relative imports from disk, so
+# every module it imports must exist here at the same relative path.
+COPY --from=build --chown=node:node /app/src/config/securityHeaders.ts ./src/config/securityHeaders.ts
 
 USER node
 
