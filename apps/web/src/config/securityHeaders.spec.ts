@@ -78,16 +78,16 @@ describe('editorial routes', () => {
 });
 
 describe('referrer policy', () => {
-	it.each(['/preview', '/editorial/camera'])(
-		'%s sends no referrer, after the site-wide rule',
-		(route) => {
-			const rules = securityHeaderRules(API);
-			const index = (source: string) => rules.findIndex((rule) => rule.source === source);
+	it.each([
+		['/preview', 'no-referrer'],
+		['/editorial/camera', 'strict-origin']
+	])('%s uses %s, after the site-wide rule', (route, policy) => {
+		const rules = securityHeaderRules(API);
+		const index = (source: string) => rules.findIndex((rule) => rule.source === source);
 
-			expect(headersOf(route).get('Referrer-Policy')).toBe('no-referrer');
-			expect(index(route)).toBeGreaterThan(index('/:path*'));
-		}
-	);
+		expect(headersOf(route).get('Referrer-Policy')).toBe(policy);
+		expect(index(route)).toBeGreaterThan(index('/:path*'));
+	});
 
 	it('leaves the site-wide policy and the API exchange route unchanged', () => {
 		expect(headersOf('/:path*').get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');

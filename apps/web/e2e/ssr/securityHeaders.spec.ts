@@ -24,9 +24,49 @@ for (const path of ['/preview', '/editorial/camera']) {
 
 		expect(headers['x-robots-tag']).toBe('noindex, nofollow');
 		expect(headers['cache-control']).toBe('no-store');
-		expect(headers['referrer-policy']).toBe('no-referrer');
 	});
 }
+
+const POLICIES: Array<[string, string]> = [
+	['/preview', 'no-referrer'],
+	['/editorial/camera', 'strict-origin']
+];
+
+for (const [path, policy] of POLICIES) {
+	test(`${path} answers Referrer-Policy ${policy}`, async ({ request }) => {
+		const headers = (await request.get(path)).headers();
+
+		expect(headers['referrer-policy']).toBe(policy);
+	});
+}
+
+test('the camera editor sends only its origin as Referer, never the draft query', async ({
+	page,
+	baseURL
+}) => {
+	const received: Array<string | undefined> = [];
+	await page.route('https://referer-probe.test/**', async (route) => {
+		received.push(route.request().headers()['referer']);
+		await route.fulfill({
+			status: 200,
+			headers: { 'access-control-allow-origin': '*' },
+			body: 'ok'
+		});
+	});
+
+	await page.goto('/editorial/camera?name=Secret+Draft&lat=1.5&lon=2.5');
+	await page.evaluate(
+		(url) =>
+			new Promise<void>((resolve) => {
+				const probe = new Image();
+				probe.onload = probe.onerror = () => resolve();
+				probe.src = url;
+			}),
+		'https://referer-probe.test/ion.png'
+	);
+
+	expect(received).toEqual([`${new URL(baseURL as string).origin}/`]);
+});
 
 for (const path of ['/', '/mountains/aconcagua']) {
 	test(`${path} keeps the site-wide referrer policy`, async ({ request }) => {

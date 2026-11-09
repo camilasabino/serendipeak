@@ -74,8 +74,17 @@ export function reportOnlyPolicy(apiBaseUrl: string | undefined): string {
 const EDITORIAL_SOURCES = ['/preview', '/editorial/camera', '/api/preview'];
 
 // Their query strings and fragments carry draft names, coordinates, camera values and a credential,
-// so not even a same-origin Referer may carry them. Listed after the site-wide rule so it wins.
-const NO_REFERRER_SOURCES = ['/preview', '/editorial/camera'];
+// so no Referer may carry them. Listed after the site-wide rule so it wins. The editor keeps the
+// origin: Cesium ion rejects a URL-restricted token on a request with no Referer header.
+const REFERRER_POLICIES: Record<string, string | undefined> = {
+	'/preview': 'no-referrer',
+	'/editorial/camera': 'strict-origin'
+};
+
+function referrerPolicyHeader(source: string): HeaderRule['headers'] {
+	const value = REFERRER_POLICIES[source];
+	return value ? [{ key: 'Referrer-Policy', value }] : [];
+}
 
 export function securityHeaderRules(apiBaseUrl: string | undefined): HeaderRule[] {
 	return [
@@ -95,9 +104,7 @@ export function securityHeaderRules(apiBaseUrl: string | undefined): HeaderRule[
 			headers: [
 				{ key: 'X-Robots-Tag', value: 'noindex, nofollow' },
 				{ key: 'Cache-Control', value: 'no-store' },
-				...(NO_REFERRER_SOURCES.includes(source)
-					? [{ key: 'Referrer-Policy', value: 'no-referrer' }]
-					: [])
+				...referrerPolicyHeader(source)
 			]
 		}))
 	];
