@@ -6,7 +6,7 @@ Nothing in this file is a credential. Values in `<angle brackets>` are chosen by
 
 ## Rules that apply to every step
 
-- **Secrets live in two places only**: Railway variables, and an *operator environment file* kept outside the repository (see "Operator shell"). Never in Git, in a chat, in shell history or in a command-line argument.
+- **Secrets live in two places only**: Railway variables, and an _operator environment file_ kept outside the repository (see "Operator shell"). Never in Git, in a chat, in shell history or in a command-line argument.
 - **Confirm the target before every command that writes**: `railway status` for Railway, and the printed database and bucket names for the management commands. Several commands print their target on purpose; read it.
 - **One writer**: while the previous production stack is the one serving visitors, nothing in this runbook moves a name that stack uses until step 11. The new stack is reached only on names of its own until then.
 - **A failed catalog load is recreated, never patched**: drop the database, `migrate`, load again.
@@ -14,15 +14,15 @@ Nothing in this file is a credential. Values in `<angle brackets>` are chosen by
 
 ## Services and names
 
-| Unit | What it is | Public |
-| ---- | ---------- | ------ |
-| `postgres` | PostgreSQL with PostGIS, same major version as CI (`postgis/postgis:18-3.6`) | never |
-| `api` | image built from `services/api/Dockerfile` | `<api-host>` |
-| `web` | image built from `apps/web/Dockerfile` | `<web-origin>` |
-| `prune` | cron service, same image and variables as `api` | never |
-| `backup` | cron service built from `services/backup`; daily `pg_dump` to the private R2 bucket `serendipeak-db-backups` | never |
-| R2 bucket `<public-bucket>` | public photograph renditions | `<media-host>` (custom domain) |
-| R2 bucket `<originals-bucket>` | private original photographs | never |
+| Unit                           | What it is                                                                                                   | Public                         |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `postgres`                     | PostgreSQL with PostGIS, same major version as CI (`postgis/postgis:18-3.6`)                                 | never                          |
+| `api`                          | image built from `services/api/Dockerfile`                                                                   | `<api-host>`                   |
+| `web`                          | image built from `apps/web/Dockerfile`                                                                       | `<web-origin>`                 |
+| `prune`                        | cron service, same image and variables as `api`                                                              | never                          |
+| `backup`                       | cron service built from `services/backup`; daily `pg_dump` to the private R2 bucket `serendipeak-db-backups` | never                          |
+| R2 bucket `<public-bucket>`    | public photograph renditions                                                                                 | `<media-host>` (custom domain) |
+| R2 bucket `<originals-bucket>` | private original photographs                                                                                 | never                          |
 
 **Decisions to record before starting** (the runbook cannot choose them):
 
@@ -56,17 +56,17 @@ The printed host and database must be the tunnel's local address and the product
 
 ## Order of execution
 
-| Order | Step | Touches production |
-| ----- | ---- | ------------------ |
-| 1 | Infrastructure and secrets | Railway |
-| 2 | PostgreSQL/PostGIS and its backups | Railway |
-| 3 | R2 buckets, media domain and their backups | Cloudflare |
-| 4, 5, 6 | Export, checksum and review, dry run | no (development and a disposable database) |
-| 9a | First `api` deploy, which migrates | Railway, database |
-| 7, 8 | Catalog import and R2 transfer, inside one SSH tunnel session | database, R2 |
-| 9b | Initial Editor, close the tunnel, `web` deploy | database, Railway |
-| 10 | Smoke tests on the staging names | read-only, plus one Studio session |
-| 11 | Switch, rollback and recovery | DNS |
+| Order   | Step                                                          | Touches production                         |
+| ------- | ------------------------------------------------------------- | ------------------------------------------ |
+| 1       | Infrastructure and secrets                                    | Railway                                    |
+| 2       | PostgreSQL/PostGIS and its backups                            | Railway                                    |
+| 3       | R2 buckets, media domain and their backups                    | Cloudflare                                 |
+| 4, 5, 6 | Export, checksum and review, dry run                          | no (development and a disposable database) |
+| 9a      | First `api` deploy, which migrates                            | Railway, database                          |
+| 7, 8    | Catalog import and R2 transfer, inside one SSH tunnel session | database, R2                               |
+| 9b      | Initial Editor, close the tunnel, `web` deploy                | database, Railway                          |
+| 10      | Smoke tests on the staging names                              | read-only, plus one Studio session         |
+| 11      | Switch, rollback and recovery                                 | DNS                                        |
 
 ## 1. Infrastructure configuration and required secrets
 
@@ -83,39 +83,39 @@ The printed host and database must be the tunnel's local address and the product
 
    **`api`** (and `prune`, which loads the same settings, so it needs the same values; use shared or reference variables):
 
-   | Variable | Value |
-   | -------- | ----- |
-   | `APP_ENV` | `production` |
-   | `DATABASE_URL` | reference to the Postgres service's private `DATABASE_URL` |
-   | `DJANGO_SECRET_KEY`, `PREVIEW_SIGNING_KEY` | the generated secrets |
-   | `ALLOWED_HOSTS` | `<api-host>,healthcheck.railway.app`; add the Railway-generated hostname only while it is in use, or remove that domain from the service |
-   | `CORS_ALLOWED_ORIGIN`, `WEB_ORIGIN` | the web origin in use (`https://…`, no path or trailing slash) |
-   | `TRUSTED_PROXY_HOPS` | `1`, only while the conditions of "Trusting forwarded headers" hold |
-   | `MEDIA_STORE` | `s3` |
-   | `MEDIA_PUBLIC_BASE_URL` | `https://media.serendipeak.camilasabino.dev` |
-   | `MEDIA_S3_ENDPOINT_URL`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | R2 endpoint and a token scoped to the two production buckets only |
-   | `MEDIA_PUBLIC_BUCKET`, `MEDIA_ORIGINALS_BUCKET` | `<public-bucket>`, `<originals-bucket>` |
-   | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `35` (Gunicorn waits up to 30 s for in-flight requests) |
-   | `WEB_CONCURRENCY` | optional, default `2` |
-   | `SECURE_HSTS_SECONDS` | leave unset now; raise in steps after step 11 |
+   | Variable                                                                        | Value                                                                                                                                    |
+   | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+   | `APP_ENV`                                                                       | `production`                                                                                                                             |
+   | `DATABASE_URL`                                                                  | reference to the Postgres service's private `DATABASE_URL`                                                                               |
+   | `DJANGO_SECRET_KEY`, `PREVIEW_SIGNING_KEY`                                      | the generated secrets                                                                                                                    |
+   | `ALLOWED_HOSTS`                                                                 | `<api-host>,healthcheck.railway.app`; add the Railway-generated hostname only while it is in use, or remove that domain from the service |
+   | `CORS_ALLOWED_ORIGIN`, `WEB_ORIGIN`                                             | the web origin in use (`https://…`, no path or trailing slash)                                                                           |
+   | `TRUSTED_PROXY_HOPS`                                                            | `1`, only while the conditions of "Trusting forwarded headers" hold                                                                      |
+   | `MEDIA_STORE`                                                                   | `s3`                                                                                                                                     |
+   | `MEDIA_PUBLIC_BASE_URL`                                                         | `https://media.serendipeak.camilasabino.dev`                                                                                             |
+   | `MEDIA_S3_ENDPOINT_URL`, `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | R2 endpoint and a token scoped to the two production buckets only                                                                        |
+   | `MEDIA_PUBLIC_BUCKET`, `MEDIA_ORIGINALS_BUCKET`                                 | `<public-bucket>`, `<originals-bucket>`                                                                                                  |
+   | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS`                                           | `35` (Gunicorn waits up to 30 s for in-flight requests)                                                                                  |
+   | `WEB_CONCURRENCY`                                                               | optional, default `2`                                                                                                                    |
+   | `SECURE_HSTS_SECONDS`                                                           | leave unset now; raise in steps after step 11                                                                                            |
 
    **`web`** (build arguments, so set them before the first build):
 
-   | Variable | Value |
-   | -------- | ----- |
-   | `NEXT_PUBLIC_API_BASE_URL` | `https://<api-host>` (the build fails unless it is an `https` origin) |
-   | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | a Cesium ion token restricted to the allowed web origins in the ion dashboard (the build fails when empty; the value ships to every browser) |
-   | `NEXT_PUBLIC_CESIUM_IMAGERY_MODE` | unset (`world` in production) |
+   | Variable                          | Value                                                                                                                                        |
+   | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `NEXT_PUBLIC_API_BASE_URL`        | `https://<api-host>` (the build fails unless it is an `https` origin)                                                                        |
+   | `NEXT_PUBLIC_CESIUM_ION_TOKEN`    | a Cesium ion token restricted to the allowed web origins in the ion dashboard (the build fails when empty; the value ships to every browser) |
+   | `NEXT_PUBLIC_CESIUM_IMAGERY_MODE` | unset (`world` in production)                                                                                                                |
 
 5. Service settings.
 
-   | Setting | `api` | `web` |
-   | ------- | ----- | ----- |
-   | Pre-deploy command | `python manage.py migrate --noinput` (set it only at step 9a) | none |
-   | Health check path | `/healthz` | `/brand/serendipeak-mark.png` (a static file: the pages depend on the API) |
-   | Health check timeout | 120 s | 120 s |
-   | Memory | at least 2 GiB (one photograph upload decodes up to about 0.6 GiB above the idle worker; two editors can overlap) | default |
-   | Public domain, TCP proxy | none yet | none yet |
+   | Setting                  | `api`                                                                                                             | `web`                                                                      |
+   | ------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+   | Pre-deploy command       | `python manage.py migrate --noinput` (set it only at step 9a)                                                     | none                                                                       |
+   | Health check path        | `/healthz`                                                                                                        | `/brand/serendipeak-mark.png` (a static file: the pages depend on the API) |
+   | Health check timeout     | 120 s                                                                                                             | 120 s                                                                      |
+   | Memory                   | at least 2 GiB (one photograph upload decodes up to about 0.6 GiB above the idle worker; two editors can overlap) | default                                                                    |
+   | Public domain, TCP proxy | none yet                                                                                                          | none yet                                                                   |
 
 6. Never add a TCP proxy to `api`, and do not place a service you do not control in the environment: its private-network traffic could send forged forwarding headers.
 
@@ -162,15 +162,15 @@ The tunnel is encrypted by SSH, so neither a TCP proxy nor server-side TLS is ne
 
 The `backup` service is a Railway cron service built from `services/backup` (root directory `services/backup`, Dockerfile builder). It runs `pg_dump --format=custom` against `postgres` over the private network, checks the archive with `pg_restore --list`, writes a SHA-256 file next to it and uploads both to the private R2 bucket `serendipeak-db-backups` under `daily/`. On Sundays (UTC) it also writes `weekly/`. Each upload is checked by size. Retention is the bucket's lifecycle rules, not the job: `daily/` expires after 14 days and `weekly/` after 60 days, so the job holds no delete permission. R2 applies lifecycle rules asynchronously, so an object can outlive its limit by about a day.
 
-| Setting | Value |
-| ------- | ----- |
-| Schedule | `30 3 * * *` (UTC) |
-| Restart policy | never (a cron service must exit; the next run is the retry) |
-| Public domain, TCP proxy | none |
-| `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | references to `postgres` (`RAILWAY_PRIVATE_DOMAIN`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) |
-| `PGPORT` | `5432` |
-| `BACKUP_S3_ENDPOINT_URL` | `https://<account-id>.r2.cloudflarestorage.com` |
-| `BACKUP_BUCKET` | `serendipeak-db-backups` |
+| Setting                                                  | Value                                                                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Schedule                                                 | `30 3 * * *` (UTC)                                                                                             |
+| Restart policy                                           | never (a cron service must exit; the next run is the retry)                                                    |
+| Public domain, TCP proxy                                 | none                                                                                                           |
+| `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`           | references to `postgres` (`RAILWAY_PRIVATE_DOMAIN`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`)       |
+| `PGPORT`                                                 | `5432`                                                                                                         |
+| `BACKUP_S3_ENDPOINT_URL`                                 | `https://<account-id>.r2.cloudflarestorage.com`                                                                |
+| `BACKUP_BUCKET`                                          | `serendipeak-db-backups`                                                                                       |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | an R2 API token with Object Read & Write on `serendipeak-db-backups` only. It must not reach the media buckets |
 
 - **No overlap.** Railway does not start a scheduled run while the previous one is still active, and `pg_dump` is bounded by `BACKUP_DUMP_TIMEOUT_SECONDS` (default 1500), so a hung run ends before it can block the next days for long.
@@ -183,6 +183,7 @@ The `backup` service is a Railway cron service built from `services/backup` (roo
   ```
 
   The R2 dashboard (bucket, objects) shows the same thing: one `daily/` dump and checksum per day. Nothing alerts on its own when the job stops being scheduled; the weekly check is the control for that.
+
 - **Restore.** Download a dump and its `.sha256` from the bucket (dashboard or any S3 client), run `shasum -a 256 -c` on it, then restore into an empty PostGIS 18 database (`pg_restore --no-owner --exit-on-error --dbname <target> <file>`). The archive carries the `postgis` extension and no roles. Run `check_catalog` on the result before relying on it.
 - **Credentials.** Rotate the R2 token by creating a new one, updating the two variables and running the service once; then revoke the old one.
 
@@ -424,16 +425,16 @@ node scripts/verify-api.mjs "$API"
 
 ### Rollback
 
-| Situation | Action |
-| --------- | ------ |
-| Build, pre-deploy or health check fails | Nothing is switched; the previous deployment keeps serving. Fix and redeploy. |
-| A released version misbehaves | Use Railway's rollback to the previous deployment of that service. If the release shipped a migration, the older version must still work with the new schema (that was the rule); if it does not, roll forward instead, or restore the dump taken before the release. |
-| Public traffic must return to the previous stack | Point the records back (the previous stack was never modified). Daily history written by the new stack does not exist there; decide beforehand whether that is acceptable (decision 5). |
-| The import is wrong or half done | Recreate the database: new `postgres` service or empty database, `migrate`, repeat steps 7 to 8. Never patch a loaded catalog. |
-| The database is lost or corrupt | Restore the latest provider backup or `pg_dump` into a new database, point `DATABASE_URL` at it, then run `check_catalog`. Users and sessions come back with the dump; from a snapshot only, run `create_editor` again. |
-| Photographs are missing or damaged | Re-copy the referenced keys from the second copy or the development buckets (step 8), then `check_photograph_media --deep --checksums`. |
-| No usable Editor | `create_editor` from the operator shell through a new tunnel; close it again. |
-| A secret is exposed | `DJANGO_SECRET_KEY`: replace and redeploy (ends every Studio session). `PREVIEW_SIGNING_KEY`: replace (ends outstanding previews). R2 token: create a new one, update the variables, redeploy, revoke the old one. Database password: rotate in Railway and redeploy every service that references it. |
+| Situation                                        | Action                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Build, pre-deploy or health check fails          | Nothing is switched; the previous deployment keeps serving. Fix and redeploy.                                                                                                                                                                                                                          |
+| A released version misbehaves                    | Use Railway's rollback to the previous deployment of that service. If the release shipped a migration, the older version must still work with the new schema (that was the rule); if it does not, roll forward instead, or restore the dump taken before the release.                                  |
+| Public traffic must return to the previous stack | Point the records back (the previous stack was never modified). Daily history written by the new stack does not exist there; decide beforehand whether that is acceptable (decision 5).                                                                                                                |
+| The import is wrong or half done                 | Recreate the database: new `postgres` service or empty database, `migrate`, repeat steps 7 to 8. Never patch a loaded catalog.                                                                                                                                                                         |
+| The database is lost or corrupt                  | Restore the latest provider backup or `pg_dump` into a new database, point `DATABASE_URL` at it, then run `check_catalog`. Users and sessions come back with the dump; from a snapshot only, run `create_editor` again.                                                                                |
+| Photographs are missing or damaged               | Re-copy the referenced keys from the second copy or the development buckets (step 8), then `check_photograph_media --deep --checksums`.                                                                                                                                                                |
+| No usable Editor                                 | `create_editor` from the operator shell through a new tunnel; close it again.                                                                                                                                                                                                                          |
+| A secret is exposed                              | `DJANGO_SECRET_KEY`: replace and redeploy (ends every Studio session). `PREVIEW_SIGNING_KEY`: replace (ends outstanding previews). R2 token: create a new one, update the variables, redeploy, revoke the old one. Database password: rotate in Railway and redeploy every service that references it. |
 
 Reversing `catalog.0001_initial` drops the `postgis` extension and fails if other objects depend on it; do not migrate backwards on a database that holds data. The way back is a restore.
 
@@ -450,3 +451,9 @@ Django believes `X-Forwarded-Proto` only when `TRUSTED_PROXY_HOPS` is above `0` 
 Verified in the production image with a bare client: no header and a forged `http` redirect to HTTPS; `https` is accepted; `http, https` redirects; a forged `X-Forwarded-Host` changes nothing; an unknown host is refused with 400; a forged left-hand `X-Forwarded-For` entry is ignored for the sign-in address. If any condition stops holding (a TCP proxy, an untrusted service in the environment, a proxy that forwards the client's value), set `TRUSTED_PROXY_HOPS=0` and list the public origin in `CSRF_TRUSTED_ORIGINS` instead; the redirect and HSTS then have to be handled at the edge, and sign-in throttling counts the proxy's address until the count is fixed.
 
 CSRF stays on for every Studio form, cookies are `Secure` and scoped to `/studio/`, `ALLOWED_HOSTS` rejects unknown names, and the preview token is signed with its own key; none of these settings is relaxed by the deployment.
+
+## Web security headers
+
+The web service sends `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy` and an enforced Content-Security-Policy limited to `base-uri`, `form-action`, `frame-ancestors` and `object-src`, which fetch nothing and cannot affect the globe. HSTS is deliberately not sent by the web service.
+
+A fuller policy (`script-src`, `worker-src`, `connect-src`, `img-src`) is sent as `Content-Security-Policy-Report-Only`. It has no reporting endpoint, so violations show only in a browser console. Before enforcing it, load a mountain page and the camera editor on the production origin with the real Cesium Ion token and read the console: every Ion, imagery, terrain and media origin that is blocked must be added first. Enforcing without `'unsafe-inline'` for scripts additionally needs per-request nonces, which turns the statically built pages into dynamic ones.
