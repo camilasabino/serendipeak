@@ -35,11 +35,13 @@ async function chooseOlympus(page: Page): Promise<string[]> {
 	return requested;
 }
 
-// Answers the destination choice with `record` only once the test releases it.
+// Answers the destination choice with `record` only once the test releases it. The client gives up
+// on a lookup after its own timeout, so `abandoned` says whether the held request outlived it.
 async function holdRandom(page: Page, record: unknown = OLYMPUS_RECORD) {
 	let release!: () => void;
 	const released = new Promise<void>((resolve) => (release = resolve));
 	const requested: string[] = [];
+	let abandoned: string | undefined;
 	await page.route(RANDOM_ENDPOINT, async (route) => {
 		requested.push(new URL(route.request().url()).search);
 		await released;
@@ -48,8 +50,20 @@ async function holdRandom(page: Page, record: unknown = OLYMPUS_RECORD) {
 			headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
 		});
 	});
+	page.on('requestfailed', (request) => {
+		if (request.url().includes('/mountains/random')) {
+			abandoned = request.failure()?.errorText ?? 'failed';
+		}
+	});
 
-	return { release, requested };
+	return { release, requested, abandoned: () => abandoned };
+}
+
+type HeldRandom = Awaited<ReturnType<typeof holdRandom>>;
+
+// Route changes are recorded from the router's own event, which is also what supersedes a run.
+async function expectRouteStarted(page: Page, url: string) {
+	await expect.poll(() => routesStarted(page)).toEqual([url]);
 }
 
 // Records every route change the router starts, so a stale push is visible without waiting for it.
@@ -68,10 +82,14 @@ const routesStarted = (page: Page) =>
 	page.evaluate(() => (window as Window & { __routes?: string[] }).__routes ?? []);
 
 // Releases a held answer and waits until the page has consumed it, with no sleep: the response is
-// observed, then two frames let any promise continuation it started run.
-async function releaseAndConsume(page: Page, release: () => void) {
+// observed, then two frames let any promise continuation it started run. A lookup the client already
+// abandoned has no response to observe, so that is reported instead of waiting for one.
+async function releaseAndConsume(page: Page, random: HeldRandom) {
+	expect(random.abandoned(), 'the client abandoned the held lookup before it was answered').toBe(
+		undefined
+	);
 	const answered = page.waitForResponse((response) => response.url().includes('/mountains/random'));
-	release();
+	random.release();
 	await answered;
 	await page.evaluate(
 		() =>
@@ -150,9 +168,16 @@ test.describe('@webgl Explore', () => {
 
 		await exploreButton(page).click();
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
-		await exploreButton(page).click({ force: true });
-		await exploreButton(page).click({ force: true });
+		// One page task: a click sent through the runner waits for a page busy rendering the flight,
+		// so on a slow machine the travel can end before it lands and it would start a new Explore.
+		const busyWhenClicked = await exploreButton(page).evaluate((button: HTMLElement) => {
+			const busy = button.getAttribute('aria-busy');
+			button.click();
+			button.click();
+
+			return busy;
+		});
+		expect(busyWhenClicked, 'the travel ended before the repeated clicks').toBe('true');
 
 		await expectIdleAt(page, OLYMPUS);
 		await expectPersistentViewer(page, probe);
@@ -222,8 +247,10 @@ test.describe('@webgl Explore superseded before the scene owns the destination',
 		await exploreButton(page).click();
 		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
 		await pushRoute(page, PERMALINK);
-		await expectIdleAt(page, ACONCAGUA);
-		await releaseAndConsume(page, random.release);
+		// The client abandons a lookup after its timeout, which a slow flight to the permalink can
+		// outlast: the late answer arrives as soon as the permalink has superseded the run.
+		await expectRouteStarted(page, PERMALINK);
+		await releaseAndConsume(page, random);
 
 		await expectIdleAt(page, ACONCAGUA);
 		expect(await routesStarted(page)).toEqual([PERMALINK]);
@@ -244,8 +271,8 @@ test.describe('@webgl Explore superseded before the scene owns the destination',
 		await exploreButton(page).click();
 		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
 		await page.goBack();
-		await expectIdleAt(page, ACONCAGUA);
-		await releaseAndConsume(page, random.release);
+		await expectRouteStarted(page, PERMALINK);
+		await releaseAndConsume(page, random);
 
 		await expectIdleAt(page, ACONCAGUA);
 		expect(await routesStarted(page)).toEqual([PERMALINK]);

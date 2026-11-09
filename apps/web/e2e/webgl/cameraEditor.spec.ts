@@ -30,11 +30,14 @@ const SAVE_TOLERANCE = { angleDegrees: 0.05, rangeMeters: 1, framing: 0.0005 } a
 const MIN_FILL_ASPECT = 1.35 / 0.85;
 const REFERENCE_RANGE_SCALE = 0.85;
 
+// Software rendering at 3440x1440 on a 2-CPU runner measured about 94 seconds to become ready.
+const SOFTWARE_RENDER_READY_MS = 150_000;
+
 // Viewports from a phone to an ultrawide screen: the editor frames the same range on all.
 const SCREENS = [
 	{ name: 'laptop', width: 1280, height: 800 },
 	{ name: 'full HD', width: 1920, height: 1080 },
-	{ name: 'ultrawide', width: 3440, height: 1440 },
+	{ name: 'ultrawide', width: 3440, height: 1440, readyTimeout: SOFTWARE_RENDER_READY_MS },
 	{ name: 'tablet portrait', width: 768, height: 1024 },
 	{ name: 'phone', width: 390, height: 844 },
 	{ name: 'phone landscape', width: 844, height: 390 }
@@ -70,10 +73,12 @@ const readout = (page: Page, label: string) =>
 
 // The panel's own status region is never empty, so the shared readiness helper does not fit: the
 // stage is ready once the reveal loader is gone and nothing failed.
-async function expectReadyStage(page: Page) {
-	await expect(page.getByText('Revealing the mountain...')).toHaveCount(0, { timeout: 60_000 });
+async function expectReadyStage(page: Page, readyTimeout = 60_000) {
+	await expect(page.getByText('Revealing the mountain...')).toHaveCount(0, {
+		timeout: readyTimeout
+	});
 	await expect(page.locator('main [role="alert"]')).toHaveCount(0);
-	await expect(page.getByText('Ready to save.')).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText('Ready to save.')).toBeVisible({ timeout: readyTimeout });
 }
 
 // Stands in for the Studio: the editor only ever navigates there, and the test reads where.
@@ -329,9 +334,13 @@ test.describe('@webgl camera editor', () => {
 
 	for (const screen of SCREENS) {
 		test(`frames the stage at the reference range on a ${screen.name} screen`, async ({ page }) => {
+			const readyTimeout = 'readyTimeout' in screen ? screen.readyTimeout : undefined;
+			if (readyTimeout) {
+				test.setTimeout(readyTimeout + 60_000);
+			}
 			await page.setViewportSize(screen);
 			await page.goto(editorUrl(ACONCAGUA.camera));
-			await expectReadyStage(page);
+			await expectReadyStage(page, readyTimeout);
 			await expectCanonicalPose(page, ACONCAGUA.camera);
 			await untilStill(page);
 

@@ -54,6 +54,8 @@ export interface StageProbe {
 	stageObservers(): Promise<{ observed: number; live: number }>;
 	/** Declares failures a test causes on purpose; everything else still fails the test. */
 	tolerate(expected: { requests?: RegExp; errors?: RegExp }): void;
+	/** What a failed test leaves behind in CI logs: page state, GL driver, console and requests. */
+	diagnostics(): Promise<string>;
 }
 
 function isLocal(url: URL): boolean {
@@ -64,6 +66,7 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 	const external: string[] = [];
 	const failed: string[] = [];
 	const errors: string[] = [];
+	const consoleLog: string[] = [];
 	const tolerated: { requests: RegExp[]; errors: RegExp[] } = { requests: [], errors: [] };
 
 	await page.addInitScript(() => {
@@ -146,6 +149,7 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 		}
 	});
 	page.on('console', (message) => {
+		consoleLog.push(`${message.type()}: ${message.text()}`);
 		if (message.type() === 'error') {
 			errors.push(message.text());
 		}
@@ -160,6 +164,7 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 			if (requests) tolerated.requests.push(requests);
 			if (messages) tolerated.errors.push(messages);
 		},
+		diagnostics: () => describePage(page, { console: consoleLog, failed, external }),
 		webglContexts: () =>
 			page.evaluate(
 				() =>
@@ -175,14 +180,83 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 	};
 }
 
+const DIAGNOSTIC_TIMEOUT_MS = 5_000;
+const CONSOLE_TAIL = 40;
+
+interface PageRecord {
+	console: string[];
+	failed: string[];
+	external: string[];
+}
+
+// A hung page must not hang the report, and nothing here may fail the test it describes.
+async function bounded<T>(read: () => Promise<T>): Promise<T | string> {
+	let timer: NodeJS.Timeout | undefined;
+	const expired = new Promise<string>((resolve) => {
+		timer = setTimeout(() => resolve('(page did not answer)'), DIAGNOSTIC_TIMEOUT_MS);
+	});
+	try {
+		return await Promise.race([read(), expired]);
+	} catch (error) {
+		return `(unavailable: ${error instanceof Error ? error.message.split('\n')[0] : String(error)})`;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function describePage(page: Page, record: PageRecord): Promise<string> {
+	const graphics = await bounded(() =>
+		page.evaluate(() => {
+			const canvas = document.querySelector('canvas');
+			const context = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl') ?? undefined;
+			if (!canvas) {
+				return 'no canvas';
+			}
+			if (!context) {
+				return 'canvas has no WebGL context';
+			}
+			const info = context.getExtension('WEBGL_debug_renderer_info');
+
+			return {
+				lost: context.isContextLost(),
+				renderer: info ? context.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'masked',
+				maxTextureSize: context.getParameter(context.MAX_TEXTURE_SIZE),
+				drawingBuffer: `${context.drawingBufferWidth}x${context.drawingBufferHeight}`,
+				devicePixelRatio: window.devicePixelRatio
+			};
+		})
+	);
+	const regions = await bounded(() =>
+		page.evaluate(() => ({
+			statuses: [...document.querySelectorAll('[role="status"]')].map((e) => e.textContent?.trim()),
+			alerts: [...document.querySelectorAll('[role="alert"]')].map((e) => e.textContent?.trim()),
+			resetControl: document.body.textContent?.includes('Reset view') ?? false,
+			camera: (window as Window & { __serendipeakCamera?: () => unknown }).__serendipeakCamera?.()
+		}))
+	);
+
+	return [
+		`url: ${page.url()}`,
+		`graphics: ${JSON.stringify(graphics)}`,
+		`regions: ${JSON.stringify(regions)}`,
+		`failed requests: ${JSON.stringify(record.failed)}`,
+		`unmocked external requests: ${JSON.stringify(record.external)}`,
+		`console (last ${CONSOLE_TAIL}):`,
+		...record.console.slice(-CONSOLE_TAIL).map((line) => `  ${line}`)
+	].join('\n');
+}
+
 type Fixtures = { probe: StageProbe };
 
 export const test = base.extend<Fixtures>({
 	probe: [
-		async ({ page }, use) => {
+		async ({ page }, use, testInfo) => {
 			const probe = await isolateStage(page);
 			await use(probe);
 
+			if (testInfo.status !== testInfo.expectedStatus) {
+				console.log(`\n[stage diagnostics] ${testInfo.title}\n${await probe.diagnostics()}\n`);
+			}
 			expect(probe.externalRequests(), 'unmocked external requests').toEqual([]);
 			expect(probe.failedRequests(), 'failed requests').toEqual([]);
 			expect(probe.errors(), 'console and page errors').toEqual([]);
@@ -194,10 +268,11 @@ export const test = base.extend<Fixtures>({
 export { expect };
 
 export async function expectReadyStage(page: Page) {
+	// The loader may not be discoverable by role yet during SSR and hydration, so its absence alone
+	// proves nothing; the Reset control only becomes enabled once the stage is interactive.
+	await expect(page.getByRole('button', { name: 'Reset view' })).toBeEnabled({ timeout: 60_000 });
 	// The stage's own status region stays mounted but empty; only the loader fills one before ready.
-	await expect(page.getByRole('status').filter({ hasText: /\S/ })).toHaveCount(0, {
-		timeout: 60_000
-	});
+	await expect(page.getByRole('status').filter({ hasText: /\S/ })).toHaveCount(0);
 	// Next's route announcer is also an alert, so only the stage's own failure notice counts.
 	await expect(page.locator('main [role="alert"]')).toHaveCount(0);
 }
