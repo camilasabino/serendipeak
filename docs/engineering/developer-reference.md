@@ -429,6 +429,15 @@ The 3D stage reads two more build-time values through `readCesiumConfig`, so a b
 | `npm run test:webgl`            | Real-WebGL scene tests (`@webgl`, Chromium) against `next dev`, where React Strict Mode runs effects twice; builds nothing in `.next`                                                                                                                                   |
 | `npm run test:webgl:prod`       | The same suite against a production build served by `next start`                                                                                                                                                                                                        |
 
+### Continuous integration
+
+The WebGL suites are the slow part of CI, so they run apart from the other web checks (lint, types, unit tests, build, production gate, SSR and no-WebGL tests):
+
+- **Concurrency.** The development and production suites run at the same time, each split into two shards with `--shard=<n>/2`. A shard is a separate runner with its own checkout, build directory, server and stub API, and runs one Playwright worker. The WebGL config sets `fullyParallel` only so that Playwright shards by test instead of by file; the one worker still runs tests in order. Run a shard locally with `npm run test:webgl -- --shard=1/2` (or `test:webgl:prod`).
+- **Coverage.** The `WebGL` check summarizes the shard reports and fails when a test ran twice within a mode, or ran in one mode and not in the other. It is the single check to require: the shard jobs are skipped when the suites do not run, and a skipped matrix job cannot satisfy a required check by name.
+- **Skipping.** `scripts/classify-changes.mjs` decides, for pull requests and for pushes to `main`, whether the WebGL suites run. They are skipped only when every changed path is under `docs/` or is a Markdown file in the repository root. A pull request is compared with its merge base and a push over the whole range from the previous tip to the new one. Any other path, an empty diff, a new branch, a base commit that is missing or malformed, and any other event run them.
+- **Durations.** Each shard uploads its Playwright JSON report. The `WebGL` job summary lists, per shard and mode, the test time and wall time and the imbalance between shards, then the duration by spec and the slowest tests. When one shard is consistently slower, rebalance by changing the number of shards or by splitting the heaviest spec.
+
 ### Stage lifecycle
 
 The stage is one Cesium `Viewer` per mounted `MountainLayout`. `AppFrame` renders the layout at the same position of the React tree for every page that has a mountain (`/` and `/mountains/[slug]`), so client navigation between them keeps the layout, its `SceneStore` and the `Viewer`; only the target changes and the camera travels to the new mountain. A page without a mountain (the 404 and error views) renders no layout: the layout unmounts, the session stops and the `Viewer` is destroyed, and coming back builds a fresh one. A full page load always starts a new one.

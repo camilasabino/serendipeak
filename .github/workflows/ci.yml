@@ -182,8 +182,149 @@ jobs:
       - name: Stage failure tests (no WebGL)
         run: npm run test:nogl
 
-      - name: WebGL scene tests (development server, Strict Mode)
-        run: npm run test:webgl
+  # Pushes and pull requests that change only documentation skip the WebGL suites. Everything else
+  # runs them: the classifier treats any path or event it does not recognise as relevant.
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      webgl: ${{ steps.classify.outputs.webgl }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: WebGL scene tests (production build)
-        run: npm run test:webgl:prod
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Test the CI scripts
+        run: node --test "scripts/*.test.mjs"
+
+      - name: Decide whether the WebGL suites run
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/classify-changes.mjs "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  # Each shard is its own runner with its own checkout, build directory, dev or production server
+  # and stub API, so nothing is shared between shards or between modes.
+  webgl:
+    name: WebGL ${{ matrix.mode }} ${{ matrix.shard_index }}/${{ matrix.shard_total }}
+    needs: changes
+    if: needs.changes.outputs.webgl == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/web
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [development, production]
+        shard_index: [1, 2]
+        shard_total: [2]
+        include:
+          - mode: development
+            script: test:webgl
+          - mode: production
+            script: test:webgl:prod
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: WebGL scene tests (${{ matrix.mode }})
+        env:
+          SCRIPT: ${{ matrix.script }}
+          SHARD: ${{ matrix.shard_index }}/${{ matrix.shard_total }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/webgl-${{ matrix.mode }}-${{ matrix.shard_index }}.json
+        run: npm run "$SCRIPT" -- --shard="$SHARD" --reporter=list,json
+
+      - name: Upload duration report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: webgl-report-${{ matrix.mode }}-${{ matrix.shard_index }}
+          path: ${{ runner.temp }}/webgl-${{ matrix.mode }}-${{ matrix.shard_index }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # One stable check for the whole matrix: a skipped matrix job reports under its unexpanded name,
+  # which a required check could never match. It also fails when a test was run twice, or in one
+  # mode only, which the individual shards cannot see.
+  webgl-result:
+    name: WebGL
+    needs: [changes, webgl]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download duration reports
+        id: download
+        if: needs.changes.outputs.webgl == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: webgl-report-*
+          path: ${{ runner.temp }}/webgl-reports
+          merge-multiple: true
+
+      - name: Summarize durations and check coverage
+        id: summary
+        if: needs.changes.outputs.webgl == 'true'
+        run: node scripts/playwright-summary.mjs "$RUNNER_TEMP/webgl-reports" >> "$GITHUB_STEP_SUMMARY"
+
+      # Fails closed: only the two outcomes below pass. An unexpected classification, a failed,
+      # cancelled or skipped shard, or a report step that did not succeed all fail the check.
+      - name: Require the WebGL result
+        if: ${{ always() }}
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WEBGL_REQUIRED: ${{ needs.changes.outputs.webgl }}
+          WEBGL_RESULT: ${{ needs.webgl.result }}
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+          SUMMARY_OUTCOME: ${{ steps.summary.outcome }}
+        run: |
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "Change classification finished with: $CHANGES_RESULT"
+            exit 1
+          fi
+
+          case "$WEBGL_REQUIRED" in
+            true)
+              if [ "$WEBGL_RESULT" != "success" ] || [ "$DOWNLOAD_OUTCOME" != "success" ] || [ "$SUMMARY_OUTCOME" != "success" ]; then
+                echo "WebGL suites: shards=$WEBGL_RESULT reports=$DOWNLOAD_OUTCOME coverage=$SUMMARY_OUTCOME"
+                exit 1
+              fi
+              ;;
+            false)
+              if [ "$WEBGL_RESULT" != "skipped" ]; then
+                echo "WebGL suites were not required but finished with: $WEBGL_RESULT"
+                exit 1
+              fi
+              echo "WebGL suites skipped: the change touches only documentation." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "Unexpected classification: '$WEBGL_REQUIRED'"
+              exit 1
+              ;;
+          esac

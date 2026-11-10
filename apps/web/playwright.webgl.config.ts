@@ -19,6 +19,9 @@ const host = `--hostname 127.0.0.1 --port ${WEB_PORT}`;
 // Development exercises React Strict Mode's double effects; production proves the shipped bundle.
 export default defineConfig({
 	testDir: './e2e/webgl',
+	// Playwright shards by contiguous groups, and a group is a whole file unless tests run fully
+	// parallel, which leaves the shards badly unbalanced. One worker still runs the tests in order.
+	fullyParallel: true,
 	workers: 1,
 	timeout: 120_000,
 	expect: { timeout: 15_000 },

@@ -198,7 +198,7 @@ npm ci
 npm run contracts:verify
 ```
 
-API tests run against a real PostGIS database rather than mocks, and the browser suites exercise real WebGL in Chromium. GitHub Actions runs commit-message, contract, API and web checks, including the browser suites, on pull requests and on pushes to `main`. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
+API tests run against a real PostGIS database rather than mocks, and the browser suites exercise real WebGL in Chromium. GitHub Actions runs commit-message, contract, API and web checks, including the browser suites, on pull requests and on pushes to `main`. The two WebGL suites (development server and production build) each run split across two runners, and a pull request or a push to `main` that changes only documentation skips them. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
 
 ## Deployment
 
