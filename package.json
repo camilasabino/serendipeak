@@ -13,6 +13,8 @@
 		"contracts:verify": "node scripts/contracts-verify.mjs",
 		"contracts:sync": "node scripts/contracts-sync.mjs",
 		"dev:restart": "node scripts/dev-restart.mjs",
+		"dev:start": "docker compose up -d --wait && node scripts/dev-restart.mjs",
+		"dev:stop": "node scripts/dev-stop.mjs",
 		"db:refresh": "node scripts/db-refresh.mjs"
 	},
 	"devDependencies": {
