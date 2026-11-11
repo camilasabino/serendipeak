@@ -1,0 +1,60 @@
+#!/bin/sh
+# Stand-in for curl: an in-memory bucket under $STATE/bucket and a recorder for heartbeat requests.
+echo "$*" >>"$STATE/curl-argv.log"
+
+cfg=""
+upload=""
+output=""
+mode="get"
+url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --config) cfg="$2"; shift 2 ;;
+    --upload-file) upload="$2"; shift 2 ;;
+    --output) output="$2"; shift 2 ;;
+    --head) mode="head"; shift ;;
+    --get) mode="list"; shift ;;
+    -H | --aws-sigv4 | --max-time | --retry | --retry-delay) shift 2 ;;
+    --fail | --silent | --show-error | --retry-all-errors) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+
+if [ "$cfg" = "-" ]; then
+  line="$(cat)"
+  target="${line#url = \"}"
+  target="${target%\"}"
+  echo "ping $target" >>"$STATE/events.log"
+  exit "${FAKE_HEARTBEAT_EXIT:-0}"
+fi
+
+key="${url#https://r2.test/test-bucket/}"
+
+case "$mode" in
+  list)
+    [ -z "${FAKE_LIST_EMPTY:-}" ] || { echo "<ListBucketResult></ListBucketResult>"; exit 0; }
+    echo "<ListBucketResult>"
+    (cd "$STATE/bucket" && find daily -type f 2>/dev/null | sort) | while read -r found; do
+      echo "<Contents><Key>$found</Key></Contents>"
+    done
+    echo "</ListBucketResult>"
+    ;;
+  head)
+    size="$(wc -c <"$STATE/bucket/$key" | tr -d ' ')"
+    [ -z "${FAKE_SHORT_UPLOAD:-}" ] || size=$((size - 1))
+    printf 'HTTP/1.1 200 OK\r\nContent-Length: %s\r\n\r\n' "$size"
+    ;;
+  get)
+    if [ -n "$upload" ]; then
+      [ "${FAKE_UPLOAD_EXIT:-0}" = "0" ] || exit "$FAKE_UPLOAD_EXIT"
+      mkdir -p "$(dirname "$STATE/bucket/$key")"
+      cp "$upload" "$STATE/bucket/$key"
+      echo "upload $key" >>"$STATE/events.log"
+    elif [ -n "$output" ]; then
+      cp "$STATE/bucket/$key" "$output" || exit 22
+      if [ -n "${FAKE_CORRUPT_DOWNLOAD:-}" ]; then
+        case "$key" in *.dump) echo "corrupted" >"$output" ;; esac
+      fi
+    fi
+    ;;
+esac

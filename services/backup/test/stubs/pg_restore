@@ -1,0 +1,2 @@
+#!/bin/sh
+exit "${FAKE_PG_RESTORE_EXIT:-0}"

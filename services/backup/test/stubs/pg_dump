@@ -1,0 +1,17 @@
+#!/bin/sh
+echo "pg_dump" >>"$STATE/events.log"
+file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --file) file="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+if [ -n "${FAKE_PG_DUMP_BLOCK_ON:-}" ]; then
+  : >"$STATE/pg_dump.started"
+  cat "$FAKE_PG_DUMP_BLOCK_ON" >/dev/null
+fi
+
+[ "${FAKE_PG_DUMP_EXIT:-0}" = "0" ] || exit "$FAKE_PG_DUMP_EXIT"
+echo "fake custom-format dump" >"$file"

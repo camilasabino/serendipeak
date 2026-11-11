@@ -29,7 +29,6 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 | `api`                          | image built from `services/api/Dockerfile`; serves the API and the Studio                                            | `https://api.serendipeak.camilasabino.dev`  |
 | `web`                          | image built from `apps/web/Dockerfile`                                                                               | `https://serendipeak.camilasabino.dev`      |
 | `backup`                       | cron service built from `services/backup`; daily `pg_dump` to a private R2 bucket                                    | never                                       |
-| `prune`                        | cron service, same image and variables as `api`; applies the daily discovery retention (see "Daily discovery retention") | never                                       |
 | R2 bucket `<public-bucket>`    | public photograph renditions                                                                                         | `https://media.serendipeak.camilasabino.dev` (custom domain) |
 | R2 bucket `<originals-bucket>` | private original photographs                                                                                         | never                                       |
 
@@ -68,7 +67,7 @@ openssl rand -base64 48   # DJANGO_SECRET_KEY
 openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 ```
 
-**`api`** (and `prune`, which loads the same settings, so it needs the same values; use shared or reference variables):
+**`api`**:
 
 | Variable                                                                        | Value                                                                                                                                    |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,7 +146,7 @@ The tunnel is encrypted by SSH, so neither a TCP proxy nor server-side TLS is ne
 
 ### Automated database backups
 
-The `backup` service is a Railway cron service built from `services/backup` (Dockerfile builder). It runs `pg_dump --format=custom` against `postgres` over the private network, checks the archive with `pg_restore --list`, writes a SHA-256 file next to it and uploads both to a private R2 bucket under `daily/`. On Sundays (UTC) it also writes `weekly/`. Each upload is checked by size. Retention is the bucket's lifecycle rules, not the job: `daily/` expires after 14 days and `weekly/` after 60 days, so the job holds no delete permission. R2 applies lifecycle rules asynchronously, so an object can outlive its limit by about a day.
+The `backup` service is a Railway cron service built from `services/backup` (Dockerfile builder). It runs `pg_dump --format=custom` against `postgres` over the private network, checks the archive with `pg_restore --list`, writes a SHA-256 file next to it and uploads both to a private R2 bucket under `daily/`. On Sundays (UTC) it also writes `weekly/`. Each upload is checked by size, and once everything is uploaded the job downloads the newest `daily/` dump and runs the same verification as `backup check` on it, which must be the dump it just wrote. Retention is the bucket's lifecycle rules, not the job: `daily/` expires after 14 days and `weekly/` after 60 days, so the job holds no delete permission. R2 applies lifecycle rules asynchronously, so an object can outlive its limit by about a day.
 
 | Setting                                                  | Value                                                                                                          |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -159,24 +158,62 @@ The `backup` service is a Railway cron service built from `services/backup` (Doc
 | `BACKUP_S3_ENDPOINT_URL`                                 | `https://<account-id>.r2.cloudflarestorage.com`                                                                |
 | `BACKUP_BUCKET`                                          | `<backup-bucket>`, private, with lifecycle rules for `daily/` and `weekly/`                                    |
 | `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | an R2 API token with Object Read & Write on the backup bucket only. It must not reach the media buckets        |
+| `BACKUP_HEARTBEAT_URL` (optional)                        | the Better Stack heartbeat URL, a secret; see "Monitoring and alerts". Unset, the job runs without reporting   |
 
 - **No overlap.** Railway does not start a scheduled run while the previous one is still active, and `pg_dump` is bounded by `BACKUP_DUMP_TIMEOUT_SECONDS` (default 1500), so a hung run ends before it can block the next days for long.
-- **Failure is visible.** Any error (database unreachable, dump or upload failure, size mismatch) exits non-zero and Railway shows the run as failed. Enable deploy-failure notifications for the project so it reaches the owner by email.
-- **A missed run produces no failure**, so look for it: `backup check` fails unless the newest `daily/` dump is at most `BACKUP_MAX_AGE_SECONDS` old (default 36 h), its checksum matches and `pg_restore --list` reads it. Run it at least weekly, and after any change to the service, from any machine with Docker and the backup token (it needs no database access):
+- **Failure is visible.** Any error (database unreachable, dump or upload failure, size mismatch, a dump that cannot be read back) exits non-zero and Railway shows the run as failed. Enable deploy-failure notifications for the project so it reaches the owner by email; the heartbeat below adds a second, independent alert.
+- **A missed run produces no failure on Railway**, so the heartbeat below alerts when the daily ping does not arrive. Independently, `backup check` fails unless the newest `daily/` dump is at most `BACKUP_MAX_AGE_SECONDS` old (default 36 h), its checksum matches and `pg_restore --list` reads it. Run it at least weekly, and after any change to the service, from any machine with Docker and the backup token (it needs no database access):
 
   ```sh
   docker build -t serendipeak-backup services/backup
   docker run --rm --env-file <file with BACKUP_S3_* and BACKUP_BUCKET> serendipeak-backup check
   ```
 
-  The R2 dashboard (bucket, objects) shows the same thing: one `daily/` dump and checksum per day. Nothing alerts on its own when the job stops being scheduled; the weekly check is the control for that.
+  The R2 dashboard (bucket, objects) shows the same thing: one `daily/` dump and checksum per day. `backup check` never sends a heartbeat, so running it by hand or from a script cannot hide a missed run. Keep the weekly check: the heartbeat proves the job finished, and the check proves the bucket still holds a readable dump.
 
 - **Restore.** Download a dump and its `.sha256` from the bucket (dashboard or any S3 client), run `shasum -a 256 -c` on it, then restore into an empty PostGIS 18 database (`pg_restore --no-owner --exit-on-error --dbname <target> <file>`). The archive carries the `postgis` extension and no roles. Run `check_catalog` on the result before relying on it.
 - **Credentials.** Rotate the R2 token by creating a new one, updating the two variables and running the service once; then revoke the old one.
 
+### Monitoring and alerts
+
+Monitoring uses the Better Stack free plan and no additional infrastructure: one heartbeat for the backup and two uptime monitors. Alerts go to the owner by email. Nothing here needs a code change to the application.
+
+| Monitor              | Type      | Target                                              | Alert when                                                                 |
+| -------------------- | --------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `serendipeak-web`    | uptime    | `GET https://serendipeak.camilasabino.dev/`         | the response is not 2xx, or does not arrive in time                        |
+| `serendipeak-api`    | uptime    | `GET https://api.serendipeak.camilasabino.dev/healthz` | the response is not 2xx, or does not arrive in time                     |
+| `serendipeak-backup` | heartbeat | the URL Better Stack generates for it               | no ping arrives for 24 h plus the grace period, or a `/fail` ping arrives |
+
+- **Uptime monitors use `GET`.** `/healthz` accepts only `GET` (a `HEAD` is answered 405) and runs `SELECT 1`, so the API monitor also proves the database is reachable. The web monitor is the one that proves pages render.
+- **Heartbeat**: period 24 h, grace 3 h. The job runs at 03:30 UTC and finishes within minutes, so a healthy day pings long before the limit and a missed or hung run alerts around 06:30 UTC at the latest.
+- **What the job sends.** On exit status 0 (dump, archive check, checksum, uploads and the verification of the newest `daily/` dump all passed) it requests the URL, once. On any other outcome it requests the same URL with `/fail` appended, and exits with its original status. This includes a missing setting and `SIGTERM`/`SIGINT`. It does not send `/start`: how Better Stack treats it is not confirmed, and the 24 h period with a grace period does not need it.
+- **Delivery problems never change the result.** The request is bounded (10 s, 3 retries). If it still fails the job logs `heartbeat delivery failed (curl exit N)` and keeps its own exit status. A good backup with an undelivered ping shows up as a late-heartbeat alert, not as a failed run, so the Railway log tells the two apart.
+- **The URL is a secret.** It lives only in the `BACKUP_HEARTBEAT_URL` variable of the `backup` service, never in Git, a chat or an argument list. The job reads it from the environment, removes it from the environment of `pg_dump` and `curl`, and passes it to `curl` on standard input, so it appears in no process list and no log line. A URL that is not `https://`, has a query string, a quote or whitespace is skipped with a warning that does not print it, and the backup still runs.
+- **Known limit.** A `SIGTERM` is handled when the command in progress returns, so a long `pg_dump` delays the `/fail` ping, bounded by `BACKUP_DUMP_TIMEOUT_SECONDS`. If Railway ends the container first, no `/fail` arrives and the missing ping raises the alert after the grace period.
+
+**Configure once**
+
+1. In Better Stack create the three monitors above with an email alert policy. Create the heartbeat first and copy its URL.
+2. In Railway, on the `backup` service only, set `BACKUP_HEARTBEAT_URL` to that URL. Confirm the target with `railway status` before writing.
+3. Check each monitor shows its first result: the uptime monitors immediately, the heartbeat after the next scheduled run.
+
+**GitHub** (repository settings, Code security): enable secret scanning, push protection, Dependabot alerts and Dependabot security updates. Direct pushes to `main` stay allowed; the ruleset is not changed. Push protection blocks a push that contains a detected secret, and a bypass is a deliberate choice of the person pushing.
+
+**Respond to an alert**
+
+| Alert                                        | First look                                                                                                          | Recovery                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Heartbeat `/fail`                            | The latest `backup` run in Railway. Its last log lines name the failing step and the exit status.                   | Fix the cause (database unreachable, R2 token, bucket), then run the service once and confirm the heartbeat recovers.                       |
+| Heartbeat late, run succeeded in Railway     | The log shows `heartbeat delivery failed`. The URL is wrong, revoked or Better Stack was unreachable.               | Re-copy the URL into `BACKUP_HEARTBEAT_URL` if it changed; otherwise wait for the next run.                                                   |
+| Heartbeat late, no run in Railway            | The cron schedule (`30 3 * * *`), whether the service is paused or removed, and the project's plan and usage.      | Restore the schedule or service, run it once, then `backup check`.                                                                            |
+| Log says `heartbeat skipped`                 | The variable is not an `https://` URL, or has a query string, quote or whitespace.                                  | Paste the bare URL Better Stack shows. The backup itself was not affected.                                                                    |
+| Web or API monitor down                      | The monitor's incident (status code or timeout), then the service's deploy and runtime logs in Railway.             | Roll back as described in "Rollback and recovery". Confirm the smoke tests that apply.                                                        |
+
+To pause alerts for planned work, pause the monitor in Better Stack and resume it afterwards. To stop reporting from the job, remove `BACKUP_HEARTBEAT_URL`: the job runs unchanged, and the heartbeat then alerts until it is paused or deleted.
+
 ### Daily discovery retention
 
-The `prune` service runs `python manage.py prune_daily_discoveries` on a daily schedule (`0 1 * * *` UTC) with the same root directory (`services/api`) and variables as `api`. Nothing fails without it; the `daily_discovery` table just grows by one row a day. See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
+Production has no scheduled job for this: the environment holds only `web`, `api`, `postgres` and `backup`. Nothing fails without it; the `daily_discovery` table just grows by one row a day. The command `python manage.py prune_daily_discoveries` is idempotent and safe to run at any time, and the database refuses to delete a discovery inside the retention window. Run it from the operator shell when needed (see "Operator shell"). Scheduling it would be a new cron service built from `services/api` with the same variables as `api`, and it would have to join the list in "Trusting forwarded headers". See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
 
 ## 3. R2 buckets and media domain
 
@@ -376,7 +413,7 @@ Reversing the first migration drops the `postgis` extension and fails if other o
 Django believes `X-Forwarded-Proto` only when `TRUSTED_PROXY_HOPS` is above `0` (`SECURE_PROXY_SSL_HEADER`), and uses the same value to pick the client address out of `X-Forwarded-For`. Gunicorn is configured not to derive the scheme from any header, `X-Forwarded-Host` is never trusted, and `ALLOWED_HOSTS` is an exact list. On Railway, `TRUSTED_PROXY_HOPS=1` is correct while **all** of these are true:
 
 1. **Every outside request passes through Railway's HTTP edge.** The edge states `X-Forwarded-Proto: https` for what it forwards and redirects plain HTTP (a plain POST is turned into a GET and redirected), so a request that reaches the service from the internet was received over HTTPS. The `api` service has no TCP proxy and no other public route.
-2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `prune`, `backup`). `web` calls the API through its public HTTPS address, not through the private one.
+2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `backup`). `web` calls the API through its public HTTPS address, not through the private one.
 3. **The edge replaces the header; Django fails closed otherwise.** Django compares the whole header value with `https`. `http`, an empty value or a list such as `http, https` make the request insecure, which turns into a redirect or a refused form post, never into a request treated as secure. A forged `X-Forwarded-Proto: https` from the internet is harmless, because the edge only forwards requests that really arrived over HTTPS. The smoke test above checks that the edge does not pass a client's `http` through.
 4. **The hop count matches the proxies that append to `X-Forwarded-For`.** One for Railway's edge. Django reads the entry that many places from the right, so a client-supplied left-hand entry is ignored. Railway's documentation does not say whether the edge strips or appends client-supplied `X-Forwarded-For` values; reading from the right works in both cases. Adding another proxy in front (a Cloudflare-proxied record for the API host) makes it `2`. A wrong count is visible in the throttling check of the smoke tests.
 5. **The health check needs none of this.** It arrives over plain HTTP from `healthcheck.railway.app`, carries no forwarding header, and is exempt from the redirect.
