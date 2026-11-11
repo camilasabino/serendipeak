@@ -13,7 +13,7 @@ import { TransitionCoordinator } from '../stage/TransitionCoordinator';
 import { TransitionCoordinatorProvider } from '../stage/TransitionCoordinatorContext';
 
 // Composition root: each of these lives as long as the app, across every client navigation.
-export default function App({ Component, pageProps }: AppProps) {
+export default function App({ Component, pageProps, router }: AppProps) {
 	const [api] = useState(createBrowserMountainApi);
 	const [preloader] = useState(() => new ImagePreloader());
 	const [coordinator] = useState(() => new TransitionCoordinator());
@@ -22,7 +22,11 @@ export default function App({ Component, pageProps }: AppProps) {
 		<MountainApiProvider value={api}>
 			<ImagePreloaderProvider value={preloader}>
 				<TransitionCoordinatorProvider value={coordinator}>
-					<AppFrame pageProps={pageProps} year={new Date().getUTCFullYear()}>
+					<AppFrame
+						pageProps={pageProps}
+						year={new Date().getUTCFullYear()}
+						pathname={router.pathname}
+					>
 						<Component {...pageProps} />
 					</AppFrame>
 				</TransitionCoordinatorProvider>

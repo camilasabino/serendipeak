@@ -53,6 +53,62 @@
 	min-width: 0;
 }
 
+.link {
+	display: inline-flex;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	color: var(--sp-mist);
+	font-size: var(--sp-text-ui);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.link:hover {
+	color: var(--sp-glacier-light);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.link[aria-current='page'] {
+	color: var(--sp-paper);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.35em;
+}
+
+@media (max-width: 30rem) {
+	.header {
+		gap: 0.5rem;
+		padding-inline: 0.5rem;
+	}
+
+	.brand {
+		gap: 0.5rem;
+	}
+
+	.name {
+		font-size: 1.125rem;
+	}
+
+	.nav {
+		gap: 0.25rem 0.75rem;
+	}
+}
+
+/* Below this width the wordmark no longer fits beside the controls; the mark stays and the
+   link keeps its accessible name. */
+@media (max-width: 22.4rem) {
+	.name {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
 @media (min-width: 56rem) {
 	.header {
 		padding-inline: var(--sp-space-4);

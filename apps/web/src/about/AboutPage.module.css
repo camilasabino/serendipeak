@@ -1,0 +1,230 @@
+.page {
+	position: relative;
+	flex: 1 1 auto;
+	box-sizing: border-box;
+	min-width: 0;
+	padding: clamp(2rem, 8vh, 5rem) clamp(1.5rem, 6vw, 4.5rem) clamp(2.5rem, 8vh, 5rem);
+	overflow: hidden;
+}
+
+.motif {
+	position: absolute;
+	inset: 0 0 auto;
+	width: 100%;
+	height: min(34rem, 80vh);
+	pointer-events: none;
+	color: var(--sp-glacier-light);
+	opacity: 0.16;
+	mask-image: linear-gradient(to bottom, black 35%, transparent);
+}
+
+.column {
+	position: relative;
+	max-width: 62rem;
+	margin-inline: auto;
+}
+
+.intro {
+	max-width: 40rem;
+	padding-bottom: clamp(2.5rem, 7vh, 4rem);
+}
+
+.eyebrow {
+	margin: 0 0 var(--sp-space-3);
+	color: var(--sp-mist);
+	font-size: 0.8125rem;
+	letter-spacing: 0.01em;
+}
+
+.title {
+	margin: 0 0 var(--sp-space-4);
+	font-family: var(--sp-font-display);
+	font-size: clamp(2.5rem, 7vw, 3.75rem);
+	font-weight: 400;
+	letter-spacing: -0.012em;
+	line-height: 1.12;
+	text-wrap: balance;
+}
+
+.lede {
+	margin: 0;
+	color: var(--sp-paper);
+	font-size: 1.1875rem;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	margin-top: var(--sp-space-5);
+	padding: 0.5rem 1rem;
+	border-radius: var(--sp-radius);
+	background: var(--sp-accent);
+	color: var(--sp-paper-bright);
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+	line-height: 1.2;
+	text-align: center;
+	text-decoration: none;
+}
+
+.action:hover {
+	background: var(--sp-accent-hover);
+}
+
+.section {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--sp-space-4);
+	padding-block: var(--sp-space-6);
+	border-top: 1px solid var(--sp-rule);
+}
+
+.heading {
+	margin: 0;
+	font-family: var(--sp-font-display);
+	font-size: 1.5rem;
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	line-height: 1.25;
+	text-wrap: balance;
+}
+
+.features {
+	margin: 0;
+}
+
+.feature {
+	padding: 0.85rem 0;
+	border-top: 1px solid var(--sp-rule-quiet);
+}
+
+.feature:first-child {
+	padding-top: 0;
+	border-top: 0;
+}
+
+.feature dt {
+	font-size: 1.0625rem;
+	font-weight: 500;
+	line-height: 1.35;
+}
+
+.feature dd {
+	margin: 0.25rem 0 0;
+	color: var(--sp-mist);
+	line-height: 1.55;
+}
+
+.prose {
+	min-width: 0;
+	max-width: 38rem;
+}
+
+.prose p {
+	margin: 0;
+	font-size: 1.0625rem;
+	line-height: 1.6;
+	text-wrap: pretty;
+}
+
+.prose p + p {
+	margin-top: var(--sp-space-3);
+}
+
+/* Dashed edge and hollow markers set the future apart from the solid list of what exists today. */
+.ideas {
+	margin-top: var(--sp-space-5);
+	padding: var(--sp-space-4) var(--sp-space-5);
+	border: 1px dashed color-mix(in srgb, var(--sp-mist) 38%, transparent);
+	border-radius: var(--sp-radius);
+	background: var(--sp-ink);
+}
+
+.prose .ideasTitle {
+	color: var(--sp-glacier-light);
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	line-height: 1.35;
+}
+
+.prose .ideasNote {
+	margin-top: 0.25rem;
+	color: var(--sp-mist);
+	font-size: var(--sp-text-ui);
+	line-height: 1.5;
+}
+
+.ideas ul {
+	margin: var(--sp-space-3) 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.ideas li {
+	position: relative;
+	padding: 0.4rem 0 0.4rem 1.25rem;
+	line-height: 1.45;
+}
+
+.ideas li::before {
+	content: '';
+	position: absolute;
+	top: 0.95em;
+	left: 0;
+	box-sizing: border-box;
+	width: 0.5rem;
+	height: 0.5rem;
+	border: 1px solid var(--sp-glacier-light);
+	border-radius: 50%;
+}
+
+.closing {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--sp-space-2) var(--sp-space-5);
+	margin: 0;
+	padding-top: var(--sp-space-6);
+	border-top: 1px solid var(--sp-rule);
+}
+
+.cue {
+	font-family: var(--sp-font-display);
+	font-size: 1.125rem;
+	letter-spacing: -0.01em;
+	line-height: 1.35;
+	text-wrap: balance;
+}
+
+.closing a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	color: var(--sp-link-on-stage);
+	font-size: var(--sp-text-ui);
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.closing a:hover {
+	color: var(--sp-link-on-stage-hover);
+}
+
+@media (min-width: 56rem) {
+	.section {
+		grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
+		column-gap: var(--sp-space-6);
+		padding-block: 2.5rem;
+	}
+
+	.features {
+		max-width: 38rem;
+	}
+}

@@ -7,10 +7,11 @@ import { pageModelOf } from './pageModel';
 interface AppFrameProps {
 	pageProps: object;
 	year: number;
+	pathname?: string;
 	children: ReactNode;
 }
 
-export function AppFrame({ pageProps, year, children }: AppFrameProps) {
+export function AppFrame({ pageProps, year, pathname, children }: AppFrameProps) {
 	const model = pageModelOf(pageProps);
 	const mountainModel = model?.kind === 'error' ? undefined : model;
 
@@ -18,6 +19,7 @@ export function AppFrame({ pageProps, year, children }: AppFrameProps) {
 		<SiteShell
 			layout={mountainModel ? 'split' : 'plain'}
 			year={year}
+			pathname={pathname}
 			navigation={mountainModel && <MountainNavigation model={mountainModel} />}
 		>
 			{mountainModel ? <MountainLayout model={mountainModel}>{children}</MountainLayout> : children}

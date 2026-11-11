@@ -11,13 +11,13 @@ const mountain = contractFixture('mountain-complete.json') as Mountain;
 const daily = contractFixture('daily-mountain.json') as DailyMountain;
 
 // A mountain page contributes content only; the layout supplies its landmark.
-function render(pageProps: object): string {
+function render(pageProps: object, pathname?: string): string {
 	const isMountainPage = pageModelOf(pageProps)?.kind !== 'error' && 'model' in pageProps;
 	const content = <h1>Page</h1>;
 
 	return renderToStaticMarkup(
 		<TestExperience>
-			<AppFrame pageProps={pageProps} year={2031}>
+			<AppFrame pageProps={pageProps} year={2031} pathname={pathname}>
 				{isMountainPage ? content : <main>{content}</main>}
 			</AppFrame>
 		</TestExperience>
@@ -96,6 +96,39 @@ describe('AppFrame header', () => {
 		expect(countOf(html, 'button')).toBe(0);
 		expect(html).toContain('<header');
 		expect(html.match(/<header[\s\S]*<\/header>/)?.[0]).not.toContain('Explore');
+	});
+});
+
+describe('AppFrame About link', () => {
+	it.each([
+		['the daily page', { model: dailyModel }],
+		['a permalink', { model: permalink }],
+		['an error page', { model: { kind: 'error', reason: 'not-found' } }],
+		['a page without data', {}]
+	])('offers About in the primary navigation on %s', (_name, props) => {
+		const html = render(props);
+		const nav = html.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
+
+		expect(countOf(html, 'nav')).toBe(1);
+		expect(nav).toContain('aria-label="Primary"');
+		expect(anchorsOf(nav)[0]).toMatchObject({ href: '/about', text: 'About' });
+		expect(html.indexOf('<header')).toBeLessThan(html.indexOf('<nav'));
+		expect(html.indexOf('</nav>')).toBeLessThan(html.indexOf('</header>'));
+	});
+
+	it('keeps the mountain controls in the same navigation after About', () => {
+		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
+
+		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['About', "Today's mountain"]);
+		expect(textsOf(nav, 'button')).toEqual(['Explore another→']);
+	});
+
+	it('marks About as the current page only on the About route', () => {
+		const onAbout = anchorsOf(render({}, '/about')).find(({ href }) => href === '/about');
+		const elsewhere = anchorsOf(render({}, '/')).find(({ href }) => href === '/about');
+
+		expect(onAbout?.attributes).toContain('aria-current="page"');
+		expect(elsewhere?.attributes).not.toContain('aria-current');
 	});
 });
 

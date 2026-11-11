@@ -11,14 +11,12 @@
 }
 
 @media (min-width: 56rem) {
-	.shell {
+	/* Only the split layout is a fixed viewport with an internally scrolling sheet; a plain page
+	   is a document that scrolls with the window. Its main spans every row so the sheet can run
+	   the full height next to the header, stage and footer, which stay in the first column. */
+	.split {
 		height: 100dvh;
 		overflow: hidden;
-	}
-
-	/* The page's main spans every row so its sheet can run the full height next to the header,
-	   stage and footer, which stay in the first column. */
-	.split {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) clamp(21rem, 28vw, 28rem);
 		grid-template-rows: auto minmax(0, 1fr) auto;
