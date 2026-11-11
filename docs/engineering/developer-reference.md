@@ -200,6 +200,29 @@ uv run --env-file ../../.env python manage.py check_catalog
 
 **Initializing an environment** takes four steps: `migrate` (the full migration history builds the schema, the continent and country reference rows and the triggers), `create_editor`, `load_catalog_snapshot`, then `check_catalog` and `check_photograph_media --deep`. The media objects are copied between buckets separately; the snapshot lists their keys and checksums.
 
+### Refreshing the local catalog from production
+
+```sh
+export OPERATOR_ENV=<operator environment file>   # once, in your shell profile
+npm run db:refresh
+```
+
+The command replaces the local development catalog with the current production catalog, with no other step. It starts the local PostGIS if needed, opens the Railway tunnel itself and always closes it. `OPERATOR_ENV` is the private operator file described in [deployment.md](../deployment.md#operator-shell): outside the repository, mode 600, with the tunnel's `DATABASE_URL`.
+
+1. **Production is only read.** Every production session has `default_transaction_read_only=on`, and the only commands that can run against it are the identity probe and `export_catalog_snapshot`, twice: the two files must be byte-identical (it retries if production changes meanwhile). Nothing is migrated or written there.
+2. **Identities are checked first.** The linked Railway target must be `serendipeak/production`; the operator file must say `APP_ENV=production` and the local one `APP_ENV=development`; the local `DATABASE_URL` must be the compose database's published port; and the source and destination must be different PostgreSQL clusters. The command prints both.
+3. **A candidate is built beside the live database**: a new database `<name>_refresh_<timestamp>` is migrated, loaded from the snapshot, verified with `verify_catalog_snapshot` and checked with `check_catalog`.
+4. **The swap happens only after all of that passes.** The live database is renamed `<name>_pre_refresh_<timestamp>` and the candidate takes its name in one transaction. Connections to the old database (a running dev server) are closed and reconnect on their own. A last `check_catalog` runs on the new database; if it fails, the previous database is put back.
+5. **Failures never touch the live database before the swap**, and the temporary database, the snapshot (a private directory under the system temporary directory, never in the repository) and the tunnel are removed on success, failure or Ctrl-C. The command never prints credentials. One run at a time.
+
+Options (pass them after `--`): `--dry-run` does everything except the swap; `--restore <backup>` puts a backup made by this command back in place (the database it replaces is kept as `<name>_pre_restore_<timestamp>`); `--no-tunnel` uses a source already reachable at the operator file's `DATABASE_URL`; `--env-file <file>` replaces the repository's `.env` as the destination, which is how the tests point it at disposable databases. Backups are never deleted by the command; list them with `docker exec serendipeak-v2-db-1 psql -U serendipeak -d postgres -c '\l'` and drop the ones you no longer need.
+
+**Local accounts survive.** A snapshot holds no users or sessions, so the command copies `app_user` and `django_session` from the previous local database into the new one (never from production), and checks the copy by checksum. Your Studio login and open sessions keep working. An account that only exists in production is not created: use `create_editor`.
+
+**Photographs after a refresh.** The snapshot carries each photograph's media keys, not the objects. Local development reads photographs from its own store (the development buckets, or `.media`), so a photograph that production added or replaced after that store was seeded has no local object: the page and viewer renditions answer 404 and the stage shows no image. The command reports how many photographs are affected. To see them, copy the keys as in "Media transfer" of the [runbook](../deployment.md#media-transfer), or temporarily point `MEDIA_PUBLIC_BASE_URL` in `.env` at the production media host (read-only for viewing; do not upload photographs while it is set).
+
+Local-only work is replaced by production's catalog: mountains created or edited only locally, and the local daily-discovery history (the snapshot carries none; today's pick is created again on the first request). All of it stays in the backup database.
+
 ### Daily discovery retention
 
 Daily discoveries are kept for 365 days: a discovery is kept while its date is on or after today (UTC) minus 365 days, and older ones are deleted. The table is otherwise immutable, and the database enforces it: its trigger refuses every `UPDATE` and any `DELETE` of a row inside the window, judged by the database's own UTC date whatever the caller asks for. The 30-day window of the daily selection lies inside the retention window, so today's discovery and the history that excludes recent mountains are never affected. The trigger's constant mirrors `RETENTION_DAYS` in `serendipeak/discovery/retention.py`.

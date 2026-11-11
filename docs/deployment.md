@@ -45,6 +45,8 @@ export OPERATOR_ENV=<path to the operator environment file>   # outside the repo
 prod() { env -i PATH="$PATH" HOME="$HOME" uv run --env-file "$OPERATOR_ENV" "$@"; }
 ```
 
+`npm run db:refresh` reads the same file through `OPERATOR_ENV` ([developer reference](engineering/developer-reference.md#refreshing-the-local-catalog-from-production)).
+
 The file holds the same variable names as the `api` service with the database URL of the SSH tunnel (`127.0.0.1` and its local port) and the production media settings, plus `GDAL_LIBRARY_PATH` and `GEOS_LIBRARY_PATH` on macOS. `APP_ENV` is `production`. Use a dedicated R2 token for it and revoke the token when the work is done.
 
 Before each production session:

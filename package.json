@@ -12,7 +12,8 @@
 		"commitlint": "commitlint",
 		"contracts:verify": "node scripts/contracts-verify.mjs",
 		"contracts:sync": "node scripts/contracts-sync.mjs",
-		"dev:restart": "node scripts/dev-restart.mjs"
+		"dev:restart": "node scripts/dev-restart.mjs",
+		"db:refresh": "node scripts/db-refresh.mjs"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^21.2.3",
