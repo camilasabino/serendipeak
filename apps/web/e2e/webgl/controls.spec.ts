@@ -87,7 +87,13 @@ test.describe('@webgl stage controls', () => {
 			.locator('main')
 			.getByRole('button')
 			.filter({ hasNotText: 'View photo fullscreen' });
-		await expect(stageButtons).toHaveText(['Reset view', 'Enter fullscreen']);
+		await expect(stageButtons).toHaveText([
+			'Zoom in',
+			'Zoom out',
+			'How to navigate',
+			'Reset view',
+			'Enter fullscreen'
+		]);
 	});
 
 	test('Reset returns a moved camera to the canonical pose in the same viewer', async ({

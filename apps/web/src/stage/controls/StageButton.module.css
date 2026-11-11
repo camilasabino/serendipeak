@@ -45,3 +45,9 @@
 	white-space: nowrap;
 	border: 0;
 }
+
+.group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+}

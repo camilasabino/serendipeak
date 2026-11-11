@@ -201,6 +201,8 @@ describe('SceneSession lifecycle ownership', () => {
 		expect(scene.shown).toEqual([]);
 		expect(scene.stages).toEqual([]);
 		expect(session.resetView()).toBe('unavailable');
+		expect(session.zoomView('in')).toBe('unavailable');
+		expect(scene.zooms).toEqual([]);
 	});
 
 	it('keeps the scene methods bound to the scene across a whole lifecycle', async () => {
@@ -503,6 +505,31 @@ describe('SceneSession stage and reset', () => {
 		session.setTarget(FITZ_ROY);
 		expect(session.resetView()).toBe('unavailable');
 		expect(scene.resets).toBe(1);
+	});
+
+	it('zooms only while the presented mountain is settled and passes the scene result through', async () => {
+		const { session, scene } = await presenting({ holdShow: true });
+		expect(session.zoomView('in')).toBe('unavailable');
+
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(session.zoomView('in')).toBe('zoomed');
+		scene.zoomResult = 'limit';
+		expect(session.zoomView('out')).toBe('limit');
+
+		session.setTarget(FITZ_ROY);
+		expect(session.zoomView('in')).toBe('unavailable');
+		expect(scene.zooms).toEqual(['in', 'out']);
+	});
+
+	it('cannot zoom after a presentation that did not arrive', async () => {
+		const { session, scene } = await presenting({ holdShow: true });
+
+		scene.pendingShows[0]!.resolve({ status: 'interrupted' });
+		await flush();
+
+		expect(session.zoomView('in')).toBe('unavailable');
+		expect(scene.zooms).toEqual([]);
 	});
 
 	it('reads the camera only while the presented mountain is settled', async () => {

@@ -2,6 +2,7 @@ import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
+import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { SceneSession, type PresentationObserver, type SceneSessionOptions } from './SceneSession';
 import { sceneCanRetry } from './experience';
 import type { SceneStore } from './SceneStore';
@@ -54,6 +55,10 @@ export class StageBinding {
 
 	resetView(): ResetResult {
 		return this.disposed ? 'unavailable' : this.session.resetView();
+	}
+
+	zoomView(direction: ZoomDirection): ZoomResult {
+		return this.disposed ? 'unavailable' : this.session.zoomView(direction);
 	}
 
 	readCamera(): CameraReading | undefined {

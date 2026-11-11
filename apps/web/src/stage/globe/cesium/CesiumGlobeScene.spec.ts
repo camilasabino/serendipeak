@@ -6,10 +6,13 @@ const cesium = vi.hoisted(() => ({
 	releaseFlight: vi.fn(),
 	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
 	holdInputs: vi.fn(),
+	zooms: [] as { direction: string; durationSeconds: number }[],
 	destroyLayer: vi.fn(),
 	viewerError: undefined as Error | undefined,
 	Ion: { defaultAccessToken: '' },
 	ScreenSpaceEventType: { LEFT_CLICK: 0, LEFT_DOUBLE_CLICK: 1 },
+	CameraEventType: { WHEEL: 3 },
+	KeyboardEventModifier: { CTRL: 1 },
 	createWorldTerrainAsync: async () => ({}),
 	ImageryLayer: {
 		fromWorldImagery: () => ({
@@ -56,6 +59,10 @@ vi.mock('./ViewerCameraFlight', () => ({
 		holdInputs() {
 			cesium.holdInputs();
 		}
+		zoom(direction: string, durationSeconds: number) {
+			cesium.zooms.push({ direction, durationSeconds });
+			return 'zoomed';
+		}
 		cameraReading() {
 			return { headingDegrees: 10, pitchDegrees: -20, rangeMeters: 5000, displayRangeMeters: 5000 };
 		}
@@ -76,6 +83,7 @@ interface FakeViewer {
 	resize(): void;
 	scene: {
 		imageryLayers: { remove(): void };
+		screenSpaceCameraController: { zoomEventTypes: unknown };
 		preUpdate: { addEventListener(listener: () => void): () => void };
 	};
 	screenSpaceEventHandler: { removeInputAction(type: number): void };
@@ -98,6 +106,7 @@ function fakeViewer(
 		resize: () => {},
 		scene: {
 			imageryLayers: { remove: () => {} },
+			screenSpaceCameraController: { zoomEventTypes: [3] },
 			preUpdate: { addEventListener: () => removeFrameListener }
 		},
 		screenSpaceEventHandler: { removeInputAction },
@@ -257,6 +266,17 @@ describe('CesiumGlobeScene.create after the viewer exists', () => {
 		});
 	});
 
+	it('lets a trackpad pinch zoom alongside the default zoom bindings', async () => {
+		cesium.viewer = fakeViewer();
+
+		await create();
+
+		expect(cesium.viewer.scene.screenSpaceCameraController.zoomEventTypes).toEqual([
+			3,
+			{ eventType: 3, modifier: 1 }
+		]);
+	});
+
 	it('keeps the viewer alive when initialization succeeds', async () => {
 		cesium.viewer = fakeViewer();
 
@@ -407,7 +427,7 @@ describe('CesiumGlobeScene.destroy', () => {
 	});
 });
 
-describe('CesiumGlobeScene.readCamera', () => {
+describe('CesiumGlobeScene camera reads and zoom steps', () => {
 	const TARGET = {
 		slug: 'aconcagua',
 		name: 'Aconcagua',
@@ -428,6 +448,7 @@ describe('CesiumGlobeScene.readCamera', () => {
 		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
 		cesium.flightCallbacks.length = 0;
 		cesium.holdInputs.mockReset();
+		cesium.zooms.length = 0;
 		cesium.viewer = fakeViewer();
 	});
 
@@ -473,6 +494,40 @@ describe('CesiumGlobeScene.readCamera', () => {
 
 		cesium.flightCallbacks.shift()!.complete();
 		expect(scene.readCamera()).toBeDefined();
+	});
+
+	it('refuses a zoom step while the reveal or a restore owns the camera', async () => {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		const arrival = scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+
+		expect(scene.zoomView('in')).toBe('unavailable');
+
+		cesium.flightCallbacks.shift()!.complete();
+		await arrival;
+		expect(scene.resetView()).toBe('reset');
+		expect(scene.zoomView('out')).toBe('unavailable');
+
+		cesium.flightCallbacks.shift()!.complete();
+		expect(scene.zoomView('out')).toBe('zoomed');
+		expect(cesium.zooms).toEqual([{ direction: 'out', durationSeconds: 0.5 }]);
+	});
+
+	it('steps instantly under reduced motion', async () => {
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+		const scene = await create();
+
+		expect(scene.zoomView('in')).toBe('zoomed');
+		expect(cesium.zooms).toEqual([{ direction: 'in', durationSeconds: 0 }]);
+	});
+
+	it('refuses a zoom step once the scene is destroyed', async () => {
+		const scene = await sceneWithMountain();
+
+		scene.destroy();
+
+		expect(scene.zoomView('in')).toBe('unavailable');
+		expect(cesium.zooms).toEqual([]);
 	});
 
 	it('gives no pose once the scene is destroyed', async () => {

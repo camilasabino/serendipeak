@@ -527,6 +527,45 @@ describe('StageBinding reset', () => {
 	});
 });
 
+describe('StageBinding zoom', () => {
+	it('is unavailable before the scene exists and after a failed initialization', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+
+		expect(binding.zoomView('in')).toBe('unavailable');
+
+		factory.reject(0, new Error('WebGL unavailable'));
+		await flush();
+
+		expect(binding.zoomView('out')).toBe('unavailable');
+	});
+
+	it('steps the settled scene without creating or destroying one', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect([binding.zoomView('in'), binding.zoomView('out')]).toEqual(['zoomed', 'zoomed']);
+		expect(scene.zooms).toEqual(['in', 'out']);
+		expect(factory.calls).toHaveLength(1);
+		expect(scene.destroyCount).toBe(0);
+	});
+
+	it('is unavailable after disposal', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.dispose();
+
+		expect(binding.zoomView('in')).toBe('unavailable');
+		expect(scene.zooms).toEqual([]);
+	});
+});
+
 describe('StageBinding transitions', () => {
 	async function exploring() {
 		const observer = new TransitionCoordinator();

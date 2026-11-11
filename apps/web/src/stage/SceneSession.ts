@@ -5,6 +5,7 @@ import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
+import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { startScene } from './lifecycle';
 import { releaseBestEffort } from './releaseBestEffort';
 import { INITIALIZATION_FAILED_STATE } from './sceneState';
@@ -100,6 +101,11 @@ export class SceneSession {
 
 	resetView(): ResetResult {
 		return this.scene && this.settled ? this.scene.resetView() : 'unavailable';
+	}
+
+	// Gated like Reset: an explicit step must not fight the reveal or a flight between mountains.
+	zoomView(direction: ZoomDirection): ZoomResult {
+		return this.scene && this.settled ? this.scene.zoomView(direction) : 'unavailable';
 	}
 
 	// Only a pose the current target arrived at is a pose someone chose to look at.

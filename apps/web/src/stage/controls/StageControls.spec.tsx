@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { SceneSnapshot } from '../SceneStore';
 import { SceneStore } from '../SceneStore';
 import type { StageFullscreen } from '../useStageFullscreen';
+import { navigationHelpSections } from './NavigationHelp';
 import { StageControls } from './StageControls';
 
 const READING = { label: '2 km', meters: 2000, widthPx: 96 };
@@ -11,7 +12,12 @@ const UNSUPPORTED: StageFullscreen = { supported: false, active: false, toggle: 
 
 function render(snapshot: SceneSnapshot, fullscreen: StageFullscreen = UNSUPPORTED): string {
 	return renderToStaticMarkup(
-		<StageControls snapshot={snapshot} onReset={() => {}} fullscreen={fullscreen} />
+		<StageControls
+			snapshot={snapshot}
+			onReset={() => {}}
+			onZoom={() => {}}
+			fullscreen={fullscreen}
+		/>
 	);
 }
 
@@ -93,14 +99,101 @@ describe('StageControls follow the store', () => {
 		expect(html).toContain('Reset view');
 	});
 
-	it('renders only Reset while neither heading nor scale is available', () => {
+	it('renders only the buttons while neither heading nor scale is available', () => {
 		const store = new SceneStore();
 		store.setState({ status: 'ready' });
 		const html = render(store.getSnapshot());
 
-		expect(html.match(/<button/g)).toHaveLength(1);
+		expect(html.match(/<button/g)).toHaveLength(5);
 		expect(html).not.toMatch(/Compass|Scale:/);
-		expect(html).toMatch(/<button[^>]*\sdisabled/);
+		expect(html.match(/<button[^>]*\sdisabled/g)).toHaveLength(3);
+	});
+});
+
+function button(html: string, label: string): string {
+	const match = new RegExp(
+		`<button[^>]*>(?:(?!</button>).)*${label}(?:(?!</button>).)*</button>`
+	).exec(html);
+	expect(match, label).not.toBeNull();
+	return match![0];
+}
+
+describe('StageControls zoom', () => {
+	it('offers labelled Zoom in and Zoom out buttons in a Zoom group', () => {
+		const html = render(readyStore().getSnapshot());
+
+		expect(html).toMatch(/<div role="group" aria-label="Zoom"[^>]*>.*Zoom in.*Zoom out.*<\/div>/);
+		expect(button(html, 'Zoom in')).toMatch(/^<button type="button"/);
+		expect(button(html, 'Zoom out')).not.toContain('disabled');
+	});
+
+	it('disables zoom with Reset until the mountain settles, and keeps help available', () => {
+		const store = readyStore();
+		store.setSettled(false);
+		const html = render(store.getSnapshot());
+
+		expect(button(html, 'Zoom in')).toContain('disabled');
+		expect(button(html, 'Zoom out')).toContain('disabled');
+		expect(button(html, 'Reset view')).toContain('disabled');
+		expect(button(html, 'How to navigate')).not.toContain('disabled');
+	});
+
+	it('places zoom and help apart from Reset and fullscreen', () => {
+		const html = render(readyStore().getSnapshot(), {
+			supported: true,
+			active: false,
+			toggle: () => {}
+		});
+
+		expect(html.indexOf('Zoom in')).toBeLessThan(html.indexOf('Zoom out'));
+		expect(html.indexOf('Zoom out')).toBeLessThan(html.indexOf('How to navigate'));
+		expect(html.indexOf('How to navigate')).toBeLessThan(html.indexOf('Reset view'));
+	});
+});
+
+describe('StageControls navigation help', () => {
+	it('starts closed, with the trigger pointing at a hidden, labelled dialog', () => {
+		const html = render(readyStore().getSnapshot());
+		const trigger = button(html, 'How to navigate');
+		const controls = /aria-controls="([^"]+)"/.exec(trigger)![1];
+
+		expect(trigger).toContain('aria-expanded="false"');
+		const panel = new RegExp(`<section[^>]*id="${controls}"[^>]*>`).exec(html)![0];
+		expect(panel).toContain('role="dialog"');
+		expect(panel).toContain('hidden=""');
+		expect(panel).toContain('tabindex="-1"');
+		const titleId = /aria-labelledby="([^"]+)"/.exec(panel)![1];
+		expect(html).toContain(`<h2 id="${titleId}"`);
+	});
+
+	it('has a labelled close button inside the dialog', () => {
+		const html = render(readyStore().getSnapshot());
+
+		expect(button(html, 'Close navigation help')).toMatch(/^<button type="button"/);
+		expect(html.indexOf('role="dialog"')).toBeLessThan(html.indexOf('Close navigation help'));
+	});
+
+	it('lists pointer gestures first unless the device has a coarse pointer', () => {
+		const headings = (touchFirst: boolean) =>
+			navigationHelpSections(touchFirst).map((section) => section.heading);
+
+		expect(headings(false)).toEqual(['Mouse and trackpad', 'Touch', 'Buttons']);
+		expect(headings(true)).toEqual(['Touch', 'Mouse and trackpad', 'Buttons']);
+	});
+
+	it('explains moving, zooming, tilting and turning for each input', () => {
+		const [pointer, touch, buttons] = navigationHelpSections(false);
+
+		expect(pointer!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt and turn']);
+		expect(touch!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt', 'Turn']);
+		expect(buttons!.gestures.map((g) => g.action)).toEqual(['+ and −', 'Reset view']);
+	});
+
+	it('renders the help content without the browser', () => {
+		const html = render(readyStore().getSnapshot());
+
+		expect(html).toContain('Pinch with two fingers.');
+		expect(html).toContain('Hold Ctrl and drag');
 	});
 });
 

@@ -43,7 +43,7 @@ export default function MountainScene({
 	observer,
 	controllerRef
 }: MountainSceneProps) {
-	const { viewportRef, snapshot, resetView, readCamera, retry } = useStage({
+	const { viewportRef, snapshot, resetView, zoomView, readCamera, retry } = useStage({
 		store,
 		ionToken: ION_TOKEN,
 		sceneFactory: SCENE_FACTORY,
@@ -58,7 +58,12 @@ export default function MountainScene({
 	return (
 		<div ref={stageRef} className={styles.scene}>
 			<div ref={viewportRef} className={styles.viewport} />
-			<StageControls snapshot={snapshot} onReset={resetView} fullscreen={fullscreen} />
+			<StageControls
+				snapshot={snapshot}
+				onReset={resetView}
+				onZoom={zoomView}
+				fullscreen={fullscreen}
+			/>
 			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />
 		</div>
 	);

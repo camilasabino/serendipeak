@@ -6,10 +6,20 @@ import { cameraOffsetFromPose, cesiumVerticalFovRadians, lookAxesForFraming } fr
 import { lookPose, sampleGlide, type LookState } from '../glidePath';
 import type { StageSize } from '../stageFrame';
 import { readSummitCamera, type CesiumCameraOffset } from '../terrainCamera';
+import {
+	clearedTravelMeters,
+	zoomProgress,
+	zoomTravelMeters,
+	type ZoomDirection,
+	type ZoomResult
+} from '../zoomStep';
 import type { CesiumModule } from './CesiumModule';
 import type { ViewSampler } from './ViewSampler';
 
 const RESET_INPUT_HOLD_MS = 1300;
+// Beyond these the camera was moved by someone else, and the dolly must let go of it.
+const EXTERNAL_MOVE_METERS = 0.5;
+const EXTERNAL_TURN = 1e-4;
 
 interface ActiveGlide {
 	cancel(): void;
@@ -19,6 +29,7 @@ export class ViewerCameraFlight implements CameraFlight {
 	private anchor: Pick<LookState, 'latitude' | 'longitude' | 'altitudeMeters'> | undefined;
 	private activeGlide: ActiveGlide | undefined;
 	private inputHold: ReturnType<typeof setTimeout> | undefined;
+	private activeZoom: ActiveGlide | undefined;
 	private readonly scratchFocus: Cartesian3;
 	private readonly scratchEnu: InstanceType<CesiumModule['Matrix4']>;
 	private readonly scratchPosition: Cartesian3;
@@ -47,6 +58,7 @@ export class ViewerCameraFlight implements CameraFlight {
 		const { Matrix4, EasingFunction } = this.cesium;
 		const { camera } = this.viewer;
 
+		this.cancelZoom();
 		this.anchorOn(move.target);
 		const oriented = this.framedOrientation(move.target, move.offset);
 		if (!oriented) {
@@ -110,6 +122,7 @@ export class ViewerCameraFlight implements CameraFlight {
 		};
 
 		this.activeGlide?.cancel();
+		this.cancelZoom();
 		controller.enableInputs = false;
 		this.activeGlide = handle;
 		removeFrameListener = this.viewer.scene.preUpdate.addEventListener(() => {
@@ -138,6 +151,7 @@ export class ViewerCameraFlight implements CameraFlight {
 	}
 
 	jump(target: SceneTarget, offset: CesiumCameraOffset): void {
+		this.cancelZoom();
 		this.viewer.camera.viewBoundingSphere(this.summitSphere(target), this.offsetRange(offset));
 		const oriented = this.framedOrientation(target, offset);
 		this.unlockCamera(oriented?.direction, oriented?.up);
@@ -212,6 +226,7 @@ export class ViewerCameraFlight implements CameraFlight {
 	}
 
 	cancel(): void {
+		this.cancelZoom();
 		this.activeGlide?.cancel();
 		this.viewer.camera.cancelFlight();
 	}
@@ -221,6 +236,7 @@ export class ViewerCameraFlight implements CameraFlight {
 			return false;
 		}
 
+		this.cancelZoom();
 		const frustum = this.activeFrustum();
 		if (!frustum) {
 			return false;
@@ -283,6 +299,111 @@ export class ViewerCameraFlight implements CameraFlight {
 		return true;
 	}
 
+	// A dolly along the current view direction: the heading, tilt and centre-screen focus stay put
+	// because the camera keeps one fixed orientation and only slides along its own line of sight.
+	// `flyTo` is avoided on purpose: it interpolates heading, pitch and roll in the local frame of
+	// each intermediate position, which swings the view mid-flight. Choreography owns the camera
+	// while it runs, so callers gate on it before asking.
+	zoom(step: ZoomDirection, durationSeconds: number): ZoomResult {
+		if (this.viewer.isDestroyed()) {
+			return 'unavailable';
+		}
+
+		const { Cartesian2, Cartesian3, Cartographic, Matrix4 } = this.cesium;
+		const { camera, scene } = this.viewer;
+		const center = new Cartesian2(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+		const ray = camera.getPickRay(center);
+		const focus = (ray && scene.globe.pick(ray, scene)) ?? camera.pickEllipsoid(center);
+		const start = Cartesian3.clone(camera.positionWC);
+		const here = Cartographic.fromCartesian(start);
+		if (!focus || !here) {
+			return 'unavailable';
+		}
+
+		const direction = Cartesian3.clone(camera.directionWC);
+		const up = Cartesian3.clone(camera.upWC);
+		const surfaceUp = scene.ellipsoid.geodeticSurfaceNormal(start, new Cartesian3());
+		const wanted = zoomTravelMeters(step, {
+			focusDistanceMeters: Cartesian3.distance(start, focus),
+			cameraHeightMeters: here.height,
+			climbPerMeterBack: -Cartesian3.dot(direction, surfaceUp)
+		});
+		const probe = new Cartesian3();
+		const sample = new Cartographic();
+		const travel = clearedTravelMeters(wanted, (distance) => {
+			Cartesian3.multiplyByScalar(direction, distance, probe);
+			Cartesian3.add(start, probe, probe);
+			if (!Cartographic.fromCartesian(probe, undefined, sample)) {
+				return undefined;
+			}
+			const ground = scene.globe.getHeight(sample);
+			return ground === undefined ? undefined : sample.height - ground;
+		});
+		if (travel === 0) {
+			return 'limit';
+		}
+
+		this.cancelZoom();
+		const place = (fraction: number, result: Cartesian3) => {
+			Cartesian3.multiplyByScalar(direction, travel * zoomProgress(fraction), result);
+			return Cartesian3.add(start, result, result);
+		};
+		const apply = (position: Cartesian3) =>
+			camera.setView({
+				destination: position,
+				orientation: { direction, up },
+				endTransform: Matrix4.IDENTITY
+			});
+
+		if (!(durationSeconds > 0)) {
+			apply(place(1, new Cartesian3()));
+			return 'zoomed';
+		}
+
+		const position = Cartesian3.clone(start);
+		const applied = Cartesian3.clone(start);
+		const appliedDirection = Cartesian3.clone(direction);
+		let startedAt: number | undefined;
+		let removeFrameListener = () => {};
+		const handle: ActiveGlide = {
+			cancel: () => {
+				removeFrameListener();
+				if (this.activeZoom === handle) {
+					this.activeZoom = undefined;
+				}
+			}
+		};
+
+		this.activeZoom = handle;
+		removeFrameListener = scene.preUpdate.addEventListener(() => {
+			const now = performance.now();
+			startedAt ??= now;
+			const fraction = Math.min(1, (now - startedAt) / 1000 / durationSeconds);
+
+			// Direct input or another animation moved the camera since the last frame: it is theirs now.
+			const moved = !Cartesian3.equalsEpsilon(camera.positionWC, applied, 0, EXTERNAL_MOVE_METERS);
+			const turned = !Cartesian3.equalsEpsilon(
+				camera.directionWC,
+				appliedDirection,
+				EXTERNAL_TURN,
+				0
+			);
+			if (moved || turned) {
+				handle.cancel();
+				return;
+			}
+
+			apply(place(fraction, position));
+			Cartesian3.clone(position, applied);
+			Cartesian3.clone(camera.directionWC, appliedDirection);
+			if (fraction >= 1) {
+				handle.cancel();
+			}
+		});
+
+		return 'zoomed';
+	}
+
 	holdInputs(): void {
 		const controller = this.viewer.scene.screenSpaceCameraController;
 
@@ -299,11 +420,16 @@ export class ViewerCameraFlight implements CameraFlight {
 	release(): void {
 		this.releaseInputHold();
 		this.activeGlide?.cancel();
+		this.cancelZoom();
 	}
 
 	private releaseInputHold(): void {
 		clearTimeout(this.inputHold);
 		this.inputHold = undefined;
+	}
+
+	private cancelZoom(): void {
+		this.activeZoom?.cancel();
 	}
 
 	private anchorOn(target: SceneTarget): void {

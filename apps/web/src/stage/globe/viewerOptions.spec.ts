@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { VIEWER_OPTIONS, disableEntityPicking } from './viewerOptions';
+import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from './viewerOptions';
 
 describe('VIEWER_OPTIONS', () => {
 	it('removes the Home and scene mode controls', () => {
@@ -60,5 +60,38 @@ describe('disableEntityPicking', () => {
 		expect(removeInputAction).toHaveBeenCalledTimes(2);
 		expect(removeInputAction).toHaveBeenCalledWith(eventTypes.LEFT_CLICK);
 		expect(removeInputAction).toHaveBeenCalledWith(eventTypes.LEFT_DOUBLE_CLICK);
+	});
+});
+
+describe('enableTrackpadPinchZoom', () => {
+	const enums = {
+		CameraEventType: { WHEEL: 3, RIGHT_DRAG: 1, PINCH: 4 },
+		KeyboardEventModifier: { CTRL: 1 }
+	};
+	const pinch = { eventType: 3, modifier: 1 };
+
+	it('adds Ctrl+wheel to the default zoom bindings and keeps them', () => {
+		const controller = { zoomEventTypes: [1, 3, 4] as unknown };
+
+		enableTrackpadPinchZoom(controller, enums);
+
+		expect(controller.zoomEventTypes).toEqual([1, 3, 4, pinch]);
+	});
+
+	it('wraps a single binding and is idempotent', () => {
+		const controller = { zoomEventTypes: 3 as unknown };
+
+		enableTrackpadPinchZoom(controller, enums);
+		enableTrackpadPinchZoom(controller, enums);
+
+		expect(controller.zoomEventTypes).toEqual([3, pinch]);
+	});
+
+	it('binds the pinch when zoom had no binding', () => {
+		const controller = { zoomEventTypes: undefined as unknown };
+
+		enableTrackpadPinchZoom(controller, enums);
+
+		expect(controller.zoomEventTypes).toEqual([pinch]);
 	});
 });

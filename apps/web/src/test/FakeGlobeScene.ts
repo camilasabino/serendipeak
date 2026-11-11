@@ -6,6 +6,7 @@ import type { MountainPlacement, ResetResult } from '../stage/globe/mountainCame
 import type { ViewOrientation } from '../stage/globe/orientation';
 import type { ScaleReading } from '../stage/globe/scaleBar';
 import type { StageSize } from '../stage/globe/stageFrame';
+import type { ZoomDirection, ZoomResult } from '../stage/globe/zoomStep';
 
 export interface Deferred<T> {
 	promise: Promise<T>;
@@ -95,6 +96,8 @@ export class FakeGlobeScene implements GlobeScene {
 	readonly stages: StageSize[] = [];
 	readonly pendingShows: PendingShow[] = [];
 	resetResult: ResetResult = 'reset';
+	zoomResult: ZoomResult = 'zoomed';
+	readonly zooms: ZoomDirection[] = [];
 	reading: CameraReading | undefined;
 	reads = 0;
 	resets = 0;
@@ -199,6 +202,14 @@ export class FakeGlobeScene implements GlobeScene {
 		}
 		this.resets += 1;
 		return this.resetResult;
+	}
+
+	zoomView(direction: ZoomDirection): ZoomResult {
+		if (this.destroyed) {
+			return 'unavailable';
+		}
+		this.zooms.push(direction);
+		return this.zoomResult;
 	}
 
 	readCamera(): CameraReading | undefined {

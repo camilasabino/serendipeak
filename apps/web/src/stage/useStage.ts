@@ -9,6 +9,7 @@ import {
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
+import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import type { PresentationObserver } from './SceneSession';
 import type { SceneStore, SceneSnapshot } from './SceneStore';
 import { sameSceneTarget } from './sceneTarget';
@@ -26,6 +27,7 @@ export interface UseStageResult {
 	viewportRef: RefObject<HTMLDivElement | null>;
 	snapshot: SceneSnapshot;
 	resetView: () => ResetResult;
+	zoomView: (direction: ZoomDirection) => ZoomResult;
 	readCamera: () => CameraReading | undefined;
 	retry: () => void;
 }
@@ -77,9 +79,14 @@ export function useStage({
 
 	const resetView = useCallback(() => bindingRef.current?.resetView() ?? 'unavailable', []);
 
+	const zoomView = useCallback(
+		(direction: ZoomDirection) => bindingRef.current?.zoomView(direction) ?? 'unavailable',
+		[]
+	);
+
 	const readCamera = useCallback(() => bindingRef.current?.readCamera(), []);
 
 	const retry = useCallback(() => bindingRef.current?.retry(), []);
 
-	return { viewportRef, snapshot, resetView, readCamera, retry };
+	return { viewportRef, snapshot, resetView, zoomView, readCamera, retry };
 }

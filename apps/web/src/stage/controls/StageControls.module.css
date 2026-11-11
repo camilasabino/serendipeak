@@ -7,3 +7,22 @@
 	flex-direction: column;
 	gap: 0.4rem;
 }
+
+/* Navigation sits on the opposite edge: a short phone stage has no room for more buttons above the
+   compass. It spans the stage height so the help panel can size to the stage, and lets pointer
+   events through everywhere but its own controls so the globe stays draggable beneath it. */
+.navigation {
+	position: absolute;
+	z-index: 2;
+	top: 0.6rem;
+	bottom: 0.6rem;
+	left: 0.6rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	pointer-events: none;
+}
+
+.navigation > * {
+	pointer-events: auto;
+}

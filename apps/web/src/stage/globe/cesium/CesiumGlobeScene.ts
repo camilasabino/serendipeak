@@ -19,7 +19,8 @@ import { ScaleTracker } from '../scaleTracker';
 import type { StageSize } from '../stageFrame';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
-import { VIEWER_OPTIONS, disableEntityPicking } from '../viewerOptions';
+import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from '../viewerOptions';
+import { ZOOM_FLIGHT_SECONDS, type ZoomDirection, type ZoomResult } from '../zoomStep';
 import { releaseBestEffort } from '../../releaseBestEffort';
 import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
@@ -140,6 +141,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		try {
 			failedBaseLayer?.attach(viewer.scene.imageryLayers);
 			disableEntityPicking(viewer, cesium.ScreenSpaceEventType);
+			enableTrackpadPinchZoom(viewer.scene.screenSpaceCameraController, cesium);
 
 			const built = new CesiumGlobeScene({
 				cesium,
@@ -299,6 +301,14 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		return result;
+	}
+
+	zoomView(direction: ZoomDirection): ZoomResult {
+		if (this.destroyed || this.director.busy()) {
+			return 'unavailable';
+		}
+
+		return this.flight.zoom(direction, this.motion() === 'direct' ? 0 : ZOOM_FLIGHT_SECONDS);
 	}
 
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void {
