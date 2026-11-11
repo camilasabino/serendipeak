@@ -190,6 +190,11 @@ Monitoring uses the Better Stack free plan and no additional infrastructure: one
 - **Delivery problems never change the result.** The request is bounded (10 s, 3 retries). If it still fails the job logs `heartbeat delivery failed (curl exit N)` and keeps its own exit status. A good backup with an undelivered ping shows up as a late-heartbeat alert, not as a failed run, so the Railway log tells the two apart.
 - **The URL is a secret.** It lives only in the `BACKUP_HEARTBEAT_URL` variable of the `backup` service, never in Git, a chat or an argument list. The job reads it from the environment, removes it from the environment of `pg_dump` and `curl`, and passes it to `curl` on standard input, so it appears in no process list and no log line. A URL that is not `https://`, has a query string, a quote or whitespace is skipped with a warning that does not print it, and the backup still runs.
 - **Known limit.** A `SIGTERM` is handled when the command in progress returns, so a long `pg_dump` delays the `/fail` ping, bounded by `BACKUP_DUMP_TIMEOUT_SECONDS`. If Railway ends the container first, no `/fail` arrives and the missing ping raises the alert after the grace period.
+- **Rotating the URL.** Rotate it whenever it has been pasted outside Railway (a chat, a ticket, shell history, a screenshot). It authorizes pings only: whoever holds it can hide a missed backup or raise a false alert, and cannot read any data. Better Stack gives a heartbeat a fixed URL, so rotating means replacing the heartbeat:
+  1. In Better Stack create a new heartbeat with the same period, grace and alert policy. Copy its URL from the dashboard.
+  2. Confirm the target with `railway status`, then set the variable on `backup` without putting the value in an argument: `pbpaste | railway variable set BACKUP_HEARTBEAT_URL --stdin --service backup`, and clear the clipboard afterwards (`pbcopy </dev/null`). The variable editor in the Railway dashboard works too.
+  3. Pause the old heartbeat so it does not alert while the new one waits for its first run. The old URL keeps working until that heartbeat is deleted.
+  4. After the next scheduled run, check that the `backup` log has neither `heartbeat delivery failed` nor `heartbeat skipped` and that the new heartbeat shows its ping. Then delete the old heartbeat, which is what invalidates the old URL.
 
 **Configure once**
 
