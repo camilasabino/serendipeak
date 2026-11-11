@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stand-in for curl: the offsite job uses it only for the heartbeat, whose URL arrives on stdin.
+echo "$*" >>"$STATE/curl-argv.log"
+
+if [ "$1" = "--config" ] && [ "$2" = "-" ]; then
+  line="$(cat)"
+  target="${line#url = \"}"
+  target="${target%\"}"
+  echo "ping $target" >>"$STATE/events.log"
+  exit "${FAKE_HEARTBEAT_EXIT:-0}"
+fi
+
+echo "curl stub: unexpected call: $*" >&2
+exit 99

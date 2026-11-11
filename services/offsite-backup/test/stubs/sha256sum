@@ -1,0 +1,5 @@
+#!/bin/sh
+for candidate in /usr/bin/sha256sum /bin/sha256sum /opt/homebrew/bin/sha256sum; do
+  [ -x "$candidate" ] && exec "$candidate" "$@"
+done
+exec /usr/bin/shasum -a 256 "$@"

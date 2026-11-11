@@ -19,7 +19,7 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 - the inventory of R2 and Railway tokens, their scopes and rotation dates;
 - Railway project, environment and service identifiers and the Cloudflare account identifier;
 - catalog snapshot files, database dumps, scratch key lists and the notes that record their checksums;
-- the location of the second copy of the originals bucket and who refreshes it.
+- the Backblaze account, the offsite bucket name, and the inventory of its application keys (scopes, rotation dates), kept apart from the Cloudflare and Railway credentials so that one compromise does not reach both copies.
 
 ## Services and names
 
@@ -31,6 +31,8 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 | `backup`                       | cron service built from `services/backup`; daily `pg_dump` to a private R2 bucket                                    | never                                       |
 | R2 bucket `<public-bucket>`    | public photograph renditions                                                                                         | `https://media.serendipeak.camilasabino.dev` (custom domain) |
 | R2 bucket `<originals-bucket>` | private original photographs                                                                                         | never                                       |
+| `offsite-backup`               | cron service built from `services/offsite-backup`; copies the originals, renditions and dumps to Backblaze B2 | never                                       |
+| B2 bucket `<offsite-bucket>`   | private independent copy (`originals/`, `media/`, `db-backups/`, `manifests/`)                                       | never                                       |
 
 `WEB_ORIGIN` and `CORS_ALLOWED_ORIGIN` are single origins and must name the web origin in use. The web build inlines the API origin, so changing the API host needs a new web build. A custom domain on an R2 bucket needs the zone, or a Cloudflare-supported partial setup for that hostname, on Cloudflare.
 
@@ -58,7 +60,7 @@ The printed host and database must be the tunnel's local address and the product
 
 ## 1. Service configuration
 
-Each service builds from the `Dockerfile` in its directory (Railway root directories `services/api`, `apps/web` and `services/backup`). Do not set a custom start command on `api` or `web`: the image's own `CMD` runs the server as PID 1. Config-as-code files are not used.
+Each service builds from the `Dockerfile` in its directory (Railway root directories `services/api`, `apps/web`, `services/backup` and `services/offsite-backup`). Do not set a custom start command on `api` or `web`: the image's own `CMD` runs the server as PID 1. Config-as-code files are not used.
 
 Generate secrets with at least 32 random characters, all different:
 
@@ -174,15 +176,154 @@ The `backup` service is a Railway cron service built from `services/backup` (Doc
 - **Restore.** Download a dump and its `.sha256` from the bucket (dashboard or any S3 client), run `shasum -a 256 -c` on it, then restore into an empty PostGIS 18 database (`pg_restore --no-owner --exit-on-error --dbname <target> <file>`). The archive carries the `postgis` extension and no roles. Run `check_catalog` on the result before relying on it.
 - **Credentials.** Rotate the R2 token by creating a new one, updating the two variables and running the service once; then revoke the old one.
 
+### Offsite media and database copy
+
+R2 holds the photographs and the dumps, and so does the account that could lose them. The `offsite-backup` service copies all of it to one private Backblaze B2 bucket, under another provider and other credentials, so that a lost or compromised Cloudflare account, a mistaken deletion or a corrupted object does not take the only copy with it.
+
+It is a cron service with its own root directory, `services/offsite-backup`, and its own `Dockerfile` (Dockerfile builder, like the other services). It needs only `curl` and `rclone`, no PostgreSQL client and no database credentials. It shares no file with the `backup` service, so a change to either one redeploys only that service: keep the watch path of each at its own directory (`/services/backup/**` and `/services/offsite-backup/**`). It reads R2 with a read-only token and writes B2 with a key that cannot delete.
+
+| Offsite prefix | Copied from                       | Verified by                                                                                                                   |
+| -------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `originals/`   | `<originals-bucket>`              | the SHA-256 that is part of every key (`photographs/<sha256>/original.<ext>`), recomputed from the bytes stored in B2          |
+| `media/`       | `<public-bucket>`                 | a hash of the source object compared with a hash of the B2 object, then recorded in the manifest                              |
+| `db-backups/`  | `<backup-bucket>` (`daily/`, `weekly/`) | the `.sha256` file the dump job wrote, compared with the dump stored in B2; the checksum file is copied byte for byte    |
+| `manifests/`   | written by the job                | `offsite-<UTC stamp>.sha256`, one per run, listing `sha256  <prefix>/<key>` for everything verified so far                    |
+
+Keys are preserved under their prefix. The bucket has one prefix besides the three copies, `manifests/`: renditions are keyed by their original's digest, not their own, so without a recorded checksum nothing independent of R2 could verify them later.
+
+**What a run does** (`offsite-backup run`):
+
+1. Copies each source bucket with `rclone copy --ignore-existing`. A key that already exists offsite is never read, compared or replaced, so a repeat run transfers only what is new. A failed copy is retried (`OFFSITE_COPY_ATTEMPTS`, default 3, `OFFSITE_RETRY_DELAY_SECONDS`, default 30) and then fails the run.
+2. Lists both sides with sizes. It fails on any source key or manifest key that is missing offsite, and on any key whose size differs from the source. Offsite-only objects (deleted at the source later) are expected and kept. A dump without its checksum file, or the reverse, fails too.
+3. Hashes every object that is not yet in the manifest, reading the bytes back from B2: originals against their key, renditions against the source object, dumps against their checksum file.
+4. Only if all of that passed, writes a new manifest and reads it back. A failed run writes no manifest, so the same objects are verified again next time.
+5. Reports to its own heartbeat: success on exit status 0, `/fail` on any other outcome, nothing on `check` or `deep-check`.
+
+`rclone` is reached through one function that accepts only `copy`, `copyto`, `lsf` and `hashsum`. The job has no `sync`, `delete`, `purge` or `cleanup` anywhere, and the B2 key has no `deleteFiles`, so neither a script change nor a stolen job credential can remove a backup. A source deletion therefore never propagates, and the offsite bucket only grows (see "Costs").
+
+**Other commands**, both read-only and without heartbeat:
+
+- `offsite-backup check` (cheap, run it weekly and after any change): every source and manifest key exists offsite with the same size, the newest manifest is at most `OFFSITE_MAX_AGE_SECONDS` old (default 36 h), and the newest `daily/` dump still matches its checksum.
+- `offsite-backup deep-check` (reads every object back, so it costs egress; run it monthly and before any restore drill): re-hashes everything in the manifest. This is what finds a stored object that changed without changing size, which a routine `run` does not re-read.
+
+**Settings of the `offsite-backup` service**
+
+| Setting                                                                           | Value                                                                                                     |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Schedule                                                                          | `0 5 * * *` (UTC)                                                                                         |
+| Restart policy                                                                    | never                                                                                                     |
+| Public domain, TCP proxy                                                          | none                                                                                                      |
+| `OFFSITE_SRC_ENDPOINT_URL`                                                        | `https://<account-id>.r2.cloudflarestorage.com`                                                           |
+| `OFFSITE_SRC_ACCESS_KEY_ID`, `OFFSITE_SRC_SECRET_ACCESS_KEY`                      | an R2 token with **Object Read only** on the three source buckets, and nothing else                       |
+| `OFFSITE_SRC_ORIGINALS_BUCKET`, `OFFSITE_SRC_PUBLIC_BUCKET`, `OFFSITE_SRC_BACKUP_BUCKET` | `<originals-bucket>`, `<public-bucket>`, `<backup-bucket>`                                         |
+| `OFFSITE_DST_ENDPOINT_URL`, `OFFSITE_DST_REGION`                                  | the bucket's S3 endpoint, `https://s3.<region>.backblazeb2.com`, and the same `<region>`. Both endpoint variables must be `https://<host>` without a path: the job refuses anything else, and never prints the value                  |
+| `OFFSITE_DST_ACCESS_KEY_ID`, `OFFSITE_DST_SECRET_ACCESS_KEY`                      | a B2 application key restricted to `<offsite-bucket>`, see below                                          |
+| `OFFSITE_DST_BUCKET`                                                              | `<offsite-bucket>`                                                                                        |
+| `OFFSITE_HEARTBEAT_URL` (optional)                                                | its own Better Stack heartbeat URL, a secret. Unset, the job runs without reporting                       |
+
+No `PG*` variable, no production database credential and none of the `MEDIA_*` write tokens belong on this service. Credentials reach `rclone` through a configuration file inside a private temporary directory, are removed from the environment, and appear in no argument list, log line or message. The heartbeat URL is handled exactly as in "Monitoring and alerts", and is a different URL from the dump job's.
+
+**Schedule.** The dump job starts at 03:30 UTC. `pg_dump` is bounded by `BACKUP_DUMP_TIMEOUT_SECONDS` (1500 s), so even a dump that runs to its limit ends by about 03:55, and its uploads and verification add a few minutes on a healthy day. Running the copy at **05:00 UTC** leaves over an hour of margin, so the day's dump is complete, checksum included, when it is copied. A dump caught half-uploaded would fail the run loudly rather than be copied wrongly, and the next run would pick it up. The heartbeat (period 24 h, grace 3 h) alerts around 08:00 UTC at the latest. Railway does not start a run while the previous one is active.
+
+**Initial backfill and first-time setup** (once, from the operator's machine, nothing of this is committed):
+
+1. In Backblaze create a private bucket with default encryption, no public access and versioning left on (the default). B2 keeps every version of a file, which is the only protection against an overwrite until Object Lock is adopted; do not set a lifecycle rule that deletes old versions.
+2. Create the B2 application key restricted to that bucket with exactly the capabilities `listBuckets`, `listAllBucketNames`, `listFiles`, `readFiles` and `writeFiles`: not `deleteFiles`, not any `writeBucket*` or `deleteBucket*` capability (they include lifecycle rules, which could expire old versions) and no key administration. The Backblaze web console only offers the presets "Read and Write" (which includes `deleteFiles`), "Read Only" and "Write Only" (which cannot list or read), so create it with the B2 command-line tool, authorized interactively so no key appears in an argument: `b2 key create --bucket <offsite-bucket> <key name> listBuckets,listAllBucketNames,listFiles,readFiles,writeFiles` (the exact syntax depends on the tool's version). Note the key ID, the secret and the region; the secret is shown once. Put the values in a private file outside the repository (mode 600) with one `NAME=value` per line, no quotes, and with the endpoint as `https://s3.<region>.backblazeb2.com`.
+3. In Cloudflare create the read-only R2 token for the three buckets (permission "Object Read only", scoped to exactly those buckets).
+4. **Check the key's permissions, read-only, before anything is written.** The key's own description is authoritative and a check changes nothing. Use API version 4, because version 3 refuses keys that are restricted by bucket in a way it cannot represent. The credentials go to `curl` through standard input, never in an argument:
+
+   ```sh
+   set -a; . <env file>; set +a
+   printf 'user = "%s:%s"\n' "$OFFSITE_DST_ACCESS_KEY_ID" "$OFFSITE_DST_SECRET_ACCESS_KEY" |
+     curl --config - --silent https://api.backblazeb2.com/b2api/v4/b2_authorize_account |
+     jq '.apiInfo.storageApi.allowed | {capabilities, buckets: [.buckets[].name], namePrefix}'
+   ```
+
+   The response also carries an authorization token, so print only the part above. `capabilities` must be exactly the five listed, `buckets` must be exactly `<offsite-bucket>`, and there must be no `deleteFiles`. If anything else is present, create a replacement key and delete the old one; do not carry on and do not test deletion to find out.
+5. **Prove the key works with `rclone` before the service exists.** This uploads one small, uniquely named object under `_probe/`, a prefix the job ignores, lists it and reads it back through the same calls the job uses:
+
+   ```sh
+   docker build -t serendipeak-offsite services/offsite-backup
+   docker run --rm --env-file <env file> --entrypoint sh serendipeak-offsite -c '
+     umask 077
+     printf "[dst]\ntype = s3\nprovider = Other\nendpoint = %s\nregion = %s\naccess_key_id = %s\nsecret_access_key = %s\nno_check_bucket = true\n" \
+       "$OFFSITE_DST_ENDPOINT_URL" "$OFFSITE_DST_REGION" "$OFFSITE_DST_ACCESS_KEY_ID" "$OFFSITE_DST_SECRET_ACCESS_KEY" >/tmp/r.conf
+     name="probe-$(date -u +%Y%m%dT%H%M%SZ)-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d " \n").txt"
+     echo "offsite probe $name" >/tmp/probe
+     rclone --config /tmp/r.conf copyto --ignore-existing /tmp/probe "dst:$OFFSITE_DST_BUCKET/_probe/$name"
+     rclone --config /tmp/r.conf lsf --format ps --separator ";" "dst:$OFFSITE_DST_BUCKET/_probe"
+     echo "$name" >/tmp/one
+     rclone --config /tmp/r.conf hashsum sha256 --download --files-from /tmp/one "dst:$OFFSITE_DST_BUCKET/_probe"
+     sha256sum /tmp/probe
+   '
+   ```
+
+   The two hashes must be equal. If the upload or listing is refused, adjust the key's capabilities, not the job. If `rclone` and the S3 endpoint do not get along at all, the fallback is rclone's native `b2` backend, which needs the job's remote definition changed and its tests rerun. The configuration file lives only inside this throwaway container. The probe object stays in the bucket: the job never deletes, and the key cannot. Remove it later with an administrative key. The probe is a few bytes, so it does not exercise multipart uploads; the first backfill does, with originals of up to 30 MiB.
+6. Create the Railway service on the same project with root directory `services/offsite-backup`, the watch path `/services/offsite-backup/**`, the variables above and the schedule. Confirm the target with `railway status`. Do not enable the schedule yet.
+7. **Backfill**: run the service once from Railway (or `docker run --rm --env-file <env file> serendipeak-offsite run` with the real values) and read the log to its `offsite ok:` line. The first run reads every object three times (source read, copy, B2 read-back); on a few GB that is minutes to tens of minutes, which is also why the first run is not left to the cron. Fix the cause of any failure (see below) and run again: copies resume where they stopped.
+8. `offsite-backup check`, then the first scheduled run, then the `deep-check` below. Only then turn the heartbeat on.
+
+**Incremental checks.** After every upload session of photographs, a second `run` is not needed: the next scheduled run picks the new objects up. To confirm immediately, run `check`: it fails with "objects missing from the offsite bucket" until a `run` has delivered them. Every run's log ends with `offsite ok: originals=<n> media=<n> db-backups=<n> newly-verified=<n>`; `originals` is one object per photograph, and `media` is the page and viewer renditions of every version kept, so compare both with the counts of the source buckets.
+
+**When a run fails.** The message names the step and lists up to 20 keys.
+
+| Message                                                                  | Meaning and action                                                                                                                                                                                       |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `copy of <name> failed after N attempts`                                  | A transfer problem: credentials, endpoint, network or a B2 incident. Check the key and quotas, then run again.                                                                                           |
+| `<name>: objects missing from the offsite bucket`                         | A key the source has, or an earlier run verified, is absent offsite. If the source still has it the next run copies it again. If it is gone from both, the object is **lost**: stop and see "Recovery".   |
+| `<name>: objects whose size differs from the source`                      | An existing offsite object is truncated or different. It is never overwritten. Investigate with B2's file versions, then remove the bad object with an administrative key, outside the job, and run again. |
+| `<name>: objects that are missing or do not match their checksum`         | Corrupt in transit or at rest. Same handling. For `db-backups/`, compare with the source before touching anything.                                                                                        |
+| `originals: keys that are not content-addressed`                          | An object in the originals bucket does not follow `photographs/<sha256>/original.<ext>`. Find out how it got there; it cannot be verified.                                                              |
+| `media: offsite objects absent from the source, so there is nothing to verify them against` | An unverified offsite object whose source is gone. Verify it by hand, then record it by hand or remove it.                                                         |
+| `<manifest> has malformed lines`, `does not read back as written`          | The manifest is damaged. Do not delete it: an earlier manifest in `manifests/` is the fallback, and the file version history shows what changed.                                                         |
+
+The job never repairs or removes anything on its own, so a failure repeats every day until someone has looked at it. That is intended.
+
+**Recovery from the offsite copy.** Use a read-only B2 key (`listFiles`, `readFiles`) and, for databases or media, a scratch directory or empty environment, never the production buckets first:
+
+1. Download the bucket to a scratch directory outside the repository. `rclone copy` with the S3 remote configured through environment variables, as in "Media transfer", is enough: `rclone copy dst:<offsite-bucket> <scratch>/offsite --checksum`.
+2. Verify with the newest manifest, from the bucket's root:
+
+   ```sh
+   cd <scratch>/offsite
+   latest="$(ls manifests | sort | tail -1)"
+   shasum -a 256 -c "manifests/$latest"      # every line must say OK
+   ```
+
+   This needs neither R2 nor any credential, and proves the restored set is what the last run recorded.
+3. **Originals and renditions**: copy `originals/photographs/…` into `<originals-bucket>` and `media/photographs/…` into `<public-bucket>` with `rclone copy --immutable --header-upload "Cache-Control: public, max-age=31536000, immutable"` for the public one, then follow steps 3 and 4 of "Media transfer" (`check_photograph_media --deep --checksums`, the headers check). The offsite copy does not preserve object metadata, so the `Cache-Control` header must be set again, as the command does.
+4. **Database**: a dump and its checksum are at `db-backups/daily/` and `db-backups/weekly/`. Verify with `shasum -a 256 -c`, then restore as in "Automated database backups". The offsite bucket keeps dumps the R2 lifecycle rules have already expired.
+5. Run the restored environment's checks (`check_catalog`, the smoke tests that apply).
+
+**Isolated restore drill** (once after the first backfill, then at least twice a year, and after any change to the job): do steps 1, 2 and 4 above on a machine with Docker, restoring the newest `daily/` dump into a disposable PostGIS 18 container, and `check_catalog` on it; for the media, restore the originals of three photographs into a scratch directory and compare each with its key's SHA-256. Then run `deep-check`. Record the date, the manifest used and the result in the owner's notes. A backup counts only after it has been restored once.
+
+**Monitoring.** `serendipeak-offsite` heartbeat (see "Monitoring and alerts"), plus a weekly `check` and a monthly `deep-check` from any machine with Docker and the offsite variables:
+
+```sh
+docker run --rm --env-file <env file> serendipeak-offsite check
+docker run --rm --env-file <env file> serendipeak-offsite deep-check
+```
+
+Both exit non-zero on any problem and never send a heartbeat, so running them cannot hide a missed run.
+
+**Credentials.** Rotate by creating the new key first, updating the two variables, running the service once and `check`, then deleting the old key in its provider's console. A source token stolen from this service can read the media but not change it; a B2 key stolen from it can add objects, not remove them. `writeFiles` still allows a new version of an existing name and, in a bucket with versions, a delete marker that hides a file: every earlier version stays in the bucket and can be restored, which is why versions are kept and why the key must never have `deleteFiles` or any `writeBucket*` capability. Rotate the R2 and B2 credentials together after any incident, and never reuse the dump job's R2 token here.
+
+**Rollback.** The service is additive. Stop it by removing its schedule (and the heartbeat, or pause the monitor); delete the Railway service if it is no longer wanted. Nothing in the production R2 buckets, the database or the existing `backup` service depends on it. The offsite bucket and its manifests stay and can be deleted from the Backblaze console, deliberately, as a separate step. A faulty release of the script is rolled back like any service, and an older manifest remains valid.
+
+**Costs.** Backblaze B2 charges $6.95 per TB per month for storage with the first 10 GB free, and its egress is free up to three times the average monthly stored data (then $0.01 per GB). Listing and download requests are free or inside the daily free allowance at this volume. The catalog is about 74 mountains with at most a 30 MiB original each plus renditions, a few GB at worst: **storage is zero to a few cents a month** and stays inside the free tier for a long time. The dumps are small and are kept forever offsite, a negligible, steadily growing amount. The daily run reads from B2 only the objects that are new, so egress is a small fraction of the free allowance; `deep-check` and a full restore read everything once, which a few GB of storage covers many times over. The Railway service runs for minutes a day and adds cents at most to the project's usage, which has a soft and a hard limit: check usage after the first backfill. R2 egress to the job is free.
+
+**Limits to keep in mind.** The copy is not a point-in-time snapshot: an object created after the listing waits for the next run. Same-size corruption at rest of an object already in the manifest is caught by `deep-check`, not by `run`. Deletions never propagate, so deleted or replaced production objects accumulate offsite; clearing them is a manual administrative step. Object Lock is not enabled, so an attacker holding an administrative B2 key could still delete versions; keep that key out of the service and out of automation.
+
 ### Monitoring and alerts
 
-Monitoring uses the Better Stack free plan and no additional infrastructure: one heartbeat for the backup and two uptime monitors. Alerts go to the owner by email. Nothing here needs a code change to the application.
+Monitoring uses the Better Stack free plan and no additional infrastructure: one heartbeat per backup job and two uptime monitors. Alerts go to the owner by email. Nothing here needs a code change to the application.
 
 | Monitor              | Type      | Target                                              | Alert when                                                                 |
 | -------------------- | --------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
 | `serendipeak-web`    | uptime    | `GET https://serendipeak.camilasabino.dev/`         | the response is not 2xx, or does not arrive in time                        |
 | `serendipeak-api`    | uptime    | `GET https://api.serendipeak.camilasabino.dev/healthz` | the response is not 2xx, or does not arrive in time                     |
 | `serendipeak-backup` | heartbeat | the URL Better Stack generates for it               | no ping arrives for 24 h plus the grace period, or a `/fail` ping arrives |
+| `serendipeak-offsite` | heartbeat | its own URL, never the one of `serendipeak-backup`  | no ping arrives for 24 h plus the grace period, or a `/fail` ping arrives |
 
 - **Uptime monitors use `GET`.** `/healthz` accepts only `GET` (a `HEAD` is answered 405) and runs `SELECT 1`, so the API monitor also proves the database is reachable. The web monitor is the one that proves pages render.
 - **Heartbeat**: period 24 h, grace 3 h. The job runs at 03:30 UTC and finishes within minutes, so a healthy day pings long before the limit and a missed or hung run alerts around 06:30 UTC at the latest.
@@ -198,9 +339,9 @@ Monitoring uses the Better Stack free plan and no additional infrastructure: one
 
 **Configure once**
 
-1. In Better Stack create the three monitors above with an email alert policy. Create the heartbeat first and copy its URL.
-2. In Railway, on the `backup` service only, set `BACKUP_HEARTBEAT_URL` to that URL. Confirm the target with `railway status` before writing.
-3. Check each monitor shows its first result: the uptime monitors immediately, the heartbeat after the next scheduled run.
+1. In Better Stack create the four monitors above with an email alert policy. Create each heartbeat first and copy its URL.
+2. In Railway, on the `backup` service only, set `BACKUP_HEARTBEAT_URL` to the URL of `serendipeak-backup`, and on `offsite-backup` only, `OFFSITE_HEARTBEAT_URL` to the URL of `serendipeak-offsite`. Confirm the target with `railway status` before writing.
+3. Check each monitor shows its first result: the uptime monitors immediately, the heartbeats after the next scheduled run.
 
 **GitHub** (repository settings, Code security): enable secret scanning, push protection, Dependabot alerts and Dependabot security updates. Direct pushes to `main` stay allowed; the ruleset is not changed. Push protection blocks a push that contains a detected secret, and a bypass is a deliberate choice of the person pushing.
 
@@ -211,6 +352,8 @@ Monitoring uses the Better Stack free plan and no additional infrastructure: one
 | Heartbeat `/fail`                            | The latest `backup` run in Railway. Its last log lines name the failing step and the exit status.                   | Fix the cause (database unreachable, R2 token, bucket), then run the service once and confirm the heartbeat recovers.                       |
 | Heartbeat late, run succeeded in Railway     | The log shows `heartbeat delivery failed`. The URL is wrong, revoked or Better Stack was unreachable.               | Re-copy the URL into `BACKUP_HEARTBEAT_URL` if it changed; otherwise wait for the next run.                                                   |
 | Heartbeat late, no run in Railway            | The cron schedule (`30 3 * * *`), whether the service is paused or removed, and the project's plan and usage.      | Restore the schedule or service, run it once, then `backup check`.                                                                            |
+| Offsite heartbeat `/fail`                    | The latest `offsite-backup` run in Railway: its last lines name the failing step and the keys involved.            | "Offsite media and database copy", "When a run fails". Never re-run blindly: a corrupt object stays corrupt until it is dealt with.        |
+| Offsite heartbeat late, no run in Railway    | The cron schedule (`0 5 * * *`), whether the service is paused or removed, and the project's plan and usage.       | Restore the schedule, run it once, then `offsite-backup check`.                                                                              |
 | Log says `heartbeat skipped`                 | The variable is not an `https://` URL, or has a query string, quote or whitespace.                                  | Paste the bare URL Better Stack shows. The backup itself was not affected.                                                                    |
 | Web or API monitor down                      | The monitor's incident (status code or timeout), then the service's deploy and runtime logs in Railway.             | Roll back as described in "Rollback and recovery". Confirm the smoke tests that apply.                                                        |
 
@@ -232,7 +375,7 @@ Production has no scheduled job for this: the environment holds only `web`, `api
    curl -s  https://<media-host>/ | head -c 200                                 # no bucket listing
    ```
 
-**Backups of the media.** Objects are content-addressed and the application never overwrites or deletes them, so an incremental copy is safe to repeat. Keep a second copy of **`<originals-bucket>`** (the renditions can be derived from the originals, the originals cannot be recovered) in a bucket under a different account or provider, refreshed with `rclone copy` (never `sync`, so a deletion cannot propagate) after upload sessions, and compared with `rclone check`. Use a read-only token on the production side.
+**Backups of the media.** Objects are content-addressed and the application never overwrites or deletes them, so an incremental copy is safe to repeat. The `offsite-backup` service keeps an independent copy of both buckets and of the database dumps at another provider; see "Offsite media and database copy".
 
 ## 4. Deploying changes
 
@@ -407,9 +550,9 @@ curl -si -H 'Origin: https://other.example' "$API/api/v1/mountains/<slug>" | gre
 | A released version misbehaves                    | Use Railway's rollback to the previous deployment of that service. If the release shipped a migration, the older version must still work with the new schema (that was the rule); if it does not, roll forward instead, or restore the dump taken before the release.                                  |
 | A load or import is wrong or half done           | Recreate the database: new `postgres` service or empty database, `migrate`, load again and repeat the media transfer. Never patch a loaded catalog.                                                                                                                                                    |
 | The database is lost or corrupt                  | Restore the latest provider backup or logical dump (see "Automated database backups") into a new database, point `DATABASE_URL` at it, then run `check_catalog`. Users and sessions come back with the dump; from a snapshot only, run `create_editor` again.                                          |
-| Photographs are missing or damaged               | Re-copy the referenced keys from the second copy of the originals or another bucket that holds them ("Media transfer"), then `check_photograph_media --deep --checksums`.                                                                                                                              |
+| Photographs are missing or damaged               | Re-copy the referenced keys from the offsite bucket ("Recovery from the offsite copy") or another bucket that holds them ("Media transfer"), then `check_photograph_media --deep --checksums`.                                                                                                          |
 | No usable Editor                                 | `create_editor` from the operator shell through a new tunnel; close it again.                                                                                                                                                                                                                          |
-| A secret is exposed                              | `DJANGO_SECRET_KEY`: replace and redeploy (ends every Studio session). `PREVIEW_SIGNING_KEY`: replace (ends outstanding previews). R2 token: create a new one, update the variables, redeploy, revoke the old one. Database password: rotate in Railway and redeploy every service that references it. |
+| A secret is exposed                              | `DJANGO_SECRET_KEY`: replace and redeploy (ends every Studio session). `PREVIEW_SIGNING_KEY`: replace (ends outstanding previews). R2 token: create a new one, update the variables, redeploy, revoke the old one. Backblaze key or `OFFSITE_*` variable: see "Offsite media and database copy". Database password: rotate in Railway and redeploy every service that references it. |
 
 Reversing the first migration drops the `postgis` extension and fails if other objects depend on it; do not migrate backwards on a database that holds data. The way back is a restore.
 

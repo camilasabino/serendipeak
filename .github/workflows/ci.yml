@@ -198,8 +198,8 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - name: Test the CI and backup scripts
-        run: node --test "scripts/*.test.mjs" "services/backup/test/*.test.mjs"
+      - name: Test the CI, backup and offsite backup scripts
+        run: node --test "scripts/*.test.mjs" "services/backup/test/*.test.mjs" "services/offsite-backup/test/*.test.mjs"
 
       - name: Decide whether the WebGL suites run
         id: classify
