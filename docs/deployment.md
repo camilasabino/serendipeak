@@ -204,7 +204,19 @@ Keys are preserved under their prefix. The bucket has one prefix besides the thr
 **Other commands**, both read-only and without heartbeat:
 
 - `offsite-backup check` (cheap, run it weekly and after any change): every source and manifest key exists offsite with the same size, the newest manifest is at most `OFFSITE_MAX_AGE_SECONDS` old (default 36 h), and the newest `daily/` dump still matches its checksum.
-- `offsite-backup deep-check` (reads every object back, so it costs egress; run it monthly and before any restore drill): re-hashes everything in the manifest. This is what finds a stored object that changed without changing size, which a routine `run` does not re-read.
+- `offsite-backup deep-check` (reads every object back, so it costs egress and download transactions; run it monthly, and before a restore drill only if the account limits allow it, see "B2 limits and daily caps"): re-hashes everything in the manifest. This is what finds a stored object that changed without changing size, which a routine `run` does not re-read.
+
+**What each operation reads from B2**, which is what spends download bandwidth and read transactions:
+
+| Operation                | Reads from B2                                                                              | Proves                                                                                  | Cost to the daily limits                          |
+| ------------------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `run`                    | listings, the latest manifest, and the bytes of objects **not yet** in the manifest         | new objects were copied and hash correctly; the manifest grew                           | small and proportional to what is new             |
+| `check`                  | listings, the latest manifest, the newest `daily/` dump and its checksum file               | coverage (nothing missing, sizes match), freshness, and that the newest dump is intact  | one dump, regardless of the catalog size          |
+| `deep-check`             | every object in the manifest                                                                | every stored byte still matches what was verified when it was copied                    | the whole bucket                                  |
+| Targeted restore drill   | the newest `daily/` dump, its checksum, and three originals                                 | the dump restores and `check_catalog` passes; originals match their keys' SHA-256       | a dump plus three photographs                     |
+| Full restore drill       | the whole bucket                                                                            | a complete recovery from B2 alone, checked against the newest manifest                  | the whole bucket, like `deep-check`               |
+
+A full restore drill already re-verifies every object with the manifest, so after one a separate `deep-check` adds nothing.
 
 **Settings of the `offsite-backup` service**
 
@@ -269,7 +281,8 @@ No `PG*` variable, no production database credential and none of the `MEDIA_*` w
 
 | Message                                                                  | Meaning and action                                                                                                                                                                                       |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `copy of <name> failed after N attempts`                                  | A transfer problem: credentials, endpoint, network or a B2 incident. Check the key and quotas, then run again.                                                                                           |
+| `copy of <name> failed after N attempts`                                  | A transfer problem: credentials, endpoint, network, a B2 incident or an account cap. Check the key and Caps & Alerts, then run again.                                                                    |
+| `hashing objects under <remote> failed`                                   | `rclone` could not read the objects back. A `403` in the lines above it points to an exhausted download cap, not to corruption: see "B2 limits and daily caps". No verdict about the data was reached.   |
 | `<name>: objects missing from the offsite bucket`                         | A key the source has, or an earlier run verified, is absent offsite. If the source still has it the next run copies it again. If it is gone from both, the object is **lost**: stop and see "Recovery".   |
 | `<name>: objects whose size differs from the source`                      | An existing offsite object is truncated or different. It is never overwritten. Investigate with B2's file versions, then remove the bad object with an administrative key, outside the job, and run again. |
 | `<name>: objects that are missing or do not match their checksum`         | Corrupt in transit or at rest. Same handling. For `db-backups/`, compare with the source before touching anything.                                                                                        |
@@ -295,9 +308,52 @@ The job never repairs or removes anything on its own, so a failure repeats every
 4. **Database**: a dump and its checksum are at `db-backups/daily/` and `db-backups/weekly/`. Verify with `shasum -a 256 -c`, then restore as in "Automated database backups". The offsite bucket keeps dumps the R2 lifecycle rules have already expired.
 5. Run the restored environment's checks (`check_catalog`, the smoke tests that apply).
 
-**Isolated restore drill** (once after the first backfill, then at least twice a year, and after any change to the job): do steps 1, 2 and 4 above on a machine with Docker, restoring the newest `daily/` dump into a disposable PostGIS 18 container, and `check_catalog` on it; for the media, restore the originals of three photographs into a scratch directory and compare each with its key's SHA-256. Then run `deep-check`. Record the date, the manifest used and the result in the owner's notes. A backup counts only after it has been restored once.
+**Isolated restore drill** (once after the first backfill, then at least twice a year, and after any change to the job). Record the date, the manifest used and the result in the owner's notes. A backup counts only after it has been restored once. There are two sizes, and they are scheduled apart (see "B2 limits and daily caps"):
 
-**Monitoring.** `serendipeak-offsite` heartbeat (see "Monitoring and alerts"), plus a weekly `check` and a monthly `deep-check` from any machine with Docker and the offsite variables:
+- **Targeted drill**: on a machine with Docker, restore the newest `daily/` dump into a disposable PostGIS 18 container and run `check_catalog` on it (steps 2 and 4 above, for that one dump), then download the originals of three photographs into a scratch directory and compare each with its key's SHA-256. It reads a dump and three photographs, so it fits inside almost any daily limit.
+- **Full drill**: steps 1 to 5 above for the whole bucket, verified against the newest manifest. It reads every object once, as `deep-check` does, so it replaces a `deep-check` of the same day.
+
+### B2 limits and daily caps
+
+Three different things decide whether B2 lets the job read. Exceeding the first two costs money; reaching the third stops the traffic:
+
+- **Storage and egress allowances.** A free amount of storage, and a free amount of download bandwidth tied to the stored volume, after which the provider bills per GB. The allowances and prices are provider-dependent and change; read them on Backblaze's current pricing page, not in this file.
+- **Transaction classes.** Backblaze counts API calls in classes with their own daily free allowance. Reading an object is a download transaction, and listing a bucket is a different class. `rclone hashsum --download` costs one read transaction per object plus its bytes, so a catalog of a few hundred objects spends a few hundred of them. Check the classification on Backblaze's transaction page.
+- **Daily caps.** Limits the account owner sets (Caps & Alerts in the Backblaze console) on storage, download bandwidth and each transaction class. A cap is not a bill: it is a stop. It applies even when the usage would have been free, and a cap set or defaulted below the free allowance blocks earlier than the allowance would. Raising a cap above the free allowance may require a payment method on the account. Values and defaults are the owner's choice and the provider's, so record the ones in force in the owner's notes.
+
+**Which limit was reached.** In the console open Caps & Alerts: each cap shows its daily limit and today's usage, and the one at 100% is the cause (download bandwidth, or the transaction class that covers reads). Both are raised in the same page.
+
+**What the `403` means.** Reads (`hashsum --download`, `copy` from B2) fail with `403` while uploads and listings may still work, because only the exhausted resource is refused. The key, its capabilities and the bucket are fine, so do not rotate or recreate the key. The job reports the step (`hashing objects under <remote> failed`, or a failed copy) and never reaches a verdict on the data: a `403` is not corruption, and no object was compared. Nothing is written or deleted by the failure, and the next run or check starts clean.
+
+**Reset.** Caps are daily and reset at midnight UTC according to Backblaze's current documentation; confirm that on the console. Verify downloads are available again before starting anything large by reading one small object, for example the newest manifest in `manifests/`, and checking in Caps & Alerts that today's usage is back near zero. Then start with the cheap operation (`check`), not the whole drill.
+
+**Scheduling under restrictive limits.** When the daily download cap is smaller than the bucket, a full `deep-check` or full drill cannot finish in one day, and a run that reaches the cap halfway proves nothing about the objects it did not reach while spending the whole day's allowance, which also starves the next scheduled `run` and `check`. Therefore:
+
+- Run `deep-check` and the full drill on a day chosen for it, outside the cron window (05:00 UTC), never on the day of another large read, and never together: the drill already re-verifies everything.
+- Before starting, compare the cap with the bucket: the bucket's size from the console against the daily download cap, and its object count against the read-transaction cap. If either does not fit, raise the cap for that day (below) or do the targeted drill instead.
+- Never use a failed large read as evidence of a bad backup, and never retry it the same day.
+
+**Emergency recovery when the cap blocks the download.** Recovering matters more than the cap. Decide deliberately, in this order:
+
+1. Confirm with Caps & Alerts that a cap, and not the key or the bucket, is the cause (the `403` above), and which cap.
+2. If the data needed is small (one dump, a few photographs), wait for the reset or download only that: the newest `daily/` dump and its `.sha256` are one object each.
+3. If the full bucket is needed now, raise only the exhausted cap, to a value a little above the bucket's size or object count, and leave the others. Estimate the cost first from the pricing page: the downloaded volume beyond the free egress allowance, times the current per-GB price, plus any transaction above its free allowance. For a few GB the cost is expected to be negligible, but it is the owner's call and the account's billing applies.
+4. Download with the read-only key (`rclone copy --checksum`, as in "Recovery from the offsite copy"), verify against the newest manifest, and only then restore.
+5. When the recovery is finished, put the cap back to its previous value and note the date, the old and new values and the reason in the owner's notes. A cap left high removes the protection against a runaway read or a stolen key that downloads in a loop.
+
+**Recommended cadence**, sized so that routine operations stay far below any daily limit:
+
+| Operation                       | How often                                                                | Download load                                  |
+| ------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------- |
+| `run`                           | daily, from the cron                                                     | only what is new                               |
+| `check`                         | weekly, and after any change to the job                                  | one dump                                       |
+| Targeted drill                  | after the first backfill, then every quarter, and after any change       | one dump and three photographs                 |
+| `deep-check`                    | monthly while the bucket fits the daily limits; otherwise every quarter, on a day set aside for it | the whole bucket      |
+| Full drill                      | once a year, or after an incident or a provider change, on a day set aside for it, replacing that day's `deep-check` | the whole bucket |
+
+If the bucket outgrows caps that cannot be raised, a verification that stops at the cap is worthless: accept the targeted drill as the routine proof and raise the cap only on the day a full one is needed.
+
+**Monitoring.** `serendipeak-offsite` heartbeat (see "Monitoring and alerts"), plus the `check` and `deep-check` of the cadence above, from any machine with Docker and the offsite variables:
 
 ```sh
 docker run --rm --env-file <env file> serendipeak-offsite check
@@ -310,7 +366,7 @@ Both exit non-zero on any problem and never send a heartbeat, so running them ca
 
 **Rollback.** The service is additive. Stop it by removing its schedule (and the heartbeat, or pause the monitor); delete the Railway service if it is no longer wanted. Nothing in the production R2 buckets, the database or the existing `backup` service depends on it. The offsite bucket and its manifests stay and can be deleted from the Backblaze console, deliberately, as a separate step. A faulty release of the script is rolled back like any service, and an older manifest remains valid.
 
-**Costs.** Backblaze B2 charges $6.95 per TB per month for storage with the first 10 GB free, and its egress is free up to three times the average monthly stored data (then $0.01 per GB). Listing and download requests are free or inside the daily free allowance at this volume. The catalog is about 74 mountains with at most a 30 MiB original each plus renditions, a few GB at worst: **storage is zero to a few cents a month** and stays inside the free tier for a long time. The dumps are small and are kept forever offsite, a negligible, steadily growing amount. The daily run reads from B2 only the objects that are new, so egress is a small fraction of the free allowance; `deep-check` and a full restore read everything once, which a few GB of storage covers many times over. The Railway service runs for minutes a day and adds cents at most to the project's usage, which has a soft and a hard limit: check usage after the first backfill. R2 egress to the job is free.
+**Costs.** The figures in this paragraph are Backblaze's at the time of writing and are provider-dependent: confirm them on its pricing page. B2 charged $6.95 per TB per month for storage with the first 10 GB free, and its egress was free up to three times the average monthly stored data (then $0.01 per GB). Listing and download requests were free or inside the daily free allowance at this volume, unless a daily cap is set lower (see "B2 limits and daily caps"). The catalog is about 74 mountains with at most a 30 MiB original each plus renditions, a few GB at worst: **storage is zero to a few cents a month** and stays inside the free tier for a long time. The dumps are small and are kept forever offsite, a negligible, steadily growing amount. The daily run reads from B2 only the objects that are new, so egress is a small fraction of the free allowance; `deep-check` and a full restore read everything once, which a few GB of storage covers many times over. The Railway service runs for minutes a day and adds cents at most to the project's usage, which has a soft and a hard limit: check usage after the first backfill. R2 egress to the job is free.
 
 **Limits to keep in mind.** The copy is not a point-in-time snapshot: an object created after the listing waits for the next run. Same-size corruption at rest of an object already in the manifest is caught by `deep-check`, not by `run`. Deletions never propagate, so deleted or replaced production objects accumulate offsite; clearing them is a manual administrative step. Object Lock is not enabled, so an attacker holding an administrative B2 key could still delete versions; keep that key out of the service and out of automation.
 
