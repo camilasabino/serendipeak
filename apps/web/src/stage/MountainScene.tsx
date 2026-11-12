@@ -2,6 +2,7 @@ import { useImperativeHandle, useRef, type Ref } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import { sceneCanRetry } from './experience';
+import type { AtlasMarker } from './globe/atlasMarkers';
 import type { AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
@@ -35,6 +36,7 @@ interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
+	markers?: readonly AtlasMarker[];
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
 }
@@ -43,6 +45,7 @@ export default function MountainScene({
 	store,
 	target,
 	atlas,
+	markers,
 	observer,
 	controllerRef
 }: MountainSceneProps) {
@@ -53,6 +56,7 @@ export default function MountainScene({
 			sceneFactory: SCENE_FACTORY,
 			target,
 			atlas,
+			markers,
 			observer
 		});
 	useImperativeHandle(controllerRef, () => ({ readCamera, resetView }), [readCamera, resetView]);

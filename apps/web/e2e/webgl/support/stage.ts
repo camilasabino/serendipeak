@@ -371,3 +371,30 @@ export function expectedDisplayRange(base: number, stage: { width: number; heigh
 
 	return base * scale;
 }
+
+export interface AtlasMarkerReading {
+	slug: string;
+	visible: boolean;
+	window?: { x: number; y: number };
+	distanceMeters: number;
+	pointPixels: number;
+	labelShown: boolean;
+}
+
+export interface AtlasLayerReading {
+	shown: boolean;
+	layers: number;
+	entities: number;
+	depthTestAgainstTerrain: boolean;
+	markers: AtlasMarkerReading[];
+}
+
+/** The atlas marker layer as its last visibility pass left it; undefined without a scene. */
+export async function atlasLayer(page: Page): Promise<AtlasLayerReading | undefined> {
+	return page.evaluate(
+		() =>
+			(
+				window as Window & { __serendipeakAtlas?: () => AtlasLayerReading | undefined }
+			).__serendipeakAtlas?.() ?? undefined
+	);
+}

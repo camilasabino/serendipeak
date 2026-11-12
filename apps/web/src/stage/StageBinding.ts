@@ -1,3 +1,4 @@
+import type { AtlasMarker } from './globe/atlasMarkers';
 import type { AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
@@ -23,6 +24,7 @@ export interface StageBindingOptions {
 	createScene: CreateScene;
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
+	markers?: readonly AtlasMarker[];
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
 }
@@ -36,12 +38,14 @@ export class StageBinding {
 	private readonly observer: ResizeObserver;
 	private target: SceneTarget | undefined;
 	private atlas: AtlasView | undefined;
+	private markers: readonly AtlasMarker[] | undefined;
 	private published: StageSize | undefined;
 	private disposed = false;
 
 	constructor(private readonly options: StageBindingOptions) {
 		this.target = options.target;
 		this.atlas = options.atlas;
+		this.markers = options.markers;
 		this.session = this.openSession();
 		this.present();
 
@@ -63,6 +67,14 @@ export class StageBinding {
 		}
 		this.atlas = atlas;
 		this.session.setAtlas(atlas);
+	}
+
+	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
+		if (this.disposed) {
+			return;
+		}
+		this.markers = markers;
+		this.session.setAtlasMarkers(markers);
 	}
 
 	resetView(): ResetResult {
@@ -123,6 +135,7 @@ export class StageBinding {
 		this.published = undefined;
 		this.publishSize();
 		this.session.setAtlas(this.atlas);
+		this.session.setAtlasMarkers(this.markers);
 		this.session.setTarget(this.target);
 	}
 

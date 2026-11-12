@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ATLAS_STAGE_LABEL } from '../atlas/atlasCopy';
 import { OpenContinentsProvider } from '../atlas/OpenContinentsContext';
+import { toAtlasMarkers } from '../atlas/toAtlasMarkers';
 import { ATLAS_VIEW } from '../stage/globe/atlasView';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
@@ -23,7 +24,8 @@ interface StageLayoutProps {
  * navigation between the daily page, mountain pages and the atlas.
  *
  * A mountain page presents its mountain. The atlas presents none: entering it lets go of the
- * mountain shown before and flies to the overview, however it was reached.
+ * mountain shown before and flies to the overview, however it was reached. Only the atlas draws
+ * its mountains on the globe, from the same index its list was rendered with.
  */
 export function StageLayout({ model, children }: StageLayoutProps) {
 	const coordinator = useTransitionCoordinator();
@@ -31,6 +33,11 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	const [openContinents] = useState(() => new Set<string>());
 	const onAtlas = model.kind === 'atlas';
 	const target = onAtlas ? undefined : toSceneTarget(mountainOf(model));
+	const atlasMountains = onAtlas ? model.mountains : undefined;
+	const markers = useMemo(
+		() => (atlasMountains ? toAtlasMarkers(atlasMountains) : undefined),
+		[atlasMountains]
+	);
 
 	return (
 		<OpenContinentsProvider value={openContinents}>
@@ -46,6 +53,7 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 							store={store}
 							target={target}
 							atlas={onAtlas ? ATLAS_VIEW : undefined}
+							markers={markers}
 							observer={coordinator}
 						/>
 					</StageBoundary>

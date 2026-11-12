@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { exposeCameraReading } from './e2eDiagnostics';
+import { exposeAtlasLayer, exposeCameraReading } from './e2eDiagnostics';
+import type { AtlasLayerReading } from './globe/atlasMarkers';
 import type { CameraReading } from './globe/cameraReading';
 
 const READING: CameraReading = {
@@ -42,5 +43,30 @@ describe('exposeCameraReading', () => {
 
 		releaseSecond();
 		expect(diagnostic()).toBeUndefined();
+	});
+});
+
+describe('exposeAtlasLayer', () => {
+	const LAYER: AtlasLayerReading = {
+		shown: true,
+		layers: 1,
+		entities: 0,
+		depthTestAgainstTerrain: false,
+		markers: []
+	};
+	const atlas = () =>
+		(globalThis as unknown as { window: { __serendipeakAtlas?: () => unknown } }).window
+			.__serendipeakAtlas;
+
+	it('publishes the layer reader on window, and a stale release leaves the current one', () => {
+		vi.stubGlobal('window', {});
+		const releaseFirst = exposeAtlasLayer(() => undefined);
+		const releaseSecond = exposeAtlasLayer(() => LAYER);
+
+		releaseFirst();
+		expect(atlas()?.()).toEqual(LAYER);
+
+		releaseSecond();
+		expect(atlas()).toBeUndefined();
 	});
 });

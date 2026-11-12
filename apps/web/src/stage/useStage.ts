@@ -6,6 +6,7 @@ import {
 	useSyncExternalStore,
 	type RefObject
 } from 'react';
+import { sameAtlasMarkers, type AtlasMarker } from './globe/atlasMarkers';
 import { sameAtlasView, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
@@ -22,6 +23,7 @@ export interface UseStageOptions {
 	sceneFactory: SceneFactory;
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
+	markers?: readonly AtlasMarker[];
 	observer?: PresentationObserver;
 }
 
@@ -41,12 +43,14 @@ export function useStage({
 	sceneFactory,
 	target,
 	atlas,
+	markers,
 	observer
 }: UseStageOptions): UseStageResult {
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const bindingRef = useRef<StageBinding | undefined>(undefined);
 	const targetRef = useRef(target);
 	const atlasRef = useRef(atlas);
+	const markersRef = useRef(markers);
 	const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
 	// A new object with the same content must not restart the presentation.
@@ -60,12 +64,23 @@ export function useStage({
 		setStableAtlas(atlas);
 	}
 
+	// Its own path, so a catalog that changes never restarts the overview or its orbit.
+	const [stableMarkers, setStableMarkers] = useState(markers);
+	if (!sameAtlasMarkers(stableMarkers, markers)) {
+		setStableMarkers(markers);
+	}
+
 	// Declared before the target effect so that, in one commit, the atlas a released target falls
 	// back to is already known.
 	useEffect(() => {
 		atlasRef.current = stableAtlas;
 		bindingRef.current?.setAtlas(stableAtlas);
 	}, [stableAtlas]);
+
+	useEffect(() => {
+		markersRef.current = stableMarkers;
+		bindingRef.current?.setAtlasMarkers(stableMarkers);
+	}, [stableMarkers]);
 
 	useEffect(() => {
 		targetRef.current = stableTarget;
@@ -85,6 +100,7 @@ export function useStage({
 			createScene: sceneFactory({ viewport }),
 			target: targetRef.current,
 			atlas: atlasRef.current,
+			markers: markersRef.current,
 			observer
 		});
 		bindingRef.current = binding;

@@ -1,5 +1,10 @@
-import type { DistanceDisplayCondition, HeightReference, Viewer } from 'cesium';
-import { SUMMIT_MARKER_STYLE, type SummitMarker, type SummitMarkerDisplay } from '../marker';
+import type { Cartesian2, Color, DistanceDisplayCondition, HeightReference, Viewer } from 'cesium';
+import {
+	MARKER_LABEL_PLATE,
+	SUMMIT_MARKER_STYLE,
+	type SummitMarker,
+	type SummitMarkerDisplay
+} from '../marker';
 import type { CesiumModule } from './CesiumModule';
 
 const SUMMIT_MARKER_ID = 'summit-marker';
@@ -7,6 +12,8 @@ const SUMMIT_MARKER_ID = 'summit-marker';
 export class SummitMarkers implements SummitMarkerDisplay {
 	private readonly heightReference: HeightReference;
 	private readonly distance: DistanceDisplayCondition;
+	private readonly plate: Color;
+	private readonly padding: Cartesian2;
 
 	constructor(
 		private readonly cesium: CesiumModule,
@@ -14,6 +21,13 @@ export class SummitMarkers implements SummitMarkerDisplay {
 	) {
 		this.heightReference = cesium.HeightReference.CLAMP_TO_TERRAIN;
 		this.distance = new cesium.DistanceDisplayCondition(0, SUMMIT_MARKER_STYLE.maxDistanceMeters);
+		this.plate = cesium.Color.fromCssColorString(MARKER_LABEL_PLATE.color).withAlpha(
+			MARKER_LABEL_PLATE.alpha
+		);
+		this.padding = new cesium.Cartesian2(
+			MARKER_LABEL_PLATE.paddingPixels.x,
+			MARKER_LABEL_PLATE.paddingPixels.y
+		);
 	}
 
 	show({ latitude, longitude, elevationMeters, label }: SummitMarker): void {
@@ -39,7 +53,8 @@ export class SummitMarkers implements SummitMarkerDisplay {
 				outlineColor: Color.BLACK,
 				outlineWidth: 3,
 				showBackground: true,
-				backgroundColor: Color.BLACK.withAlpha(0.45),
+				backgroundColor: this.plate,
+				backgroundPadding: this.padding,
 				verticalOrigin: VerticalOrigin.BOTTOM,
 				pixelOffset: new Cartesian2(0, -SUMMIT_MARKER_STYLE.labelOffsetPixels),
 				heightReference: this.heightReference,

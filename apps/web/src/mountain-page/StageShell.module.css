@@ -18,6 +18,8 @@
 	box-sizing: border-box;
 	padding: var(--sp-space-5);
 	overflow: hidden;
+	/* Opaque: the canvas renders beneath while the scene loads, and atlas markers must not show through. */
+	background: var(--sp-stage);
 	color: var(--sp-paper);
 	text-align: center;
 }

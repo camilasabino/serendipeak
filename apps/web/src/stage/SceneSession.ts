@@ -4,6 +4,7 @@ import {
 	overviewRangeMeters,
 	type AtlasView
 } from './globe/atlasView';
+import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { CameraOutcome } from './globe/choreography';
@@ -65,6 +66,7 @@ export class SceneSession {
 	private free = false;
 	private target: SceneTarget | undefined;
 	private atlas: AtlasView | undefined;
+	private markers: readonly AtlasMarker[] | undefined;
 	private stage: StageSize | undefined;
 	private stopped = false;
 	private revealed = false;
@@ -147,6 +149,18 @@ export class SceneSession {
 			return;
 		}
 		this.publishRotation();
+	}
+
+	/**
+	 * The mountains drawn on the globe, kept apart from the overview so a new catalog never moves
+	 * the camera. Kept for a scene that does not exist yet, such as one a retry builds.
+	 */
+	setAtlasMarkers(next: readonly AtlasMarker[] | undefined): void {
+		if (this.stopped) {
+			return;
+		}
+		this.markers = next;
+		this.scene?.setAtlasMarkers(next);
 	}
 
 	/** Pauses the ambient orbit, or resumes it, flying back to the overview if the camera left it. */
@@ -288,6 +302,9 @@ export class SceneSession {
 
 		if (this.stage) {
 			ready.updateStage(this.stage);
+		}
+		if (this.markers) {
+			ready.setAtlasMarkers(this.markers);
 		}
 		if (this.target) {
 			this.begin(this.target);

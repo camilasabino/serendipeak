@@ -4,6 +4,8 @@ const cesium = vi.hoisted(() => ({
 	viewer: undefined as unknown as FakeViewer,
 	releaseLayerListener: vi.fn(),
 	releaseFlight: vi.fn(),
+	releaseAtlas: vi.fn(),
+	atlasSets: [] as unknown[],
 	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
 	holdInputs: vi.fn(),
 	orbits: [] as { periodSeconds: number; running: boolean }[],
@@ -80,6 +82,19 @@ vi.mock('./SummitMarkers', () => ({
 	SummitMarkers: class {
 		hide() {}
 		show() {}
+	}
+}));
+vi.mock('./AtlasMarkers', () => ({
+	AtlasMarkers: class {
+		set(markers: unknown) {
+			cesium.atlasSets.push(markers);
+		}
+		read() {
+			return { shown: cesium.atlasSets.at(-1) !== undefined };
+		}
+		release() {
+			cesium.releaseAtlas();
+		}
 	}
 }));
 vi.mock('./ViewerOrbit', () => ({
@@ -349,6 +364,30 @@ describe('CesiumGlobeScene.destroy', () => {
 		scene.destroy();
 
 		expect(order).toEqual(['reading', 'orientation', 'flight', 'viewer']);
+	});
+
+	it('releases the atlas markers and their reading before the viewer', async () => {
+		const order: string[] = [];
+		cesium.viewer = fakeViewer(
+			() => {},
+			() => {},
+			() => order.push('viewer')
+		);
+		cesium.releaseAtlas.mockImplementation(() => order.push('atlas markers'));
+		const scene = await CesiumGlobeScene.create(
+			{} as HTMLElement,
+			{
+				ionToken: 'token',
+				imageryMode: 'world',
+				exposeAtlasLayer: () => () => order.push('atlas reading')
+			},
+			new AbortController().signal
+		);
+
+		scene.destroy();
+		scene.destroy();
+
+		expect(order).toEqual(['atlas reading', 'atlas markers', 'viewer']);
 	});
 
 	it('still destroys the viewer when the first disposer throws', async () => {
@@ -645,6 +684,21 @@ describe('CesiumGlobeScene ambient orbit', () => {
 		const scene = await create();
 
 		expect(scene.canOrbit()).toBe(false);
+	});
+
+	it('hands atlas markers to their layer, and nothing once destroyed', async () => {
+		cesium.atlasSets.length = 0;
+		const scene = await create();
+		const markers = [
+			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
+		] as const;
+
+		scene.setAtlasMarkers(markers);
+		scene.setAtlasMarkers(undefined);
+		scene.destroy();
+		scene.setAtlasMarkers(markers);
+
+		expect(cesium.atlasSets).toEqual([markers, undefined]);
 	});
 
 	it('hears presses and wheels on the globe until released or destroyed', async () => {

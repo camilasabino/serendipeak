@@ -5,7 +5,16 @@ import { mountainIndexEntry, serendipeakDocument } from './serendipeak-contract.
 
 const contractsDirectory = new URL('../../../../contracts/v1/', import.meta.url);
 
-export const SCENARIOS = ['ok', 'unreachable', 'malformed', 'server-error', 'no-eligible'];
+// `catalog` serves the vendored catalog's 73 mountains as the index, for tests that need real
+// density on the globe; every other route answers as in `ok`.
+export const SCENARIOS = [
+	'ok',
+	'unreachable',
+	'malformed',
+	'server-error',
+	'no-eligible',
+	'catalog'
+];
 
 const INDEX_PATH = '/api/v1/mountains';
 const API_PREFIX = `${INDEX_PATH}/`;
@@ -16,6 +25,48 @@ const CORS = { 'Access-Control-Allow-Origin': '*' };
 
 function fixture(name) {
 	return serendipeakDocument(JSON.parse(readFileSync(new URL(name, contractsDirectory), 'utf8')));
+}
+
+// The catalog has no geography, so each entry gets a synthetic continent from rough boxes around
+// its coordinates. None of it is editorial data; it only spreads the atlas list over continents.
+const CONTINENT_BOXES = [
+	['AN', ({ latitude }) => latitude < -60],
+	['NA', ({ latitude, longitude }) => longitude < -25 && latitude > 8],
+	['SA', ({ longitude }) => longitude < -25],
+	['OC', ({ latitude, longitude }) => (longitude > 110 && latitude < 0) || longitude > 160],
+	['AF', ({ latitude, longitude }) => longitude < 52 && latitude < 30],
+	['EU', ({ latitude, longitude }) => longitude < 45 && latitude >= 36],
+	['AS', () => true]
+];
+const CONTINENTS = {
+	AF: 'Africa',
+	AN: 'Antarctica',
+	AS: 'Asia',
+	EU: 'Europe',
+	NA: 'North America',
+	OC: 'Oceania',
+	SA: 'South America'
+};
+
+function catalogIndex(served) {
+	const catalog = JSON.parse(readFileSync(new URL('catalog.json', contractsDirectory), 'utf8'));
+	const mountains = catalog.mountains.map((mountain) => {
+		const known = served.get(mountain.slug);
+		if (known) {
+			return mountainIndexEntry(known);
+		}
+		const [code] = CONTINENT_BOXES.find(([, contains]) => contains(mountain.coordinates));
+		return {
+			slug: mountain.slug,
+			name: mountain.name,
+			coordinates: mountain.coordinates,
+			elevationMeters: mountain.elevationMeters,
+			continent: { code, name: CONTINENTS[code] },
+			countries: [],
+			region: null
+		};
+	});
+	return { mountains };
 }
 
 function buildRoutes() {
@@ -31,6 +82,7 @@ function buildRoutes() {
 	};
 	return {
 		index,
+		catalogIndex: catalogIndex(mountainsBySlug),
 		daily: fixture('daily-mountain.json'),
 		notFound: fixture('error-mountain-not-found.json'),
 		internal: fixture('error-internal.json'),
@@ -48,7 +100,8 @@ function decodeSlug(encoded) {
 }
 
 export function createStubApi() {
-	const { index, daily, notFound, internal, noEligible, mountainsBySlug } = buildRoutes();
+	const { index, catalogIndex, daily, notFound, internal, noEligible, mountainsBySlug } =
+		buildRoutes();
 	let scenario = 'ok';
 	let requests = [];
 
@@ -110,7 +163,7 @@ export function createStubApi() {
 			} else if (scenario === 'server-error') {
 				send(500, internal, { 'Cache-Control': 'no-store' });
 			} else {
-				send(200, index);
+				send(200, scenario === 'catalog' ? catalogIndex : index);
 			}
 			return;
 		}

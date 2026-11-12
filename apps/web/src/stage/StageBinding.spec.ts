@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeResizeObserver, type FakeViewport } from '../test/FakeResizeObserver';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
+import type { AtlasMarker } from './globe/atlasMarkers';
 import { atlasOverviewLook, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import { SceneStore } from './SceneStore';
@@ -39,6 +40,7 @@ function setup(
 		ionToken?: string;
 		target?: SceneTarget;
 		atlas?: AtlasView;
+		markers?: readonly AtlasMarker[];
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
 	} = {}
@@ -54,6 +56,7 @@ function setup(
 			createScene: factory.createScene,
 			target: options.target,
 			atlas: options.atlas,
+			markers: options.markers,
 			observer: options.observer
 		});
 
@@ -283,6 +286,23 @@ describe('StageBinding retry', () => {
 		expect(scene.overviews).toEqual([
 			{ look: atlasOverviewLook(second, { width: 800, height: 500 }), animate: false }
 		]);
+	});
+
+	it('keeps the latest atlas markers for the new attempt', async () => {
+		const first: AtlasMarker[] = [
+			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
+		];
+		const second: AtlasMarker[] = [
+			{ slug: 'b', name: 'B', latitude: 4, longitude: 5, elevationMeters: 6 }
+		];
+		const { factory, binding } = await failedBinding({ markers: first });
+		binding.setAtlasMarkers(second);
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.markerSets).toEqual([second]);
 	});
 
 	it('keeps the mountain target and the stage size for the new attempt', async () => {
@@ -656,5 +676,36 @@ describe('StageBinding transitions', () => {
 		binding.setTarget(FITZ_ROY);
 
 		await expect(transition.arrival).resolves.toBe('interrupted');
+	});
+});
+
+describe('StageBinding atlas markers', () => {
+	const MARKERS: AtlasMarker[] = [
+		{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
+	];
+
+	it('hands the mounted markers to the scene, then each update, on the same scene', async () => {
+		const { factory, mount } = setup({ markers: MARKERS });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.setAtlasMarkers(undefined);
+		binding.setAtlasMarkers([]);
+
+		expect(scene.markerSets).toEqual([MARKERS, undefined, []]);
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('does no marker work after disposal', async () => {
+		const { factory, mount } = setup();
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.dispose();
+		binding.setAtlasMarkers(MARKERS);
+
+		expect(scene.markerSets).toEqual([]);
 	});
 });

@@ -1,3 +1,4 @@
+import type { AtlasLayerReading, ExposeAtlasLayer } from './globe/atlasMarkers';
 import type {
 	CameraReading,
 	ExposeCameraReading,
@@ -8,6 +9,7 @@ import type {
 type DiagnosticWindow = Window & {
 	__serendipeakCamera?: () => CameraReading | undefined;
 	__serendipeakGlobe?: () => GlobePosition | undefined;
+	__serendipeakAtlas?: () => AtlasLayerReading | undefined;
 };
 
 // Reached only through a dynamic import behind NEXT_PUBLIC_E2E_DIAGNOSTICS, so production builds omit it.
@@ -29,6 +31,17 @@ export const exposeGlobePosition: ExposeGlobePosition = (read) => {
 	return () => {
 		if (target.__serendipeakGlobe === read) {
 			delete target.__serendipeakGlobe;
+		}
+	};
+};
+
+export const exposeAtlasLayer: ExposeAtlasLayer = (read) => {
+	const target = window as DiagnosticWindow;
+	target.__serendipeakAtlas = read;
+
+	return () => {
+		if (target.__serendipeakAtlas === read) {
+			delete target.__serendipeakAtlas;
 		}
 	};
 };

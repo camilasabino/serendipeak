@@ -209,6 +209,22 @@ test.describe('@nogl Atlas navigation', () => {
 		await context.close();
 	});
 
+	test('covers the stage with an opaque loader, so nothing the globe draws shows through', async ({
+		browser
+	}) => {
+		const context = await browser.newContext({ javaScriptEnabled: false });
+		const page = await context.newPage();
+
+		await page.goto('/atlas');
+		const loader = page.locator('[data-stage] [role="status"]', { hasText: 'Preparing the atlas' });
+		const background = await loader.evaluate(
+			(element) => getComputedStyle(element).backgroundColor
+		);
+
+		expect(background).toMatch(/^rgb\(/);
+		await context.close();
+	});
+
 	test('stays useful without a globe: the failure notice, the list and its links', async ({
 		page
 	}) => {

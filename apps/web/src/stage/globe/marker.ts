@@ -13,6 +13,14 @@ export interface SummitMarkerDisplay {
 	hide(): void;
 }
 
+/** The dark plate under every marker label, so names read over snow as well as over rock. */
+export const MARKER_LABEL_PLATE = {
+	// The stage colour, near black; Cesium cannot read the CSS variable.
+	color: '#0b1219',
+	alpha: 0.78,
+	paddingPixels: { x: 7, y: 4 }
+} as const;
+
 export const SUMMIT_MARKER_STYLE = {
 	pointPixelSize: 8,
 	labelFont: '600 14px system-ui, sans-serif',

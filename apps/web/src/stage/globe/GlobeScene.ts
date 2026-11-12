@@ -1,4 +1,5 @@
 import type { Destroyable } from '../lifecycle';
+import type { AtlasMarker } from './atlasMarkers';
 import type { SceneTarget } from './camera';
 import type { CameraReading } from './cameraReading';
 import type { CameraOutcome } from './choreography';
@@ -37,6 +38,12 @@ export interface GlobeScene extends Destroyable {
 	 */
 	startOrbit(periodSeconds: number, onHalted: () => void): boolean;
 	stopOrbit(): void;
+	/**
+	 * Draws these mountains on the globe, replacing the set drawn before, or with `undefined` takes
+	 * them away at once. Markers only show where they can be seen: in front of the camera, above the
+	 * horizon and inside the stage. They take no input and never move the camera.
+	 */
+	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void;
 	/** Direct input on the globe, a press or a wheel. A new subscription replaces the previous one. */
 	subscribeInteraction(listener: () => void): () => void;
 	/** Resolves when the view is ready, superseded by a later call, or the scene is destroyed. */

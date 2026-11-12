@@ -1,3 +1,4 @@
+import type { AtlasMarker } from '../stage/globe/atlasMarkers';
 import type { SceneTarget } from '../stage/globe/camera';
 import type { CameraReading } from '../stage/globe/cameraReading';
 import type { CameraOutcome } from '../stage/globe/choreography';
@@ -114,6 +115,8 @@ export class FakeGlobeScene implements GlobeScene {
 	holdShow: boolean;
 	holdViewReady: boolean;
 	reducedMotion: boolean;
+	/** Every marker set handed to the scene, in order; `undefined` took the markers away. */
+	readonly markerSets: (readonly AtlasMarker[] | undefined)[] = [];
 	/** Every orbit started, with whether it is still turning. */
 	readonly orbits: { periodSeconds: number; running: boolean; onHalted: () => void }[] = [];
 
@@ -259,6 +262,17 @@ export class FakeGlobeScene implements GlobeScene {
 			running.running = false;
 			running.onHalted();
 		}
+	}
+
+	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
+		if (!this.destroyed) {
+			this.markerSets.push(markers);
+		}
+	}
+
+	/** The markers the scene draws now. */
+	get atlasMarkers(): readonly AtlasMarker[] | undefined {
+		return this.markerSets.at(-1);
 	}
 
 	subscribeInteraction(listener: () => void): () => void {

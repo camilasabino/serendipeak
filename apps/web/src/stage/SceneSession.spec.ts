@@ -7,6 +7,7 @@ import {
 	atlasOverviewLook,
 	overviewRangeMeters
 } from './globe/atlasView';
+import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import {
@@ -1476,5 +1477,89 @@ describe('SceneSession releasing its target off the atlas', () => {
 		session.stop();
 
 		expect(store.getSnapshot().free).toBe(false);
+	});
+});
+
+describe('SceneSession atlas markers', () => {
+	const MARKERS: AtlasMarker[] = [
+		{
+			slug: 'aconcagua',
+			name: 'Aconcagua',
+			latitude: -32.653,
+			longitude: -70.011,
+			elevationMeters: 6961
+		}
+	];
+	const MORE_MARKERS: AtlasMarker[] = [
+		...MARKERS,
+		{
+			slug: 'fitz-roy',
+			name: 'Fitz Roy',
+			latitude: -49.271,
+			longitude: -73.043,
+			elevationMeters: 3405
+		}
+	];
+
+	it('hands markers set before the scene exists to the scene before it reveals anything', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(MARKERS);
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.markerSets).toEqual([MARKERS]);
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: false }]);
+	});
+
+	it('replaces the markers on a live scene without moving the camera or the orbit', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(MARKERS);
+		const scene = factory.resolve(0);
+		await flush();
+		expect(scene.orbiting).toBe(true);
+
+		session.setAtlasMarkers(MORE_MARKERS);
+
+		expect(scene.atlasMarkers).toBe(MORE_MARKERS);
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.orbits).toHaveLength(1);
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('takes the markers away in the same step that presents the next mountain', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(MARKERS);
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.setAtlas(undefined);
+		session.setAtlasMarkers(undefined);
+		session.setTarget(ACONCAGUA);
+
+		expect(scene.atlasMarkers).toBeUndefined();
+		expect(scene.shown).toEqual([{ target: ACONCAGUA, placement: 'next' }]);
+	});
+
+	it('hands no markers to a scene for a mountain page', async () => {
+		const { session, factory } = setup();
+		session.setTarget(ACONCAGUA);
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.markerSets).toEqual([]);
+	});
+
+	it('ignores markers once stopped', async () => {
+		const { session, scene } = await readySession();
+
+		session.stop();
+		session.setAtlasMarkers(MARKERS);
+
+		expect(scene.markerSets).toEqual([]);
 	});
 });
