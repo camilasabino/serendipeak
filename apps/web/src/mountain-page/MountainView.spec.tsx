@@ -122,7 +122,7 @@ describe('minimal fixture', () => {
 	it('collapses to the name and the facts that exist', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual(['Europe', '2,000 m', '45.0000° N, 10.0000° E']);
-		expect(textsOf(html, 'p')).toEqual(["Today's mountain", '←Back to atlas']);
+		expect(textsOf(html, 'p')).toEqual(['←Back to atlas']);
 	});
 
 	it.each(['Countr', 'Region', 'Data sources', '<figure', 'About this photo'])(
@@ -136,10 +136,8 @@ describe('minimal fixture', () => {
 describe('permalink composition', () => {
 	const html = render(complete);
 
-	it("links back to today's mountain and shows no daily copy", () => {
-		expect(anchorsOf(html).filter(({ text }) => text === "Today's mountain")).toEqual([
-			expect.objectContaining({ href: '/' })
-		]);
+	it('leaves Today to the global navigation and shows no daily copy', () => {
+		expect(anchorsOf(html).filter(({ href }) => href === '/')).toEqual([]);
 		expect(html).not.toContain("Today's discovery");
 		expect(html).not.toContain('Tomorrow, another mountain.');
 	});
@@ -173,7 +171,7 @@ describe('sheet', () => {
 		const html = render(complete);
 
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
-		expect(textsOf(html, 'button')).toEqual(['View photo fullscreen']);
+		expect(textsOf(html, 'button')).toEqual(['Explore another→', 'View photo fullscreen']);
 	});
 });
 

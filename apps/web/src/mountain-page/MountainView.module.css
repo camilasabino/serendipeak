@@ -18,23 +18,8 @@
 	color: var(--sp-paper);
 }
 
-.return {
-	margin: 0 0 var(--sp-space-3);
-}
-
-.return a {
-	display: inline-flex;
-	align-items: center;
-	min-height: 2.75rem;
-	padding: 0.25rem 0;
-	color: var(--sp-mist);
-	text-decoration: none;
-}
-
-.return a:hover {
-	color: var(--sp-paper);
-	text-decoration: underline;
-	text-underline-offset: 0.18em;
+.explore {
+	margin: var(--sp-space-3) 0 0;
 }
 
 .atlas {
@@ -74,6 +59,10 @@
 }
 
 @media (min-width: 56rem) {
+	.explore {
+		display: none;
+	}
+
 	.sheet {
 		grid-area: auto;
 		grid-column: 2;
@@ -83,9 +72,5 @@
 		overscroll-behavior: contain;
 		scrollbar-gutter: stable;
 		border-left: 1px solid var(--sp-rule);
-	}
-
-	.return {
-		display: none;
 	}
 }

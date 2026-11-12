@@ -58,3 +58,11 @@
 		inset-inline-end: var(--sp-space-4);
 	}
 }
+
+.inlineError {
+	position: static;
+	max-width: none;
+	margin-top: var(--sp-space-2);
+	padding: 0;
+	background: transparent;
+}

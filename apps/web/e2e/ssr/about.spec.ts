@@ -20,6 +20,7 @@ test.describe('about page', () => {
 		expect(response.status()).toBe(200);
 		expect(titleOf(html)).toBe('About · SerendiPeak');
 		expect(descriptionOf(html)).toMatch(/one mountain every day/);
+		expect(descriptionOf(html)).toMatch(/atlas/);
 		expect(headingsOf(html)).toEqual(['Discover one mountain every day.']);
 		expect(html).toContain('<html lang="en"');
 	});
@@ -57,6 +58,45 @@ test.describe('about link in the site header', () => {
 
 			expect(html).toMatch(ABOUT_LINK);
 			expect(html).not.toMatch(/href="\/about"[^>]*aria-current/);
+		});
+	}
+});
+
+test.describe('primary navigation in the site header', () => {
+	const destinations = [
+		['Today', '/'],
+		['Atlas', '/atlas'],
+		['About', '/about']
+	] as const;
+
+	for (const path of ['/', '/mountains/aconcagua', '/atlas', '/about', '/mountains/missing']) {
+		test(`offers Today, Atlas, About and search on ${path}`, async ({ request }) => {
+			const html = await (await request.get(path)).text();
+			const nav = /<nav[^>]*aria-label="Primary"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+
+			expect(nav).toMatch(/<button[^>]*aria-haspopup="dialog"[\s\S]*> mountains<\/span>/);
+			for (const [label, href] of destinations) {
+				expect(nav).toMatch(new RegExp(`<a[^>]*href="${href}"[^>]*>${label}</a>`));
+			}
+		});
+	}
+
+	const current: Array<[string, string | null]> = [
+		['/', 'Today'],
+		['/atlas', 'Atlas'],
+		['/about', 'About'],
+		['/mountains/aconcagua', null]
+	];
+
+	for (const [path, label] of current) {
+		test(`marks ${label ?? 'nothing'} as current on ${path}`, async ({ request }) => {
+			const html = await (await request.get(path)).text();
+			const nav = /<nav[^>]*aria-label="Primary"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+			const marked = [...nav.matchAll(/<a[^>]*aria-current="page"[^>]*>([^<]*)<\/a>/g)].map(
+				(match) => match[1]
+			);
+
+			expect(marked).toEqual(label ? [label] : []);
 		});
 	}
 });

@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import type { Mountain } from '../api/contract';
 import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
+import { ExploreControl } from '../explore/ExploreControl';
 import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
-import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE, TODAY_LINK_LABEL } from './pageCopy';
+import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
 
 interface MountainViewProps {
 	mountain: Mountain;
@@ -23,13 +23,11 @@ export function MountainView({ mountain, daily, preview = false }: MountainViewP
 					{PREVIEW_NOTICE}
 				</p>
 			)}
-			{!daily && (
-				<p className={styles.return}>
-					<Link href="/">{TODAY_LINK_LABEL}</Link>
-				</p>
-			)}
 			{daily && <p className={styles.eyebrow}>{DAILY_EYEBROW}</p>}
 			<MountainInfoPanel mountain={mountain} />
+			<div className={styles.explore}>
+				<ExploreControl slug={mountain.slug} placement="panel" />
+			</div>
 			{!daily && !preview && (
 				<p className={styles.atlas}>
 					<AtlasReturnLink />

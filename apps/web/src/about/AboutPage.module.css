@@ -54,13 +54,19 @@
 	text-wrap: pretty;
 }
 
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-space-3);
+	margin-top: var(--sp-space-5);
+}
+
 .action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	box-sizing: border-box;
 	min-height: 2.75rem;
-	margin-top: var(--sp-space-5);
 	padding: 0.5rem 1rem;
 	border-radius: var(--sp-radius);
 	background: var(--sp-accent);
@@ -74,6 +80,18 @@
 
 .action:hover {
 	background: var(--sp-accent-hover);
+}
+
+.secondary {
+	border: 1px solid var(--sp-link-on-stage);
+	background: transparent;
+	color: var(--sp-link-on-stage);
+}
+
+.secondary:hover {
+	border-color: var(--sp-link-on-stage-hover);
+	background: transparent;
+	color: var(--sp-link-on-stage-hover);
 }
 
 .section {

@@ -56,7 +56,9 @@
 .link {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	box-sizing: border-box;
+	min-width: 2.75rem;
 	min-height: 2.75rem;
 	color: var(--sp-mist);
 	font-size: var(--sp-text-ui);
@@ -96,21 +98,10 @@
 	}
 }
 
-/* Below these widths the wordmark no longer fits beside the controls: search, Atlas and About,
-   then also the mountain controls. The mark stays and the link keeps its accessible name. */
-@media (max-width: 22.4rem) {
+/* Below this width the wordmark no longer fits beside search, Today, Atlas and About. The mark
+   stays and the link keeps its accessible name. */
+@media (max-width: 24rem) {
 	.name {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
-	}
-}
-
-@media (max-width: 33rem) {
-	.withMountainControls .name {
 		position: absolute;
 		width: 1px;
 		height: 1px;

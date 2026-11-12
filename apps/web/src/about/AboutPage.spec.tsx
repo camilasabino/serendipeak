@@ -6,9 +6,11 @@ import { AboutPage } from './AboutPage';
 import {
 	ABOUT_DESCRIPTION,
 	ABOUT_HEADING,
+	ABOUT_LEDE,
 	ABOUT_TITLE,
 	TODAY_FEATURES,
 	VISION_IDEAS,
+	VISION_INTRO,
 	VISION_NOTE_TITLE
 } from './aboutCopy';
 
@@ -76,6 +78,39 @@ describe('About page content', () => {
 			"See today's mountain",
 			"Back to today's mountain"
 		]);
+	});
+
+	it('offers the atlas as a second call to action next to the daily mountain', () => {
+		const intro = html.slice(0, html.indexOf('about-today'));
+
+		expect(anchorsOf(intro).map(({ href, text }) => ({ href, text }))).toEqual([
+			{ href: '/', text: "See today's mountain" },
+			{ href: '/atlas', text: 'Explore the atlas' }
+		]);
+	});
+
+	it('presents Today and the atlas as available features', () => {
+		const names = TODAY_FEATURES.map(({ name }) => name);
+		const atlas = TODAY_FEATURES.find(({ name }) => name === 'Atlas');
+
+		expect(names).toEqual(expect.arrayContaining(['Today', 'Atlas']));
+		expect(atlas?.description).toMatch(/continent/);
+		expect(atlas?.description).toMatch(/full profile/);
+	});
+
+	it('no longer lists the atlas or continent browsing as a future possibility', () => {
+		const vision = html.slice(html.indexOf('about-vision'));
+
+		expect(VISION_INTRO).not.toMatch(/to become an evolving global mountain atlas/);
+		expect(vision).not.toMatch(/by continent/i);
+		expect(VISION_IDEAS.join(' ')).not.toMatch(/continent/i);
+	});
+
+	it('does not claim markers, on-globe selection, country browsing or a hardcoded mountain count', () => {
+		const available = TODAY_FEATURES.map(({ description }) => description).join(' ');
+
+		expect(available).not.toMatch(/marker|on the globe|country|range|nearby/i);
+		expect(`${ABOUT_LEDE} ${ABOUT_DESCRIPTION} ${available}`).not.toMatch(/\d[\d,]*\s+mountains/);
 	});
 
 	it('links nowhere outside the site', () => {

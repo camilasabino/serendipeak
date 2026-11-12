@@ -48,7 +48,8 @@ export const PREVIEW_NOTICE =
 	'Preview of the saved draft. This mountain is not published, so visitors cannot see this page.';
 export const DAILY_EYEBROW = "Today's discovery";
 export const DAILY_CUE = 'Tomorrow, another mountain.';
-export const TODAY_LINK_LABEL = "Today's mountain";
+export const TODAY_LINK_LABEL = 'Today';
+export const TODAY_PATH = '/';
 
 export function revealLabel(daily: boolean): string {
 	return daily ? "Revealing today's mountain..." : 'Revealing the mountain...';

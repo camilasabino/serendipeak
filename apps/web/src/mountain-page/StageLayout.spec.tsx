@@ -5,7 +5,7 @@ import { contractFixture } from '../api/test-support/contractFixtures';
 import { TestExperience } from '../test/TestExperience';
 import { StageLayout } from './StageLayout';
 import { MountainView } from './MountainView';
-import { countOf } from './test-support/markup';
+import { countOf, textsOf } from './test-support/markup';
 import type { MountainModel } from './pageModel';
 
 const mountain = contractFixture('mountain-complete.json') as Mountain;
@@ -50,7 +50,7 @@ describe.each([
 
 	it('renders the loader as the only stage content before the globe mounts', () => {
 		expect(countOf(html, 'canvas')).toBe(0);
-		expect(countOf(html.replace(/<figure[\s\S]*?<\/figure>/, ''), 'button')).toBe(0);
+		expect(textsOf(html, 'button')).toEqual(['Explore another→', 'View photo fullscreen']);
 		expect(html).not.toMatch(/role="alert"|cesium/i);
 	});
 });

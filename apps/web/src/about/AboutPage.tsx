@@ -1,9 +1,11 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { ATLAS_PATH } from '../atlas/atlasQuery';
 import { TopographicMotif } from '../mountain-page/TopographicMotif';
 import styles from './AboutPage.module.css';
 import {
 	ABOUT_DESCRIPTION,
+	ATLAS_ACTION_LABEL,
 	ABOUT_EYEBROW,
 	ABOUT_HEADING,
 	ABOUT_LEDE,
@@ -36,9 +38,14 @@ export function AboutPage() {
 						<p className={styles.eyebrow}>{ABOUT_EYEBROW}</p>
 						<h1 className={styles.title}>{ABOUT_HEADING}</h1>
 						<p className={styles.lede}>{ABOUT_LEDE}</p>
-						<Link className={styles.action} href="/">
-							{TODAY_ACTION_LABEL}
-						</Link>
+						<div className={styles.actions}>
+							<Link className={styles.action} href="/">
+								{TODAY_ACTION_LABEL}
+							</Link>
+							<Link className={`${styles.action} ${styles.secondary}`} href={ATLAS_PATH}>
+								{ATLAS_ACTION_LABEL}
+							</Link>
+						</div>
 					</div>
 
 					<section className={styles.section} aria-labelledby="about-today">

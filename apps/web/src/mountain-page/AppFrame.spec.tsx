@@ -70,19 +70,30 @@ describe('AppFrame header', () => {
 		}
 	});
 
-	it("offers today's mountain and a usable Explore control on a permalink", () => {
+	it('offers a usable Explore control in the header on a permalink', () => {
 		const html = render({ model: permalink });
 
-		expect(anchorsOf(html).map(({ text }) => text)).toContain("Today's mountain");
 		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
 		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
 		expect(html).toContain('aria-busy="false"');
 	});
 
-	it('offers only the Explore control on the daily page', () => {
+	it('offers Today once, in the header, on the daily page and on a permalink', () => {
+		for (const props of [{ model: dailyModel }, { model: permalink }]) {
+			const html = render(props);
+
+			expect(
+				anchorsOf(html)
+					.filter(({ href }) => href === '/')
+					.map(({ text }) => text)
+			).toEqual(['SerendiPeak', 'Today']);
+			expect(anchorsOf(html).map(({ text }) => text)).not.toContain("Today's mountain");
+		}
+	});
+
+	it('offers the Explore control on the daily page', () => {
 		const html = render({ model: dailyModel });
 
-		expect(anchorsOf(html).map(({ text }) => text)).not.toContain("Today's mountain");
 		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
 		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
 	});
@@ -111,7 +122,8 @@ describe('AppFrame About link', () => {
 
 		expect(countOf(html, 'nav')).toBe(1);
 		expect(nav).toContain('aria-label="Primary"');
-		expect(anchorsOf(nav).slice(0, 2)).toMatchObject([
+		expect(anchorsOf(nav).slice(0, 3)).toMatchObject([
+			{ href: '/', text: 'Today' },
 			{ href: '/atlas', text: 'Atlas' },
 			{ href: '/about', text: 'About' }
 		]);
@@ -119,10 +131,10 @@ describe('AppFrame About link', () => {
 		expect(html.indexOf('</nav>')).toBeLessThan(html.indexOf('</header>'));
 	});
 
-	it('keeps the mountain controls in the same navigation after About', () => {
+	it('keeps the Explore control in the same navigation after About', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
-		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Atlas', 'About', "Today's mountain"]);
+		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Today', 'Atlas', 'About']);
 		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'Explore another→']);
 	});
 
@@ -146,6 +158,24 @@ describe('AppFrame About link', () => {
 
 		expect(onAtlas?.attributes).toContain('aria-current="page"');
 		expect(elsewhere?.attributes).not.toContain('aria-current');
+	});
+
+	it('marks Today as the current page only on the home route', () => {
+		const today = (pathname: string) =>
+			anchorsOf(render({ model: dailyModel }, pathname)).find(
+				({ text, href }) => href === '/' && text === 'Today'
+			);
+
+		expect(today('/')?.attributes).toContain('aria-current="page"');
+		for (const pathname of ['/atlas', '/about', '/mountains/[slug]']) {
+			expect(today(pathname)?.attributes).not.toContain('aria-current');
+		}
+	});
+
+	it('leaves every primary destination unmarked on a mountain permalink', () => {
+		const nav = render({ model: permalink }, '/mountains/[slug]').match(/<nav[\s\S]*?<\/nav>/)?.[0];
+
+		expect(nav).not.toContain('aria-current');
 	});
 
 	it('marks About as the current page only on the About route', () => {

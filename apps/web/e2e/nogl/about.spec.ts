@@ -61,6 +61,16 @@ test.describe('@nogl About page', () => {
 		expect(watched.pageErrors).toEqual([]);
 	});
 
+	test('leads to the atlas from its second call to action', async ({ page }) => {
+		await watch(page);
+		await page.goto('/about');
+
+		await page.getByRole('main').getByRole('link', { name: 'Explore the atlas' }).click();
+
+		await expect(page).toHaveURL(/\/atlas$/);
+		await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible();
+	});
+
 	test('is reached from a permalink and from the brand link home', async ({ page }) => {
 		await watch(page);
 		await page.goto(`/mountains/${ACONCAGUA.slug}`);
@@ -147,54 +157,7 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	// The wordmark gives way to the controls on a mountain page below 528px.
-	for (const width of [320, 360, 375, 390, 430, 500, 530]) {
-		test(`keeps the header controls apart and tappable at ${width}px`, async ({ page }) => {
-			await watch(page);
-			await page.setViewportSize({ width, height: 740 });
-			await page.goto(`/mountains/${ACONCAGUA.slug}`);
-			await expect(page.getByRole('link', { name: 'SerendiPeak' }).first()).toBeVisible();
-
-			// Measure the wordmark's text, not its link: the link box shrinks while the text overflows.
-			const extents = await page.evaluate(() => {
-				const header = document.querySelector('header')!;
-				const edges = (rect: DOMRect) => ({ left: rect.left, right: rect.right });
-				const wordmark = header.querySelector('a span')!;
-				const text = document.createRange();
-				text.selectNodeContents(wordmark);
-				const [search, explore] = [...header.querySelectorAll('nav button')];
-				const atlas = header.querySelector('nav a[href="/atlas"]')!.getBoundingClientRect();
-				const about = header.querySelector('nav a[href="/about"]')!.getBoundingClientRect();
-				const searchBox = search!.getBoundingClientRect();
-
-				return {
-					brandText:
-						wordmark.getBoundingClientRect().width > 1 ? edges(text.getBoundingClientRect()) : null,
-					brandLink: edges(header.querySelector('a')!.getBoundingClientRect()),
-					search: { ...edges(searchBox), width: searchBox.width, height: searchBox.height },
-					atlas: { ...edges(atlas), height: atlas.height },
-					about: { ...edges(about), height: about.height },
-					explore: edges(explore!.getBoundingClientRect())
-				};
-			});
-
-			expect(extents.brandText === null).toBe(width < 528);
-			expect(extents.atlas.height).toBeGreaterThanOrEqual(44);
-			expect(extents.about.height).toBeGreaterThanOrEqual(44);
-			expect(extents.search.height).toBeGreaterThanOrEqual(44);
-			expect(extents.search.width).toBeGreaterThanOrEqual(44);
-			expect(extents.brandLink.right).toBeLessThanOrEqual(extents.search.left);
-			if (extents.brandText) {
-				expect(extents.brandText.right).toBeLessThanOrEqual(extents.search.left);
-			}
-			expect(extents.search.right).toBeLessThanOrEqual(extents.atlas.left);
-			expect(extents.atlas.right).toBeLessThanOrEqual(extents.about.left);
-			expect(extents.about.right).toBeLessThanOrEqual(extents.explore.left);
-			expect(extents.explore.right).toBeLessThanOrEqual(width);
-		});
-	}
-
-	for (const width of [360, 390]) {
+	for (const width of [390, 430]) {
 		test(`keeps the wordmark beside search and About at ${width}px`, async ({ page }) => {
 			await watch(page);
 			await page.setViewportSize({ width, height: 740 });

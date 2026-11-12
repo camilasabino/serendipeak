@@ -68,7 +68,8 @@ for (const mountain of [complete, sparse, minimal]) {
 			expect(labels.some((text) => text.includes('Wikipedia'))).toBe(false);
 			expect(html.includes('Data sources')).toBe(mountain.sources !== undefined);
 			expect(html.includes('<figure')).toBe(mountain.primaryImage !== undefined);
-			expect(labels.filter((text) => text === "Today's mountain")).toHaveLength(2);
+			expect(labels).not.toContain("Today's mountain");
+			expect(labels.filter((text) => text === 'Today')).toHaveLength(1);
 		});
 	});
 }
@@ -101,15 +102,14 @@ test.describe('minimal permalink', () => {
 test.describe('daily page', () => {
 	test('composes the eyebrow, the cue and no link to itself', async ({ request }) => {
 		const html = await (await request.get('/?utm=x')).text();
-		const labels = anchorsOf(html).map(({ text }) => text);
-
 		expect(headingsOf(html)).toEqual([daily.mountain.name]);
 		expect(html.indexOf('Today&#x27;s discovery')).toBeGreaterThan(-1);
 		expect(html.indexOf('Today&#x27;s discovery')).toBeLessThan(html.indexOf('<h1'));
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));
-		expect(labels).not.toContain("Today's mountain");
+		expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/"[^>]*>Today<\/a>/);
 		expect(textsOf(html, 'button')).toEqual([
 			'Search mountains',
+			'Explore another→',
 			'Explore another→',
 			'View photo fullscreen'
 		]);

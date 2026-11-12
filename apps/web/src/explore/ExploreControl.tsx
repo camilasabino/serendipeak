@@ -9,10 +9,17 @@ interface ExploreButtonProps {
 	state: ExploreState;
 	onExplore: () => void;
 	buttonRef?: Ref<HTMLButtonElement>;
+	placement?: 'header' | 'panel';
 }
 
 // Stays focusable while busy: the explorer ignores repeated activations itself.
-export function ExploreButton({ slug, state, onExplore, buttonRef }: ExploreButtonProps) {
+export function ExploreButton({
+	slug,
+	state,
+	onExplore,
+	buttonRef,
+	placement = 'header'
+}: ExploreButtonProps) {
 	const busy = state.status === 'loading';
 
 	return (
@@ -29,7 +36,10 @@ export function ExploreButton({ slug, state, onExplore, buttonRef }: ExploreButt
 				{!busy && <span aria-hidden="true">→</span>}
 			</button>
 			{state.status === 'failed' && state.from === slug && (
-				<p className={styles.error} role="alert">
+				<p
+					className={placement === 'panel' ? `${styles.error} ${styles.inlineError}` : styles.error}
+					role="alert"
+				>
 					{state.message}
 				</p>
 			)}
@@ -37,7 +47,12 @@ export function ExploreButton({ slug, state, onExplore, buttonRef }: ExploreButt
 	);
 }
 
-export function ExploreControl({ slug }: { slug: string }) {
+interface ExploreControlProps {
+	slug: string;
+	placement?: 'header' | 'panel';
+}
+
+export function ExploreControl({ slug, placement }: ExploreControlProps) {
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const explorer = useExplorer(buttonRef);
 	const state = useSyncExternalStore(
@@ -51,6 +66,7 @@ export function ExploreControl({ slug }: { slug: string }) {
 			slug={slug}
 			state={state}
 			buttonRef={buttonRef}
+			placement={placement}
 			onExplore={() => void explorer.explore(slug)}
 		/>
 	);
