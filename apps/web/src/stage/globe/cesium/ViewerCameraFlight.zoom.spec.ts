@@ -1,5 +1,6 @@
 import * as cesium from 'cesium';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { zoomProgress } from '../zoomStep';
 import type { CesiumModule } from './CesiumModule';
 import { ViewerCameraFlight } from './ViewerCameraFlight';
 
@@ -38,7 +39,13 @@ function setup({ groundHeight = 0 }: { groundHeight?: number } = {}) {
 		flyTo: vi.fn(),
 		cancelFlight: vi.fn(),
 		setView(options: SetView) {
-			views.push(options);
+			views.push({
+				destination: Cartesian3.clone(options.destination),
+				orientation: {
+					direction: Cartesian3.clone(options.orientation.direction),
+					up: Cartesian3.clone(options.orientation.up)
+				}
+			});
 			Cartesian3.clone(options.destination, camera.positionWC);
 		}
 	};
@@ -118,6 +125,50 @@ describe('ViewerCameraFlight.zoom', () => {
 		expect(distances).toEqual([...distances].sort((a, b) => a - b));
 		const focusDistance = Cartesian3.distance(START, GROUND);
 		expect(distances.at(-1)).toBeCloseTo(focusDistance, 0);
+	});
+
+	// A software renderer can finish only a handful of frames inside the flight; whatever frames
+	// arrive, the dolly keeps its line of sight and ends on the same destination.
+	it.each([
+		['every 16 ms', Array.from({ length: 33 }, (_, index) => index * 16)],
+		['three frames', [0, 200, 520]],
+		['one late frame after the start', [0, 5_000]]
+	])('keeps its orientation and ends on the destination with frames %s', (_name, times) => {
+		const { flight, camera, views, listeners, frame } = setup();
+		const focusDistance = Cartesian3.distance(START, GROUND);
+
+		flight.zoom('out', 0.5);
+		for (const time of times) {
+			now = 1_000 + time;
+			frame();
+		}
+
+		expect(views).toHaveLength(times.length);
+		for (const view of views) {
+			expect(Cartesian3.equalsEpsilon(view.orientation.direction, DIRECTION, 1e-12)).toBe(true);
+			expect(Cartesian3.equalsEpsilon(view.orientation.up, UP, 1e-12)).toBe(true);
+		}
+		const distances = views.map((view) => Cartesian3.distance(view.destination, START));
+		expect(distances).toEqual([...distances].sort((a, b) => a - b));
+		expect(Cartesian3.distance(camera.positionWC, START)).toBeCloseTo(focusDistance, 0);
+		expect(listeners.size).toBe(0);
+	});
+
+	it('places the camera on the eased progress at each moment of the flight', () => {
+		const { flight, views, frame } = setup();
+		const focusDistance = Cartesian3.distance(START, GROUND);
+		const fractions = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
+
+		flight.zoom('out', 0.5);
+		for (const fraction of fractions) {
+			now = 1_000 + fraction * 500;
+			frame();
+		}
+
+		const travelled = views.map((view) => Cartesian3.distance(view.destination, START));
+		fractions.forEach((fraction, index) => {
+			expect(travelled[index]).toBeCloseTo(focusDistance * zoomProgress(fraction), 3);
+		});
 	});
 
 	it('removes its frame listener when it completes', () => {
@@ -207,6 +258,26 @@ describe('ViewerCameraFlight.zoom', () => {
 
 		expect(listeners.size).toBe(0);
 		expect(Cartesian3.equals(camera.positionWC, moved)).toBe(true);
+	});
+
+	it('lets go when something else turned the camera, without turning it back', () => {
+		const { flight, listeners, views, frame, camera } = setup();
+		flight.zoom('out', 0.5);
+		now += 100;
+		frame();
+
+		camera.directionWC = Cartesian3.normalize(
+			Cartesian3.add(camera.directionWC, UP, new Cartesian3()),
+			new Cartesian3()
+		);
+		const turned = Cartesian3.clone(camera.directionWC);
+		const applied = views.length;
+		now += 100;
+		frame();
+
+		expect(listeners.size).toBe(0);
+		expect(views).toHaveLength(applied);
+		expect(Cartesian3.equals(camera.directionWC, turned)).toBe(true);
 	});
 
 	it('stops short of the terrain on the line of sight instead of lifting the view', () => {
