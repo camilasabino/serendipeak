@@ -108,7 +108,11 @@ test.describe('daily page', () => {
 		expect(html.indexOf('Today&#x27;s discovery')).toBeLessThan(html.indexOf('<h1'));
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));
 		expect(labels).not.toContain("Today's mountain");
-		expect(textsOf(html, 'button')).toEqual(['Explore another→', 'View photo fullscreen']);
+		expect(textsOf(html, 'button')).toEqual([
+			'Search mountains',
+			'Explore another→',
+			'View photo fullscreen'
+		]);
 		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>\s*<span[^>]*>View photo fullscreen/);
 	});
 

@@ -1,0 +1,62 @@
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	box-sizing: border-box;
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+	padding: 0 0.25rem;
+	border: 0;
+	background: transparent;
+	color: var(--sp-mist);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	line-height: 1.2;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.button:hover {
+	color: var(--sp-glacier-light);
+}
+
+.button:hover .label {
+	text-decoration: underline;
+	text-underline-offset: 0.18em;
+}
+
+.icon {
+	flex: none;
+	width: 1.125rem;
+	height: 1.125rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.6;
+	stroke-linecap: round;
+}
+
+.hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* On a narrow header the magnifier stands alone; the button keeps its full accessible name. */
+@media (max-width: 30rem) {
+	.button {
+		padding: 0;
+	}
+
+	.label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}

@@ -76,3 +76,19 @@ export function serendipeakDocument(document) {
 
 	return copy;
 }
+
+const INDEX_MEMBERS = [
+	'slug',
+	'name',
+	'coordinates',
+	'elevationMeters',
+	'continent',
+	'countries',
+	'region'
+];
+
+// An entry of the mountain index is the part of a SerendiPeak mountain document that names and
+// locates it, with the same values.
+export function mountainIndexEntry(mountain) {
+	return Object.fromEntries(INDEX_MEMBERS.map((member) => [member, mountain[member]]));
+}

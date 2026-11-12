@@ -15,6 +15,7 @@ from serendipeak.catalog.entities import (
     Country,
     ImageDimensions,
     Mountain,
+    MountainIndexEntry,
     MountainStatus,
     PhotographMedia,
     PrimaryImage,
@@ -123,6 +124,23 @@ def to_mountain_with_image(
         primary_image=None if image is None else to_primary_image(image),
         osm_node_id=record.osm_node_id,
         wikidata_id=record.wikidata_id,
+    )
+
+
+def to_mountain_index_entry(
+    record: MountainRecord, region_paths: Mapping[UUID, RegionPath]
+) -> MountainIndexEntry:
+    """Reads the relations as to_mountain does; region_paths must hold the record's region."""
+    region = None if record.region_id is None else region_paths[record.region_id]
+
+    return MountainIndexEntry(
+        slug=record.slug,
+        name=LocalizedText(en=record.name_en, es=record.name_es, pt=record.name_pt),
+        coordinates=to_coordinates(record),
+        elevation_meters=record.elevation_meters,
+        continent=to_continent(record.continent),
+        countries=to_countries(link.country for link in record.country_links.all()),
+        region=region,
     )
 
 

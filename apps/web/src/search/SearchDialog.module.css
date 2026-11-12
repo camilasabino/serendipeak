@@ -1,0 +1,224 @@
+/* A modal dialog does not stop the document behind it from scrolling on its own. */
+:global(html):has(.dialog[open]) {
+	overflow: hidden;
+}
+
+.dialog {
+	box-sizing: border-box;
+	width: min(36rem, calc(100% - 2rem));
+	max-width: none;
+	max-height: min(40rem, calc(100dvh - 4rem));
+	margin: clamp(1rem, 10vh, 6rem) auto auto;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var(--sp-rule);
+	border-radius: var(--sp-radius);
+	background: var(--sp-ink);
+	color: var(--sp-text-on-stage);
+	box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 45%);
+}
+
+.dialog[open] {
+	display: flex;
+}
+
+.dialog::backdrop {
+	background: rgb(5 9 13 / 72%);
+}
+
+.panel {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+
+.top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-space-3);
+	padding: var(--sp-space-2) var(--sp-space-2) 0 var(--sp-space-5);
+}
+
+.title {
+	margin: 0;
+	color: var(--sp-mist);
+	font-family: var(--sp-font-ui);
+	font-size: 0.8125rem;
+	font-weight: 400;
+	letter-spacing: 0.01em;
+}
+
+.close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem;
+	box-sizing: border-box;
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+	padding: 0 0.5rem;
+	border: 0;
+	background: transparent;
+	color: var(--sp-mist);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	cursor: pointer;
+}
+
+.close span[aria-hidden] {
+	font-size: 1.25rem;
+	line-height: 1;
+}
+
+.close:hover {
+	color: var(--sp-paper-bright);
+}
+
+.search {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.input {
+	box-sizing: border-box;
+	width: calc(100% - 2 * var(--sp-space-5));
+	min-height: 3rem;
+	margin: 0 var(--sp-space-5);
+	padding: 0.25rem 0;
+	border: 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--sp-mist) 45%, transparent);
+	border-radius: 0;
+	background: transparent;
+	color: var(--sp-paper-bright);
+	font-family: var(--sp-font-display);
+	font-size: 1.5rem;
+	line-height: 1.2;
+}
+
+.input::placeholder {
+	color: color-mix(in srgb, var(--sp-mist) 55%, transparent);
+}
+
+/* The rule thickens into the focus indicator, so the field keeps its editorial underline. */
+.input:focus-visible {
+	border-bottom-color: var(--sp-glacier-light);
+	outline: none;
+	box-shadow: 0 1px 0 var(--sp-glacier-light);
+}
+
+.status {
+	margin: 0;
+	padding: var(--sp-space-3) var(--sp-space-5);
+	color: var(--sp-mist);
+	font-size: var(--sp-text-ui);
+}
+
+.retry {
+	align-self: flex-start;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	margin: 0 var(--sp-space-5) var(--sp-space-5);
+	padding: 0.5rem 1rem;
+	border: 0;
+	border-radius: var(--sp-radius);
+	background: var(--sp-accent);
+	color: var(--sp-paper-bright);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.retry:hover {
+	background: var(--sp-accent-hover);
+}
+
+.results {
+	flex: 1 1 auto;
+	min-height: 0;
+	margin: 0;
+	padding: 0 0 var(--sp-space-2);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	border-top: 1px solid var(--sp-rule-quiet);
+	list-style: none;
+}
+
+.option {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0.15rem;
+	box-sizing: border-box;
+	min-height: 3.25rem;
+	padding: 0.5rem calc(var(--sp-space-5) - 3px);
+	border-bottom: 1px solid var(--sp-rule-quiet);
+	border-left: 3px solid transparent;
+	cursor: pointer;
+}
+
+.option:hover {
+	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+}
+
+.option[aria-selected='true'] {
+	border-left-color: var(--sp-glacier-light);
+	background: color-mix(in srgb, var(--sp-glacier) 22%, transparent);
+}
+
+.name {
+	font-family: var(--sp-font-display);
+	font-size: 1.125rem;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+
+.detail {
+	color: var(--sp-mist);
+	font-size: var(--sp-text-ui);
+	line-height: 1.3;
+}
+
+@media (max-width: 30rem) {
+	.dialog {
+		width: calc(100% - 1rem);
+		max-height: calc(100dvh - 1rem);
+		margin-top: 0.5rem;
+	}
+
+	.top {
+		padding-left: var(--sp-space-4);
+	}
+
+	.input {
+		width: calc(100% - 2 * var(--sp-space-4));
+		margin-inline: var(--sp-space-4);
+		font-size: 1.25rem;
+	}
+
+	.status {
+		padding-inline: var(--sp-space-4);
+	}
+
+	.retry {
+		margin-inline: var(--sp-space-4);
+	}
+
+	.option {
+		padding-inline: calc(var(--sp-space-4) - 3px);
+	}
+}

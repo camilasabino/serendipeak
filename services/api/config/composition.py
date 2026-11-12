@@ -26,6 +26,7 @@ from serendipeak.catalog.delete_mountain_region import DeleteMountainRegion
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
 from serendipeak.catalog.get_mountain_detail import GetMountainDetail
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
+from serendipeak.catalog.get_mountain_index import GetMountainIndex
 from serendipeak.catalog.get_mountain_preview import GetMountainPreview
 from serendipeak.catalog.get_mountain_region import GetMountainRegion
 from serendipeak.catalog.get_region_directory import GetRegionDirectory
@@ -114,6 +115,10 @@ def build_check_catalog() -> CheckCatalog:
 
 def build_get_mountain_by_slug() -> GetMountainBySlug:
     return GetMountainBySlug(DjangoMountainRepository())
+
+
+def build_get_mountain_index() -> GetMountainIndex:
+    return GetMountainIndex(DjangoMountainRepository())
 
 
 def build_list_mountains() -> ListMountains:

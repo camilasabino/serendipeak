@@ -128,6 +128,22 @@ A mountain serves `continent` as `{code, name}` and `countries` as a list of `{c
 
 The v1 fixtures stay untouched. The API tests turn each fixture into SerendiPeak's own document by applying exactly these changes, and compare every response with the result member by member: `primaryImage.url` and `primaryImage.thumbnailUrl` hold owned media URLs, `attribution` is renamed `author`, and `creator` and `sourceIdentifier` are dropped, and `prominenceMeters` and `sources.wikipedia` are dropped (`sources` goes with them when nothing is left), and `continent` and the `{code, name}` countries are derived from the v1 country names by a rule that exists only in the tests and is not editorial (the names through the alias table, the continent of the first country, `AQ` and Antarctica for a mountain without any, and an explicit synthetic Europe for the invented mountain of `mountain-minimal.json`), and `rangeName` becomes a `region` by another rule that exists only in the tests (a root region named by the range, its slug the plain derivation of the name, or `null`); hierarchies are tested with invented taxonomies. Any other difference fails. `node scripts/verify-api.mjs` is the live-API counterpart of the vendored `contracts/v1/verify-api.mjs`, which describes the v1 API and is no longer run: it differs from it only in those members, fails when `prominenceMeters`, `sources.wikipedia` or `rangeName` is served or `countries` are served as names, checks the shape of `continent`, `countries` (an approved continent code, well-formed unique country codes, the order above) and `region` (present, `null` or `{slug, name, ancestors}` with valid slugs), and checks each of the 73 photographs by source page and dimensions. With `--geography <file> --geography-sha256 <hash>` it also compares the continent, country codes and region path of the mountains the private geography input covers; without them it says that the comparison of values was skipped.
 
+### Mountain index endpoint
+
+`GET /api/v1/mountains` returns every `active` mountain as `{"mountains":[...]}`, ordered by slug code points. Each entry is `{slug, name, coordinates: {latitude, longitude}, elevationMeters, continent: {code, name}, countries: [{code, name}], region}`, with the same values and rules as the same members of the mountain endpoint (`region` is `null` without one, `countries` may be empty). Every member is always present. It is the part of a mountain that names and locates it, for search and for anything that places every mountain on a map.
+
+- `draft` and `inactive` mountains are never listed. An `inactive` mountain stays reachable at its permalink, but it is no longer offered for discovery.
+- The entry serves no `id`, summary, camera, photograph, sources or status. Spanish and Portuguese names are not served, as everywhere else in the API.
+- An empty catalog answers `200 {"mountains":[]}`. Any failure answers `500` with code `INTERNAL_ERROR`.
+- A successful answer carries `Cache-Control: public, max-age=300`, so a published or deactivated mountain reaches visitors within five minutes without a deployment. Errors carry `Cache-Control: no-store`.
+- The whole index is read in three queries whatever the catalog size: the mountains with their continent, their country links, and the region paths (none without a region).
+
+The full index is about 300 bytes per mountain: 22 KB for 75 mountains, under 5 KB gzipped. Returning it whole stays reasonable up to a few thousand mountains (about 1 MB uncompressed, a few hundred KB compressed). Past that, the simplest step is to keep this shape and add optional filters that reuse it (`?continent=`, a bounding box `?bbox=` answered with a PostGIS index on `location`), then cursor pagination ordered by slug; full-text search belongs in a separate endpoint only when client-side filtering of names is no longer instant.
+
+```sh
+curl -i http://127.0.0.1:8000/api/v1/mountains
+```
+
 ### Today's mountain endpoint
 
 `GET /api/v1/mountains/today` returns `{"date":"YYYY-MM-DD","mountain":{...}}` in the shape of `contracts/v1/daily-mountain.json`, where `date` is the current UTC calendar date and `mountain` has the shape of the mountain endpoint.
@@ -452,6 +468,12 @@ The 3D stage reads two more build-time values through `readCesiumConfig`, so a b
 | `npm run test:webgl`            | Real-WebGL scene tests (`@webgl`, Chromium) against `next dev`, where React Strict Mode runs effects twice; builds nothing in `.next`                                                                                                                                   |
 | `npm run test:webgl:prod`       | The same suite against a production build served by `next start`                                                                                                                                                                                                        |
 
+### Mountain search
+
+The Search button in the site header opens a modal dialog that finds mountains by name and opens the chosen one at `/mountains/<slug>` by client navigation. No page loads the index on its own: the first opening of search requests `GET /api/v1/mountains` once, and the header, which stays mounted across client navigation, keeps it for every later search. An opening more than five minutes after the last load refreshes the index in the background while the one already loaded stays searchable; a failed refresh keeps it and the next opening tries again. The browser's HTTP cache honours the API's own five-minute lifetime, so a newly published mountain appears in search within about ten minutes at most, without a deployment.
+
+Filtering runs in the browser on every keystroke, with no request: names are compared case-, accent- and punctuation-insensitively (`Huascaran` finds Huascarán, `mont blanc` finds Mont-Blanc), names that start with the query come first, then names with a word that starts with it, then any other match. The dialog follows the combobox pattern with a listbox of results (arrow keys move the active result, Enter opens it or the first result, Escape or Close dismisses it and returns focus to the button) and announces loading, failures, the prompt and the number of results in one status region. It needs no WebGL.
+
 ### Continuous integration
 
 The WebGL suites are the slow part of CI, so they run apart from the other web checks (lint, types, unit tests, build, production gate, SSR and no-WebGL tests):
@@ -469,7 +491,7 @@ The stage is one Cesium `Viewer` per mounted `MountainLayout`. `AppFrame` render
 
 The test-only camera reading (`window.__serendipeakCamera`) exists only in builds made with `NEXT_PUBLIC_E2E_DIAGNOSTICS=1`. `next.config.ts` always defines the variable so the bundler folds the branch away otherwise, and `check:production-gate` fails the build if the identifier reaches the output. `NEXT_DIST_DIR` redirects the build directory; the `@webgl` suite uses `.next-e2e` so it never touches the production build.
 
-`e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `POST /__control/scenario/<ok|unreachable|malformed|server-error|no-eligible>` switches every API answer, `GET /__control/requests` lists the API paths requested and `POST /__control/reset` restores `ok` and clears the list. `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
+`e2e/stub-api/server.mjs` serves the vendored `contracts/v1/` fixtures, and a mountain index built from them, for browser and SSR tests without a network or database (`node e2e/stub-api/server.mjs`, port `STUB_API_PORT`, default 8099). `POST /__control/scenario/<ok|unreachable|malformed|server-error|no-eligible>` switches every API answer (the index has no `no-eligible` answer), `GET /__control/requests` lists the API paths requested and `POST /__control/reset` restores `ok` and clears the list. `eslint` pins ESLint 9 because `eslint-plugin-react`, bundled by `eslint-config-next`, does not declare ESLint 10 support.
 
 ## Frozen contracts
 

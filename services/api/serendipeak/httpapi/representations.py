@@ -1,4 +1,14 @@
-from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
+from collections.abc import Iterable
+
+from serendipeak.catalog.entities import (
+    CanonicalCamera,
+    Continent,
+    Coordinates,
+    Country,
+    Mountain,
+    MountainIndexEntry,
+    PrimaryImage,
+)
 from serendipeak.catalog.media.keys import public_url
 from serendipeak.catalog.regions import RegionPath, RegionRef
 from serendipeak.discovery.entities import DailyMountain
@@ -8,22 +18,15 @@ WIKIDATA_URL = "https://www.wikidata.org/wiki/{id}"
 
 
 def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, object]:
-    coordinates = mountain.coordinates
-
     members = _present(
         {
             "id": str(mountain.id),
             "slug": mountain.slug,
             "name": mountain.name.en,
-            "coordinates": {
-                "latitude": coordinates.latitude,
-                "longitude": coordinates.longitude,
-            },
+            "coordinates": _coordinates(mountain.coordinates),
             "elevationMeters": mountain.elevation_meters,
-            "continent": {"code": mountain.continent.code, "name": mountain.continent.name.en},
-            "countries": [
-                {"code": country.code, "name": country.name.en} for country in mountain.countries
-            ],
+            "continent": _continent(mountain.continent),
+            "countries": _countries(mountain.countries),
             "summary": None if mountain.summary is None else mountain.summary.en,
             "camera": _camera(mountain.camera),
             "primaryImage": _primary_image(mountain.primary_image, media_base_url),
@@ -33,6 +36,35 @@ def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, obj
 
     # Always present, and null without a region, unlike every other member that has no value.
     return {**members, "region": _region(mountain.region)}
+
+
+def represent_mountain_index(entries: Iterable[MountainIndexEntry]) -> dict[str, object]:
+    return {"mountains": [_index_entry(entry) for entry in entries]}
+
+
+def _index_entry(entry: MountainIndexEntry) -> dict[str, object]:
+    # Every member is always present: none of them is optional, and region is null without one.
+    return {
+        "slug": entry.slug,
+        "name": entry.name.en,
+        "coordinates": _coordinates(entry.coordinates),
+        "elevationMeters": entry.elevation_meters,
+        "continent": _continent(entry.continent),
+        "countries": _countries(entry.countries),
+        "region": _region(entry.region),
+    }
+
+
+def _coordinates(coordinates: Coordinates) -> dict[str, object]:
+    return {"latitude": coordinates.latitude, "longitude": coordinates.longitude}
+
+
+def _continent(continent: Continent) -> dict[str, object]:
+    return {"code": continent.code, "name": continent.name.en}
+
+
+def _countries(countries: Iterable[Country]) -> list[dict[str, object]]:
+    return [{"code": country.code, "name": country.name.en} for country in countries]
 
 
 def _region(path: RegionPath | None) -> dict[str, object] | None:

@@ -74,7 +74,7 @@ describe('AppFrame header', () => {
 		const html = render({ model: permalink });
 
 		expect(anchorsOf(html).map(({ text }) => text)).toContain("Today's mountain");
-		expect(textsOf(html, 'button')).toEqual(['Explore another→']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
 		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
 		expect(html).toContain('aria-busy="false"');
 	});
@@ -83,17 +83,17 @@ describe('AppFrame header', () => {
 		const html = render({ model: dailyModel });
 
 		expect(anchorsOf(html).map(({ text }) => text)).not.toContain("Today's mountain");
-		expect(textsOf(html, 'button')).toEqual(['Explore another→']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
 		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
 	});
 
 	it.each([
 		['an error page', { model: { kind: 'error', reason: 'unreachable' } }],
 		['a page without data', {}]
-	])('shows no navigation on %s', (_name, props) => {
+	])('shows no mountain navigation on %s', (_name, props) => {
 		const html = render(props);
 
-		expect(countOf(html, 'button')).toBe(0);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
 		expect(html).toContain('<header');
 		expect(html.match(/<header[\s\S]*<\/header>/)?.[0]).not.toContain('Explore');
 	});
@@ -120,7 +120,21 @@ describe('AppFrame About link', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
 		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['About', "Today's mountain"]);
-		expect(textsOf(nav, 'button')).toEqual(['Explore another→']);
+		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'Explore another→']);
+	});
+
+	it.each([
+		['the daily page', { model: dailyModel }],
+		['a permalink', { model: permalink }],
+		['an error page', { model: { kind: 'error', reason: 'not-found' } }],
+		['a page without data', {}]
+	])('offers search first in the primary navigation, closed, on %s', (_name, props) => {
+		const html = render(props);
+		const nav = html.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
+
+		expect(nav.indexOf('Search mountains')).toBeLessThan(nav.indexOf('href="/about"'));
+		expect(nav).toContain('aria-haspopup="dialog"');
+		expect(html).not.toContain('<dialog');
 	});
 
 	it('marks About as the current page only on the About route', () => {

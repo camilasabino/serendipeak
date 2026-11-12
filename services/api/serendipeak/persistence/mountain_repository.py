@@ -6,10 +6,16 @@ from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
     CandidateMountain,
     Mountain,
+    MountainIndexEntry,
     MountainStatus,
 )
 from serendipeak.persistence.errors import translate_database_errors
-from serendipeak.persistence.mapping import to_mountain, with_geography
+from serendipeak.persistence.mapping import (
+    load_region_paths,
+    to_mountain,
+    to_mountain_index_entry,
+    with_geography,
+)
 from serendipeak.persistence.models import MountainRecord
 
 _PUBLIC_STATUS_VALUES = sorted(status.value for status in PUBLIC_STATUSES)
@@ -36,3 +42,24 @@ class DjangoMountainRepository:
             )
 
         return tuple(CandidateMountain(id=mountain_id, slug=slug) for mountain_id, slug in rows)
+
+    def list_active_index(self) -> Sequence[MountainIndexEntry]:
+        with translate_database_errors():
+            records = list(
+                with_geography(MountainRecord.objects.filter(status=MountainStatus.ACTIVE.value))
+                # Only the columns an entry maps: the summary and camera are never read here.
+                .only(
+                    "slug",
+                    "name_en",
+                    "name_es",
+                    "name_pt",
+                    "location",
+                    "elevation_meters",
+                    "region_id",
+                    "continent",
+                )
+                .order_by(Collate("slug", "C"))
+            )
+            paths = load_region_paths(records)
+
+        return tuple(to_mountain_index_entry(record, paths) for record in records)

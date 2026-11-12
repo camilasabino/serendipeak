@@ -65,6 +65,17 @@ export interface Mountain {
 	sources?: MountainSources;
 }
 
+/** The part of a mountain that names and locates it, served for every active mountain at once. */
+export interface MountainIndexEntry {
+	slug: string;
+	name: string;
+	coordinates: Coordinates;
+	elevationMeters: number;
+	continent: Continent;
+	countries: Country[];
+	region: Region | null;
+}
+
 export interface DailyMountain {
 	date: string;
 	mountain: Mountain;
@@ -88,3 +99,6 @@ export type RandomMountainResult =
 	| { kind: 'no-eligible-mountains' }
 	| ApiError
 	| Unreachable;
+
+export type MountainIndexResult =
+	{ kind: 'found'; mountains: MountainIndexEntry[] } | ApiError | Unreachable;

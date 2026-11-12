@@ -17,6 +17,7 @@ from serendipeak.catalog.entities import (
     Coordinates,
     ImageDimensions,
     Mountain,
+    MountainIndexEntry,
     MountainStatus,
     PhotographMedia,
     PrimaryImage,
@@ -90,6 +91,18 @@ def mountain(slug="aconcagua", **overrides):
             fields[member] = LocalizedText(en=fields[member])
 
     return Mountain(**fields)
+
+
+def index_entry_of(mountain_):
+    return MountainIndexEntry(
+        slug=mountain_.slug,
+        name=mountain_.name,
+        coordinates=mountain_.coordinates,
+        elevation_meters=mountain_.elevation_meters,
+        continent=mountain_.continent,
+        countries=mountain_.countries,
+        region=mountain_.region,
+    )
 
 
 def catalog_mountain(slug="aconcagua", **overrides):

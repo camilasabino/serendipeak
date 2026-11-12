@@ -1,7 +1,13 @@
-import type { DailyMountainResult, MountainResult, RandomMountainResult } from './contract';
+import type {
+	DailyMountainResult,
+	MountainIndexResult,
+	MountainResult,
+	RandomMountainResult
+} from './contract';
 
 export interface MountainApi {
 	getMountain(slug: string): Promise<MountainResult>;
+	getMountainIndex(): Promise<MountainIndexResult>;
 	getDailyMountain(): Promise<DailyMountainResult>;
 	getRandomMountain(exclude?: string): Promise<RandomMountainResult>;
 }

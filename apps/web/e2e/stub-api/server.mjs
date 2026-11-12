@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
-import { serendipeakDocument } from './serendipeak-contract.mjs';
+import { mountainIndexEntry, serendipeakDocument } from './serendipeak-contract.mjs';
 
 const contractsDirectory = new URL('../../../../contracts/v1/', import.meta.url);
 
 export const SCENARIOS = ['ok', 'unreachable', 'malformed', 'server-error', 'no-eligible'];
 
-const API_PREFIX = '/api/v1/mountains/';
+const INDEX_PATH = '/api/v1/mountains';
+const API_PREFIX = `${INDEX_PATH}/`;
 const CONTROL_PREFIX = '/__control/';
 
 // The browser calls this API from the web origin, so every answer must be readable cross-origin.
@@ -23,7 +24,13 @@ function buildRoutes() {
 			.map(fixture)
 			.map((mountain) => [mountain.slug, mountain])
 	);
+	const index = {
+		mountains: [...mountainsBySlug.values()]
+			.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0))
+			.map(mountainIndexEntry)
+	};
 	return {
+		index,
 		daily: fixture('daily-mountain.json'),
 		notFound: fixture('error-mountain-not-found.json'),
 		internal: fixture('error-internal.json'),
@@ -41,7 +48,7 @@ function decodeSlug(encoded) {
 }
 
 export function createStubApi() {
-	const { daily, notFound, internal, noEligible, mountainsBySlug } = buildRoutes();
+	const { index, daily, notFound, internal, noEligible, mountainsBySlug } = buildRoutes();
 	let scenario = 'ok';
 	let requests = [];
 
@@ -84,7 +91,8 @@ export function createStubApi() {
 			response.end(typeof body === 'string' ? body : JSON.stringify(body));
 		};
 
-		if (request.method !== 'GET' || !pathname.startsWith(API_PREFIX)) {
+		const isIndex = pathname === INDEX_PATH;
+		if (request.method !== 'GET' || !(isIndex || pathname.startsWith(API_PREFIX))) {
 			send(404, notFound);
 			return;
 		}
@@ -92,6 +100,18 @@ export function createStubApi() {
 
 		if (scenario === 'unreachable') {
 			request.socket.destroy();
+			return;
+		}
+
+		// No caching headers: every test sees the scenario it set, never an answer the browser kept.
+		if (isIndex) {
+			if (scenario === 'malformed') {
+				send(200, '{"unexpected":true}');
+			} else if (scenario === 'server-error') {
+				send(500, internal, { 'Cache-Control': 'no-store' });
+			} else {
+				send(200, index);
+			}
 			return;
 		}
 

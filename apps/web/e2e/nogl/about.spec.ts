@@ -147,7 +147,8 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	for (const width of [320, 360, 375, 390]) {
+	// The wordmark gives way to the controls on a mountain page below 428px.
+	for (const width of [320, 360, 375, 390, 430]) {
 		test(`keeps the header controls apart and tappable at ${width}px`, async ({ page }) => {
 			await watch(page);
 			await page.setViewportSize({ width, height: 740 });
@@ -161,27 +162,52 @@ test.describe('@nogl About page responsiveness', () => {
 				const wordmark = header.querySelector('a span')!;
 				const text = document.createRange();
 				text.selectNodeContents(wordmark);
+				const [search, explore] = [...header.querySelectorAll('nav button')];
 				const about = header.querySelector('nav a')!.getBoundingClientRect();
+				const searchBox = search!.getBoundingClientRect();
 
 				return {
 					brandText:
 						wordmark.getBoundingClientRect().width > 1 ? edges(text.getBoundingClientRect()) : null,
 					brandLink: edges(header.querySelector('a')!.getBoundingClientRect()),
+					search: { ...edges(searchBox), width: searchBox.width, height: searchBox.height },
 					about: { ...edges(about), height: about.height },
-					explore: edges(header.querySelector('button')!.getBoundingClientRect())
+					explore: edges(explore!.getBoundingClientRect())
 				};
 			});
 
-			if (width >= 360) {
-				expect(extents.brandText).not.toBeNull();
-			}
+			expect(extents.brandText === null).toBe(width < 428);
 			expect(extents.about.height).toBeGreaterThanOrEqual(44);
-			expect(extents.brandLink.right).toBeLessThanOrEqual(extents.about.left);
+			expect(extents.search.height).toBeGreaterThanOrEqual(44);
+			expect(extents.search.width).toBeGreaterThanOrEqual(44);
+			expect(extents.brandLink.right).toBeLessThanOrEqual(extents.search.left);
 			if (extents.brandText) {
-				expect(extents.brandText.right).toBeLessThanOrEqual(extents.about.left);
+				expect(extents.brandText.right).toBeLessThanOrEqual(extents.search.left);
 			}
+			expect(extents.search.right).toBeLessThanOrEqual(extents.about.left);
 			expect(extents.about.right).toBeLessThanOrEqual(extents.explore.left);
 			expect(extents.explore.right).toBeLessThanOrEqual(width);
+		});
+	}
+
+	for (const width of [360, 390]) {
+		test(`keeps the wordmark beside search and About at ${width}px`, async ({ page }) => {
+			await watch(page);
+			await page.setViewportSize({ width, height: 740 });
+			await page.goto('/about');
+
+			const [wordmarkRight, searchLeft] = await page.evaluate(() => {
+				const header = document.querySelector('header')!;
+				const text = document.createRange();
+				text.selectNodeContents(header.querySelector('a span')!);
+				return [
+					text.getBoundingClientRect().right,
+					header.querySelector('nav button')!.getBoundingClientRect().left
+				];
+			});
+
+			expect(wordmarkRight).toBeGreaterThan(0);
+			expect(wordmarkRight).toBeLessThanOrEqual(searchLeft);
 		});
 	}
 

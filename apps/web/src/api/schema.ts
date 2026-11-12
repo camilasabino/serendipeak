@@ -13,6 +13,7 @@ import type {
 	Mountain,
 	MountainCamera,
 	MountainImage,
+	MountainIndexEntry,
 	MountainSources,
 	Region,
 	RegionReference
@@ -180,6 +181,32 @@ export function isMountain(value: unknown): value is Mountain {
 		isOptional(value, 'camera', isMountainCamera) &&
 		isOptional(value, 'primaryImage', isMountainImage) &&
 		isOptional(value, 'sources', isMountainSources)
+	);
+}
+
+function isMountainIndexEntry(value: unknown): value is MountainIndexEntry {
+	return (
+		isRecord(value) &&
+		isValidSlug(value.slug) &&
+		isNonEmptyString(value.name) &&
+		isCoordinates(value.coordinates) &&
+		isPositiveInteger(value.elevationMeters) &&
+		isContinent(value.continent) &&
+		areDistinctCountries(value.countries) &&
+		(value.region === null || isRegion(value.region))
+	);
+}
+
+// The slug keys each entry and builds its link, so a repeated one would make two results the same.
+export function isMountainIndex(value: unknown): value is { mountains: MountainIndexEntry[] } {
+	if (!isRecord(value) || !Array.isArray(value.mountains)) {
+		return false;
+	}
+	const entries: unknown[] = value.mountains;
+
+	return (
+		entries.every(isMountainIndexEntry) &&
+		new Set(entries.map((entry) => (entry as MountainIndexEntry).slug)).size === entries.length
 	);
 }
 

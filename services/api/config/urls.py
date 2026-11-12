@@ -19,6 +19,7 @@ from config.composition import (
     build_get_mountain_by_slug,
     build_get_mountain_detail,
     build_get_mountain_form_options,
+    build_get_mountain_index,
     build_get_mountain_preview,
     build_get_mountain_region,
     build_get_random_mountain,
@@ -114,6 +115,7 @@ urlpatterns = [
     ),
     *mountain_urlpatterns(
         get_mountain=build_get_mountain_by_slug(),
+        get_index=build_get_mountain_index(),
         get_todays_mountain=build_get_todays_mountain(),
         get_random_mountain=build_get_random_mountain(),
         get_preview=build_get_mountain_preview(),

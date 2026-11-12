@@ -3,10 +3,22 @@ from rest_framework.views import APIView
 
 from serendipeak.catalog.errors import InvalidPreviewToken
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.catalog.get_mountain_index import GetMountainIndex
 from serendipeak.catalog.get_mountain_preview import GetMountainPreview
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
-from serendipeak.httpapi.representations import represent_daily_mountain, represent_mountain
+from serendipeak.httpapi.representations import (
+    represent_daily_mountain,
+    represent_mountain,
+    represent_mountain_index,
+)
+
+
+class MountainIndexView(APIView):
+    get_index: GetMountainIndex | None = None
+
+    def get(self, request):
+        return Response(represent_mountain_index(self.get_index.execute()))
 
 
 class MountainBySlugView(APIView):

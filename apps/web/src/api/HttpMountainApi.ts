@@ -1,13 +1,14 @@
 import type {
 	ApiError,
 	DailyMountainResult,
+	MountainIndexResult,
 	MountainResult,
 	RandomMountainResult,
 	Unreachable
 } from './contract';
 import type { PreviewGrant } from '../editorial/preview/previewGrant';
 import type { MountainApi, MountainPreviewApi } from './MountainApi';
-import { hasErrorCode, isDailyMountain, isMountain } from './schema';
+import { hasErrorCode, isDailyMountain, isMountain, isMountainIndex } from './schema';
 
 export const DEFAULT_TIMEOUT_MS = 5_000;
 
@@ -50,6 +51,20 @@ export class HttpMountainApi implements MountainApi, MountainPreviewApi {
 		}
 		if (exchange.ok && isMountain(exchange.body)) {
 			return { kind: 'found', mountain: exchange.body };
+		}
+
+		return apiError(exchange.status);
+	}
+
+	// The API lets the browser cache the index briefly, so this request honours HTTP caching.
+	async getMountainIndex(): Promise<MountainIndexResult> {
+		const exchange = await this.get('/api/v1/mountains', { noStore: false });
+		if (exchange.kind === 'unreachable') {
+			return exchange;
+		}
+
+		if (exchange.ok && isMountainIndex(exchange.body)) {
+			return { kind: 'found', mountains: exchange.body.mountains };
 		}
 
 		return apiError(exchange.status);

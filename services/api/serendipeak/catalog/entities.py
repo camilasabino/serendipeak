@@ -96,3 +96,16 @@ class Mountain:
 class CandidateMountain:
     id: UUID
     slug: str
+
+
+@dataclass(frozen=True, slots=True)
+class MountainIndexEntry:
+    """What locates and names a public mountain, without its editorial content or photograph."""
+
+    slug: str
+    name: LocalizedText
+    coordinates: Coordinates
+    elevation_meters: int
+    continent: Continent
+    countries: tuple[Country, ...]
+    region: RegionPath | None

@@ -8,6 +8,7 @@ from django.urls import resolve
 
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.get_mountain_by_slug import GetMountainBySlug
+from serendipeak.catalog.get_mountain_index import GetMountainIndex
 from serendipeak.discovery.get_random_mountain import GetRandomMountain
 from serendipeak.discovery.get_todays_mountain import GetTodaysMountain
 from serendipeak.httpapi.urls import mountain_urlpatterns
@@ -39,6 +40,7 @@ NEW_DAY = datetime.date(2026, 10, 20)
 clock = FixedClock(FIXTURE_DAY)
 urlpatterns = mountain_urlpatterns(
     get_mountain=GetMountainBySlug(DjangoMountainRepository()),
+    get_index=GetMountainIndex(DjangoMountainRepository()),
     get_todays_mountain=GetTodaysMountain(
         DjangoMountainRepository(),
         DjangoDailyDiscoveryRepository(),

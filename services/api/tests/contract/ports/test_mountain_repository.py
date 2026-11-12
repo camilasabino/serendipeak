@@ -2,6 +2,7 @@ import pytest
 
 from serendipeak.catalog.bootstrap.ports import CatalogMountain
 from serendipeak.catalog.entities import CandidateMountain, Coordinates, MountainStatus
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from tests.support.catalog import (
@@ -11,6 +12,7 @@ from tests.support.catalog import (
     catalog_mountain,
     catalog_of,
     fixture_catalog,
+    index_entry_of,
     primary_image,
 )
 from tests.support.fakes import InMemoryMountainRepository
@@ -173,3 +175,95 @@ def test_a_region_comes_back_with_its_ancestors_root_first(repository_holding, n
 
 def test_a_mountain_without_a_region_has_none(repository_holding):
     assert repository_holding(BARE).find_public_by_slug("bare-peak").region is None
+
+
+def test_the_index_holds_the_active_mountains_in_code_point_order(repository_holding):
+    entries = (catalog_mountain("mountain"), catalog_mountain("mount9"), *CATALOG)
+
+    index = repository_holding(*entries).list_active_index()
+
+    assert index == tuple(
+        index_entry_of(entry.mountain)
+        for entry in (ACONCAGUA, WITHOUT_DIMENSIONS, entries[1], entries[0])
+    )
+
+
+def test_the_index_leaves_out_draft_and_inactive_mountains(repository_holding):
+    index = repository_holding(*CATALOG).list_active_index()
+
+    assert {entry.slug for entry in index} == {"aconcagua", "mont-blanc"}
+
+
+def test_every_committed_active_mountain_is_in_the_index_exactly(repository_holding):
+    entries = fixture_catalog().mountains
+
+    index = repository_holding(*entries).list_active_index()
+
+    assert index == tuple(
+        index_entry_of(entry.mountain)
+        for entry in sorted(entries, key=lambda entry: entry.mountain.slug)
+        if entry.mountain.status is MountainStatus.ACTIVE
+    )
+
+
+def test_the_index_keeps_geography_and_regions_as_stored(repository_holding):
+    with_region = catalog_mountain("ridge-peak", region=region_path("Alpha", "Beta", "Gamma"))
+    without_region = catalog_mountain("plain-peak", region=None, countries=())
+    shared_ancestor = catalog_mountain("sister-peak", region=region_path("Alpha", "Delta"))
+
+    repository = repository_holding(*GEOGRAPHY, with_region, without_region, shared_ancestor)
+
+    assert repository.list_active_index() == tuple(
+        index_entry_of(entry.mountain)
+        for entry in sorted(
+            (*GEOGRAPHY, with_region, without_region, shared_ancestor),
+            key=lambda entry: entry.mountain.slug,
+        )
+    )
+
+
+def test_the_index_keeps_the_localized_names(repository_holding):
+    named = catalog_mountain(
+        "cerro-peak", name=LocalizedText(en="Cerro Peak", es="Cerro Pico", pt=None)
+    )
+
+    [entry] = repository_holding(named).list_active_index()
+
+    assert entry.name == LocalizedText(en="Cerro Peak", es="Cerro Pico", pt=None)
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [(INACTIVE_WITHOUT_IMAGE, BARE, DRAFT), ()],
+    ids=["no-active", "empty"],
+)
+def test_no_active_mountain_gives_an_empty_index(repository_holding, entries):
+    assert repository_holding(*entries).list_active_index() == ()
+
+
+@pytest.mark.django_db
+def test_the_index_is_three_queries_however_many_mountains(django_assert_num_queries):
+    DjangoCatalogStore().load(fixture_catalog())
+
+    with django_assert_num_queries(3):
+        index = DjangoMountainRepository().list_active_index()
+
+    assert len(index) == sum(
+        entry.mountain.status is MountainStatus.ACTIVE for entry in fixture_catalog().mountains
+    )
+
+
+@pytest.mark.django_db
+def test_the_index_skips_the_region_query_when_no_mountain_has_a_region(
+    django_assert_num_queries,
+):
+    DjangoCatalogStore().load(catalog_of(catalog_mountain("plain-peak", region=None)))
+
+    with django_assert_num_queries(2):
+        DjangoMountainRepository().list_active_index()
+
+
+@pytest.mark.django_db
+def test_an_empty_index_is_one_query(django_assert_num_queries):
+    with django_assert_num_queries(1):
+        assert DjangoMountainRepository().list_active_index() == ()

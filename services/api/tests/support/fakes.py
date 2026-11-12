@@ -49,6 +49,7 @@ from serendipeak.catalog.regions import MountainRegion, UnknownRegion, build_reg
 from serendipeak.catalog.relocation import RelocationOutcome
 from serendipeak.discovery.entities import DailyMountain, DiscoveryHistoryEntry, RecentDiscovery
 from serendipeak.errors import InfrastructureError
+from tests.support.catalog import index_entry_of
 from tests.support.geography import reference as geography_reference
 
 
@@ -155,6 +156,13 @@ class InMemoryMountainRepository:
     def list_active_candidates(self):
         return tuple(
             CandidateMountain(id=mountain.id, slug=mountain.slug)
+            for slug, mountain in sorted(self._mountains.items())
+            if mountain.status is MountainStatus.ACTIVE
+        )
+
+    def list_active_index(self):
+        return tuple(
+            index_entry_of(mountain)
             for slug, mountain in sorted(self._mountains.items())
             if mountain.status is MountainStatus.ACTIVE
         )

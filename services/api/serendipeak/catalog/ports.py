@@ -12,6 +12,7 @@ from serendipeak.catalog.entities import (
     Coordinates,
     Country,
     Mountain,
+    MountainIndexEntry,
     MountainStatus,
     PrimaryImage,
 )
@@ -33,6 +34,14 @@ class MountainRepository(Protocol):
 
     def list_active_candidates(self) -> Sequence[CandidateMountain]:
         """Return the id and slug of every active mountain, ordered by slug code points.
+
+        Returns an empty sequence when no mountain is active.
+        """
+
+    def list_active_index(self) -> Sequence[MountainIndexEntry]:
+        """Return the index entry of every active mountain, with its continent, countries and
+        region path, ordered by slug code points, in a number of queries that does not grow with
+        the catalog.
 
         Returns an empty sequence when no mountain is active.
         """

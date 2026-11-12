@@ -19,6 +19,7 @@ export function createBrowserMountainApi(): MountainApi {
 
 	return {
 		getMountain: async (slug) => resolve().getMountain(slug),
+		getMountainIndex: async () => resolve().getMountainIndex(),
 		getDailyMountain: async () => resolve().getDailyMountain(),
 		getRandomMountain: async (exclude) => resolve().getRandomMountain(exclude)
 	};
