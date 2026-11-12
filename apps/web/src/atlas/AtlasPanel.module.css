@@ -1,0 +1,24 @@
+.sheet {
+	composes: sheet from '../mountain-page/MountainView.module.css';
+}
+
+.title {
+	margin: 0;
+	font-family: var(--sp-font-display);
+	font-size: clamp(2.25rem, 10cqi, 2.75rem);
+	font-weight: 400;
+	letter-spacing: -0.02em;
+	line-height: 1.12;
+}
+
+.title:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: 0.25rem;
+}
+
+.lede {
+	margin: var(--sp-space-2) 0 0;
+	font-size: 1rem;
+	line-height: 1.55;
+	color: var(--sp-mist);
+}

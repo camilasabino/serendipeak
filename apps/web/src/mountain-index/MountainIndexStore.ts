@@ -1,13 +1,12 @@
-import type { MountainIndexResult } from '../api/contract';
+import type { MountainIndexEntry, MountainIndexResult } from '../api/contract';
 import type { MountainApi } from '../api/MountainApi';
-import { prepareIndex, type SearchableIndex } from './findMountains';
 
 export type IndexFailure = 'unreachable' | 'api-error';
 
 export type MountainIndexState =
 	| { status: 'idle' }
 	| { status: 'loading' }
-	| { status: 'ready'; index: SearchableIndex }
+	| { status: 'ready'; mountains: readonly MountainIndexEntry[] }
 	| { status: 'failed'; reason: IndexFailure };
 
 /** Matches the API's own cache lifetime for the index. */
@@ -27,7 +26,8 @@ function reportUnexpectedError(error: unknown): void {
 	console.error('The mountain index could not be loaded', error);
 }
 
-// Loads the index on demand, never on page load, and keeps it for the life of the app.
+// One per app, shared by every consumer. It loads the index only when a consumer asks (search
+// opening) or hands it one (a page rendered with the index), never on an ordinary page load.
 export class MountainIndexStore {
 	private snapshot: MountainIndexState = IDLE;
 	private loadedAt = 0;
@@ -73,6 +73,15 @@ export class MountainIndexStore {
 		return this.pending;
 	}
 
+	/**
+	 * Takes an index that a page was rendered with as freshly loaded, so a consumer that asks next
+	 * makes no request. A request already in flight still lands and replaces it.
+	 */
+	seed(mountains: readonly MountainIndexEntry[]): void {
+		this.loadedAt = this.now();
+		this.publish({ status: 'ready', mountains });
+	}
+
 	private async load(): Promise<void> {
 		const refreshing = this.snapshot.status === 'ready';
 		if (!refreshing) {
@@ -82,7 +91,7 @@ export class MountainIndexStore {
 		const result = await this.fetchIndex();
 		if (result.kind === 'found') {
 			this.loadedAt = this.now();
-			this.publish({ status: 'ready', index: prepareIndex(result.mountains) });
+			this.publish({ status: 'ready', mountains: result.mountains });
 			return;
 		}
 		// A failed refresh keeps the index already shown; the next request tries again.

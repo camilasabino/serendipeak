@@ -97,6 +97,12 @@ openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN`    | a Cesium ion token restricted to the allowed web origins in the ion dashboard (the build fails when empty; the value ships to every browser) |
 | `NEXT_PUBLIC_CESIUM_IMAGERY_MODE` | unset (`world` in production)                                                                                                                |
 
+**`web`** (runtime variable: a change needs a restart, not a build):
+
+| Variable      | Value                                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `SITE_ORIGIN` | `https://serendipeak.camilasabino.dev` (no path or trailing slash); without it the atlas has no canonical |
+
 **Service settings:**
 
 | Setting                  | `api`                                                                                                             | `web`                                                                      |

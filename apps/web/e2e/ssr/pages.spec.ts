@@ -213,7 +213,7 @@ test.describe('permalink page', () => {
 
 test.describe('unknown routes', () => {
 	test('answer 404 with the page-not-found view', async ({ request }) => {
-		const response = await request.get('/atlas');
+		const response = await request.get('/no-such-page');
 		const html = await response.text();
 
 		expect(response.status()).toBe(404);

@@ -298,6 +298,36 @@ function angleDelta(a: number, b: number): number {
 	return delta > 180 ? 360 - delta : delta;
 }
 
+export interface GlobePosition {
+	latitude: number;
+	longitude: number;
+	heightMeters: number;
+	distanceFromCenterMeters: number;
+	orbiting: boolean;
+}
+
+export async function globePosition(page: Page): Promise<GlobePosition | undefined> {
+	return page.evaluate(
+		() =>
+			(
+				window as Window & { __serendipeakGlobe?: () => GlobePosition | undefined }
+			).__serendipeakGlobe?.() ?? undefined
+	);
+}
+
+/** Resolves after the page has rendered this many animation frames: a signal, not a sleep. */
+export async function framesPass(page: Page, frames = 30): Promise<void> {
+	await page.evaluate(
+		(count) =>
+			new Promise<void>((resolve) => {
+				let seen = 0;
+				const next = () => (++seen >= count ? resolve() : requestAnimationFrame(next));
+				requestAnimationFrame(next);
+			}),
+		frames
+	);
+}
+
 export function poseDifference(
 	reading: CameraReading | undefined,
 	canonical: CanonicalCamera

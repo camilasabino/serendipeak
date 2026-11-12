@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findMountains, prepareIndex } from './findMountains';
-import { indexEntry } from './test-support/indexEntries';
+import { indexEntry } from '../api/test-support/indexEntries';
 
 const index = prepareIndex([
 	indexEntry('mount-olympus', 'Mount Olympus'),

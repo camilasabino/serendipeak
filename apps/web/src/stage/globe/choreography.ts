@@ -31,10 +31,19 @@ export interface GlideCallbacks {
 	onFail: (error: unknown) => void;
 }
 
+export interface FlightCallbacks {
+	onComplete: () => void;
+	onCancel: () => void;
+}
+
 export interface CameraFlight {
-	fly(move: CameraMove, callbacks: { onComplete: () => void; onCancel: () => void }): void;
+	fly(move: CameraMove, callbacks: FlightCallbacks): void;
 	glide(glide: CameraGlide, callbacks: GlideCallbacks): void;
 	jump(target: SceneTarget, offset: CesiumCameraOffset): void;
+	/** Places a free look at once; false when the current view cannot express it. */
+	applyLook(look: LookState): boolean;
+	/** Flies to a free look; false, without moving, when the current view cannot express it. */
+	flyToLook(look: LookState, durationSeconds: number, callbacks: FlightCallbacks): boolean;
 	look(): LookState | undefined;
 	cancel(): void;
 }
@@ -104,8 +113,9 @@ export function lookFromOffset(target: SceneTarget, offset: CesiumCameraOffset):
 }
 
 interface ActiveRun {
-	kind: 'travel' | 'reframe';
-	target: SceneTarget;
+	kind: 'travel' | 'reframe' | 'view';
+	/** Undefined for a free look, which presents no mountain. */
+	target: SceneTarget | undefined;
 	cancel: () => void;
 	listen: (onSettled?: (outcome: CameraOutcome) => void) => void;
 }
@@ -160,7 +170,7 @@ export class CameraDirector {
 			onSettled?.({ status: 'interrupted' });
 			return;
 		}
-		if (this.run && isSameTarget(this.run.target, target)) {
+		if (this.run?.target && isSameTarget(this.run.target, target)) {
 			this.run.listen(onSettled);
 			return;
 		}
@@ -346,6 +356,75 @@ export class CameraDirector {
 		return true;
 	}
 
+	/**
+	 * Moves the camera to a look that presents no mountain, such as a whole-globe overview. Any run
+	 * is cancelled and the summit marker hidden, since the camera no longer shows a target. A zero
+	 * duration places the look at once.
+	 */
+	view(
+		look: LookState,
+		durationSeconds: number,
+		onSettled?: (outcome: CameraOutcome) => void
+	): void {
+		if (this.stopped) {
+			onSettled?.({ status: 'interrupted' });
+			return;
+		}
+
+		this.release();
+		if (!(durationSeconds > 0)) {
+			onSettled?.(this.applyLook(look));
+			return;
+		}
+
+		let active = true;
+		this.run = {
+			kind: 'view',
+			target: undefined,
+			listen() {},
+			cancel: () => {
+				if (!active) {
+					return;
+				}
+				active = false;
+				this.flight.cancel();
+				onSettled?.({ status: 'interrupted' });
+			}
+		};
+		const finish = (outcome: CameraOutcome) => {
+			if (!active) {
+				return;
+			}
+			active = false;
+			this.run = undefined;
+			onSettled?.(outcome);
+		};
+
+		let started: boolean;
+		try {
+			started = this.flight.flyToLook(look, durationSeconds, {
+				onComplete: () => finish({ status: 'arrived' }),
+				onCancel: () => finish({ status: 'interrupted' })
+			});
+		} catch (error) {
+			finish({ status: 'failed', error });
+			return;
+		}
+		if (!started) {
+			finish({ status: 'failed', error: new Error('The view cannot express this look.') });
+		}
+	}
+
+	/**
+	 * Lets go of the presented mountain without ending the director: the run stops where it is,
+	 * the summit marker goes and nothing counts as settled, but later commands still work.
+	 */
+	release(): void {
+		this.cancelRun();
+		this.settled = undefined;
+		this.markers.hide();
+	}
+
 	busy(): boolean {
 		return this.run !== undefined;
 	}
@@ -355,6 +434,16 @@ export class CameraDirector {
 		this.cancelRun();
 		this.settled = undefined;
 		this.markers.hide();
+	}
+
+	private applyLook(look: LookState): CameraOutcome {
+		try {
+			return this.flight.applyLook(look)
+				? { status: 'arrived' }
+				: { status: 'failed', error: new Error('The view cannot express this look.') };
+		} catch (error) {
+			return { status: 'failed', error };
+		}
 	}
 
 	private cancelRun(): void {

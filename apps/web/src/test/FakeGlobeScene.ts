@@ -1,7 +1,8 @@
 import type { SceneTarget } from '../stage/globe/camera';
 import type { CameraReading } from '../stage/globe/cameraReading';
 import type { CameraOutcome } from '../stage/globe/choreography';
-import type { GlobeScene } from '../stage/globe/GlobeScene';
+import type { LookState } from '../stage/globe/glidePath';
+import type { GlobeScene, RefitResult } from '../stage/globe/GlobeScene';
 import type { MountainPlacement, ResetResult } from '../stage/globe/mountainCamera';
 import type { ViewOrientation } from '../stage/globe/orientation';
 import type { ScaleReading } from '../stage/globe/scaleBar';
@@ -46,6 +47,7 @@ export interface FakeGlobeSceneOptions {
 	cinematic?: boolean;
 	holdShow?: boolean;
 	holdViewReady?: boolean;
+	reducedMotion?: boolean;
 	onDestroy?: () => void;
 }
 
@@ -95,6 +97,12 @@ export class FakeGlobeScene implements GlobeScene {
 	readonly shown: { target: SceneTarget; placement: MountainPlacement }[] = [];
 	readonly stages: StageSize[] = [];
 	readonly pendingShows: PendingShow[] = [];
+	readonly overviews: { look: LookState; animate: boolean }[] = [];
+	readonly pendingOverviews: ((outcome: CameraOutcome) => void)[] = [];
+	clears = 0;
+	/** Every range the scene was asked to refit to, in order. */
+	readonly refits: number[] = [];
+	refitResult: RefitResult = 'refitted';
 	resetResult: ResetResult = 'reset';
 	zoomResult: ZoomResult = 'zoomed';
 	readonly zooms: ZoomDirection[] = [];
@@ -105,6 +113,9 @@ export class FakeGlobeScene implements GlobeScene {
 	cinematic: boolean;
 	holdShow: boolean;
 	holdViewReady: boolean;
+	reducedMotion: boolean;
+	/** Every orbit started, with whether it is still turning. */
+	readonly orbits: { periodSeconds: number; running: boolean; onHalted: () => void }[] = [];
 
 	private readonly onDestroy: (() => void) | undefined;
 	private readonly throwOn: Partial<Record<FakeSetupStep, Error>>;
@@ -113,6 +124,7 @@ export class FakeGlobeScene implements GlobeScene {
 	private readonly orientation = new ReplaceableSubscription<ViewOrientation>(() => this.destroyed);
 	private readonly scale = new ReplaceableSubscription<ScaleReading>(() => this.destroyed);
 	private readonly imagery = new Set<(degraded: boolean) => void>();
+	private interaction: (() => void) | undefined;
 	private degraded = false;
 
 	constructor({
@@ -121,8 +133,10 @@ export class FakeGlobeScene implements GlobeScene {
 		cinematic = false,
 		holdShow = false,
 		holdViewReady = false,
+		reducedMotion = false,
 		onDestroy
 	}: FakeGlobeSceneOptions = {}) {
+		this.reducedMotion = reducedMotion;
 		this.cinematic = cinematic;
 		this.holdShow = holdShow;
 		this.holdViewReady = holdViewReady;
@@ -155,7 +169,16 @@ export class FakeGlobeScene implements GlobeScene {
 	}
 
 	get liveSubscriptions(): number {
-		return Number(this.orientation.live) + Number(this.scale.live) + this.imagery.size;
+		return (
+			Number(this.orientation.live) +
+			Number(this.scale.live) +
+			this.imagery.size +
+			Number(this.interaction !== undefined)
+		);
+	}
+
+	get orbiting(): boolean {
+		return this.orbits.some((orbit) => orbit.running);
 	}
 
 	prepareReveal(target: SceneTarget): boolean {
@@ -165,6 +188,7 @@ export class FakeGlobeScene implements GlobeScene {
 	}
 
 	showMountain(target: SceneTarget, placement: MountainPlacement): Promise<CameraOutcome> {
+		this.stopOrbit();
 		this.shown.push({ target, placement });
 		if (this.destroyed) {
 			return Promise.resolve({ status: 'interrupted' });
@@ -175,6 +199,83 @@ export class FakeGlobeScene implements GlobeScene {
 		return new Promise((resolve, reject) => {
 			this.pendingShows.push({ target, placement, resolve, reject });
 		});
+	}
+
+	// A clear interrupts every show still in flight, as the real camera's ticket does.
+	clearTarget(): void {
+		if (this.destroyed) {
+			return;
+		}
+		this.clears += 1;
+		this.interruptPending();
+	}
+
+	showOverview(look: LookState, animate: boolean): Promise<CameraOutcome> {
+		if (this.destroyed) {
+			return Promise.resolve({ status: 'interrupted' });
+		}
+		this.stopOrbit();
+		this.clearTarget();
+		this.overviews.push({ look, animate });
+		if (!animate || !this.holdShow) {
+			return Promise.resolve({ status: 'arrived' });
+		}
+		return new Promise((resolve) => {
+			this.pendingOverviews.push(resolve);
+		});
+	}
+
+	refitRange(rangeMeters: number): RefitResult {
+		if (this.destroyed) {
+			return 'unavailable';
+		}
+		this.refits.push(rangeMeters);
+		return this.refitResult;
+	}
+
+	canOrbit(): boolean {
+		return !this.destroyed && !this.reducedMotion;
+	}
+
+	startOrbit(periodSeconds: number, onHalted: () => void): boolean {
+		this.stopOrbit();
+		if (!this.canOrbit()) {
+			return false;
+		}
+		this.orbits.push({ periodSeconds, running: true, onHalted });
+		return true;
+	}
+
+	stopOrbit(): void {
+		for (const orbit of this.orbits) {
+			orbit.running = false;
+		}
+	}
+
+	/** The orbit ends by itself, as when something else moves the camera. */
+	haltOrbit(): void {
+		const running = this.orbits.find((orbit) => orbit.running);
+		if (running) {
+			running.running = false;
+			running.onHalted();
+		}
+	}
+
+	subscribeInteraction(listener: () => void): () => void {
+		if (this.destroyed) {
+			return () => {};
+		}
+		this.interaction = listener;
+		return () => {
+			if (this.interaction === listener) {
+				this.interaction = undefined;
+			}
+		};
+	}
+
+	/** A press or a wheel on the globe. */
+	interact(): void {
+		this.interaction?.();
 	}
 
 	whenViewReady(): Promise<void> {
@@ -200,6 +301,7 @@ export class FakeGlobeScene implements GlobeScene {
 		if (this.destroyed) {
 			return 'unavailable';
 		}
+		this.stopOrbit();
 		this.resets += 1;
 		return this.resetResult;
 	}
@@ -208,6 +310,7 @@ export class FakeGlobeScene implements GlobeScene {
 		if (this.destroyed) {
 			return 'unavailable';
 		}
+		this.stopOrbit();
 		this.zooms.push(direction);
 		return this.zoomResult;
 	}
@@ -249,13 +352,22 @@ export class FakeGlobeScene implements GlobeScene {
 		this.orientation.end();
 		this.scale.end();
 		this.imagery.clear();
+		this.interaction = undefined;
+		this.stopOrbit();
 		for (const waiter of this.viewWaiters.splice(0)) {
 			waiter.resolve();
 		}
+		this.interruptPending();
+		this.onDestroy?.();
+	}
+
+	private interruptPending(): void {
 		for (const pending of this.pendingShows.splice(0)) {
 			pending.resolve({ status: 'interrupted' });
 		}
-		this.onDestroy?.();
+		for (const resolve of this.pendingOverviews.splice(0)) {
+			resolve({ status: 'interrupted' });
+		}
 	}
 
 	emitOrientation(viewHeadingDegrees: number | undefined): void {

@@ -16,6 +16,7 @@ function render(snapshot: SceneSnapshot, fullscreen: StageFullscreen = UNSUPPORT
 			snapshot={snapshot}
 			onReset={() => {}}
 			onZoom={() => {}}
+			onToggleRotation={() => {}}
 			fullscreen={fullscreen}
 		/>
 	);
@@ -223,5 +224,32 @@ describe('StageControls fullscreen', () => {
 		store.setState({ status: 'loading' });
 
 		expect(render(store.getSnapshot(), SUPPORTED)).toBe('');
+	});
+});
+
+describe('StageControls globe rotation', () => {
+	it('offers no rotation control where the globe cannot turn by itself', () => {
+		const html = render(readyStore().getSnapshot());
+
+		expect(html).not.toMatch(/globe rotation|Rotate the globe/);
+	});
+
+	it('offers pausing while the globe turns, and turning it again once paused', () => {
+		const store = readyStore();
+		store.setRotation('rotating');
+		expect(render(store.getSnapshot())).toContain('Pause globe rotation');
+
+		store.setRotation('paused');
+		const paused = render(store.getSnapshot());
+		expect(paused).toContain('Rotate the globe');
+		expect(paused).not.toContain('Pause globe rotation');
+	});
+
+	it('renders no rotation control over a globe that is not ready', () => {
+		const store = readyStore();
+		store.setRotation('rotating');
+		store.setState({ status: 'loading' });
+
+		expect(render(store.getSnapshot())).toBe('');
 	});
 });

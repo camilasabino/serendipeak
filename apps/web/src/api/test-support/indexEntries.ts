@@ -1,4 +1,4 @@
-import type { MountainIndexEntry } from '../../api/contract';
+import type { MountainIndexEntry } from '../contract';
 
 export function indexEntry(
 	slug: string,

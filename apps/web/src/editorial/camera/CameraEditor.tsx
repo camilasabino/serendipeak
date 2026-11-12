@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { LazyMountainScene } from '../../mountain-page/LazyMountainScene';
+import { revealLabel } from '../../mountain-page/pageCopy';
 import { StageShell } from '../../mountain-page/StageShell';
 import type { StageController } from '../../stage/MountainScene';
 import { SceneStore } from '../../stage/SceneStore';
@@ -67,7 +68,7 @@ export function CameraEditor({ request, studioBaseUrl }: CameraEditorProps) {
 			}
 		>
 			<div className={styles.workspace}>
-				<StageShell store={store} daily={false} className={styles.frame}>
+				<StageShell store={store} label={revealLabel(false)} className={styles.frame}>
 					<StageBoundary store={store}>
 						<LazyMountainScene
 							store={store}

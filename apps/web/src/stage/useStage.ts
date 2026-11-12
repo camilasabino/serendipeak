@@ -6,6 +6,7 @@ import {
 	useSyncExternalStore,
 	type RefObject
 } from 'react';
+import { sameAtlasView, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
@@ -20,6 +21,7 @@ export interface UseStageOptions {
 	ionToken: string | undefined;
 	sceneFactory: SceneFactory;
 	target: SceneTarget | undefined;
+	atlas?: AtlasView;
 	observer?: PresentationObserver;
 }
 
@@ -28,6 +30,7 @@ export interface UseStageResult {
 	snapshot: SceneSnapshot;
 	resetView: () => ResetResult;
 	zoomView: (direction: ZoomDirection) => ZoomResult;
+	toggleRotation: () => void;
 	readCamera: () => CameraReading | undefined;
 	retry: () => void;
 }
@@ -37,11 +40,13 @@ export function useStage({
 	ionToken,
 	sceneFactory,
 	target,
+	atlas,
 	observer
 }: UseStageOptions): UseStageResult {
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const bindingRef = useRef<StageBinding | undefined>(undefined);
 	const targetRef = useRef(target);
+	const atlasRef = useRef(atlas);
 	const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
 	// A new object with the same content must not restart the presentation.
@@ -49,6 +54,18 @@ export function useStage({
 	if (!sameSceneTarget(stableTarget, target)) {
 		setStableTarget(target);
 	}
+
+	const [stableAtlas, setStableAtlas] = useState(atlas);
+	if (!sameAtlasView(stableAtlas, atlas)) {
+		setStableAtlas(atlas);
+	}
+
+	// Declared before the target effect so that, in one commit, the atlas a released target falls
+	// back to is already known.
+	useEffect(() => {
+		atlasRef.current = stableAtlas;
+		bindingRef.current?.setAtlas(stableAtlas);
+	}, [stableAtlas]);
 
 	useEffect(() => {
 		targetRef.current = stableTarget;
@@ -67,6 +84,7 @@ export function useStage({
 			ionToken,
 			createScene: sceneFactory({ viewport }),
 			target: targetRef.current,
+			atlas: atlasRef.current,
 			observer
 		});
 		bindingRef.current = binding;
@@ -84,9 +102,11 @@ export function useStage({
 		[]
 	);
 
+	const toggleRotation = useCallback(() => bindingRef.current?.toggleRotation(), []);
+
 	const readCamera = useCallback(() => bindingRef.current?.readCamera(), []);
 
 	const retry = useCallback(() => bindingRef.current?.retry(), []);
 
-	return { viewportRef, snapshot, resetView, zoomView, readCamera, retry };
+	return { viewportRef, snapshot, resetView, zoomView, toggleRotation, readCamera, retry };
 }

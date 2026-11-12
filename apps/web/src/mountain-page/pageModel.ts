@@ -1,4 +1,4 @@
-import type { DailyMountain, Mountain } from '../api/contract';
+import type { DailyMountain, Mountain, MountainIndexEntry } from '../api/contract';
 
 export type FailureReason = 'not-found' | 'unreachable' | 'no-eligible-mountains' | 'api-error';
 
@@ -7,16 +7,25 @@ export type FailureStatus = 404 | 502 | 503;
 export type PageModel =
 	| { kind: 'mountain'; mountain: Mountain; preview?: true }
 	| { kind: 'daily'; daily: DailyMountain }
+	| { kind: 'atlas'; mountains: MountainIndexEntry[] }
 	| { kind: 'error'; reason: FailureReason };
 
-export type MountainModel = Exclude<PageModel, { kind: 'error' }>;
+/** A page that presents one mountain. */
+export type MountainModel = Extract<PageModel, { kind: 'mountain' | 'daily' }>;
+
+export type AtlasModel = Extract<PageModel, { kind: 'atlas' }>;
+
+export type ErrorModel = Extract<PageModel, { kind: 'error' }>;
+
+/** A page rendered around the persistent 3D stage. */
+export type StageModel = Exclude<PageModel, { kind: 'error' }>;
 
 export function mountainOf(model: MountainModel): Mountain {
 	return model.kind === 'daily' ? model.daily.mountain : model.mountain;
 }
 
-export interface PageLoad {
-	model: PageModel;
+export interface PageLoad<M extends PageModel = PageModel> {
+	model: M;
 	status: 200 | FailureStatus;
 	cacheControl?: string;
 	noindex?: true;
@@ -44,11 +53,11 @@ export function classifyFailure(reason: FailureReason): FailureStatus {
 	return FAILURE_STATUS[reason];
 }
 
-export function foundLoad(model: PageModel, cacheControl?: string): PageLoad {
+export function foundLoad<M extends PageModel>(model: M, cacheControl?: string): PageLoad<M> {
 	return withCacheControl({ model, status: 200 }, cacheControl);
 }
 
-export function previewLoad(mountain: Mountain): PageLoad {
+export function previewLoad(mountain: Mountain): PageLoad<MountainModel> {
 	return {
 		model: { kind: 'mountain', mountain, preview: true },
 		status: 200,
@@ -57,13 +66,16 @@ export function previewLoad(mountain: Mountain): PageLoad {
 	};
 }
 
-export function failedLoad(reason: FailureReason, cacheControl?: string): PageLoad {
+export function failedLoad(reason: FailureReason, cacheControl?: string): PageLoad<ErrorModel> {
 	return withCacheControl(
 		{ model: { kind: 'error', reason }, status: classifyFailure(reason) },
 		cacheControl
 	);
 }
 
-function withCacheControl(load: PageLoad, cacheControl: string | undefined): PageLoad {
+function withCacheControl<M extends PageModel>(
+	load: PageLoad<M>,
+	cacheControl: string | undefined
+): PageLoad<M> {
 	return cacheControl === undefined ? load : { ...load, cacheControl };
 }

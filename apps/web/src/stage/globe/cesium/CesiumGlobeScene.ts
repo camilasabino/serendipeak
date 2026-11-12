@@ -1,9 +1,15 @@
 import type { TerrainProvider, Viewer } from 'cesium';
 import type { SceneTarget } from '../camera';
-import type { CameraReading, ExposeCameraReading } from '../cameraReading';
-import { CameraDirector, type CameraOutcome } from '../choreography';
-import type { GlobeScene } from '../GlobeScene';
+import type {
+	CameraReading,
+	ExposeCameraReading,
+	ExposeGlobePosition,
+	GlobePosition
+} from '../cameraReading';
+import { CameraDirector, RESET_FLIGHT_SECONDS, type CameraOutcome } from '../choreography';
+import type { GlobeScene, RefitResult } from '../GlobeScene';
 import { FailedLayerRemoval } from '../failedLayerRemoval';
+import type { LookState } from '../glidePath';
 import { ImageryMonitor } from '../imageryMonitor';
 import { SENTINEL2_ASSET_ID, createBaseLayer, type ImageryMode } from '../imagery';
 import {
@@ -26,6 +32,7 @@ import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
 import { SummitMarkers } from './SummitMarkers';
 import { ViewerCameraFlight } from './ViewerCameraFlight';
+import { ViewerOrbit } from './ViewerOrbit';
 import { ViewSampler } from './ViewSampler';
 
 export const CESIUM_BASE_URL = '/cesium/';
@@ -40,6 +47,7 @@ export interface CesiumSceneConfig {
 	ionToken: string;
 	imageryMode: ImageryMode;
 	exposeCameraReading?: ExposeCameraReading;
+	exposeGlobePosition?: ExposeGlobePosition;
 }
 
 interface ViewReadyWaiter {
@@ -66,6 +74,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly sampler: ViewSampler;
 	private readonly flight: ViewerCameraFlight;
 	private readonly director: CameraDirector;
+	private readonly orbit: ViewerOrbit;
 	private readonly camera: MountainCamera;
 	private readonly terrainSession: TerrainCameraSession;
 	private readonly reducedMotion: MediaQueryList;
@@ -74,12 +83,14 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
 	private releaseCameraReading: () => void = noop;
+	private releaseGlobePosition: () => void = noop;
+	private releaseInteraction: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
 	private destroyed = false;
 
 	static async create(
 		container: HTMLElement,
-		{ ionToken, imageryMode, exposeCameraReading }: CesiumSceneConfig,
+		{ ionToken, imageryMode, exposeCameraReading, exposeGlobePosition }: CesiumSceneConfig,
 		signal: AbortSignal
 	): Promise<CesiumGlobeScene> {
 		// Cesium reads the base URL lazily, so it must be set before the module is first used.
@@ -154,6 +165,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			scene = built;
 			// The diagnostic reads mid-flight too: it observes the scene, it does not gate an edit.
 			built.releaseCameraReading = exposeCameraReading?.(() => built.sampleCamera()) ?? noop;
+			built.releaseGlobePosition = exposeGlobePosition?.(() => built.globePosition()) ?? noop;
 		} catch (error) {
 			if (scene) {
 				scene.destroy();
@@ -188,6 +200,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.sampler = new ViewSampler(cesium, viewer);
 		this.flight = new ViewerCameraFlight(cesium, viewer, this.sampler, () => this.measureStage());
 		this.terrainSession = createTerrainCameraSession();
+		this.orbit = new ViewerOrbit(cesium, viewer, () => this.canOrbit());
 
 		const markers = new SummitMarkers(cesium, viewer);
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
@@ -242,12 +255,91 @@ export class CesiumGlobeScene implements GlobeScene {
 			return { status: 'interrupted' };
 		}
 
+		this.orbit.stop();
 		const outcome = await this.camera.show(target, placement);
 		if (!this.destroyed) {
 			this.viewer.resize();
 		}
 
 		return outcome;
+	}
+
+	clearTarget(): void {
+		if (!this.destroyed) {
+			this.camera.clear();
+		}
+	}
+
+	// A free look moves as quickly as Reset does, and holds direct input for as long.
+	showOverview(look: LookState, animate: boolean): Promise<CameraOutcome> {
+		if (this.destroyed) {
+			return Promise.resolve({ status: 'interrupted' });
+		}
+
+		this.orbit.stop();
+		this.camera.clear();
+		const flying = animate && this.motion() !== 'direct';
+		const arrival = new Promise<CameraOutcome>((resolve) => {
+			this.director.view(look, flying ? RESET_FLIGHT_SECONDS : 0, resolve);
+		});
+		if (flying && this.director.busy()) {
+			this.flight.holdInputs();
+		}
+
+		return arrival;
+	}
+
+	refitRange(rangeMeters: number): RefitResult {
+		if (this.destroyed) {
+			return 'unavailable';
+		}
+		if (this.director.busy()) {
+			return 'busy';
+		}
+		if (!this.flight.setRange(rangeMeters)) {
+			return 'unavailable';
+		}
+
+		this.orbit.adopt();
+		return 'refitted';
+	}
+
+	canOrbit(): boolean {
+		return !this.destroyed && this.motion() !== 'direct';
+	}
+
+	startOrbit(periodSeconds: number, onHalted: () => void): boolean {
+		return !this.destroyed && !this.director.busy() && this.orbit.start(periodSeconds, onHalted);
+	}
+
+	stopOrbit(): void {
+		this.orbit.stop();
+	}
+
+	// Heard before Cesium's own handlers act on the event, so the orbit never fights a gesture.
+	subscribeInteraction(listener: () => void): () => void {
+		this.releaseInteraction();
+		this.releaseInteraction = noop;
+		if (this.destroyed) {
+			return noop;
+		}
+
+		const canvas = this.viewer.scene.canvas;
+		const options = { capture: true, passive: true } as const;
+		canvas.addEventListener('pointerdown', listener, options);
+		canvas.addEventListener('wheel', listener, options);
+		const release = () => {
+			canvas.removeEventListener('pointerdown', listener, options);
+			canvas.removeEventListener('wheel', listener, options);
+		};
+		this.releaseInteraction = release;
+
+		return () => {
+			release();
+			if (this.releaseInteraction === release) {
+				this.releaseInteraction = noop;
+			}
+		};
 	}
 
 	whenViewReady(): Promise<void> {
@@ -295,6 +387,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			return 'unavailable';
 		}
 
+		this.orbit.stop();
 		const result = this.camera.reset();
 		if (result === 'reset') {
 			this.flight.holdInputs();
@@ -308,6 +401,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			return 'unavailable';
 		}
 
+		this.orbit.stop();
 		return this.flight.zoom(direction, this.motion() === 'direct' ? 0 : ZOOM_FLIGHT_SECONDS);
 	}
 
@@ -391,15 +485,22 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.destroyed = true;
 
 		const releaseCameraReading = this.releaseCameraReading;
+		const releaseGlobePosition = this.releaseGlobePosition;
+		const releaseInteraction = this.releaseInteraction;
 		const releaseOrientation = this.releaseOrientation;
 		const releaseScale = this.releaseScale;
 		this.releaseCameraReading = noop;
+		this.releaseGlobePosition = noop;
+		this.releaseInteraction = noop;
 		this.releaseOrientation = noop;
 		this.releaseScale = noop;
 
 		// One failing disposer must not strand the resources after it, and the Viewer goes last.
 		releaseBestEffort(CLEANUP_OWNER, [
 			['camera reading', releaseCameraReading],
+			['globe position', releaseGlobePosition],
+			['interaction listeners', releaseInteraction],
+			['orbit', () => this.orbit.stop()],
 			['view-ready waiter', () => this.viewReadyWaiter?.settle()],
 			['imagery monitor', () => this.imagery.release()],
 			['failed layer removal', () => this.failedBaseLayer?.release()],
@@ -420,6 +521,22 @@ export class CesiumGlobeScene implements GlobeScene {
 
 	private sampleCamera(): CameraReading | undefined {
 		return this.destroyed ? undefined : this.flight.cameraReading();
+	}
+
+	private globePosition(): GlobePosition | undefined {
+		if (this.destroyed) {
+			return undefined;
+		}
+		const { Math: CesiumMath } = this.cesium;
+		const { positionCartographic, positionWC } = this.viewer.camera;
+
+		return {
+			latitude: CesiumMath.toDegrees(positionCartographic.latitude),
+			longitude: CesiumMath.toDegrees(positionCartographic.longitude),
+			heightMeters: positionCartographic.height,
+			distanceFromCenterMeters: this.cesium.Cartesian3.magnitude(positionWC),
+			orbiting: this.orbit.running
+		};
 	}
 
 	private motion(): MotionPreference {

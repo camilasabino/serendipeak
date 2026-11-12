@@ -82,6 +82,7 @@ function createDirector() {
 		travel,
 		reframe,
 		busy: () => false,
+		release: vi.fn(),
 		stop: vi.fn()
 	};
 	return { director, place, travel, reframe };
@@ -437,6 +438,55 @@ describe('MountainCamera.reset', () => {
 			}
 		};
 	}
+
+	it('clears the presented mountain: Reset is unavailable and the director lets go', async () => {
+		const { camera, reframe, director } = setup();
+		await camera.show(MATTERHORN, 'initial');
+
+		camera.clear();
+
+		expect(director.release).toHaveBeenCalledOnce();
+		expect(camera.reset()).toBe('unavailable');
+		camera.updateStage({ width: 1200, height: 500 });
+		expect(reframe).not.toHaveBeenCalled();
+	});
+
+	it('interrupts a show whose pose resolves after a clear, and still shows the next one', async () => {
+		const { director, travel } = createDirector();
+		const pending = deferred<TerrainCameraPose>();
+		const camera = createMountainCamera({
+			resolvePose: () => pending.promise,
+			measure: () => NARROW,
+			reducedMotion: () => false,
+			director,
+			markers: createMarkers()
+		});
+		const showing = camera.show(MATTERHORN, 'next');
+
+		camera.clear();
+		pending.resolve(POSE);
+
+		await expect(showing).resolves.toEqual({ status: 'interrupted' });
+		expect(travel).not.toHaveBeenCalled();
+		const resolved = createMountainCamera({
+			resolvePose: async () => POSE,
+			measure: () => NARROW,
+			reducedMotion: () => false,
+			director,
+			markers: createMarkers()
+		});
+		resolved.clear();
+		await expect(resolved.show(MATTERHORN, 'next')).resolves.toEqual({ status: 'arrived' });
+	});
+
+	it('ignores a clear once stopped', () => {
+		const { camera, director } = setup();
+		camera.stop();
+
+		camera.clear();
+
+		expect(director.release).not.toHaveBeenCalled();
+	});
 
 	it('returns to the canonical curated pose of the presented mountain', async () => {
 		const { camera, reframe } = setup();

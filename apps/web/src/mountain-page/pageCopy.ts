@@ -1,4 +1,5 @@
-import { type FailureReason, type PageModel } from './pageModel';
+import type { MountainPageModel } from './applyPageLoad';
+import type { FailureReason } from './pageModel';
 
 export interface ErrorContent {
 	title: string;
@@ -32,7 +33,7 @@ export function documentTitle(title: string): string {
 	return `${title} · SerendiPeak`;
 }
 
-export function pageTitle(model: PageModel): string {
+export function pageTitle(model: MountainPageModel): string {
 	switch (model.kind) {
 		case 'mountain':
 			return documentTitle(model.preview ? `Preview: ${model.mountain.name}` : model.mountain.name);

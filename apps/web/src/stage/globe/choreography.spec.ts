@@ -79,6 +79,9 @@ function createFakeFlight() {
 	let throwOnJump: unknown;
 	let throwOnGlide: unknown;
 	let currentLook: LookState | undefined;
+	const applied: LookState[] = [];
+	const lookFlights: { look: LookState; durationSeconds: number }[] = [];
+	let expressible = true;
 
 	const flight: CameraFlight = {
 		fly(move, { onComplete, onCancel }) {
@@ -102,6 +105,20 @@ function createFakeFlight() {
 			}
 			jumps.push({ target, offset });
 		},
+		applyLook(look) {
+			if (expressible) {
+				applied.push(look);
+			}
+			return expressible;
+		},
+		flyToLook(look, durationSeconds, callbacks) {
+			if (!expressible) {
+				return false;
+			}
+			active = callbacks;
+			lookFlights.push({ look, durationSeconds });
+			return true;
+		},
 		look: () => currentLook,
 		cancel: vi.fn(() => {
 			const cancelled = active;
@@ -118,6 +135,11 @@ function createFakeFlight() {
 		moves,
 		glides,
 		jumps,
+		applied,
+		lookFlights,
+		cannotExpressLooks() {
+			expressible = false;
+		},
 		complete() {
 			const current = active;
 			active = undefined;
@@ -618,5 +640,128 @@ describe('production camera path', () => {
 			expect(source, file).not.toContain('enableLighting');
 			expect(source, file).not.toContain('fullscreenElement');
 		}
+	});
+});
+
+const OVERVIEW: LookState = {
+	latitude: 10,
+	longitude: 20,
+	altitudeMeters: 0,
+	headingDegrees: 0,
+	pitchDegrees: -89,
+	rangeMeters: 16_000_000,
+	framingX: 0,
+	framingY: 0
+};
+
+describe('CameraDirector free looks', () => {
+	it('places a look at once with a zero duration, hiding the summit marker first', () => {
+		const fake = createFakeFlight();
+		const markers = createMarkers();
+		const director = new CameraDirector(fake.flight, markers.display);
+		director.place(ACONCAGUA, OFFSET);
+		const onSettled = vi.fn();
+
+		director.view(OVERVIEW, 0, onSettled);
+
+		expect(fake.applied).toEqual([OVERVIEW]);
+		expect(markers.events).toEqual(['show:Aconcagua', 'hide']);
+		expect(onSettled).toHaveBeenCalledWith({ status: 'arrived' });
+		expect(director.busy()).toBe(false);
+	});
+
+	it('flies to a look as a run that keeps the director busy until it completes', () => {
+		const fake = createFakeFlight();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		const onSettled = vi.fn();
+
+		director.view(OVERVIEW, RESET_FLIGHT_SECONDS, onSettled);
+
+		expect(fake.lookFlights).toEqual([{ look: OVERVIEW, durationSeconds: RESET_FLIGHT_SECONDS }]);
+		expect(director.busy()).toBe(true);
+		fake.complete();
+		expect(onSettled).toHaveBeenCalledExactlyOnceWith({ status: 'arrived' });
+		expect(director.busy()).toBe(false);
+	});
+
+	it('reports a look flight that a mountain journey superseded as interrupted, once', () => {
+		const fake = createFakeFlight();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		const onSettled = vi.fn();
+		director.view(OVERVIEW, RESET_FLIGHT_SECONDS, onSettled);
+
+		director.place(ACONCAGUA, OFFSET);
+
+		expect(onSettled).toHaveBeenCalledExactlyOnceWith({ status: 'interrupted' });
+		expect(fake.jumps).toHaveLength(1);
+	});
+
+	it('reports a look the view cannot express as a failure, without a run', () => {
+		const fake = createFakeFlight();
+		fake.cannotExpressLooks();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		const placed = vi.fn();
+		const flown = vi.fn();
+
+		director.view(OVERVIEW, 0, placed);
+		director.view(OVERVIEW, RESET_FLIGHT_SECONDS, flown);
+
+		expect(placed.mock.calls[0]?.[0]).toMatchObject({ status: 'failed' });
+		expect(flown.mock.calls[0]?.[0]).toMatchObject({ status: 'failed' });
+		expect(director.busy()).toBe(false);
+	});
+
+	it('does not reframe over a look flight, which no reframe may supersede', () => {
+		const fake = createFakeFlight();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		director.view(OVERVIEW, RESET_FLIGHT_SECONDS);
+
+		expect(director.reframe(ACONCAGUA, OFFSET, true, undefined, { supersede: true })).toBe(false);
+	});
+
+	it('refuses looks once stopped', () => {
+		const fake = createFakeFlight();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		director.stop();
+		const onSettled = vi.fn();
+
+		director.view(OVERVIEW, 0, onSettled);
+
+		expect(onSettled).toHaveBeenCalledWith({ status: 'interrupted' });
+		expect(fake.applied).toEqual([]);
+	});
+});
+
+describe('CameraDirector release', () => {
+	it('cancels the journey, hides the marker and forgets the settled mountain, but keeps working', () => {
+		const fake = createFakeFlight();
+		fake.setLook(lookFromOffset(EVEREST, OFFSET));
+		const markers = createMarkers();
+		const director = new CameraDirector(fake.flight, markers.display);
+		const onSettled = vi.fn();
+		director.travel(ACONCAGUA, OFFSET, 'explore', onSettled);
+		fake.approach();
+
+		director.release();
+
+		expect(onSettled).toHaveBeenCalledExactlyOnceWith({ status: 'interrupted' });
+		expect(markers.events.at(-1)).toBe('hide');
+		expect(director.busy()).toBe(false);
+
+		const again = vi.fn();
+		director.place(ACONCAGUA, OFFSET, again);
+		expect(fake.jumps).toHaveLength(1);
+		expect(again).toHaveBeenCalledWith({ status: 'arrived' });
+	});
+
+	it('makes a settled mountain travel again instead of counting as arrived', () => {
+		const fake = createFakeFlight();
+		const director = new CameraDirector(fake.flight, createMarkers().display);
+		director.place(ACONCAGUA, OFFSET);
+
+		director.release();
+		director.place(ACONCAGUA, OFFSET);
+
+		expect(fake.jumps).toHaveLength(2);
 	});
 });

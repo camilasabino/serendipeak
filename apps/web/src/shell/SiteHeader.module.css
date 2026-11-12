@@ -96,8 +96,8 @@
 	}
 }
 
-/* Below these widths the wordmark no longer fits beside the controls: search and About, then
-   also the mountain controls. The mark stays and the link keeps its accessible name. */
+/* Below these widths the wordmark no longer fits beside the controls: search, Atlas and About,
+   then also the mountain controls. The mark stays and the link keeps its accessible name. */
 @media (max-width: 22.4rem) {
 	.name {
 		position: absolute;
@@ -109,7 +109,7 @@
 	}
 }
 
-@media (max-width: 26.75rem) {
+@media (max-width: 33rem) {
 	.withMountainControls .name {
 		position: absolute;
 		width: 1px;

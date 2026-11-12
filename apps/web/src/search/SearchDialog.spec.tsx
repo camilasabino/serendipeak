@@ -1,16 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { prepareIndex } from './findMountains';
-import type { MountainIndexState } from './MountainIndexStore';
+import type { MountainIndexState } from '../mountain-index/MountainIndexStore';
 import { SearchButton } from './SearchControl';
 import { SearchCombobox } from './SearchDialog';
-import { indexEntry } from './test-support/indexEntries';
+import { indexEntry } from '../api/test-support/indexEntries';
 
 const noop = () => {};
 
 const READY: MountainIndexState = {
 	status: 'ready',
-	index: prepareIndex([
+	mountains: [
 		indexEntry('aconcagua', 'Aconcagua', {
 			countries: [
 				{ code: 'AR', name: 'Argentina' },
@@ -20,7 +19,7 @@ const READY: MountainIndexState = {
 		}),
 		indexEntry('monch', 'Mönch', { elevationMeters: 4110 }),
 		indexEntry('mont-blanc', 'Mont Blanc', { elevationMeters: 4806 })
-	])
+	]
 };
 
 function render(state: MountainIndexState, initialQuery = ''): string {
@@ -117,7 +116,7 @@ describe('SearchCombobox', () => {
 	});
 
 	it('explains an empty catalog', () => {
-		expect(statusOf(render({ status: 'ready', index: [] }))).toBe(
+		expect(statusOf(render({ status: 'ready', mountains: [] }))).toBe(
 			'No mountains are available to search yet.'
 		);
 	});

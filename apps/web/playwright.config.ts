@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { STUB_API_PORT, WEB_PORT } from './e2e/support/ports';
+import { SITE_ORIGIN, STUB_API_PORT, WEB_PORT } from './e2e/support/ports';
 
 // WebGL scene tests live in playwright.webgl.config.ts: they need a different build and server.
 export default defineConfig({
@@ -20,7 +20,9 @@ export default defineConfig({
 		{
 			// The build must have inlined NEXT_PUBLIC_API_BASE_URL for the stub (npm run test:ssr).
 			command: `next start --hostname 127.0.0.1 --port ${WEB_PORT}`,
-			url: `http://127.0.0.1:${WEB_PORT}/`
+			url: `http://127.0.0.1:${WEB_PORT}/`,
+			// Read per request on the server, so it needs no build of its own.
+			env: { SITE_ORIGIN: SITE_ORIGIN }
 		}
 	]
 });

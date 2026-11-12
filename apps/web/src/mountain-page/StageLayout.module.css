@@ -1,4 +1,4 @@
-.mountain {
+.layout {
 	display: grid;
 	grid-template-areas: 'stage' 'sheet';
 	grid-template-columns: minmax(0, 1fr);
@@ -10,15 +10,21 @@
 	height: clamp(16rem, 52dvh, 34rem);
 }
 
+/* The atlas is mostly globe: on a phone it takes more of the screen, above its stacked panel. */
+.atlas .stage {
+	height: clamp(18rem, 62dvh, 40rem);
+}
+
 @media (min-width: 56rem) {
-	.mountain {
+	.layout {
 		grid-template-areas: none;
 		grid-template-columns: subgrid;
 		grid-template-rows: subgrid;
 		min-height: 0;
 	}
 
-	.stage {
+	.stage,
+	.atlas .stage {
 		grid-area: auto;
 		grid-column: 1;
 		grid-row: 2;

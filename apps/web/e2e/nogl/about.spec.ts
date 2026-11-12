@@ -147,8 +147,8 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	// The wordmark gives way to the controls on a mountain page below 428px.
-	for (const width of [320, 360, 375, 390, 430]) {
+	// The wordmark gives way to the controls on a mountain page below 528px.
+	for (const width of [320, 360, 375, 390, 430, 500, 530]) {
 		test(`keeps the header controls apart and tappable at ${width}px`, async ({ page }) => {
 			await watch(page);
 			await page.setViewportSize({ width, height: 740 });
@@ -163,7 +163,8 @@ test.describe('@nogl About page responsiveness', () => {
 				const text = document.createRange();
 				text.selectNodeContents(wordmark);
 				const [search, explore] = [...header.querySelectorAll('nav button')];
-				const about = header.querySelector('nav a')!.getBoundingClientRect();
+				const atlas = header.querySelector('nav a[href="/atlas"]')!.getBoundingClientRect();
+				const about = header.querySelector('nav a[href="/about"]')!.getBoundingClientRect();
 				const searchBox = search!.getBoundingClientRect();
 
 				return {
@@ -171,12 +172,14 @@ test.describe('@nogl About page responsiveness', () => {
 						wordmark.getBoundingClientRect().width > 1 ? edges(text.getBoundingClientRect()) : null,
 					brandLink: edges(header.querySelector('a')!.getBoundingClientRect()),
 					search: { ...edges(searchBox), width: searchBox.width, height: searchBox.height },
+					atlas: { ...edges(atlas), height: atlas.height },
 					about: { ...edges(about), height: about.height },
 					explore: edges(explore!.getBoundingClientRect())
 				};
 			});
 
-			expect(extents.brandText === null).toBe(width < 428);
+			expect(extents.brandText === null).toBe(width < 528);
+			expect(extents.atlas.height).toBeGreaterThanOrEqual(44);
 			expect(extents.about.height).toBeGreaterThanOrEqual(44);
 			expect(extents.search.height).toBeGreaterThanOrEqual(44);
 			expect(extents.search.width).toBeGreaterThanOrEqual(44);
@@ -184,7 +187,8 @@ test.describe('@nogl About page responsiveness', () => {
 			if (extents.brandText) {
 				expect(extents.brandText.right).toBeLessThanOrEqual(extents.search.left);
 			}
-			expect(extents.search.right).toBeLessThanOrEqual(extents.about.left);
+			expect(extents.search.right).toBeLessThanOrEqual(extents.atlas.left);
+			expect(extents.atlas.right).toBeLessThanOrEqual(extents.about.left);
 			expect(extents.about.right).toBeLessThanOrEqual(extents.explore.left);
 			expect(extents.explore.right).toBeLessThanOrEqual(width);
 		});

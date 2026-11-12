@@ -1,7 +1,13 @@
 import type { BoundingSphere, Cartesian3, HeadingPitchRange, Viewer } from 'cesium';
 import type { SceneTarget } from '../camera';
 import type { CameraReading } from '../cameraReading';
-import type { CameraFlight, CameraGlide, CameraMove, GlideCallbacks } from '../choreography';
+import type {
+	CameraFlight,
+	CameraGlide,
+	CameraMove,
+	FlightCallbacks,
+	GlideCallbacks
+} from '../choreography';
 import { cameraOffsetFromPose, cesiumVerticalFovRadians, lookAxesForFraming } from '../framing';
 import { lookPose, sampleGlide, type LookState } from '../glidePath';
 import type { StageSize } from '../stageFrame';
@@ -20,6 +26,8 @@ const RESET_INPUT_HOLD_MS = 1300;
 // Beyond these the camera was moved by someone else, and the dolly must let go of it.
 const EXTERNAL_MOVE_METERS = 0.5;
 const EXTERNAL_TURN = 1e-4;
+// A range this close to the wanted one is already there; moving by less only adds a jitter.
+const RANGE_TOLERANCE = 1e-4;
 
 interface ActiveGlide {
 	cancel(): void;
@@ -51,10 +59,7 @@ export class ViewerCameraFlight implements CameraFlight {
 		this.scratchAxis = new cesium.Cartesian3();
 	}
 
-	fly(
-		move: CameraMove,
-		{ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }
-	): void {
+	fly(move: CameraMove, { onComplete, onCancel }: FlightCallbacks): void {
 		const { Matrix4, EasingFunction } = this.cesium;
 		const { camera } = this.viewer;
 
@@ -237,6 +242,93 @@ export class ViewerCameraFlight implements CameraFlight {
 		}
 
 		this.cancelZoom();
+		if (!this.posePlacing(look)) {
+			return false;
+		}
+
+		this.viewer.camera.setView({
+			destination: this.scratchPosition,
+			orientation: { direction: this.scratchLook, up: this.scratchLookUp },
+			endTransform: this.cesium.Matrix4.IDENTITY
+		});
+		this.anchorOnLook(look);
+
+		return true;
+	}
+
+	/**
+	 * Slides the camera along its line of sight until it is `rangeMeters` from where that line meets
+	 * the ellipsoid. Orientation and the point looked at stay put, so a turning globe keeps its
+	 * turn. False when the camera cannot be placed, such as when it looks away from the globe.
+	 */
+	setRange(rangeMeters: number): boolean {
+		if (this.viewer.isDestroyed() || !(rangeMeters > 0)) {
+			return false;
+		}
+
+		const { Cartesian3, IntersectionTests, Matrix4, Ray } = this.cesium;
+		const { camera, scene } = this.viewer;
+		const position = Cartesian3.clone(camera.positionWC);
+		const direction = Cartesian3.clone(camera.directionWC);
+		const up = Cartesian3.clone(camera.upWC);
+		const hit = IntersectionTests.rayEllipsoid(new Ray(position, direction), scene.ellipsoid);
+		if (!hit || !(hit.start > 0)) {
+			return false;
+		}
+		if (Math.abs(hit.start - rangeMeters) <= hit.start * RANGE_TOLERANCE) {
+			return true;
+		}
+
+		this.cancelZoom();
+		const travel = Cartesian3.multiplyByScalar(
+			direction,
+			hit.start - rangeMeters,
+			new Cartesian3()
+		);
+		const destination = Cartesian3.add(position, travel, travel);
+		camera.setView({
+			destination,
+			orientation: { direction, up },
+			endTransform: Matrix4.IDENTITY
+		});
+
+		return true;
+	}
+
+	flyToLook(
+		look: LookState,
+		durationSeconds: number,
+		{ onComplete, onCancel }: FlightCallbacks
+	): boolean {
+		if (this.viewer.isDestroyed()) {
+			return false;
+		}
+
+		this.cancelZoom();
+		if (!this.posePlacing(look)) {
+			return false;
+		}
+
+		const { Cartesian3, EasingFunction, Matrix4 } = this.cesium;
+		this.anchorOnLook(look);
+		this.viewer.camera.flyTo({
+			destination: Cartesian3.clone(this.scratchPosition),
+			orientation: {
+				direction: Cartesian3.clone(this.scratchLook),
+				up: Cartesian3.clone(this.scratchLookUp)
+			},
+			duration: durationSeconds,
+			easingFunction: EasingFunction.QUADRATIC_IN_OUT,
+			complete: onComplete,
+			cancel: onCancel,
+			endTransform: Matrix4.IDENTITY
+		});
+
+		return true;
+	}
+
+	// Leaves the camera position and axes of `look` in the scratch vectors.
+	private posePlacing(look: LookState): boolean {
 		const frustum = this.activeFrustum();
 		if (!frustum) {
 			return false;
@@ -285,18 +377,15 @@ export class ViewerCameraFlight implements CameraFlight {
 		Cartesian3.normalize(this.scratchLook, this.scratchLook);
 		Cartesian3.normalize(this.scratchLookUp, this.scratchLookUp);
 
-		this.viewer.camera.setView({
-			destination: this.scratchPosition,
-			orientation: { direction: this.scratchLook, up: this.scratchLookUp },
-			endTransform: Matrix4.IDENTITY
-		});
+		return true;
+	}
+
+	private anchorOnLook(look: LookState): void {
 		this.anchor = {
 			latitude: look.latitude,
 			longitude: look.longitude,
 			altitudeMeters: look.altitudeMeters
 		};
-
-		return true;
 	}
 
 	// A dolly along the current view direction: the heading, tilt and centre-screen focus stay put

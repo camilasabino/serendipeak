@@ -37,6 +37,26 @@
 	text-underline-offset: 0.18em;
 }
 
+.atlas {
+	margin: var(--sp-space-3) 0 0;
+}
+
+.atlas a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	min-height: 2.75rem;
+	color: var(--sp-link-on-stage);
+	font-size: var(--sp-text-ui);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
+}
+
+.atlas a:hover {
+	color: var(--sp-link-on-stage-hover);
+}
+
 .eyebrow {
 	margin: 0 0 var(--sp-space-3);
 	font-size: 0.8125rem;

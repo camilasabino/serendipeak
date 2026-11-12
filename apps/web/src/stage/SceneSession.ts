@@ -1,15 +1,21 @@
+import {
+	ATLAS_ORBIT_PERIOD_SECONDS,
+	atlasOverviewLook,
+	overviewRangeMeters,
+	type AtlasView
+} from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { CameraOutcome } from './globe/choreography';
 import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
 import type { ResetResult } from './globe/mountainCamera';
-import type { StageSize } from './globe/stageFrame';
+import { stageAspect, type StageSize } from './globe/stageFrame';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { startScene } from './lifecycle';
 import { releaseBestEffort } from './releaseBestEffort';
 import { INITIALIZATION_FAILED_STATE } from './sceneState';
-import type { SceneStore } from './SceneStore';
+import type { RotationState, SceneStore } from './SceneStore';
 
 export type PresentationOutcome = CameraOutcome['status'];
 
@@ -18,6 +24,8 @@ export type PresentationOutcome = CameraOutcome['status'];
 export interface PresentationObserver {
 	presenting(target: SceneTarget): void;
 	presented(target: SceneTarget, outcome: PresentationOutcome): void;
+	/** The session let go of its target without presenting another: nothing pending will arrive. */
+	cleared(): void;
 	/** The session will present nothing further: it stopped, or it has no scene to present with. */
 	ended(): void;
 }
@@ -32,6 +40,15 @@ export interface SceneSessionOptions {
 
 const noop = () => {};
 
+const FAILED_FLIGHT: CameraOutcome = { status: 'failed', error: undefined };
+
+/**
+ * Where the atlas camera stands relative to its overview: `arriving` while placed or flown there,
+ * `idle` once there and untouched, which is when the ambient orbit may turn it, and `away` after
+ * anything else moved it.
+ */
+type OverviewStage = 'away' | 'arriving' | 'idle';
+
 // The constructor starts the session; `stop()` is its only teardown and is idempotent.
 export class SceneSession {
 	private readonly store: SceneStore;
@@ -41,14 +58,21 @@ export class SceneSession {
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
 	private releaseImagery: () => void = noop;
+	private releaseInteraction: () => void = noop;
 	private stopScene: () => void = noop;
 	private imageryDegraded = false;
 	private settled = false;
+	private free = false;
 	private target: SceneTarget | undefined;
+	private atlas: AtlasView | undefined;
 	private stage: StageSize | undefined;
 	private stopped = false;
 	private revealed = false;
 	private presentation = 0;
+	private overview: OverviewStage = 'away';
+	private orbiting = false;
+	/** The reader paused the ambient orbit; kept until they resume it, across atlas visits. */
+	private rotationPaused = false;
 
 	constructor({ ionToken, createScene, store, onError, observer }: SceneSessionOptions) {
 		this.store = store;
@@ -77,18 +101,71 @@ export class SceneSession {
 		);
 	}
 
+	/**
+	 * Presents a mountain, or with `undefined` lets go of the one presented: its flight stops where
+	 * it is and its summit marker goes. The camera then belongs to free navigation, and on the atlas
+	 * flies from wherever it stopped to the overview.
+	 */
 	setTarget(next: SceneTarget | undefined): void {
 		if (this.stopped) {
 			return;
 		}
+		const previous = this.target;
 		this.target = next;
 		if (this.scene && next) {
 			this.begin(next);
 			return;
 		}
+		if (this.scene && previous) {
+			this.release(this.scene);
+			if (this.atlas) {
+				void this.flyToOverview(this.scene, this.atlas);
+			}
+			return;
+		}
 		if (next && this.store.getSnapshot().state.status === 'failed') {
 			this.observer?.ended();
 		}
+	}
+
+	/**
+	 * Where a free camera returns to. Arriving on the atlas with no mountain to let go of flies there
+	 * at once; with one, letting it go does. Leaving the atlas ends the ambient orbit.
+	 */
+	setAtlas(next: AtlasView | undefined): void {
+		if (this.stopped) {
+			return;
+		}
+		const previous = this.atlas;
+		this.atlas = next;
+		if (!next) {
+			this.leaveOverview();
+			return;
+		}
+		if (!previous && this.scene && this.revealed && !this.target) {
+			void this.flyToOverview(this.scene, next);
+			return;
+		}
+		this.publishRotation();
+	}
+
+	/** Pauses the ambient orbit, or resumes it, flying back to the overview if the camera left it. */
+	toggleRotation(): void {
+		const state = this.rotationState();
+		if (state === 'off' || !this.scene || !this.atlas) {
+			return;
+		}
+		if (state === 'rotating') {
+			this.rotationPaused = true;
+			this.haltOrbit();
+			return;
+		}
+		this.rotationPaused = false;
+		if (this.overview === 'away' && this.free) {
+			void this.flyToOverview(this.scene, this.atlas);
+			return;
+		}
+		this.resumeOrbit();
 	}
 
 	updateStage(size: StageSize): void {
@@ -97,15 +174,32 @@ export class SceneSession {
 		}
 		this.stage = size;
 		this.scene?.updateStage(size);
+		this.refitOverview(size);
 	}
 
+	// A presented mountain resets to its own pose; a free camera to the atlas overview, if any.
 	resetView(): ResetResult {
-		return this.scene && this.settled ? this.scene.resetView() : 'unavailable';
+		if (!this.scene) {
+			return 'unavailable';
+		}
+		if (this.settled) {
+			return this.scene.resetView();
+		}
+		if (this.free && this.atlas) {
+			void this.flyToOverview(this.scene, this.atlas);
+			return 'reset';
+		}
+
+		return 'unavailable';
 	}
 
 	// Gated like Reset: an explicit step must not fight the reveal or a flight between mountains.
 	zoomView(direction: ZoomDirection): ZoomResult {
-		return this.scene && this.settled ? this.scene.zoomView(direction) : 'unavailable';
+		if (!this.scene || !(this.settled || this.free)) {
+			return 'unavailable';
+		}
+		this.leaveOverview();
+		return this.scene.zoomView(direction);
 	}
 
 	// Only a pose the current target arrived at is a pose someone chose to look at.
@@ -120,15 +214,20 @@ export class SceneSession {
 		this.stopped = true;
 		this.presentation += 1;
 		this.publishSettled(false);
+		this.publishFree(false);
+		this.orbiting = false;
+		this.publishRotation();
 		this.store.setOrientation(undefined);
 		this.store.setScale(undefined);
 		this.scene = undefined;
 		this.observer?.ended();
 
-		const { releaseOrientation, releaseScale, releaseImagery, stopScene } = this;
+		const { releaseOrientation, releaseScale, releaseImagery, releaseInteraction, stopScene } =
+			this;
 		this.releaseOrientation = noop;
 		this.releaseScale = noop;
 		this.releaseImagery = noop;
+		this.releaseInteraction = noop;
 		this.stopScene = noop;
 
 		// The scene goes last: a retry must never meet a live Viewer because a release threw.
@@ -136,6 +235,7 @@ export class SceneSession {
 			['orientation subscription', releaseOrientation],
 			['scale subscription', releaseScale],
 			['imagery subscription', releaseImagery],
+			['interaction subscription', releaseInteraction],
 			['scene', stopScene]
 		]);
 	}
@@ -184,6 +284,7 @@ export class SceneSession {
 				this.publishReady();
 			}
 		});
+		this.releaseInteraction = ready.subscribeInteraction(() => this.interacted());
 
 		if (this.stage) {
 			ready.updateStage(this.stage);
@@ -192,8 +293,144 @@ export class SceneSession {
 			this.begin(this.target);
 			return;
 		}
+		if (this.atlas) {
+			void this.revealOverview(ready, this.atlas);
+			return;
+		}
 		this.revealed = true;
 		this.publishReady();
+		this.publishFree(true);
+	}
+
+	// Placed at once, like a direct reveal: the loader stays until the globe under it has loaded.
+	private async revealOverview(ready: GlobeScene, atlas: AtlasView): Promise<void> {
+		const ticket = ++this.presentation;
+		this.overview = 'arriving';
+		let outcome: CameraOutcome;
+		try {
+			outcome = await ready.showOverview(atlasOverviewLook(atlas, this.stage), false);
+		} catch (error) {
+			this.failSetup(error);
+			return;
+		}
+		if (!this.isCurrent(ticket)) {
+			return;
+		}
+		await ready.whenViewReady().catch(() => undefined);
+		if (!this.isCurrent(ticket)) {
+			return;
+		}
+		this.revealed = true;
+		this.publishReady();
+		this.publishFree(true);
+		this.settleOverview(outcome);
+	}
+
+	// A failed flight leaves the camera wherever it stopped, which is still a free camera.
+	private async flyToOverview(ready: GlobeScene, atlas: AtlasView): Promise<void> {
+		const ticket = ++this.presentation;
+		this.haltOrbit();
+		this.overview = 'arriving';
+		this.publishFree(false);
+		this.publishRotation();
+		const outcome = await ready
+			.showOverview(atlasOverviewLook(atlas, this.stage), true)
+			.catch(() => FAILED_FLIGHT);
+		if (!this.isCurrent(ticket)) {
+			return;
+		}
+		this.publishFree(true);
+		this.settleOverview(outcome);
+	}
+
+	// Someone who touched the globe on the way keeps it: the orbit does not start under them.
+	// A camera still at the overview keeps the whole globe in view when the stage changes shape. One
+	// the reader moved is theirs, and a flight in progress is aimed at the old shape, so it restarts.
+	private refitOverview(size: StageSize): void {
+		const ready = this.scene;
+		if (!ready || !this.atlas || this.overview === 'away' || !(stageAspect(size) > 0)) {
+			return;
+		}
+		if (ready.refitRange(overviewRangeMeters(size)) === 'busy') {
+			void this.flyToOverview(ready, this.atlas);
+		}
+	}
+
+	private settleOverview(outcome: CameraOutcome): void {
+		if (this.overview === 'arriving') {
+			this.overview = outcome.status === 'arrived' ? 'idle' : 'away';
+		}
+		this.resumeOrbit();
+	}
+
+	private resumeOrbit(): void {
+		const ready = this.scene;
+		if (
+			ready &&
+			this.atlas &&
+			this.revealed &&
+			this.overview === 'idle' &&
+			!this.rotationPaused &&
+			!this.orbiting
+		) {
+			this.orbiting = ready.startOrbit(ATLAS_ORBIT_PERIOD_SECONDS, () => this.orbitHalted());
+		}
+		this.publishRotation();
+	}
+
+	private orbitHalted(): void {
+		if (this.stopped) {
+			return;
+		}
+		this.orbiting = false;
+		this.overview = 'away';
+		this.publishRotation();
+	}
+
+	private interacted(): void {
+		if (!this.stopped && (this.overview !== 'away' || this.orbiting)) {
+			this.leaveOverview();
+		}
+	}
+
+	private leaveOverview(): void {
+		this.overview = 'away';
+		this.haltOrbit();
+	}
+
+	private haltOrbit(): void {
+		if (this.orbiting) {
+			this.orbiting = false;
+			this.scene?.stopOrbit();
+		}
+		this.publishRotation();
+	}
+
+	private rotationState(): RotationState {
+		const ready = this.scene;
+		if (this.stopped || !ready || !this.atlas || !this.revealed || !ready.canOrbit()) {
+			return 'off';
+		}
+		return this.rotationPaused || this.overview === 'away' ? 'paused' : 'rotating';
+	}
+
+	private publishRotation(): void {
+		this.store.setRotation(this.rotationState());
+	}
+
+	// The presentation ticket moves on first, so no outcome of the released target is reported. A
+	// reveal still in progress ends here: there is nothing left for the loader to wait for.
+	private release(ready: GlobeScene): void {
+		this.presentation += 1;
+		this.leaveOverview();
+		this.publishSettled(false);
+		ready.clearTarget();
+		this.observer?.cleared();
+		if (!this.revealed) {
+			this.revealed = true;
+			this.publishReady();
+		}
+		this.publishFree(true);
 	}
 
 	private publishReady(): void {
@@ -210,14 +447,24 @@ export class SceneSession {
 		this.store.setSettled(next);
 	}
 
+	private publishFree(next: boolean): void {
+		if (next === this.free) {
+			return;
+		}
+		this.free = next;
+		this.store.setFree(next);
+	}
+
 	private publishCamera(target: SceneTarget, outcome: CameraOutcome): void {
 		this.publishSettled(outcome.status === 'arrived');
 		this.observer?.presented(target, outcome.status);
 	}
 
 	private begin(next: SceneTarget): void {
+		this.leaveOverview();
 		const ticket = ++this.presentation;
 		this.publishSettled(false);
+		this.publishFree(false);
 		this.observer?.presenting(next);
 		if (!this.revealed) {
 			void this.presentInitial(next, ticket);

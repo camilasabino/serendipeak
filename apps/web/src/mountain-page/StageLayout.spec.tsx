@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { TestExperience } from '../test/TestExperience';
-import { MountainLayout } from './MountainLayout';
+import { StageLayout } from './StageLayout';
 import { MountainView } from './MountainView';
 import { countOf } from './test-support/markup';
 import type { MountainModel } from './pageModel';
@@ -17,9 +17,9 @@ function render(model: MountainModel): string {
 
 	return renderToStaticMarkup(
 		<TestExperience>
-			<MountainLayout model={model}>
+			<StageLayout model={model}>
 				<MountainView mountain={shown} daily={daily_} />
-			</MountainLayout>
+			</StageLayout>
 		</TestExperience>
 	);
 }
@@ -29,7 +29,7 @@ const STAGE_LOADER = 'role="status"';
 describe.each([
 	['a permalink', { kind: 'mountain', mountain } as const],
 	['the daily page', { kind: 'daily', daily } as const]
-])('MountainLayout on %s', (_name, model) => {
+])('StageLayout on %s', (_name, model) => {
 	const html = render(model);
 
 	it('renders one main landmark that holds the sheet and the stage', () => {
@@ -55,7 +55,7 @@ describe.each([
 	});
 });
 
-describe('MountainLayout reveal announcement', () => {
+describe('StageLayout reveal announcement', () => {
 	it('uses the permalink wording', () => {
 		expect(render({ kind: 'mountain', mountain })).toContain('Revealing the mountain...');
 	});

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MountainIndexResult } from '../api/contract';
 import { MountainIndexStore, type MountainIndexState } from './MountainIndexStore';
-import { indexEntry } from './test-support/indexEntries';
+import { indexEntry } from '../api/test-support/indexEntries';
 
 const FOUND: MountainIndexResult = {
 	kind: 'found',
@@ -46,7 +46,7 @@ function storeAnswering(...results: (MountainIndexResult | Promise<MountainIndex
 }
 
 function slugsOf(state: MountainIndexState): string[] {
-	return state.status === 'ready' ? state.index.map((mountain) => mountain.entry.slug) : [];
+	return state.status === 'ready' ? state.mountains.map((mountain) => mountain.slug) : [];
 }
 
 describe('MountainIndexStore', () => {
@@ -153,7 +153,7 @@ describe('MountainIndexStore', () => {
 
 		await store.request();
 
-		expect(store.getSnapshot()).toEqual({ status: 'ready', index: [] });
+		expect(store.getSnapshot()).toEqual({ status: 'ready', mountains: [] });
 	});
 
 	it('stops notifying a listener that unsubscribed', async () => {
@@ -164,5 +164,37 @@ describe('MountainIndexStore', () => {
 		await store.request();
 
 		expect(listener).not.toHaveBeenCalled();
+	});
+
+	it('takes a seeded index as fresh, so the next ask makes no request', async () => {
+		const { store, getMountainIndex, states, advance } = storeAnswering(REFRESHED);
+
+		store.seed([indexEntry('aconcagua', 'Aconcagua')]);
+		advance(999);
+		await store.request();
+
+		expect(states).toEqual(['ready']);
+		expect(slugsOf(store.getSnapshot())).toEqual(['aconcagua']);
+		expect(getMountainIndex).not.toHaveBeenCalled();
+	});
+
+	it('refreshes a seeded index once it is older than the maximum age', async () => {
+		const { store, getMountainIndex, advance } = storeAnswering(REFRESHED);
+		store.seed([indexEntry('aconcagua', 'Aconcagua')]);
+
+		advance(1_000);
+		await store.request();
+
+		expect(getMountainIndex).toHaveBeenCalledOnce();
+		expect(slugsOf(store.getSnapshot())).toEqual(['aconcagua', 'mont-blanc']);
+	});
+
+	it('replaces a failed index with a seeded one', async () => {
+		const { store } = storeAnswering({ kind: 'unreachable' });
+		await store.request();
+
+		store.seed([indexEntry('mont-blanc', 'Mont Blanc')]);
+
+		expect(slugsOf(store.getSnapshot())).toEqual(['mont-blanc']);
 	});
 });

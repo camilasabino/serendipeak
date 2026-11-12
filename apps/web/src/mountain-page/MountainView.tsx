@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { Mountain } from '../api/contract';
+import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
 import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
@@ -29,6 +30,11 @@ export function MountainView({ mountain, daily, preview = false }: MountainViewP
 			)}
 			{daily && <p className={styles.eyebrow}>{DAILY_EYEBROW}</p>}
 			<MountainInfoPanel mountain={mountain} />
+			{!daily && !preview && (
+				<p className={styles.atlas}>
+					<AtlasReturnLink />
+				</p>
+			)}
 			{primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
 			<DataSources sources={sources} />
 			{daily && <p className={styles.cue}>{DAILY_CUE}</p>}

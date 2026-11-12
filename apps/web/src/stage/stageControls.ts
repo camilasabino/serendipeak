@@ -6,8 +6,12 @@ export interface StageControls {
 	zoomEnabled: boolean;
 }
 
-export function stageControlsFor(state: SceneState, settled: boolean): StageControls {
+// Settled and free are the two states in which no choreography owns the camera.
+export function stageControlsFor(
+	state: SceneState,
+	camera: { settled: boolean; free: boolean }
+): StageControls {
 	const visible = state.status === 'ready';
-	const cameraFree = visible && settled;
+	const cameraFree = visible && (camera.settled || camera.free);
 	return { visible, resetEnabled: cameraFree, zoomEnabled: cameraFree };
 }

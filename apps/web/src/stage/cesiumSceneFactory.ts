@@ -21,7 +21,12 @@ export function cesiumSceneFactory({
 
 			return CesiumGlobeScene.create(
 				viewport,
-				{ ionToken, imageryMode: mode, exposeCameraReading: diagnostics?.exposeCameraReading },
+				{
+					ionToken,
+					imageryMode: mode,
+					exposeCameraReading: diagnostics?.exposeCameraReading,
+					exposeGlobePosition: diagnostics?.exposeGlobePosition
+				},
 				signal
 			);
 		};

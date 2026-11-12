@@ -111,7 +111,10 @@ describe('AppFrame About link', () => {
 
 		expect(countOf(html, 'nav')).toBe(1);
 		expect(nav).toContain('aria-label="Primary"');
-		expect(anchorsOf(nav)[0]).toMatchObject({ href: '/about', text: 'About' });
+		expect(anchorsOf(nav).slice(0, 2)).toMatchObject([
+			{ href: '/atlas', text: 'Atlas' },
+			{ href: '/about', text: 'About' }
+		]);
 		expect(html.indexOf('<header')).toBeLessThan(html.indexOf('<nav'));
 		expect(html.indexOf('</nav>')).toBeLessThan(html.indexOf('</header>'));
 	});
@@ -119,7 +122,7 @@ describe('AppFrame About link', () => {
 	it('keeps the mountain controls in the same navigation after About', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
-		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['About', "Today's mountain"]);
+		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Atlas', 'About', "Today's mountain"]);
 		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'Explore another→']);
 	});
 
@@ -135,6 +138,14 @@ describe('AppFrame About link', () => {
 		expect(nav.indexOf('Search mountains')).toBeLessThan(nav.indexOf('href="/about"'));
 		expect(nav).toContain('aria-haspopup="dialog"');
 		expect(html).not.toContain('<dialog');
+	});
+
+	it('marks Atlas as the current page only on the atlas route', () => {
+		const onAtlas = anchorsOf(render({}, '/atlas')).find(({ href }) => href === '/atlas');
+		const elsewhere = anchorsOf(render({}, '/')).find(({ href }) => href === '/atlas');
+
+		expect(onAtlas?.attributes).toContain('aria-current="page"');
+		expect(elsewhere?.attributes).not.toContain('aria-current');
 	});
 
 	it('marks About as the current page only on the About route', () => {

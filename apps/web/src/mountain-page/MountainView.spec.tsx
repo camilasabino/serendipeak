@@ -122,7 +122,7 @@ describe('minimal fixture', () => {
 	it('collapses to the name and the facts that exist', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual(['Europe', '2,000 m', '45.0000° N, 10.0000° E']);
-		expect(textsOf(html, 'p')).toEqual(["Today's mountain"]);
+		expect(textsOf(html, 'p')).toEqual(["Today's mountain", '←Back to atlas']);
 	});
 
 	it.each(['Countr', 'Region', 'Data sources', '<figure', 'About this photo'])(
@@ -194,5 +194,20 @@ describe('preview', () => {
 
 		expect(textsOf(html, 'h1')).toEqual([minimal.name]);
 		expect(html).toContain('This mountain is not published');
+	});
+});
+
+describe('atlas link', () => {
+	it('leads from a permalink back to the atlas, wherever the page was opened from', () => {
+		expect(
+			anchorsOf(render(complete)).find(({ text }) => text.includes('Back to atlas'))
+		).toMatchObject({ href: '/atlas' });
+	});
+
+	it.each([
+		['the daily page', true, false],
+		['a draft preview', false, true]
+	])('is absent from %s', (_name, daily, preview) => {
+		expect(render(complete, daily, preview)).not.toContain('Back to atlas');
 	});
 });

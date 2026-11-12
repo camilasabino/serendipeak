@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ABOUT_LINK_LABEL, ABOUT_PATH } from '../about/aboutCopy';
+import { ATLAS_LINK_LABEL } from '../atlas/atlasCopy';
+import { ATLAS_PATH } from '../atlas/atlasQuery';
 import { SearchControl } from '../search/SearchControl';
 import { BrandMark } from './BrandMark';
 import styles from './SiteHeader.module.css';
@@ -21,6 +23,13 @@ export function SiteHeader({ pathname, children }: SiteHeaderProps) {
 			</Link>
 			<nav className={styles.nav} aria-label="Primary">
 				<SearchControl />
+				<Link
+					className={styles.link}
+					href={ATLAS_PATH}
+					aria-current={pathname === ATLAS_PATH ? 'page' : undefined}
+				>
+					{ATLAS_LINK_LABEL}
+				</Link>
 				<Link
 					className={styles.link}
 					href={ABOUT_PATH}

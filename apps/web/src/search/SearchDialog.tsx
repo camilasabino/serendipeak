@@ -10,10 +10,10 @@ import {
 } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { moveActiveOption } from './activeOption';
-import { describeResult } from './describeResult';
-import { findMountains } from './findMountains';
+import { describeEntry } from '../mountain-index/describeEntry';
+import { findMountains, prepareIndex } from './findMountains';
 import { foldName } from './foldName';
-import type { MountainIndexState, MountainIndexStore } from './MountainIndexStore';
+import type { MountainIndexState, MountainIndexStore } from '../mountain-index/MountainIndexStore';
 import {
 	CLOSE_LABEL,
 	failureMessage,
@@ -105,10 +105,11 @@ export function SearchCombobox({
 	const listId = `${id}-results`;
 	const [query, setQuery] = useState(initialQuery);
 	const [active, setActive] = useState(-1);
-	const results = useMemo(
-		() => (state.status === 'ready' ? findMountains(state.index, query) : []),
-		[state, query]
+	const index = useMemo(
+		() => (state.status === 'ready' ? prepareIndex(state.mountains) : undefined),
+		[state]
 	);
+	const results = useMemo(() => (index ? findMountains(index, query) : []), [index, query]);
 	const activeEntry: MountainIndexEntry | undefined = results[active];
 	const optionId = (slug: string) => `${id}-option-${slug}`;
 	const activeId = activeEntry ? optionId(activeEntry.slug) : undefined;
@@ -182,7 +183,7 @@ export function SearchCombobox({
 							onClick={() => onSelect(entry.slug)}
 						>
 							<span className={styles.name}>{entry.name}</span>
-							<span className={styles.detail}>{describeResult(entry)}</span>
+							<span className={styles.detail}>{describeEntry(entry)}</span>
 						</li>
 					))}
 				</ul>
@@ -200,7 +201,7 @@ function statusMessage(state: MountainIndexState, query: string, count: number):
 			return failureMessage(state.reason);
 		case 'ready':
 			return foldName(query) === ''
-				? promptMessage(state.index.length)
+				? promptMessage(state.mountains.length)
 				: resultsMessage(count, query);
 	}
 }

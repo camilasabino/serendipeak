@@ -1,3 +1,4 @@
+import type { AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
@@ -21,6 +22,7 @@ export interface StageBindingOptions {
 	ionToken: string | undefined;
 	createScene: CreateScene;
 	target: SceneTarget | undefined;
+	atlas?: AtlasView;
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
 }
@@ -33,11 +35,13 @@ export class StageBinding {
 	private session: SceneSession;
 	private readonly observer: ResizeObserver;
 	private target: SceneTarget | undefined;
+	private atlas: AtlasView | undefined;
 	private published: StageSize | undefined;
 	private disposed = false;
 
 	constructor(private readonly options: StageBindingOptions) {
 		this.target = options.target;
+		this.atlas = options.atlas;
 		this.session = this.openSession();
 		this.present();
 
@@ -53,12 +57,26 @@ export class StageBinding {
 		this.session.setTarget(target);
 	}
 
+	setAtlas(atlas: AtlasView | undefined): void {
+		if (this.disposed) {
+			return;
+		}
+		this.atlas = atlas;
+		this.session.setAtlas(atlas);
+	}
+
 	resetView(): ResetResult {
 		return this.disposed ? 'unavailable' : this.session.resetView();
 	}
 
 	zoomView(direction: ZoomDirection): ZoomResult {
 		return this.disposed ? 'unavailable' : this.session.zoomView(direction);
+	}
+
+	toggleRotation(): void {
+		if (!this.disposed) {
+			this.session.toggleRotation();
+		}
 	}
 
 	readCamera(): CameraReading | undefined {
@@ -104,6 +122,7 @@ export class StageBinding {
 	private present(): void {
 		this.published = undefined;
 		this.publishSize();
+		this.session.setAtlas(this.atlas);
 		this.session.setTarget(this.target);
 	}
 

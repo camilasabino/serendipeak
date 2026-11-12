@@ -13,7 +13,7 @@ export type MountainPlacement = 'initial' | 'next';
 
 export type MountainCameraDirector = Pick<
 	CameraDirector,
-	'place' | 'travel' | 'reframe' | 'busy' | 'stop'
+	'place' | 'travel' | 'reframe' | 'busy' | 'release' | 'stop'
 >;
 
 export type ResetResult = 'reset' | 'unchanged' | 'unavailable';
@@ -23,6 +23,8 @@ export interface MountainCamera {
 	remember(pose: TerrainCameraPose, size: StageSize): void;
 	reset(): ResetResult;
 	updateStage(size: StageSize): void;
+	/** Forgets the presented mountain and its pose; unlike stop(), later shows still work. */
+	clear(): void;
 	stop(): void;
 }
 
@@ -185,6 +187,16 @@ export function createMountainCamera({
 			if (!applyReframe(size)) {
 				pendingStage = size;
 			}
+		},
+		clear() {
+			if (stopped) {
+				return;
+			}
+			ticket += 1;
+			pendingStage = undefined;
+			activeTarget = undefined;
+			activePose = undefined;
+			director.release();
 		},
 		stop() {
 			stopped = true;

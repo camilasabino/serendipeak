@@ -1,4 +1,4 @@
-import type { IndexFailure } from './MountainIndexStore';
+import type { IndexFailure } from '../mountain-index/MountainIndexStore';
 
 export const SEARCH_BUTTON_LABEL = 'Search';
 export const SEARCH_BUTTON_LABEL_SUFFIX = ' mountains';

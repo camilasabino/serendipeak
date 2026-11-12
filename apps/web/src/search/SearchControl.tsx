@@ -1,9 +1,8 @@
 import Router from 'next/router';
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { useMountainApi } from '../api/MountainApiContext';
 import { bindRouteChanges, createNavigate } from '../explore/navigate';
 import { focusMountainHeading } from '../mountain-page/focusMountainHeading';
-import { MountainIndexStore } from './MountainIndexStore';
+import { useMountainIndex } from '../mountain-index/MountainIndexContext';
 import { SEARCH_BUTTON_LABEL, SEARCH_BUTTON_LABEL_SUFFIX } from './searchCopy';
 import styles from './SearchControl.module.css';
 import { SearchDialog } from './SearchDialog';
@@ -37,11 +36,10 @@ export function SearchButton({
 	);
 }
 
-// The control lives in the site header, which stays mounted across client navigation, so the
-// index it loads is reused for every later search.
+// The index store belongs to the app, so whatever one search or page loaded serves every later
+// search.
 export function SearchControl() {
-	const api = useMountainApi();
-	const [store] = useState(() => new MountainIndexStore({ api }));
+	const store = useMountainIndex();
 	const [navigate] = useState(() => createNavigate(() => Router));
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);

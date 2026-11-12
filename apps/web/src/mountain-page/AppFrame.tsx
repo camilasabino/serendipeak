@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { SiteShell } from '../shell/SiteShell';
-import { MountainLayout } from './MountainLayout';
 import { MountainNavigation } from './MountainNavigation';
 import { pageModelOf } from './pageModel';
+import { StageLayout } from './StageLayout';
 
 interface AppFrameProps {
 	pageProps: object;
@@ -13,16 +13,17 @@ interface AppFrameProps {
 
 export function AppFrame({ pageProps, year, pathname, children }: AppFrameProps) {
 	const model = pageModelOf(pageProps);
-	const mountainModel = model?.kind === 'error' ? undefined : model;
+	const stageModel = model?.kind === 'error' ? undefined : model;
+	const mountainModel = stageModel?.kind === 'atlas' ? undefined : stageModel;
 
 	return (
 		<SiteShell
-			layout={mountainModel ? 'split' : 'plain'}
+			layout={stageModel ? 'split' : 'plain'}
 			year={year}
 			pathname={pathname}
 			navigation={mountainModel && <MountainNavigation model={mountainModel} />}
 		>
-			{mountainModel ? <MountainLayout model={mountainModel}>{children}</MountainLayout> : children}
+			{stageModel ? <StageLayout model={stageModel}>{children}</StageLayout> : children}
 		</SiteShell>
 	);
 }

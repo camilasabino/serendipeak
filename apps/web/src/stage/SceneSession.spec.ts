@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FakeReleaseStep, FakeSetupStep } from '../test/FakeGlobeScene';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
+import {
+	ATLAS_ORBIT_PERIOD_SECONDS,
+	ATLAS_VIEW,
+	atlasOverviewLook,
+	overviewRangeMeters
+} from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import {
@@ -161,7 +167,7 @@ describe('SceneSession lifecycle ownership', () => {
 
 	it('destroys the scene once and releases every subscription on repeated stop', async () => {
 		const { session, scene } = await readySession();
-		expect(scene.liveSubscriptions).toBe(3);
+		expect(scene.liveSubscriptions).toBe(4);
 
 		session.stop();
 		session.stop();
@@ -700,6 +706,10 @@ class RecordingObserver implements PresentationObserver {
 		this.log.push(`presented:${target.slug}:${outcome}`);
 	}
 
+	cleared(): void {
+		this.log.push('cleared');
+	}
+
 	ended(): void {
 		this.log.push('ended');
 	}
@@ -918,5 +928,553 @@ describe('SceneSession with the transition coordinator', () => {
 		context.session.stop();
 
 		await expect(transition.arrival).resolves.toBe('interrupted');
+	});
+});
+
+const ATLAS = ATLAS_VIEW;
+// The sessions below never measure a stage, so the overview fits an unmeasured one.
+const OVERVIEW = atlasOverviewLook(ATLAS, undefined);
+
+async function onAtlas(sceneOptions = {}) {
+	const context = setup();
+	context.session.setAtlas(ATLAS);
+	const scene = context.factory.resolve(0, sceneOptions);
+	await flush();
+	return { ...context, scene };
+}
+
+describe('SceneSession on the atlas', () => {
+	it('opens on the overview, placed at once, and keeps loading until the view is ready', async () => {
+		const { session, factory, store } = setup();
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0, { holdViewReady: true });
+		await flush();
+
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: false }]);
+		expect(store.getSnapshot()).toMatchObject({
+			state: { status: 'loading' },
+			free: false,
+			rotation: 'off'
+		});
+		expect(scene.orbiting).toBe(false);
+
+		scene.arriveViewReady();
+		await flush();
+
+		expect(store.getSnapshot()).toMatchObject({
+			state: { status: 'ready' },
+			settled: false,
+			free: true,
+			rotation: 'rotating'
+		});
+		expect(scene.orbits).toEqual([
+			expect.objectContaining({ periodSeconds: ATLAS_ORBIT_PERIOD_SECONDS, running: true })
+		]);
+		expect(scene.shown).toEqual([]);
+	});
+
+	it('fits the overview to the measured stage', async () => {
+		const { session, factory } = setup();
+		const stage = { width: 360, height: 420 };
+		session.updateStage(stage);
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.overviews).toEqual([{ look: atlasOverviewLook(ATLAS, stage), animate: false }]);
+	});
+
+	it('never turns the globe for a reader who prefers reduced motion', async () => {
+		const { scene, store, session } = await onAtlas({ reducedMotion: true });
+
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.orbits).toEqual([]);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+
+		session.toggleRotation();
+		expect(scene.orbits).toEqual([]);
+	});
+
+	it('stops turning at a press or wheel on the globe, until asked to resume', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.holdShow = true;
+
+		scene.interact();
+
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+
+		// The camera may be anywhere now: resuming flies back to the overview first.
+		session.toggleRotation();
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('rotating');
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('stops turning when something else moves the camera', async () => {
+		const { scene, store } = await onAtlas();
+
+		scene.haltOrbit();
+
+		expect(store.getSnapshot().rotation).toBe('paused');
+	});
+
+	it('pauses in place and resumes in place, without a flight', async () => {
+		const { scene, store, session } = await onAtlas();
+
+		session.toggleRotation();
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+
+		session.toggleRotation();
+		expect(scene.orbiting).toBe(true);
+		expect(scene.orbits).toHaveLength(2);
+		expect(scene.overviews).toHaveLength(1);
+		expect(store.getSnapshot().rotation).toBe('rotating');
+	});
+
+	it('keeps a reader’s pause through Reset, which still returns to the overview', async () => {
+		const { scene, store, session } = await onAtlas();
+		session.toggleRotation();
+
+		expect(session.resetView()).toBe('reset');
+		await flush();
+
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+	});
+
+	it('zooms in free mode, ending the orbit, but reads no camera', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.reading = READING;
+
+		expect(session.zoomView('in')).toBe('zoomed');
+
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+		expect(session.readCamera()).toBeUndefined();
+		expect(scene.reads).toBe(0);
+	});
+
+	it('resets a free camera to the overview through an animated flight, then turns again', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.holdShow = true;
+		scene.interact();
+
+		expect(session.resetView()).toBe('reset');
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+		expect(store.getSnapshot().free).toBe(false);
+		expect(session.zoomView('in')).toBe('unavailable');
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
+		expect(scene.orbiting).toBe(true);
+		expect(scene.resets).toBe(0);
+	});
+
+	it('does not start turning under someone who touched the globe during the flight', async () => {
+		const { scene, session } = await onAtlas();
+		scene.holdShow = true;
+		session.resetView();
+
+		scene.interact();
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(scene.orbiting).toBe(false);
+	});
+
+	it('stays free without turning when the overview flight is interrupted', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.holdShow = true;
+		session.resetView();
+
+		scene.pendingOverviews[0]!({ status: 'interrupted' });
+		await flush();
+
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'paused' });
+		expect(scene.orbiting).toBe(false);
+	});
+
+	it('keeps Reset unavailable for a free camera off the atlas', async () => {
+		const { session, factory, store } = setup();
+		factory.resolve(0);
+		await flush();
+
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+		expect(session.resetView()).toBe('unavailable');
+	});
+
+	it('lets a mountain set before the scene exists take over the overview reveal', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setTarget(FITZ_ROY);
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.overviews).toEqual([]);
+		expect(scene.shown).toEqual([{ target: FITZ_ROY, placement: 'initial' }]);
+	});
+
+	it('ends in a controlled failure when placing the overview throws', async () => {
+		const { session, factory, store } = setup({ onError: () => {} });
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0);
+		scene.showOverview = () => {
+			throw new Error('overview');
+		};
+		await flush();
+
+		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
+		expect(scene.destroyed).toBe(true);
+	});
+
+	it('stops the orbit and lets go of the interaction listener when it stops', async () => {
+		const { scene, store, session } = await onAtlas();
+
+		session.stop();
+
+		expect(scene.orbiting).toBe(false);
+		expect(scene.liveSubscriptions).toBe(0);
+		expect(store.getSnapshot()).toMatchObject({ free: false, rotation: 'off' });
+	});
+});
+
+describe('SceneSession resizing on the atlas', () => {
+	const PORTRAIT = { width: 390, height: 520 };
+	const WIDE = { width: 900, height: 360 };
+
+	it('refits the range of a turning overview without flying or restarting the orbit', async () => {
+		const { scene, store, session } = await onAtlas();
+
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([overviewRangeMeters(WIDE)]);
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.orbits).toHaveLength(1);
+		expect(scene.orbiting).toBe(true);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
+	});
+
+	it('refits a paused overview and leaves it paused', async () => {
+		const { scene, store, session } = await onAtlas();
+		session.toggleRotation();
+
+		session.updateStage(PORTRAIT);
+
+		expect(scene.refits).toEqual([overviewRangeMeters(PORTRAIT)]);
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+	});
+
+	it('refits again for each new shape, ending on the last one', async () => {
+		const { scene, session } = await onAtlas();
+
+		session.updateStage(PORTRAIT);
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([overviewRangeMeters(PORTRAIT), overviewRangeMeters(WIDE)]);
+	});
+
+	it('refits an overview that never turns for reduced motion', async () => {
+		const { scene, session } = await onAtlas({ reducedMotion: true });
+
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([overviewRangeMeters(WIDE)]);
+		expect(scene.orbits).toEqual([]);
+	});
+
+	it('leaves a camera the reader moved where it is', async () => {
+		const { scene, session } = await onAtlas();
+		scene.interact();
+
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([]);
+		expect(scene.overviews).toHaveLength(1);
+	});
+
+	it('leaves a camera that a zoom step moved where it is', async () => {
+		const { scene, session } = await onAtlas();
+		session.zoomView('in');
+
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([]);
+	});
+
+	it('restarts the overview flight for the new shape instead of refitting under it', async () => {
+		const { scene, session } = await onAtlas();
+		scene.holdShow = true;
+		scene.refitResult = 'busy';
+		session.resetView();
+
+		session.updateStage(WIDE);
+
+		expect(scene.overviews.at(-1)).toEqual({ look: atlasOverviewLook(ATLAS, WIDE), animate: true });
+		expect(scene.overviews).toHaveLength(3);
+		expect(scene.orbiting).toBe(false);
+
+		scene.pendingOverviews.at(-1)!({ status: 'arrived' });
+		await flush();
+
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('refits an overview placed but still waiting for the globe to load', async () => {
+		const { session, factory, store } = setup();
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0, { holdViewReady: true });
+		await flush();
+
+		session.updateStage(WIDE);
+
+		expect(scene.refits).toEqual([overviewRangeMeters(WIDE)]);
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+
+		scene.arriveViewReady();
+		await flush();
+
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('ignores a stage with no area', async () => {
+		const { scene, session } = await onAtlas();
+
+		session.updateStage({ width: 0, height: 0 });
+
+		expect(scene.refits).toEqual([]);
+	});
+
+	it('never refits off the atlas or after leaving it', async () => {
+		const { scene, session } = await onAtlas();
+		session.setAtlas(undefined);
+		session.updateStage(WIDE);
+		session.setTarget(ACONCAGUA);
+		session.updateStage(PORTRAIT);
+
+		expect(scene.refits).toEqual([]);
+	});
+});
+
+describe('SceneSession entering and leaving the atlas', () => {
+	// The layout tells the session about the atlas before it lets go of the mountain.
+	function enterAtlas(session: SceneSession) {
+		session.setAtlas(ATLAS);
+		session.setTarget(undefined);
+	}
+
+	function leaveAtlasFor(session: SceneSession, target: SceneTarget) {
+		session.setAtlas(undefined);
+		session.setTarget(target);
+	}
+
+	it('lets go of a settled mountain and flies once from it to the overview', async () => {
+		const observer = new RecordingObserver();
+		const context = setup({ observer });
+		context.session.setTarget(ACONCAGUA);
+		const scene = context.factory.resolve(0, { holdShow: true });
+		await flush();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		enterAtlas(context.session);
+
+		expect(scene.clears).toBeGreaterThanOrEqual(1);
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: true }]);
+		expect(context.store.getSnapshot()).toMatchObject({
+			settled: false,
+			free: false,
+			rotation: 'rotating'
+		});
+		expect(context.session.readCamera()).toBeUndefined();
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(context.store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
+		expect(scene.orbiting).toBe(true);
+		expect(observer.log).toEqual([
+			'presenting:aconcagua',
+			'presented:aconcagua:arrived',
+			'cleared'
+		]);
+	});
+
+	it('cuts a mountain flight short and flies from wherever it stopped', async () => {
+		const { session, scene, observer, store } = await observed({ holdShow: true });
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		session.setTarget(FITZ_ROY);
+
+		enterAtlas(session);
+		await flush();
+
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: true }]);
+		expect(observer.log).toEqual([
+			'presenting:aconcagua',
+			'presented:aconcagua:arrived',
+			'presenting:fitz-roy',
+			'cleared'
+		]);
+		expect(store.getSnapshot().settled).toBe(false);
+	});
+
+	it('flies to the overview from a free camera that had no mountain to let go of', async () => {
+		const { session, scene } = await readySession();
+
+		session.setAtlas(ATLAS);
+
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: true }]);
+		expect(scene.clears).toBe(1);
+	});
+
+	it('flies only once however often the atlas is confirmed', async () => {
+		const { session, scene } = await presenting();
+
+		enterAtlas(session);
+		session.setAtlas(ATLAS);
+		session.setTarget(undefined);
+		await flush();
+
+		expect(scene.overviews).toHaveLength(1);
+	});
+
+	it('ends a reveal still in progress and flies to the overview instead', async () => {
+		const { session, factory, store } = setup();
+		session.setTarget(ACONCAGUA);
+		const scene = factory.resolve(0, { holdShow: true });
+		await flush();
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+
+		enterAtlas(session);
+
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: true }]);
+	});
+
+	it('leaves the atlas by stopping the orbit and presenting the next mountain', async () => {
+		const { session, scene, store } = await onAtlas();
+		expect(scene.orbiting).toBe(true);
+
+		leaveAtlasFor(session, FITZ_ROY);
+		await flush();
+
+		expect(scene.orbiting).toBe(false);
+		expect(scene.shown).toEqual([{ target: FITZ_ROY, placement: 'next' }]);
+		expect(store.getSnapshot()).toMatchObject({ settled: true, rotation: 'off' });
+	});
+
+	it('lets a mountain chosen during the overview flight take over, with no orbit after', async () => {
+		const { session, scene, store } = await presenting({ holdShow: true });
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		enterAtlas(session);
+
+		leaveAtlasFor(session, FITZ_ROY);
+		await flush();
+		scene.pendingShows.at(-1)!.resolve({ status: 'arrived' });
+		await flush();
+
+		expect(scene.shown.at(-1)).toEqual({ target: FITZ_ROY, placement: 'next' });
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot()).toMatchObject({ settled: true, free: false });
+	});
+
+	it('returns to the overview on every visit, keeping a reader’s pause', async () => {
+		const { session, scene, store } = await onAtlas();
+		session.toggleRotation();
+
+		leaveAtlasFor(session, FITZ_ROY);
+		await flush();
+		enterAtlas(session);
+		await flush();
+
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+	});
+});
+
+describe('SceneSession releasing its target off the atlas', () => {
+	it('lets go of a settled mountain: no summit, no settled, a free camera that stays put', async () => {
+		const { session, scene, store } = await presenting();
+		expect(store.getSnapshot().settled).toBe(true);
+
+		session.setTarget(undefined);
+
+		expect(scene.clears).toBe(1);
+		expect(scene.overviews).toEqual([]);
+		expect(store.getSnapshot()).toMatchObject({ settled: false, free: true });
+		expect(session.readCamera()).toBeUndefined();
+		expect(session.zoomView('in')).toBe('zoomed');
+	});
+
+	it('ends a reveal still in progress instead of leaving the loader up', async () => {
+		const { session, factory, store } = setup();
+		session.setTarget(ACONCAGUA);
+		factory.resolve(0, { holdShow: true });
+		await flush();
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+
+		session.setTarget(undefined);
+
+		expect(store.getSnapshot()).toMatchObject({ state: { status: 'ready' }, free: true });
+	});
+
+	it('does nothing for a target that was never set', async () => {
+		const { session, scene } = await readySession();
+
+		session.setTarget(undefined);
+
+		expect(scene.clears).toBe(0);
+	});
+
+	it('presents a mountain again after a release', async () => {
+		const { session, scene, store } = await presenting();
+		session.setTarget(undefined);
+
+		session.setTarget(FITZ_ROY);
+		await flush();
+
+		expect(scene.shown.at(-1)).toEqual({ target: FITZ_ROY, placement: 'next' });
+		expect(store.getSnapshot()).toMatchObject({ settled: true, free: false });
+	});
+
+	it('settles a pending transition as superseded and keeps nothing pending', async () => {
+		const coordinator = new TransitionCoordinator();
+		const context = setup({ observer: coordinator });
+		context.session.setTarget(ACONCAGUA);
+		context.factory.resolve(0, { holdShow: true });
+		await flush();
+		const transition = coordinator.begin('aconcagua');
+
+		context.session.setTarget(undefined);
+
+		await expect(transition.arrival).resolves.toBe('superseded');
+		const later = coordinator.begin('aconcagua');
+		later.cancel();
+		await expect(later.arrival).resolves.toBe('interrupted');
+	});
+
+	it('clears free mode when it stops', async () => {
+		const { session, factory, store } = setup();
+		factory.resolve(0);
+		await flush();
+		expect(store.getSnapshot().free).toBe(true);
+
+		session.stop();
+
+		expect(store.getSnapshot().free).toBe(false);
 	});
 });

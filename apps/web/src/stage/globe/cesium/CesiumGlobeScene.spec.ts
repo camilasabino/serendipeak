@@ -6,6 +6,10 @@ const cesium = vi.hoisted(() => ({
 	releaseFlight: vi.fn(),
 	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
 	holdInputs: vi.fn(),
+	orbits: [] as { periodSeconds: number; running: boolean }[],
+	adopts: 0,
+	ranges: [] as number[],
+	rangeResult: true,
 	zooms: [] as { direction: string; durationSeconds: number }[],
 	destroyLayer: vi.fn(),
 	viewerError: undefined as Error | undefined,
@@ -53,6 +57,10 @@ vi.mock('./ViewerCameraFlight', () => ({
 		}
 		jump() {}
 		cancel() {}
+		setRange(rangeMeters: number) {
+			cesium.ranges.push(rangeMeters);
+			return cesium.rangeResult;
+		}
 		look() {
 			return undefined;
 		}
@@ -74,6 +82,26 @@ vi.mock('./SummitMarkers', () => ({
 		show() {}
 	}
 }));
+vi.mock('./ViewerOrbit', () => ({
+	ViewerOrbit: class {
+		start(periodSeconds: number) {
+			this.stop();
+			cesium.orbits.push({ periodSeconds, running: true });
+			return true;
+		}
+		stop() {
+			for (const orbit of cesium.orbits) {
+				orbit.running = false;
+			}
+		}
+		adopt() {
+			cesium.adopts += 1;
+		}
+		get running() {
+			return cesium.orbits.some((orbit) => orbit.running);
+		}
+	}
+}));
 vi.mock('./cesiumTerrain', () => ({ createCesiumTerrainSource: () => ({}) }));
 
 import { CesiumGlobeScene } from './CesiumGlobeScene';
@@ -85,6 +113,7 @@ interface FakeViewer {
 		imageryLayers: { remove(): void };
 		screenSpaceCameraController: { zoomEventTypes: unknown };
 		preUpdate: { addEventListener(listener: () => void): () => void };
+		canvas: EventTarget;
 	};
 	screenSpaceEventHandler: { removeInputAction(type: number): void };
 	isDestroyed(): boolean;
@@ -107,7 +136,8 @@ function fakeViewer(
 		scene: {
 			imageryLayers: { remove: () => {} },
 			screenSpaceCameraController: { zoomEventTypes: [3] },
-			preUpdate: { addEventListener: () => removeFrameListener }
+			preUpdate: { addEventListener: () => removeFrameListener },
+			canvas: new EventTarget()
 		},
 		screenSpaceEventHandler: { removeInputAction },
 		isDestroyed: () => destroyed,
@@ -536,5 +566,107 @@ describe('CesiumGlobeScene camera reads and zoom steps', () => {
 		scene.destroy();
 
 		expect(scene.readCamera()).toBeUndefined();
+	});
+});
+
+describe('CesiumGlobeScene ambient orbit', () => {
+	beforeEach(() => {
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.flightCallbacks.length = 0;
+		cesium.orbits.length = 0;
+		cesium.adopts = 0;
+		cesium.ranges.length = 0;
+		cesium.rangeResult = true;
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	const TARGET = { slug: 'peak', name: 'Peak', latitude: 1, longitude: 2, elevationMeters: 3000 };
+
+	it('starts only while no choreography owns the camera, and every flight stops it', async () => {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		expect(scene.startOrbit(300, () => {})).toBe(true);
+
+		void scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+
+		expect(cesium.orbits.every((orbit) => !orbit.running)).toBe(true);
+		expect(scene.startOrbit(300, () => {})).toBe(false);
+	});
+
+	it('refits the range of a free camera and lets the orbit carry on from there', async () => {
+		const scene = await create();
+		scene.startOrbit(300, () => {});
+
+		expect(scene.refitRange(12_000_000)).toBe('refitted');
+
+		expect(cesium.ranges).toEqual([12_000_000]);
+		expect(cesium.adopts).toBe(1);
+		expect(cesium.orbits.filter((orbit) => orbit.running)).toHaveLength(1);
+	});
+
+	it('leaves the range alone while a flight owns the camera', async () => {
+		const scene = await create();
+		void scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+
+		expect(scene.refitRange(12_000_000)).toBe('busy');
+
+		expect(cesium.ranges).toEqual([]);
+		expect(cesium.adopts).toBe(0);
+	});
+
+	it('reports a camera that cannot be placed without adopting the move', async () => {
+		const scene = await create();
+		cesium.rangeResult = false;
+
+		expect(scene.refitRange(12_000_000)).toBe('unavailable');
+
+		expect(cesium.adopts).toBe(0);
+	});
+
+	it('refits nothing once destroyed', async () => {
+		const scene = await create();
+		scene.destroy();
+
+		expect(scene.refitRange(12_000_000)).toBe('unavailable');
+
+		expect(cesium.ranges).toEqual([]);
+	});
+
+	it('cannot turn under reduced motion', async () => {
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+		const scene = await create();
+
+		expect(scene.canOrbit()).toBe(false);
+	});
+
+	it('hears presses and wheels on the globe until released or destroyed', async () => {
+		const scene = await create();
+		const heard = vi.fn();
+		const release = scene.subscribeInteraction(heard);
+		const canvas = cesium.viewer.scene.canvas;
+
+		canvas.dispatchEvent(new Event('pointerdown'));
+		canvas.dispatchEvent(new Event('wheel'));
+		expect(heard).toHaveBeenCalledTimes(2);
+
+		release();
+		canvas.dispatchEvent(new Event('pointerdown'));
+		expect(heard).toHaveBeenCalledTimes(2);
+
+		scene.subscribeInteraction(heard);
+		scene.startOrbit(300, () => {});
+		scene.destroy();
+		canvas.dispatchEvent(new Event('wheel'));
+		expect(heard).toHaveBeenCalledTimes(2);
+		expect(cesium.orbits.every((orbit) => !orbit.running)).toBe(true);
+		expect(scene.canOrbit()).toBe(false);
 	});
 });

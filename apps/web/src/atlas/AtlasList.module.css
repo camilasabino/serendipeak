@@ -1,0 +1,126 @@
+.list {
+	margin: var(--sp-space-6) 0 0;
+}
+
+.heading {
+	margin: 0;
+	font-family: var(--sp-font-display);
+	font-size: 1.375rem;
+	font-weight: 400;
+	letter-spacing: -0.01em;
+}
+
+.group {
+	margin: 0;
+	border-bottom: 1px solid var(--sp-rule-quiet);
+}
+
+.group:first-of-type {
+	margin-top: var(--sp-space-3);
+	border-top: 1px solid var(--sp-rule-quiet);
+}
+
+.continent {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-space-3);
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.5rem 0.625rem 0.5rem 0;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--sp-paper);
+	list-style: none;
+	cursor: pointer;
+}
+
+.continent::-webkit-details-marker {
+	display: none;
+}
+
+/* A chevron that turns down when the continent opens. */
+.continent::before {
+	content: '';
+	flex: none;
+	width: 0.4rem;
+	height: 0.4rem;
+	margin: 0 0.3rem 0 0.2rem;
+	border-right: 1.5px solid currentColor;
+	border-bottom: 1.5px solid currentColor;
+	transform: rotate(-45deg);
+}
+
+.group[open] > .continent::before {
+	transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.continent::before {
+		transition: transform 150ms ease-out;
+	}
+}
+
+.continent:hover {
+	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+}
+
+.continent:focus-visible {
+	outline-offset: -2px;
+}
+
+.continentName {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: break-word;
+}
+
+.count {
+	flex: none;
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--sp-mist);
+}
+
+.items {
+	margin: 0 0 var(--sp-space-2);
+	padding: 0;
+	list-style: none;
+}
+
+.item {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.5rem 0.625rem;
+	border-top: 1px solid var(--sp-rule-quiet);
+	border-left: 2px solid transparent;
+	color: var(--sp-paper);
+	text-decoration: none;
+}
+
+.item:hover {
+	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+}
+
+.item:focus-visible {
+	outline-offset: -2px;
+}
+
+.name {
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.35;
+	overflow-wrap: break-word;
+}
+
+.detail {
+	font-size: 0.8125rem;
+	line-height: 1.35;
+	color: var(--sp-mist);
+	overflow-wrap: break-word;
+}

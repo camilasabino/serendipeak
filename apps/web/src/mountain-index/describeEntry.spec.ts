@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { describeResult, placeOf } from './describeResult';
-import { indexEntry } from './test-support/indexEntries';
+import { describeEntry, placeOf } from './describeEntry';
+import { indexEntry } from '../api/test-support/indexEntries';
 
 const region = {
 	slug: 'cordillera-blanca',
@@ -32,9 +32,9 @@ describe('placeOf', () => {
 	});
 });
 
-describe('describeResult', () => {
+describe('describeEntry', () => {
 	it('joins the place and the formatted elevation', () => {
-		expect(describeResult(indexEntry('a', 'A', { elevationMeters: 6961 }))).toBe(
+		expect(describeEntry(indexEntry('a', 'A', { elevationMeters: 6961 }))).toBe(
 			'Switzerland · 6,961 m'
 		);
 	});

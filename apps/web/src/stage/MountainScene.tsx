@@ -2,6 +2,7 @@ import { useImperativeHandle, useRef, type Ref } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import { sceneCanRetry } from './experience';
+import type { AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
@@ -33,6 +34,7 @@ export interface StageController {
 interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
+	atlas?: AtlasView;
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
 }
@@ -40,16 +42,19 @@ interface MountainSceneProps {
 export default function MountainScene({
 	store,
 	target,
+	atlas,
 	observer,
 	controllerRef
 }: MountainSceneProps) {
-	const { viewportRef, snapshot, resetView, zoomView, readCamera, retry } = useStage({
-		store,
-		ionToken: ION_TOKEN,
-		sceneFactory: SCENE_FACTORY,
-		target,
-		observer
-	});
+	const { viewportRef, snapshot, resetView, zoomView, toggleRotation, readCamera, retry } =
+		useStage({
+			store,
+			ionToken: ION_TOKEN,
+			sceneFactory: SCENE_FACTORY,
+			target,
+			atlas,
+			observer
+		});
 	useImperativeHandle(controllerRef, () => ({ readCamera, resetView }), [readCamera, resetView]);
 	const stageRef = useRef<HTMLDivElement>(null);
 	const fullscreen = useStageFullscreen(stageRef);
@@ -62,6 +67,7 @@ export default function MountainScene({
 				snapshot={snapshot}
 				onReset={resetView}
 				onZoom={zoomView}
+				onToggleRotation={toggleRotation}
 				fullscreen={fullscreen}
 			/>
 			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />

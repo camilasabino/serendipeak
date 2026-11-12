@@ -13,6 +13,9 @@ export const DETAILS_AVAILABLE_MESSAGE = 'The mountain details are still availab
 
 export const RESET_VIEW_LABEL = 'Reset view';
 
+export const PAUSE_ROTATION_LABEL = 'Pause globe rotation';
+export const RESUME_ROTATION_LABEL = 'Rotate the globe';
+
 export const ENTER_FULLSCREEN_LABEL = 'Enter fullscreen';
 export const EXIT_FULLSCREEN_LABEL = 'Exit fullscreen';
 
@@ -60,6 +63,6 @@ export const BUTTON_NAVIGATION: NavigationHelpSection = {
 	heading: 'Buttons',
 	gestures: [
 		{ action: '+ and −', gesture: 'Zoom in or out one step.' },
-		{ action: 'Reset view', gesture: 'Return to the original view of the mountain.' }
+		{ action: 'Reset view', gesture: 'Return to the starting view.' }
 	]
 };

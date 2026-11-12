@@ -69,6 +69,12 @@ export class TransitionCoordinator implements PresentationObserver {
 		}
 	}
 
+	// The scene let go of its mountain: nothing pending will be presented any more.
+	cleared(): void {
+		this.presentation = undefined;
+		this.settleCurrent('superseded');
+	}
+
 	ended(): void {
 		this.presentation = undefined;
 		this.settleCurrent('interrupted');

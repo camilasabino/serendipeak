@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { SceneStore } from '../stage/SceneStore';
 import { StageShell } from './StageShell';
 
-function render(store: SceneStore, daily = false): string {
+function render(store: SceneStore, label = 'Revealing the mountain...'): string {
 	return renderToStaticMarkup(
-		<StageShell store={store} daily={daily}>
+		<StageShell store={store} label={label}>
 			<p>scene</p>
 		</StageShell>
 	);
@@ -30,6 +30,10 @@ describe('StageShell', () => {
 
 		expect(html).not.toContain('role="status"');
 		expect(html).toContain('scene');
+	});
+
+	it('says what the stage is preparing', () => {
+		expect(render(new SceneStore(), 'Preparing the atlas...')).toContain('Preparing the atlas...');
 	});
 
 	it('is a programmatic focus anchor that is never a tab stop', () => {

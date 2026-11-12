@@ -7,8 +7,23 @@ describe('SceneStore', () => {
 			state: { status: 'loading' },
 			headingDegrees: undefined,
 			scale: undefined,
-			settled: false
+			settled: false,
+			free: false,
+			rotation: 'off'
 		});
+	});
+
+	it('publishes free navigation only when it changes', () => {
+		const store = new SceneStore();
+		const listener = vi.fn();
+		store.subscribe(listener);
+
+		store.setFree(true);
+		store.setFree(true);
+		store.setFree(false);
+
+		expect(listener).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot().free).toBe(false);
 	});
 
 	it('works when subscribe and getSnapshot are passed around detached', () => {

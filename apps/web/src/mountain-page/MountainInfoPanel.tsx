@@ -17,7 +17,7 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 				{mountain.name}
 			</h1>
 			{summary && <p className={styles.summary}>{summary}</p>}
-			<dl className={styles.facts}>
+			<Facts>
 				<Fact term="Continent">{continent.name}</Fact>
 				{countries.length > 0 && (
 					<Fact term={countries.length === 1 ? 'Country' : 'Countries'}>
@@ -34,12 +34,16 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 						{formattedCoordinates}
 					</ExternalLink>
 				</Fact>
-			</dl>
+			</Facts>
 		</section>
 	);
 }
 
-function Fact({ term, children }: { term: string; children: ReactNode }) {
+export function Facts({ children }: { children: ReactNode }) {
+	return <dl className={styles.facts}>{children}</dl>;
+}
+
+export function Fact({ term, children }: { term: string; children: ReactNode }) {
 	return (
 		<div className={styles.fact}>
 			<dt>{term}</dt>

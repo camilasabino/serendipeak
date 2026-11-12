@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeResizeObserver, type FakeViewport } from '../test/FakeResizeObserver';
 import { FakeSceneFactory } from '../test/FakeSceneFactory';
+import { atlasOverviewLook, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import { SceneStore } from './SceneStore';
 import { TransitionCoordinator } from './TransitionCoordinator';
@@ -37,6 +38,7 @@ function setup(
 	options: {
 		ionToken?: string;
 		target?: SceneTarget;
+		atlas?: AtlasView;
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
 	} = {}
@@ -51,6 +53,7 @@ function setup(
 			ionToken: 'ionToken' in options ? options.ionToken : 'ion-token',
 			createScene: factory.createScene,
 			target: options.target,
+			atlas: options.atlas,
 			observer: options.observer
 		});
 
@@ -267,6 +270,21 @@ describe('StageBinding retry', () => {
 		expect(factory.calls).toHaveLength(2);
 	});
 
+	it('keeps the atlas for the new attempt, which opens on its overview', async () => {
+		const first: AtlasView = { center: { latitude: 0, longitude: 0 } };
+		const second: AtlasView = { center: { latitude: 10, longitude: 20 } };
+		const { factory, binding } = await failedBinding({ atlas: first });
+		binding.setAtlas(second);
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.overviews).toEqual([
+			{ look: atlasOverviewLook(second, { width: 800, height: 500 }), animate: false }
+		]);
+	});
+
 	it('keeps the mountain target and the stage size for the new attempt', async () => {
 		const { factory, binding } = await failedBinding({ target: ACONCAGUA });
 		binding.setTarget(FITZ_ROY);
@@ -444,12 +462,13 @@ describe('store snapshots through the binding', () => {
 
 		scene.emitOrientation(30);
 
-		expect(heard).toEqual(['ready', 'ready']);
+		// Ready, then free navigation (no target), then the heading.
+		expect(heard).toEqual(['ready', 'ready', 'ready']);
 		expect(getSnapshot().headingDegrees).toBe(30);
 
 		unsubscribe();
 		scene.emitOrientation(60);
-		expect(heard).toHaveLength(2);
+		expect(heard).toHaveLength(3);
 	});
 });
 
