@@ -668,6 +668,25 @@ describe('editor reference stage', () => {
 		expect(preview.pitchRadians).toBe(visitor.pitchRadians);
 	});
 
+	// The editor fills its workspace down to the narrowest aspect that keeps the reference range and
+	// letterboxes anything narrower at that aspect (CameraEditor.module.css).
+	it.each([
+		['laptop', 1_280, 800],
+		['full HD', 1_920, 1_080],
+		['ultrawide', 3_440, 1_440],
+		['tablet portrait', 768, 1_024],
+		['phone', 390, 844],
+		['phone landscape', 844, 390]
+	])('shows the reference range on a %s screen', (_name, screenWidth, screenHeight) => {
+		const aspect = Math.max(screenWidth / screenHeight, STAGE_FILL_MIN_ASPECT);
+		const preview = previewOffset(saved, REFERENCE_WIDTH, REFERENCE_HEIGHT);
+		const shown = previewOffset(saved, 1_000 * aspect, 1_000);
+
+		expect(stageAspectScale(1_000 * aspect, 1_000)).toBeCloseTo(0.85, 10);
+		expect(shown.rangeMeters).toBeCloseTo(preview.rangeMeters, 6);
+		expect(shown.rangeMeters / saved.rangeMeters).toBeCloseTo(0.85, 6);
+	});
+
 	it('round-trips a saved range through the reference stage', () => {
 		const shown = previewOffset(saved, REFERENCE_WIDTH, REFERENCE_HEIGHT);
 		const read = editorialPoseFromOffset(

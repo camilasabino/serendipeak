@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 
 const REPORT_NAME = /^webgl-(development|production)-(\d+)\.json$/;
 const SLOWEST_TESTS = 15;
+const LIFECYCLE_TAG = '@lifecycle';
+const LIFECYCLE = /@lifecycle\b/;
 
 function collectTests(suite, titles, tests) {
 	const path = suite.file && suite.title === suite.file ? titles : [...titles, suite.title];
@@ -101,14 +103,18 @@ function checkIntegrity(reports) {
 
 	if (development && production) {
 		for (const id of development) {
+			if (!LIFECYCLE.test(id)) {
+				problems.push(`"${id}" ran in development but is not tagged ${LIFECYCLE_TAG}`);
+			}
+
 			if (!production.has(id)) {
 				problems.push(`"${id}" ran in development but not in production`);
 			}
 		}
 
 		for (const id of production) {
-			if (!development.has(id)) {
-				problems.push(`"${id}" ran in production but not in development`);
+			if (LIFECYCLE.test(id) && !development.has(id)) {
+				problems.push(`"${id}" is tagged ${LIFECYCLE_TAG} but did not run in development`);
 			}
 		}
 	}
@@ -165,7 +171,10 @@ function specTable(reports) {
 
 	for (const report of reports) {
 		for (const test of report.tests) {
-			const entry = byFile.get(test.file) ?? { development: [], production: [] };
+			const entry = byFile.get(test.file) ?? {
+				development: [],
+				production: []
+			};
 
 			entry[report.mode].push(test.duration);
 			byFile.set(test.file, entry);
@@ -214,7 +223,7 @@ export function summarize(reports) {
 	const sections = [
 		'## WebGL suites',
 		'',
-		'Test time is the sum of the durations of the tests; wall time also includes fixtures and worker start-up. Imbalance is how much shorter the fastest shard is than the slowest.',
+		'Production runs every test; development runs only the tests tagged `@lifecycle`, which exercise React Strict Mode and the Viewer lifecycle. Test time is the sum of the durations of the tests; wall time also includes fixtures and worker start-up. Imbalance is how much shorter the fastest shard is than the slowest.',
 		'',
 		...shardTable(ordered),
 		'',

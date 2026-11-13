@@ -16,7 +16,8 @@ const webEnvironment = {
 
 const host = `--hostname 127.0.0.1 --port ${WEB_PORT}`;
 
-// Development exercises React Strict Mode's double effects; production proves the shipped bundle.
+// Development exercises React Strict Mode's double effects, and runs only the @lifecycle scenarios
+// (npm run test:webgl -- --grep @lifecycle); production runs every scenario.
 export default defineConfig({
 	testDir: './e2e/webgl',
 	// Playwright shards by contiguous groups, and a group is a whole file unless tests run fully
@@ -25,7 +26,7 @@ export default defineConfig({
 	workers: 1,
 	timeout: 120_000,
 	expect: { timeout: 15_000 },
-	use: { baseURL: `http://127.0.0.1:${WEB_PORT}` },
+	use: { baseURL: `http://127.0.0.1:${WEB_PORT}`, trace: 'retain-on-failure' },
 	projects: [{ name: 'webgl', grep: /@webgl/, use: { browserName: 'chromium' } }],
 	webServer: [
 		{

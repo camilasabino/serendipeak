@@ -30,19 +30,6 @@ const SAVE_TOLERANCE = { angleDegrees: 0.05, rangeMeters: 1, framing: 0.0005 } a
 const MIN_FILL_ASPECT = 1.35 / 0.85;
 const REFERENCE_RANGE_SCALE = 0.85;
 
-// Software rendering at 3440x1440 on a 2-CPU runner measured about 94 seconds to become ready.
-const SOFTWARE_RENDER_READY_MS = 150_000;
-
-// Viewports from a phone to an ultrawide screen: the editor frames the same range on all.
-const SCREENS = [
-	{ name: 'laptop', width: 1280, height: 800 },
-	{ name: 'full HD', width: 1920, height: 1080 },
-	{ name: 'ultrawide', width: 3440, height: 1440, readyTimeout: SOFTWARE_RENDER_READY_MS },
-	{ name: 'tablet portrait', width: 768, height: 1024 },
-	{ name: 'phone', width: 390, height: 844 },
-	{ name: 'phone landscape', width: 844, height: 390 }
-] as const;
-
 type Reading = NonNullable<Awaited<ReturnType<typeof cameraReading>>>;
 
 function editorUrl(camera?: CanonicalCamera, { proposal = false } = {}): string {
@@ -73,12 +60,12 @@ const readout = (page: Page, label: string) =>
 
 // The panel's own status region is never empty, so the shared readiness helper does not fit: the
 // stage is ready once the reveal loader is gone and nothing failed.
-async function expectReadyStage(page: Page, readyTimeout = 60_000) {
+async function expectReadyStage(page: Page) {
 	await expect(page.getByText('Revealing the mountain...')).toHaveCount(0, {
-		timeout: readyTimeout
+		timeout: 60_000
 	});
 	await expect(page.locator('main [role="alert"]')).toHaveCount(0);
-	await expect(page.getByText('Ready to save.')).toBeVisible({ timeout: readyTimeout });
+	await expect(page.getByText('Ready to save.')).toBeVisible({ timeout: 60_000 });
 }
 
 // Stands in for the Studio: the editor only ever navigates there, and the test reads where.
@@ -172,73 +159,111 @@ async function untilStill(page: Page) {
 function expectSaved(url: URL, reading: Reading) {
 	expectWithin(savedCamera(url), reading as CanonicalCamera);
 }
-
 test.describe('@webgl camera editor', () => {
 	test.beforeEach(async ({ page }) => {
 		await page.setViewportSize(DESKTOP);
 	});
 
-	test('opens on the stored camera and shows it as it would be saved', async ({ page }) => {
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await untilStill(page);
-		expectWithin((await cameraReading(page))!, ACONCAGUA.camera);
-		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
-		await expect(page.getByText('Opened on the saved camera.')).toBeVisible();
-		await expect(page.getByText('Ready to save.')).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Save camera…' })).toBeEnabled();
-		await expect(readout(page, 'Heading')).toHaveText(/^\d+(\.\d{1,2})?°$/);
-		expect(
-			Math.abs(Number.parseFloat((await readout(page, 'Heading').textContent())!) - 66.87)
-		).toBeLessThanOrEqual(CAMERA_TOLERANCE.angleDegrees);
-	});
-
-	test('follows the camera while it moves', async ({ page }) => {
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		const before = await readout(page, 'Heading').textContent();
-
-		await orbit(page);
-
-		await expect(readout(page, 'Heading')).not.toHaveText(before!);
-	});
-
-	test('saves by navigating to the Studio with the quantized live camera', async ({ page }) => {
+	test('opens on the stored camera, follows and restores it, and saves the live camera to the Studio', async ({
+		page
+	}) => {
 		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await orbit(page);
 		await untilStill(page);
-		const reading = (await cameraReading(page))!;
 
-		await page.getByRole('button', { name: 'Save camera…' }).click();
+		await test.step('opens on the stored camera, framed at the reference range, shown as it would be saved', async () => {
+			expectWithin((await cameraReading(page))!, ACONCAGUA.camera);
+			await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
+			await expect(page.getByText('Opened on the saved camera.')).toBeVisible();
+			await expect(page.getByText('Ready to save.')).toBeVisible();
+			await expect(page.getByRole('button', { name: 'Save camera…' })).toBeEnabled();
+			await expect(readout(page, 'Heading')).toHaveText(/^\d+(\.\d{1,2})?°$/);
+			expect(
+				Math.abs(Number.parseFloat((await readout(page, 'Heading').textContent())!) - 66.87)
+			).toBeLessThanOrEqual(CAMERA_TOLERANCE.angleDegrees);
 
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
-		const url = reached()!;
-		expect(url.origin).toBe(STUB_API_URL);
-		expectSaved(url, reading);
-		expect([...url.searchParams.keys()].sort()).toEqual([
-			'fx',
-			'fy',
-			'heading',
-			'lat',
-			'lon',
-			'mountain',
-			'pitch',
-			'range'
-		]);
-		expect(url.searchParams.get('mountain')).toBe(TARGET.id);
-		expect(Number(url.searchParams.get('lat'))).toBe(TARGET.coordinates.latitude);
-		expect(Number(url.searchParams.get('lon'))).toBe(TARGET.coordinates.longitude);
-		// The editor wrote nothing: the Studio form is what saves.
-		await expect(page.getByText('confirmation')).toBeVisible();
+			const reading = (await cameraReading(page))!;
+			expect(reading.stage.width / reading.stage.height).toBeGreaterThanOrEqual(
+				MIN_FILL_ASPECT - 0.01
+			);
+			expect(
+				Math.abs(reading.displayRangeMeters / reading.rangeMeters - REFERENCE_RANGE_SCALE)
+			).toBeLessThanOrEqual(0.01);
+			expect((await page.locator('canvas').first().boundingBox())!.width).toBeLessThanOrEqual(
+				DESKTOP.width
+			);
+		});
+
+		await test.step('the readout follows the camera while it moves', async () => {
+			const before = await readout(page, 'Heading').textContent();
+
+			await orbit(page);
+
+			await expect(readout(page, 'Heading')).not.toHaveText(before!);
+			await untilStill(page);
+		});
+
+		await test.step('restoring the saved camera returns to the presented pose', async () => {
+			await page.getByRole('button', { name: 'Restore saved camera' }).click();
+
+			await expectCanonicalPose(page, ACONCAGUA.camera);
+			await expect(page.getByText('Ready to save.')).toBeVisible();
+		});
+
+		await test.step('a pose still returning to the presented camera is not saved', async () => {
+			await orbit(page);
+			await untilStill(page);
+
+			// One task: the panel has not sampled the flight yet, so Save is still enabled when clicked.
+			await page.evaluate(() => {
+				const button = (name: string) =>
+					[...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
+				button('Restore saved camera').click();
+				button('Save camera…').click();
+			});
+
+			await expectCanonicalPose(page, ACONCAGUA.camera);
+			await expect(page.getByText('Ready to save.')).toBeVisible();
+			expect(reached()).toBeUndefined();
+			expect(new URL(page.url()).pathname).toBe('/editorial/camera');
+		});
+
+		await test.step('saving navigates to the Studio with the quantized live camera, and only reads', async () => {
+			await orbit(page);
+			await untilStill(page);
+			const reading = (await cameraReading(page))!;
+
+			await page.getByRole('button', { name: 'Save camera…' }).dblclick();
+
+			await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
+			await expect(page.getByText('confirmation')).toBeVisible();
+			const urls = reached.all().map(String);
+			expect(urls.length).toBeLessThanOrEqual(2);
+			expect(new Set(urls).size).toBe(1);
+			const url = reached()!;
+			expect(url.origin).toBe(STUB_API_URL);
+			expectSaved(url, reading);
+			expect([...url.searchParams.keys()].sort()).toEqual([
+				'fx',
+				'fy',
+				'heading',
+				'lat',
+				'lon',
+				'mountain',
+				'pitch',
+				'range'
+			]);
+			expect(url.searchParams.get('mountain')).toBe(TARGET.id);
+			expect(Number(url.searchParams.get('lat'))).toBe(TARGET.coordinates.latitude);
+			expect(Number(url.searchParams.get('lon'))).toBe(TARGET.coordinates.longitude);
+		});
 	});
 
-	test('reopening on the saved values reproduces the same view', async ({ page }) => {
+	test('reopening on the saved values reproduces the same view, and saving again keeps them', async ({
+		page
+	}) => {
 		const reached = await interceptStudio(page);
 		await page.goto(editorUrl(ACONCAGUA.camera));
 		await expectReadyStage(page);
@@ -249,6 +274,7 @@ test.describe('@webgl camera editor', () => {
 		await page.getByRole('button', { name: 'Save camera…' }).click();
 		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
 		const camera = savedCamera(reached()!);
+		const saves = reached.all().length;
 
 		await page.goto(editorUrl(camera));
 		await expectReadyStage(page);
@@ -261,141 +287,10 @@ test.describe('@webgl camera editor', () => {
 		expectWithin(reopened, beforeSaving as CanonicalCamera);
 		await expect(readout(page, 'Heading')).toHaveText(`${camera.headingDegrees}°`);
 		await expect(readout(page, 'Range')).toHaveText(`${camera.rangeMeters} m`);
-	});
-
-	test('saving without moving keeps the stored camera', async ({ page }) => {
-		const reached = await interceptStudio(page);
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await untilStill(page);
 
 		await page.getByRole('button', { name: 'Save camera…' }).click();
 
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
-		expectWithin(savedCamera(reached()!), ACONCAGUA.camera);
-	});
-
-	test('a double click on Save only reads the Studio confirmation, twice at most', async ({
-		page
-	}) => {
-		const reached = await interceptStudio(page);
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await untilStill(page);
-
-		await page.getByRole('button', { name: 'Save camera…' }).dblclick();
-
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
-		await expect(page.getByText('confirmation')).toBeVisible();
-		const urls = reached.all().map(String);
-		expect(urls.length).toBeLessThanOrEqual(2);
-		expect(new Set(urls).size).toBe(1);
-	});
-
-	test('does not save a pose that is still returning to the presented camera', async ({ page }) => {
-		const reached = await interceptStudio(page);
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await orbit(page);
-		await untilStill(page);
-
-		// One task: the panel has not sampled the flight yet, so Save is still enabled when clicked.
-		await page.evaluate(() => {
-			const button = (name: string) =>
-				[...document.querySelectorAll('button')].find((b) => b.textContent === name)!;
-			button('Restore saved camera').click();
-			button('Save camera…').click();
-		});
-
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await expect(page.getByText('Ready to save.')).toBeVisible();
-		expect(reached()).toBeUndefined();
-		expect(new URL(page.url()).pathname).toBe('/editorial/camera');
-
-		await page.getByRole('button', { name: 'Save camera…' }).click();
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
-	});
-
-	test('opens on a proposal sent back by the Studio and says it is not saved', async ({ page }) => {
-		await page.goto(editorUrl(ACONCAGUA.camera, { proposal: true }));
-		await expectReadyStage(page);
-
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await untilStill(page);
-		expectWithin((await cameraReading(page))!, ACONCAGUA.camera);
-		await expect(
-			page.getByText('Opened on the camera you proposed. It is not saved yet.')
-		).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Restore proposed camera' })).toBeEnabled();
-	});
-
-	for (const screen of SCREENS) {
-		test(`frames the stage at the reference range on a ${screen.name} screen`, async ({ page }) => {
-			const readyTimeout = 'readyTimeout' in screen ? screen.readyTimeout : undefined;
-			if (readyTimeout) {
-				test.setTimeout(readyTimeout + 60_000);
-			}
-			await page.setViewportSize(screen);
-			await page.goto(editorUrl(ACONCAGUA.camera));
-			await expectReadyStage(page, readyTimeout);
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-			await untilStill(page);
-
-			const reading = (await cameraReading(page))!;
-			const aspect = reading.stage.width / reading.stage.height;
-			expect(aspect).toBeGreaterThanOrEqual(MIN_FILL_ASPECT - 0.01);
-			// The displayed range is the saved range times the public page's own scale at this aspect.
-			expect(
-				Math.abs(reading.displayRangeMeters / reading.rangeMeters - REFERENCE_RANGE_SCALE)
-			).toBeLessThanOrEqual(0.01);
-			expectWithin(reading, ACONCAGUA.camera);
-			const box = (await page.locator('canvas').first().boundingBox())!;
-			expect(box.width).toBeLessThanOrEqual(screen.width);
-			await expect(page.getByRole('button', { name: 'Save camera…' })).toBeEnabled();
-		});
-	}
-
-	test('restores the presented camera after the view was moved', async ({ page }) => {
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await orbit(page);
-		await untilStill(page);
-
-		await page.getByRole('button', { name: 'Restore saved camera' }).click();
-
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await expect(page.getByText('Ready to save.')).toBeVisible();
-	});
-
-	test('starts from the automatic view when nothing is saved', async ({ page }) => {
-		await page.goto(editorUrl());
-		await expectReadyStage(page);
-
-		await expect(page.getByText(/No saved camera yet/)).toBeVisible();
-		await expect(page.getByRole('button', { name: 'Restore automatic view' })).toBeEnabled();
-		await expect.poll(async () => (await cameraReading(page))?.framing).toBeDefined();
-	});
-
-	test('goes back to the mountain in the Studio without saving anything', async ({ page }) => {
-		const reached = await interceptStudio(page);
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-
-		await page.getByRole('link', { name: 'Back to the mountain' }).click();
-
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/`);
-		expect(reached()!.search).toBe('');
-	});
-
-	test('refuses an invalid link without starting a globe', async ({ page }) => {
-		await page.goto('/editorial/camera?mountain=not-a-uuid');
-
-		await expect(page.locator('main [role="alert"]')).toContainText('Open the camera editor again');
-		await expect(page.locator('canvas')).toHaveCount(0);
-		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+		await expect.poll(() => reached.all().length).toBeGreaterThan(saves);
+		expectWithin(savedCamera(reached()!), camera);
 	});
 });

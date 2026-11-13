@@ -11,7 +11,7 @@ const DESKTOP = { width: 1280, height: 800 };
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const TERRAIN_ENDPOINT = 'https://api.cesium.com/v1/assets/1/endpoint**';
 
-test.describe('@webgl stage failure and retry', () => {
+test.describe('@webgl @lifecycle stage failure and retry', () => {
 	test('recovers to the canonical pose with exactly one viewer after Try again', async ({
 		page,
 		probe

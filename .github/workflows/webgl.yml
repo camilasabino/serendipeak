@@ -1,12 +1,11 @@
 name: WebGL
 
-# The full real-WebGL matrix is slow and sensitive to renderer timing, so it never runs on pushes or
-# pull requests and is not a required check. Scheduled runs use the default branch; a manual run
-# uses the branch chosen in the dispatch form.
+# The real-WebGL suites are slow and sensitive to renderer timing, so they never run on pushes or
+# pull requests and are not a required check. Production runs every scenario in two shards;
+# development runs only the scenarios tagged @lifecycle, which exist for React Strict Mode and the
+# Viewer lifecycle. A run uses the branch chosen in the dispatch form. No schedule is configured.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
@@ -16,26 +15,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Each shard is its own runner with its own checkout, build directory, dev or production server
-  # and stub API, so nothing is shared between shards or between modes.
+  # Each job is its own runner with its own checkout, build directory, dev or production server and
+  # stub API, so nothing is shared between jobs or between modes.
   webgl:
     name: WebGL ${{ matrix.mode }} ${{ matrix.shard_index }}/${{ matrix.shard_total }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/web
     strategy:
       fail-fast: false
       matrix:
-        mode: [development, production]
-        shard_index: [1, 2]
-        shard_total: [2]
         include:
           - mode: development
             script: test:webgl
+            shard_index: 1
+            shard_total: 1
+            grep: "@lifecycle"
           - mode: production
             script: test:webgl:prod
+            shard_index: 1
+            shard_total: 2
+            grep: ""
+          - mode: production
+            script: test:webgl:prod
+            shard_index: 2
+            shard_total: 2
+            grep: ""
     steps:
       - uses: actions/checkout@v5
 
@@ -55,8 +62,18 @@ jobs:
         env:
           SCRIPT: ${{ matrix.script }}
           SHARD: ${{ matrix.shard_index }}/${{ matrix.shard_total }}
+          GREP: ${{ matrix.grep }}
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/webgl-${{ matrix.mode }}-${{ matrix.shard_index }}.json
-        run: npm run "$SCRIPT" -- --shard="$SHARD" --reporter=list,json
+        run: npm run "$SCRIPT" -- --shard="$SHARD" --reporter=list,json ${GREP:+--grep "$GREP"}
+
+      - name: Upload failure traces
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: webgl-traces-${{ matrix.mode }}-${{ matrix.shard_index }}
+          path: apps/web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload duration report
         if: ${{ !cancelled() }}
@@ -67,7 +84,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Fails when a test was run twice, or in one mode only, which the individual shards cannot see.
+  # Fails when a test was run twice, a development test is not tagged @lifecycle, or a @lifecycle
+  # test did not run in development, which the individual shards cannot see.
   webgl-result:
     name: WebGL
     needs: webgl

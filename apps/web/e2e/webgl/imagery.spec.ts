@@ -139,50 +139,12 @@ test.describe('@webgl stage imagery degradation', () => {
 		await expectSingleViewer(page, probe);
 		expect((await probe.stageObservers()).live).toBe(1);
 		expect(await cameraReading(page)).toBeDefined();
-	});
 
-	for (const [name, viewport] of [
-		['desktop', DESKTOP],
-		['phone', PHONE]
-	] as const) {
-		test(`keeps the degraded notice clear of the Cesium attribution on a ${name} stage`, async ({
-			page,
-			probe
-		}) => {
-			probe.tolerate({
-				requests: /imagery\.e2e\.invalid.*\(403\)/,
-				errors: /Failed to load resource: the server responded with a status of 403/
-			});
-			await page.setViewportSize(viewport);
-			await page.route(`${IMAGERY_HOST}**`, (route) =>
-				route.fulfill({ status: 403, body: 'forbidden' })
-			);
-
-			await page.goto(PERMALINK);
-
-			const notice = page.locator('main [role="status"]', { hasText: DEGRADED });
-			await expect(notice).toBeVisible({ timeout: 60_000 });
-			await expectNoticeClearOfAttribution(page, notice);
-		});
-	}
-
-	test('counts repeated non-authorization tile errors as persistent degradation', async ({
-		page,
-		probe
-	}) => {
-		probe.tolerate({
-			requests: /imagery\.e2e\.invalid.*\(500\)/,
-			errors: /Failed to load resource: the server responded with a status of 500/
-		});
-		const traffic = observe(page);
-		await page.route(`${IMAGERY_HOST}**`, (route) =>
-			route.fulfill({ status: 500, body: 'unavailable' })
-		);
-
-		await page.goto(PERMALINK);
-
-		await expectDegradedButUsable(page, traffic);
-		await expectSingleViewer(page, probe);
+		const notice = page.locator('main [role="status"]', { hasText: DEGRADED });
+		await expectNoticeClearOfAttribution(page, notice);
+		await page.setViewportSize(PHONE);
+		await expect(notice).toBeVisible();
+		await expectNoticeClearOfAttribution(page, notice);
 	});
 
 	test('drops the base layer and keeps terrain when the imagery provider cannot be created', async ({

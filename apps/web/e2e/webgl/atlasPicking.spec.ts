@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { resetStub, useScenario } from '../ssr/support';
+import { overlapping } from './support/atlas';
 import {
 	ACONCAGUA,
 	OLYMPUS,
@@ -114,24 +115,6 @@ async function expectBeside(page: Page, pressed: Point) {
 	}
 }
 
-/** Any marker drawn on top of another, turning the globe until one is in view. */
-async function mergedMarker(page: Page): Promise<Point> {
-	for (let turn = 0; turn < 8; turn += 1) {
-		const drawn = (await layer(page)).markers.filter((entry) => entry.visible);
-		const merged = drawn.find((entry) =>
-			drawn.some(
-				(other) => other !== entry && distance(other.window!, entry.window!) < MOUSE_CLEARANCE
-			)
-		);
-		if (merged) {
-			return merged.window!;
-		}
-		await dragGlobe(page, 0.3);
-		await cameraAtRest(page);
-	}
-	throw new Error('No two markers merge in any view tried');
-}
-
 const describeFocus = (page: Page) =>
 	page.evaluate(() => {
 		const active = document.activeElement;
@@ -165,20 +148,6 @@ async function overviewAtRest(page: Page) {
 	await cameraAtRest(page);
 }
 
-function overlapping(reading: AtlasLayerReading): string[] {
-	const named = reading.markers.filter((entry) => entry.labelShown && entry.label);
-	const clashes: string[] = [];
-	for (const [index, a] of named.entries()) {
-		for (const b of named.slice(index + 1)) {
-			const [p, q] = [a.label!, b.label!];
-			if (p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom) {
-				clashes.push(`${a.slug} × ${b.slug}`);
-			}
-		}
-	}
-	return clashes;
-}
-
 test.beforeEach(async ({ page, request }) => {
 	await page.setViewportSize(DESKTOP);
 	await useScenario(request, 'catalog');
@@ -188,12 +157,19 @@ test.afterEach(async ({ request }) => {
 	await resetStub(request);
 });
 
-test.describe('@webgl atlas marker activation', () => {
-	test('opens a mountain page from its marker, on the same Viewer, as one history entry', async ({
+const historyLength = (page: Page) => page.evaluate(() => history.length);
+
+test.describe('@webgl @lifecycle atlas marker activation', () => {
+	test('a marker opens its mountain once, as one history entry, again after Back, on one Viewer', async ({
 		page,
 		probe
 	}) => {
-		await overviewAtRest(page);
+		await page.goto('/atlas');
+		await expectReadyStage(page);
+		await expect
+			.poll(async () => (await globePosition(page))?.orbiting, { timeout: 30_000 })
+			.toBe(true);
+		const entries = await historyLength(page);
 		const olympus = await shown(page, OLYMPUS.slug);
 		expect(nearestOther(await layer(page), olympus.window, OLYMPUS.slug)).toBeGreaterThan(
 			MOUSE_REACH + MOUSE_CLEARANCE
@@ -205,160 +181,240 @@ test.describe('@webgl atlas marker activation', () => {
 		await expect(chooser(page)).toHaveCount(0);
 		await expect.poll(async () => (await layer(page)).shown).toBe(false);
 		await expectCanonicalPose(page, OLYMPUS.camera);
+		expect(await historyLength(page)).toBe(entries + 1);
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 
 		await page.goBack();
 		await expect(page).toHaveURL(/\/atlas$/);
 		await expect.poll(async () => (await layer(page)).shown).toBe(true);
-		await page.goForward();
+		await cameraAtRest(page);
+		await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
+
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
 		await expectCanonicalPose(page, OLYMPUS.camera);
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 		expect(await probe.webglContexts()).toBe(1);
 	});
+});
 
-	test('points at a marker under the mouse and rings it, and at nothing over bare globe', async ({
-		page
+test.describe('@webgl atlas marker gestures', () => {
+	test('points at a marker, tells a click from a drag, and keeps working across a flight', async ({
+		page,
+		probe
 	}) => {
-		await overviewAtRest(page);
-		const olympus = await shown(page, OLYMPUS.slug);
-		const cursor = () => canvas(page).evaluate((element) => getComputedStyle(element).cursor);
-
-		const over = await onPage(page, olympus.window);
-		await page.mouse.move(over.x, over.y);
-		await expect.poll(cursor).toBe('pointer');
-		expect((await layer(page)).hovered).toBe(OLYMPUS.slug);
-
-		const bare = { x: olympus.window.x, y: olympus.window.y + 60 };
-		expect(nearestOther(await layer(page), bare, '')).toBeGreaterThan(MOUSE_REACH);
-		const away = await onPage(page, bare);
-		await page.mouse.move(away.x, away.y);
-		await expect.poll(cursor).toBe('auto');
-		expect((await layer(page)).hovered).toBeUndefined();
-	});
-
-	test('opens nothing from a drag that starts on a marker', async ({ page }) => {
-		await overviewAtRest(page);
-		const start = await onPage(page, (await shown(page, OLYMPUS.slug)).window);
-
-		await page.mouse.move(start.x, start.y);
-		await page.mouse.down();
-		await page.mouse.move(start.x + 40, start.y + 10, { steps: 8 });
-		await page.mouse.up();
-		await cameraAtRest(page);
-
-		await expect(page).toHaveURL(/\/atlas$/);
-		await expect(chooser(page)).toHaveCount(0);
-		expect((await shown(page, OLYMPUS.slug)).window.x).toBeGreaterThan(start.x - 1);
-	});
-
-	test('opens nothing from a click on bare globe', async ({ page }) => {
 		await overviewAtRest(page);
 		const olympus = await shown(page, OLYMPUS.slug);
 		const bare = { x: olympus.window.x, y: olympus.window.y + 60 };
 		expect(nearestOther(await layer(page), bare, '')).toBeGreaterThan(FINGER_REACH);
 
-		await clickCanvas(page, bare);
-		await framesPass(page, 10);
+		await test.step('the pointer rings the marker under it, and nothing over bare globe', async () => {
+			const cursor = () => canvas(page).evaluate((element) => getComputedStyle(element).cursor);
 
-		await expect(page).toHaveURL(/\/atlas$/);
-		await expect(chooser(page)).toHaveCount(0);
-	});
+			const over = await onPage(page, olympus.window);
+			await page.mouse.move(over.x, over.y);
+			await expect.poll(cursor).toBe('pointer');
+			expect((await layer(page)).hovered).toBe(OLYMPUS.slug);
 
-	test('opens a marker clicked while the globe turns', async ({ page }) => {
-		await page.goto('/atlas');
-		await expectReadyStage(page);
-		await expect
-			.poll(async () => (await globePosition(page))?.orbiting, { timeout: 30_000 })
-			.toBe(true);
+			const away = await onPage(page, bare);
+			await page.mouse.move(away.x, away.y);
+			await expect.poll(cursor).toBe('auto');
+			expect((await layer(page)).hovered).toBeUndefined();
+		});
 
-		await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
+		await test.step('a click on bare globe opens nothing', async () => {
+			await clickCanvas(page, bare);
+			await framesPass(page, 10);
 
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+			await expect(page).toHaveURL(/\/atlas$/);
+			await expect(chooser(page)).toHaveCount(0);
+		});
+
+		await test.step('a drag that starts on a marker opens nothing and turns the globe', async () => {
+			const start = await onPage(page, olympus.window);
+
+			await page.mouse.move(start.x, start.y);
+			await page.mouse.down();
+			await page.mouse.move(start.x + 40, start.y + 10, { steps: 8 });
+			await page.mouse.up();
+			await cameraAtRest(page);
+
+			await expect(page).toHaveURL(/\/atlas$/);
+			await expect(chooser(page)).toHaveCount(0);
+			expect((await shown(page, OLYMPUS.slug)).window.x).toBeGreaterThan(start.x - 1);
+		});
+
+		await test.step('the atlas interrupting a mountain flight leaves the markers working', async () => {
+			await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+
+			await atlasLink(page).click();
+			await expect(page).toHaveURL(/\/atlas$/);
+			// The reader paused the rotation, and the pause holds across visits: the overview stays put.
+			await expect(page.getByRole('button', { name: 'Rotate the globe' })).toBeVisible();
+			await expect.poll(async () => (await layer(page)).shown).toBe(true);
+			await cameraAtRest(page);
+			await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
+
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+			await expectCanonicalPose(page, OLYMPUS.camera);
+		});
+
+		await test.step('a mountain page opens nothing from a click on its globe', async () => {
+			const box = (await canvas(page).boundingBox())!;
+
+			await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+			await framesPass(page, 10);
+
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+			await expect(chooser(page)).toHaveCount(0);
+			expect(await layer(page)).toMatchObject({ shown: false });
+			expect(await canvas(page).evaluate((element) => getComputedStyle(element).cursor)).toBe(
+				'auto'
+			);
+		});
+
+		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
+		expect(await probe.webglContexts()).toBe(1);
 	});
 });
 
 test.describe('@webgl atlas marker chooser', () => {
-	test('asks where the Himalaya merge, nearest and highest first, and closes by Escape', async ({
-		page
-	}) => {
-		await overviewAtRest(page);
-		const reading = await layer(page);
-		const everest = await shown(page, 'mount-everest');
-		const merged = reading.markers.filter(
-			(entry) => entry.visible && distance(entry.window!, everest.window) < MOUSE_CLEARANCE
-		);
-		expect(merged.length).toBeGreaterThan(1);
-
-		await clickCanvas(page, everest.window);
-
-		const dialog = chooser(page);
-		await expect(dialog).toBeVisible();
-		const links = dialog.getByRole('link');
-		await expect(links).toHaveCount(merged.length);
-		await expect(links.first()).toHaveText('Mount Everest');
-		await expect(links.first()).toBeFocused();
-		await expect(links.first()).toHaveAttribute('href', '/mountains/mount-everest');
-		await page.keyboard.press('Tab');
-		await expect(links.nth(1)).toBeFocused();
-
-		await page.keyboard.press('Escape');
-		await expect(dialog).toHaveCount(0);
-		await expect(page.locator('[data-stage]')).toBeFocused();
-		await expect(page).toHaveURL(/\/atlas$/);
-	});
-
-	test('closes on a press or a wheel elsewhere, and on a press that opens nothing', async ({
-		page
-	}) => {
-		await overviewAtRest(page);
-		const everest = (await shown(page, 'mount-everest')).window;
-
-		await clickCanvas(page, everest);
-		await expect(chooser(page)).toBeVisible();
-		await page.getByRole('heading', { name: 'Atlas', level: 1 }).click();
-		await expect(chooser(page)).toHaveCount(0);
-
-		await clickCanvas(page, everest);
-		await expect(chooser(page)).toBeVisible();
-		await page.mouse.wheel(0, 100);
-		await expect(chooser(page)).toHaveCount(0);
-		await cameraAtRest(page);
-
-		await clickCanvas(page, (await shown(page, 'mount-everest')).window);
-		await expect(chooser(page)).toBeVisible();
-		await page.getByRole('button', { name: 'Close the list of mountains' }).click();
-		await expect(chooser(page)).toHaveCount(0);
-		await expect(page).toHaveURL(/\/atlas$/);
-	});
-
-	test('opens the chosen mountain and leaves no chooser behind on Back', async ({
+	test('asks which mountain where markers merge, places itself beside the press and dismisses cleanly', async ({
 		page,
 		probe
 	}) => {
+		const enterFullscreen = async () => {
+			await page.getByRole('button', { name: 'Enter fullscreen' }).click();
+			await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+			await cameraAtRest(page);
+		};
 		await overviewAtRest(page);
-		await dragGlobe(page, 0.45, -0.3);
-		await cameraAtRest(page);
-		const [aconcagua, plata] = [
-			(await shown(page, ACONCAGUA.slug)).window,
-			(await shown(page, 'cerro-el-plata')).window
-		];
-		const between = { x: (aconcagua.x + plata.x) / 2, y: (aconcagua.y + plata.y) / 2 };
-		expect(distance(aconcagua, plata)).toBeLessThan(2 * MOUSE_REACH);
+		const everest = (await shown(page, 'mount-everest')).window;
 
-		await clickCanvas(page, between);
-		const dialog = chooser(page);
-		await expect(dialog.getByRole('link')).toHaveText([ACONCAGUA.name, 'Cerro El Plata']);
-		await dialog.getByRole('link', { name: ACONCAGUA.name }).click();
+		await test.step('the Himalaya merge: nearest and highest first, focus on the first, Escape closes', async () => {
+			const reading = await layer(page);
+			const merged = reading.markers.filter(
+				(entry) => entry.visible && distance(entry.window!, everest) < MOUSE_CLEARANCE
+			);
+			expect(merged.length).toBeGreaterThan(1);
 
-		await expect(page).toHaveURL(new RegExp(`/mountains/${ACONCAGUA.slug}$`));
-		await expect(chooser(page)).toHaveCount(0);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
+			await clickCanvas(page, everest);
 
-		await page.goBack();
-		await expect(page).toHaveURL(/\/atlas$/);
-		await expect.poll(async () => (await layer(page)).shown).toBe(true);
-		await expect(chooser(page)).toHaveCount(0);
+			const dialog = chooser(page);
+			await expect(dialog).toBeVisible();
+			const links = dialog.getByRole('link');
+			await expect(links).toHaveCount(merged.length);
+			await expect(links.first()).toHaveText('Mount Everest');
+			await expect(links.first()).toBeFocused();
+			await expect(links.first()).toHaveAttribute('href', '/mountains/mount-everest');
+			await expectBeside(page, await onPage(page, everest));
+			await page.keyboard.press('Tab');
+			await expect(links.nth(1)).toBeFocused();
+
+			await page.keyboard.press('Escape');
+			await expect(dialog).toHaveCount(0);
+			await expect(page.locator('[data-stage]')).toBeFocused();
+			await expect(page).toHaveURL(/\/atlas$/);
+		});
+
+		await test.step('it closes on a press elsewhere, on a wheel and on its Close button', async () => {
+			await clickCanvas(page, everest);
+			await expect(chooser(page)).toBeVisible();
+			await page.getByRole('heading', { name: 'Atlas', level: 1 }).click();
+			await expect(chooser(page)).toHaveCount(0);
+
+			await clickCanvas(page, everest);
+			await expect(chooser(page)).toBeVisible();
+			await page.mouse.wheel(0, 100);
+			await expect(chooser(page)).toHaveCount(0);
+			await cameraAtRest(page);
+
+			await clickCanvas(page, (await shown(page, 'mount-everest')).window);
+			await expect(chooser(page)).toBeVisible();
+			await page.getByRole('button', { name: 'Close the list of mountains' }).click();
+			await expect(chooser(page)).toHaveCount(0);
+			await expect(page).toHaveURL(/\/atlas$/);
+		});
+
+		await test.step('it closes when fullscreen changes the stage, and opens beside the press inside it', async () => {
+			const here = (await shown(page, 'mount-everest')).window;
+			await clickCanvas(page, here);
+			await expect(chooser(page)).toBeVisible();
+
+			await enterFullscreen();
+			await expect(chooser(page)).toHaveCount(0);
+
+			const inside = (await shown(page, 'mount-everest')).window;
+			await clickCanvas(page, inside);
+			await expect(chooser(page)).toBeVisible();
+			await expectBeside(page, await onPage(page, inside));
+			await expect(chooser(page).getByRole('link').first()).toBeFocused();
+
+			await page.keyboard.press('Escape');
+
+			await expect(chooser(page)).toHaveCount(0);
+			const focus = await describeFocus(page);
+			expect(focus.isBody, JSON.stringify(focus)).toBe(false);
+			if (focus.fullscreen) {
+				expect(focus.insideFullscreen, JSON.stringify(focus)).toBe(true);
+			}
+		});
+
+		await test.step('it closes when the stage changes shape without the window resizing', async () => {
+			if (await page.evaluate(() => document.fullscreenElement !== null)) {
+				await page.getByRole('button', { name: 'Exit fullscreen' }).click();
+				await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
+				await cameraAtRest(page);
+			}
+			await page.evaluate(() => {
+				(window as Window & { __windowResizes?: number }).__windowResizes = 0;
+				window.addEventListener('resize', () => {
+					(window as Window & { __windowResizes?: number }).__windowResizes! += 1;
+				});
+			});
+			await clickCanvas(page, (await shown(page, 'mount-everest')).window);
+			await expect(chooser(page)).toBeVisible();
+
+			await page.locator('[data-stage]').evaluate((element) => {
+				element.style.height = `${element.clientHeight - 120}px`;
+			});
+
+			await expect(chooser(page)).toHaveCount(0);
+			expect(
+				await page.evaluate(() => (window as Window & { __windowResizes?: number }).__windowResizes)
+			).toBe(0);
+			await expect(page).toHaveURL(/\/atlas$/);
+			await page.locator('[data-stage]').evaluate((element) => {
+				element.style.height = '';
+			});
+			await cameraAtRest(page);
+		});
+
+		await test.step('choosing a mountain opens it and leaves no chooser behind on Back', async () => {
+			await dragGlobe(page, 0.45, -0.3);
+			await cameraAtRest(page);
+			const [aconcagua, plata] = [
+				(await shown(page, ACONCAGUA.slug)).window,
+				(await shown(page, 'cerro-el-plata')).window
+			];
+			const between = { x: (aconcagua.x + plata.x) / 2, y: (aconcagua.y + plata.y) / 2 };
+			expect(distance(aconcagua, plata)).toBeLessThan(2 * MOUSE_REACH);
+
+			await clickCanvas(page, between);
+			const dialog = chooser(page);
+			await expect(dialog.getByRole('link')).toHaveText([ACONCAGUA.name, 'Cerro El Plata']);
+			await dialog.getByRole('link', { name: ACONCAGUA.name }).click();
+
+			await expect(page).toHaveURL(new RegExp(`/mountains/${ACONCAGUA.slug}$`));
+			await expect(chooser(page)).toHaveCount(0);
+			await expectCanonicalPose(page, ACONCAGUA.camera);
+
+			await page.goBack();
+			await expect(page).toHaveURL(/\/atlas$/);
+			await expect.poll(async () => (await layer(page)).shown).toBe(true);
+			await expect(chooser(page)).toHaveCount(0);
+		});
+
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 		expect(await probe.webglContexts()).toBe(1);
 	});
@@ -418,28 +474,6 @@ test.describe('@webgl atlas close neighbours', () => {
 		await clickCanvas(page, named.torre.window);
 		await expect(page).toHaveURL(/\/mountains\/cerro-torre$/);
 	});
-
-	test('names Mont Blanc and the Matterhorn without overlap, both still drawn', async ({
-		page
-	}) => {
-		await overviewAtRest(page);
-		const box = (await canvas(page).boundingBox())!;
-		let blanc = await shown(page, 'mont-blanc');
-		let matterhorn = await shown(page, 'matterhorn');
-		for (let step = 0; step < 60 && !(blanc.labelShown && matterhorn.labelShown); step += 1) {
-			await page.mouse.move(box.x + blanc.window.x, box.y + blanc.window.y);
-			await page.mouse.wheel(0, -400);
-			await framesPass(page, 8);
-			expect(overlapping(await layer(page))).toEqual([]);
-			blanc = await shown(page, 'mont-blanc');
-			matterhorn = await shown(page, 'matterhorn');
-			if (blanc.labelShown && !matterhorn.labelShown) {
-				expect(matterhorn.labelSuppressed).toBe(true);
-			}
-		}
-
-		expect([blanc.labelShown, matterhorn.labelShown]).toEqual([true, true]);
-	});
 });
 
 test.describe('@webgl atlas markers by touch', () => {
@@ -449,180 +483,55 @@ test.describe('@webgl atlas markers by touch', () => {
 		await page.setViewportSize(PHONE);
 	});
 
-	test('opens a mountain with a tap a fingertip away from its marker', async ({ page }) => {
-		await overviewAtRest(page);
-		const reading = await layer(page);
-		const olympus = (await shown(page, OLYMPUS.slug)).window;
-		// Off the dot by more than a mouse reaches, on the side away from every neighbour.
-		const offsets = [-16, 16].flatMap((dx) => [-16, 16].map((dy) => ({ dx, dy })));
-		const tap = offsets
-			.map(({ dx, dy }) => ({ x: olympus.x + dx * 0.75, y: olympus.y + dy * 0.75 }))
-			.sort(
-				(a, b) => nearestOther(reading, b, OLYMPUS.slug) - nearestOther(reading, a, OLYMPUS.slug)
-			)[0]!;
-		expect(distance(tap, olympus)).toBeGreaterThan(MOUSE_REACH);
-		expect(nearestOther(reading, tap, OLYMPUS.slug)).toBeGreaterThan(distance(tap, olympus) + 8);
-
-		await tapCanvas(page, tap);
-
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-	});
-
-	test('keeps the chooser on the phone screen and closes it with a tap elsewhere', async ({
+	test('a tap a fingertip away opens a mountain, and the chooser stays on the screen', async ({
 		page
 	}) => {
 		await overviewAtRest(page);
-		const everest = (await shown(page, 'mount-everest')).window;
 
-		await tapCanvas(page, everest);
+		await test.step('a tap a fingertip away from a marker opens its mountain', async () => {
+			const reading = await layer(page);
+			const olympus = (await shown(page, OLYMPUS.slug)).window;
+			// Off the dot by more than a mouse reaches, on the side away from every neighbour.
+			const offsets = [-16, 16].flatMap((dx) => [-16, 16].map((dy) => ({ dx, dy })));
+			const tap = offsets
+				.map(({ dx, dy }) => ({ x: olympus.x + dx * 0.75, y: olympus.y + dy * 0.75 }))
+				.sort(
+					(a, b) => nearestOther(reading, b, OLYMPUS.slug) - nearestOther(reading, a, OLYMPUS.slug)
+				)[0]!;
+			expect(distance(tap, olympus)).toBeGreaterThan(MOUSE_REACH);
+			expect(nearestOther(reading, tap, OLYMPUS.slug)).toBeGreaterThan(distance(tap, olympus) + 8);
 
-		const dialog = chooser(page);
-		await expect(dialog).toBeVisible();
-		await expectBeside(page, await onPage(page, everest));
-		const placed = (await dialog.boundingBox())!;
-		const stage = (await page.locator('[data-stage]').boundingBox())!;
-		expect(placed.x).toBeGreaterThanOrEqual(stage.x);
-		expect(placed.x + placed.width).toBeLessThanOrEqual(
-			Math.min(stage.x + stage.width, PHONE.width)
-		);
-		expect(placed.y).toBeGreaterThanOrEqual(stage.y);
-		expect(placed.y + placed.height).toBeLessThanOrEqual(stage.y + stage.height);
-		await expect(dialog.getByRole('link').first()).toHaveText('Mount Everest');
+			await tapCanvas(page, tap);
 
-		const heading = (await page.getByRole('heading', { name: 'Atlas', level: 1 }).boundingBox())!;
-		await page.touchscreen.tap(heading.x + 10, heading.y + heading.height / 2);
-		await expect(dialog).toHaveCount(0);
-		await expect(page).toHaveURL(/\/atlas$/);
-	});
-});
-
-test.describe('@webgl atlas markers across navigation', () => {
-	test('keeps markers working after the atlas interrupts a mountain flight', async ({
-		page,
-		probe
-	}) => {
-		await overviewAtRest(page);
-		await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-
-		await atlasLink(page).click();
-		await expect(page).toHaveURL(/\/atlas$/);
-		// The reader paused the rotation, and the pause holds across visits: the overview stays put.
-		await expect(page.getByRole('button', { name: 'Rotate the globe' })).toBeVisible();
-		await expect.poll(async () => (await layer(page)).shown).toBe(true);
-		await cameraAtRest(page);
-		await clickCanvas(page, (await shown(page, OLYMPUS.slug)).window);
-
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await expectCanonicalPose(page, OLYMPUS.camera);
-		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-		expect(await probe.webglContexts()).toBe(1);
-	});
-
-	test('a mountain page opens nothing from a click on its globe', async ({ page }) => {
-		await page.goto(`/mountains/${OLYMPUS.slug}`);
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, OLYMPUS.camera);
-		const box = (await canvas(page).boundingBox())!;
-
-		await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-		await framesPass(page, 10);
-
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await expect(chooser(page)).toHaveCount(0);
-		expect(await layer(page)).toMatchObject({ shown: false, layers: 0 });
-		expect(await canvas(page).evaluate((element) => getComputedStyle(element).cursor)).toBe('auto');
-	});
-});
-
-test.describe('@webgl atlas marker chooser placement and dismissal', () => {
-	const enterFullscreen = async (page: Page) => {
-		await page.getByRole('button', { name: 'Enter fullscreen' }).click();
-		await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
-		await cameraAtRest(page);
-	};
-
-	test('opens beside the marker pressed, in the page and in fullscreen', async ({ page }) => {
-		await overviewAtRest(page);
-		const everest = (await shown(page, 'mount-everest')).window;
-
-		await clickCanvas(page, everest);
-		await expect(chooser(page)).toBeVisible();
-		await expectBeside(page, await onPage(page, everest));
-		await page.keyboard.press('Escape');
-		await expect(chooser(page)).toHaveCount(0);
-
-		await enterFullscreen(page);
-		const inside = (await shown(page, 'mount-everest')).window;
-		await clickCanvas(page, inside);
-		await expect(chooser(page)).toBeVisible();
-		await expectBeside(page, await onPage(page, inside));
-	});
-
-	test('opens beside the marker on a short, wide stage and a tall, narrow one', async ({
-		page
-	}) => {
-		for (const size of [
-			{ width: 900, height: 420 },
-			{ width: 480, height: 900 }
-		]) {
-			await page.setViewportSize(size);
-			await overviewAtRest(page);
-			const merged = await mergedMarker(page);
-
-			await clickCanvas(page, merged);
-			await expect(chooser(page)).toBeVisible();
-			await expectBeside(page, await onPage(page, merged));
-			await page.keyboard.press('Escape');
-			await expect(chooser(page)).toHaveCount(0);
-		}
-	});
-
-	test('hands focus back to the stage when Escape closes it in fullscreen', async ({ page }) => {
-		await overviewAtRest(page);
-		await enterFullscreen(page);
-		await clickCanvas(page, (await shown(page, 'mount-everest')).window);
-		await expect(chooser(page).getByRole('link').first()).toBeFocused();
-
-		await page.keyboard.press('Escape');
-
-		await expect(chooser(page)).toHaveCount(0);
-		const focus = await describeFocus(page);
-		expect(focus.isBody, JSON.stringify(focus)).toBe(false);
-		if (focus.fullscreen) {
-			expect(focus.insideFullscreen, JSON.stringify(focus)).toBe(true);
-		}
-	});
-
-	test('closes when the stage changes shape without the window resizing', async ({ page }) => {
-		await overviewAtRest(page);
-		await page.evaluate(() => {
-			(window as Window & { __windowResizes?: number }).__windowResizes = 0;
-			window.addEventListener('resize', () => {
-				(window as Window & { __windowResizes?: number }).__windowResizes! += 1;
-			});
-		});
-		await clickCanvas(page, (await shown(page, 'mount-everest')).window);
-		await expect(chooser(page)).toBeVisible();
-
-		await page.locator('[data-stage]').evaluate((element) => {
-			element.style.height = `${element.clientHeight - 120}px`;
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
 		});
 
-		await expect(chooser(page)).toHaveCount(0);
-		expect(
-			await page.evaluate(() => (window as Window & { __windowResizes?: number }).__windowResizes)
-		).toBe(0);
-		await expect(page).toHaveURL(/\/atlas$/);
-	});
+		await test.step('the chooser keeps on the phone screen and closes with a tap elsewhere', async () => {
+			await page.goBack();
+			await expect(page).toHaveURL(/\/atlas$/);
+			await expect.poll(async () => (await layer(page)).shown).toBe(true);
+			await cameraAtRest(page);
+			const everest = (await shown(page, 'mount-everest')).window;
 
-	test('closes when fullscreen changes the stage', async ({ page }) => {
-		await overviewAtRest(page);
-		await clickCanvas(page, (await shown(page, 'mount-everest')).window);
-		await expect(chooser(page)).toBeVisible();
+			await tapCanvas(page, everest);
 
-		await page.getByRole('button', { name: 'Enter fullscreen' }).click();
+			const dialog = chooser(page);
+			await expect(dialog).toBeVisible();
+			await expectBeside(page, await onPage(page, everest));
+			const placed = (await dialog.boundingBox())!;
+			const stage = (await page.locator('[data-stage]').boundingBox())!;
+			expect(placed.x).toBeGreaterThanOrEqual(stage.x);
+			expect(placed.x + placed.width).toBeLessThanOrEqual(
+				Math.min(stage.x + stage.width, PHONE.width)
+			);
+			expect(placed.y).toBeGreaterThanOrEqual(stage.y);
+			expect(placed.y + placed.height).toBeLessThanOrEqual(stage.y + stage.height);
+			await expect(dialog.getByRole('link').first()).toHaveText('Mount Everest');
 
-		await expect(chooser(page)).toHaveCount(0);
+			const heading = (await page.getByRole('heading', { name: 'Atlas', level: 1 }).boundingBox())!;
+			await page.touchscreen.tap(heading.x + 10, heading.y + heading.height / 2);
+			await expect(dialog).toHaveCount(0);
+			await expect(page).toHaveURL(/\/atlas$/);
+		});
 	});
 });

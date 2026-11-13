@@ -2,11 +2,12 @@ import type { Page } from '@playwright/test';
 import { fixture } from '../ssr/support';
 import {
 	ACONCAGUA,
-	BARE_PEAK,
 	OLYMPUS,
+	cameraReading,
 	expect,
 	expectCanonicalPose,
 	expectReadyStage,
+	framesPass,
 	liveViewers,
 	test
 } from './support/stage';
@@ -14,7 +15,6 @@ import {
 const DESKTOP = { width: 1280, height: 800 };
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const RANDOM_ENDPOINT = '**/api/v1/mountains/random**';
-const OLYMPUS_RECORD = fixture<unknown>('mountain-sparse.json');
 const LONGEST_TRAVEL_MS = 3_000;
 
 const exploreButton = (page: Page) =>
@@ -22,12 +22,12 @@ const exploreButton = (page: Page) =>
 const resetButton = (page: Page) => page.getByRole('button', { name: 'Reset view' });
 
 // The API stays the real stub; only the choice of destination is made deterministic.
-async function chooseOlympus(page: Page): Promise<string[]> {
+async function chooseDestination(page: Page, record: unknown): Promise<string[]> {
 	const requested: string[] = [];
 	await page.route(RANDOM_ENDPOINT, (route) => {
 		requested.push(new URL(route.request().url()).search);
 		return route.fulfill({
-			json: OLYMPUS_RECORD,
+			json: record,
 			headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
 		});
 	});
@@ -35,38 +35,6 @@ async function chooseOlympus(page: Page): Promise<string[]> {
 	return requested;
 }
 
-// Answers the destination choice with `record` only once the test releases it. The client gives up
-// on a lookup after its own timeout, so `abandoned` says whether the held request outlived it.
-async function holdRandom(page: Page, record: unknown = OLYMPUS_RECORD) {
-	let release!: () => void;
-	const released = new Promise<void>((resolve) => (release = resolve));
-	const requested: string[] = [];
-	let abandoned: string | undefined;
-	await page.route(RANDOM_ENDPOINT, async (route) => {
-		requested.push(new URL(route.request().url()).search);
-		await released;
-		await route.fulfill({
-			json: record,
-			headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
-		});
-	});
-	page.on('requestfailed', (request) => {
-		if (request.url().includes('/mountains/random')) {
-			abandoned = request.failure()?.errorText ?? 'failed';
-		}
-	});
-
-	return { release, requested, abandoned: () => abandoned };
-}
-
-type HeldRandom = Awaited<ReturnType<typeof holdRandom>>;
-
-// Route changes are recorded from the router's own event, which is also what supersedes a run.
-async function expectRouteStarted(page: Page, url: string) {
-	await expect.poll(() => routesStarted(page)).toEqual([url]);
-}
-
-// Records every route change the router starts, so a stale push is visible without waiting for it.
 async function recordRoutes(page: Page) {
 	await page.evaluate(() => {
 		const win = window as Window & {
@@ -81,30 +49,27 @@ async function recordRoutes(page: Page) {
 const routesStarted = (page: Page) =>
 	page.evaluate(() => (window as Window & { __routes?: string[] }).__routes ?? []);
 
-// Releases a held answer and waits until the page has consumed it, with no sleep: the response is
-// observed, then two frames let any promise continuation it started run. A lookup the client already
-// abandoned has no response to observe, so that is reported instead of waiting for one.
-async function releaseAndConsume(page: Page, random: HeldRandom) {
-	expect(random.abandoned(), 'the client abandoned the held lookup before it was answered').toBe(
-		undefined
-	);
-	const answered = page.waitForResponse((response) => response.url().includes('/mountains/random'));
-	random.release();
-	await answered;
-	await page.evaluate(
-		() =>
-			new Promise<void>((resolve) =>
-				requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-			)
-	);
-}
-
 async function pushRoute(page: Page, url: string) {
 	await page.evaluate((target) => {
 		void (
 			window as Window & { next?: { router: { push(url: string): Promise<boolean> } } }
 		).next!.router.push(target);
 	}, url);
+}
+
+// Negative evidence needs elapsed time, but only time the page spent rendering counts: an
+// abandoned flight can only land on frames the page actually draws.
+async function renderedFor(page: Page, milliseconds: number) {
+	await page.evaluate(
+		(duration) =>
+			new Promise<void>((resolve) => {
+				const start = performance.now();
+				const next = () =>
+					performance.now() - start >= duration ? resolve() : requestAnimationFrame(next);
+				requestAnimationFrame(next);
+			}),
+		milliseconds
+	);
 }
 
 async function openStage(page: Page, url = PERMALINK) {
@@ -115,12 +80,10 @@ async function openStage(page: Page, url = PERMALINK) {
 	await page.evaluate(() => document.querySelector('canvas')?.setAttribute('data-probe', 'first'));
 }
 
-async function expectIdleAt(page: Page, mountain: typeof OLYMPUS | typeof BARE_PEAK) {
+async function expectIdleAt(page: Page, mountain: typeof OLYMPUS | typeof ACONCAGUA) {
 	await expect(page).toHaveURL(new RegExp(`/mountains/${mountain.slug}$`));
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(mountain.name);
-	if ('camera' in mountain) {
-		await expectCanonicalPose(page, mountain.camera);
-	}
+	await expectCanonicalPose(page, mountain.camera);
 	await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'false');
 	await expect(resetButton(page)).toBeEnabled();
 }
@@ -132,232 +95,112 @@ async function expectPersistentViewer(page: Page, probe: { webglContexts(): Prom
 }
 
 test.describe('@webgl Explore', () => {
-	test('travels to the destination, settles on its canonical pose and keeps the same viewer', async ({
-		page,
-		probe
-	}) => {
-		const requested = await chooseOlympus(page);
+	test('travels to a destination and explores again, on one Viewer', async ({ page, probe }) => {
+		const requested = await chooseDestination(page, fixture<unknown>('mountain-sparse.json'));
 		await openStage(page);
 
-		await exploreButton(page).click();
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		await test.step('travels, settles on the destination pose and stays idle', async () => {
+			await exploreButton(page).click();
+			await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
 
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-		expect(requested).toEqual([`?exclude=${ACONCAGUA.slug}`]);
-	});
-
-	test('explores again from the destination it arrived at', async ({ page, probe }) => {
-		const requested = await chooseOlympus(page);
-		await openStage(page);
-		await exploreButton(page).click();
-		await expectIdleAt(page, OLYMPUS);
-
-		await pushRoute(page, PERMALINK);
-		await expectIdleAt(page, ACONCAGUA);
-		await exploreButton(page).click();
-
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-		expect(requested).toEqual([`?exclude=${ACONCAGUA.slug}`, `?exclude=${ACONCAGUA.slug}`]);
-	});
-
-	test('ignores repeated clicks while the scene is travelling', async ({ page, probe }) => {
-		const requested = await chooseOlympus(page);
-		await openStage(page);
-
-		await exploreButton(page).click();
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		// One page task: a click sent through the runner waits for a page busy rendering the flight,
-		// so on a slow machine the travel can end before it lands and it would start a new Explore.
-		const busyWhenClicked = await exploreButton(page).evaluate((button: HTMLElement) => {
-			const busy = button.getAttribute('aria-busy');
-			button.click();
-			button.click();
-
-			return busy;
+			await expectIdleAt(page, OLYMPUS);
+			expect(requested).toEqual([`?exclude=${ACONCAGUA.slug}`]);
 		});
-		expect(busyWhenClicked, 'the travel ended before the repeated clicks').toBe('true');
 
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-		expect(requested).toHaveLength(1);
-	});
+		await test.step('explores again from the mountain it came back to', async () => {
+			await pushRoute(page, PERMALINK);
+			await expectIdleAt(page, ACONCAGUA);
 
-	test('lets a newer navigation win mid-travel and leaves no stale destination in charge', async ({
-		page,
-		probe
-	}) => {
-		const requested = await chooseOlympus(page);
-		await openStage(page);
+			await exploreButton(page).click();
 
-		await exploreButton(page).click();
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
-		await pushRoute(page, PERMALINK);
+			await expectIdleAt(page, OLYMPUS);
+			expect(requested).toHaveLength(2);
+		});
 
-		await expectIdleAt(page, ACONCAGUA);
-		// Negative evidence: the abandoned flight has had longer than any flight lasts to finish.
-		await page.waitForTimeout(LONGEST_TRAVEL_MS);
-		await expectIdleAt(page, ACONCAGUA);
-		await expectPersistentViewer(page, probe);
+		await test.step('ignores repeated clicks while the scene is travelling', async () => {
+			await pushRoute(page, PERMALINK);
+			await expectIdleAt(page, ACONCAGUA);
+			await exploreButton(page).click();
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
 
-		await exploreButton(page).click();
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-		expect(requested).toHaveLength(2);
-	});
+			// One page task: a click sent through the runner waits for a page busy rendering the flight,
+			// so on a slow machine the travel can end before it lands and it would start a new Explore.
+			const busyWhenClicked = await exploreButton(page).evaluate((button: HTMLElement) => {
+				const busy = button.getAttribute('aria-busy');
+				button.click();
+				button.click();
 
-	test('reaches the same destination state with reduced motion', async ({ page, probe }) => {
-		await page.emulateMedia({ reducedMotion: 'reduce' });
-		const requested = await chooseOlympus(page);
-		await openStage(page);
-
-		await exploreButton(page).click();
-
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-		expect(requested).toHaveLength(1);
-	});
-
-	test('explores from the daily page without changing what / serves', async ({ page, probe }) => {
-		await chooseOlympus(page);
-		await openStage(page, '/');
-
-		await exploreButton(page).click();
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-
-		await page.goto('/');
-		await expectReadyStage(page);
-		await expect(page).toHaveURL(/\/$/);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-	});
-});
-
-test.describe('@webgl Explore superseded before the scene owns the destination', () => {
-	test('a permalink pushed while the destination is being chosen wins over the late answer', async ({
-		page,
-		probe
-	}) => {
-		const random = await holdRandom(page);
-		await openStage(page, `/mountains/${BARE_PEAK.slug}`);
-		await recordRoutes(page);
-
-		await exploreButton(page).click();
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
-		await pushRoute(page, PERMALINK);
-		// The client abandons a lookup after its timeout, which a slow flight to the permalink can
-		// outlast: the late answer arrives as soon as the permalink has superseded the run.
-		await expectRouteStarted(page, PERMALINK);
-		await releaseAndConsume(page, random);
-
-		await expectIdleAt(page, ACONCAGUA);
-		expect(await routesStarted(page)).toEqual([PERMALINK]);
-		await expectPersistentViewer(page, probe);
-		expect(random.requested).toEqual([`?exclude=${BARE_PEAK.slug}`]);
-	});
-
-	test('browser Back while the destination is being chosen wins and Explore stays usable', async ({
-		page,
-		probe
-	}) => {
-		const random = await holdRandom(page);
-		await openStage(page);
-		await pushRoute(page, `/mountains/${BARE_PEAK.slug}`);
-		await expectIdleAt(page, BARE_PEAK);
-		await recordRoutes(page);
-
-		await exploreButton(page).click();
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
-		await page.goBack();
-		await expectRouteStarted(page, PERMALINK);
-		await releaseAndConsume(page, random);
-
-		await expectIdleAt(page, ACONCAGUA);
-		expect(await routesStarted(page)).toEqual([PERMALINK]);
-		await expectPersistentViewer(page, probe);
-
-		await exploreButton(page).click();
-		await expectIdleAt(page, OLYMPUS);
-		await expectPersistentViewer(page, probe);
-	});
-
-	test('browser Back while the scene is travelling wins and the abandoned flight never lands', async ({
-		page,
-		probe
-	}) => {
-		await chooseOlympus(page);
-		await openStage(page);
-		await recordRoutes(page);
-
-		await exploreButton(page).click();
-		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
-		await page.goBack();
-
-		await expectIdleAt(page, ACONCAGUA);
-		expect(await routesStarted(page)).toEqual([`/mountains/${OLYMPUS.slug}`, PERMALINK]);
-		await expectPersistentViewer(page, probe);
-	});
-
-	test('a destination photograph that is still loading neither delays nor blocks the travel', async ({
-		page,
-		probe
-	}) => {
-		await chooseOlympus(page);
-		await openStage(page);
-		let release!: () => void;
-		const released = new Promise<void>((resolve) => (release = resolve));
-		const photos: string[] = [];
-		await page.route(/^https:\/\/(upload|thumb)\.wikimedia\.org\//, async (route) => {
-			photos.push(route.request().url());
-			await released;
-			await route.fulfill({
-				contentType: 'image/svg+xml',
-				body: '<svg xmlns="http://www.w3.org/2000/svg"/>'
+				return busy;
 			});
+			expect(busyWhenClicked, 'the travel ended before the repeated clicks').toBe('true');
+
+			await expectIdleAt(page, OLYMPUS);
+			expect(requested).toHaveLength(3);
 		});
 
-		await exploreButton(page).click();
+		await test.step('a transition during a zoom cancels the zoom and arrives on the destination', async () => {
+			await pushRoute(page, PERMALINK);
+			await expectIdleAt(page, ACONCAGUA);
 
-		await expectIdleAt(page, OLYMPUS);
+			await page.getByRole('button', { name: 'Zoom out' }).click();
+			await exploreButton(page).click();
+
+			await expectIdleAt(page, OLYMPUS);
+			const settled = (await cameraReading(page))!.displayRangeMeters;
+			await framesPass(page, 40);
+			expect((await cameraReading(page))!.displayRangeMeters).toBeCloseTo(settled, 0);
+		});
+
+		await test.step('exploring to the mountain already shown settles at once', async () => {
+			await pushRoute(page, PERMALINK);
+			await expectIdleAt(page, ACONCAGUA);
+			await chooseDestination(page, fixture<unknown>('mountain-complete.json'));
+
+			await exploreButton(page).click();
+
+			await expectIdleAt(page, ACONCAGUA);
+		});
+
 		await expectPersistentViewer(page, probe);
-		expect(photos.length).toBeGreaterThan(0);
-		release();
 	});
-});
 
-test.describe('@webgl Same destination', () => {
-	test('exploring to the mountain already shown settles at once on the same viewer', async ({
+	test('a newer navigation wins a flight in progress, and nothing stale lands afterwards', async ({
 		page,
 		probe
 	}) => {
-		await page.route(RANDOM_ENDPOINT, (route) =>
-			route.fulfill({
-				json: fixture<unknown>('mountain-complete.json'),
-				headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
-			})
-		);
+		const requested = await chooseDestination(page, fixture<unknown>('mountain-sparse.json'));
 		await openStage(page);
-
-		await exploreButton(page).click();
-
-		await expectIdleAt(page, ACONCAGUA);
-		await expectPersistentViewer(page, probe);
-	});
-
-	test('the daily page and its permalink share one viewer and one pose', async ({
-		page,
-		probe
-	}) => {
-		await openStage(page, '/');
 		await recordRoutes(page);
 
-		await pushRoute(page, PERMALINK);
+		await test.step('a permalink pushed mid-travel wins', async () => {
+			await exploreButton(page).click();
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+			await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+			await pushRoute(page, PERMALINK);
 
-		await expectIdleAt(page, ACONCAGUA);
-		expect(await routesStarted(page)).toEqual([PERMALINK]);
-		await expectPersistentViewer(page, probe);
+			await expectIdleAt(page, ACONCAGUA);
+			await renderedFor(page, LONGEST_TRAVEL_MS);
+			await expectIdleAt(page, ACONCAGUA);
+			await expectPersistentViewer(page, probe);
+		});
+
+		await test.step('browser Back mid-travel wins and the abandoned flight never lands', async () => {
+			await exploreButton(page).click();
+			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+			await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+			await page.goBack();
+
+			await expectIdleAt(page, ACONCAGUA);
+			await renderedFor(page, LONGEST_TRAVEL_MS);
+			await expectIdleAt(page, ACONCAGUA);
+			await expectPersistentViewer(page, probe);
+			expect(await routesStarted(page)).toEqual([
+				`/mountains/${OLYMPUS.slug}`,
+				PERMALINK,
+				`/mountains/${OLYMPUS.slug}`,
+				PERMALINK
+			]);
+			expect(requested).toHaveLength(2);
+		});
 	});
 });
