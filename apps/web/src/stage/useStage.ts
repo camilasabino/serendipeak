@@ -10,6 +10,7 @@ import { sameAtlasMarkers, type AtlasMarker } from './globe/atlasMarkers';
 import { sameAtlasView, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
+import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import type { PresentationObserver } from './SceneSession';
@@ -25,6 +26,9 @@ export interface UseStageOptions {
 	atlas?: AtlasView;
 	markers?: readonly AtlasMarker[];
 	observer?: PresentationObserver;
+	/** Read when an activation arrives, so a new function never rebuilds the stage. */
+	onMarkerActivate?: (activation: MarkerActivation) => void;
+	onStageResize?: () => void;
 }
 
 export interface UseStageResult {
@@ -44,13 +48,17 @@ export function useStage({
 	target,
 	atlas,
 	markers,
-	observer
+	observer,
+	onMarkerActivate,
+	onStageResize
 }: UseStageOptions): UseStageResult {
 	const viewportRef = useRef<HTMLDivElement>(null);
 	const bindingRef = useRef<StageBinding | undefined>(undefined);
 	const targetRef = useRef(target);
 	const atlasRef = useRef(atlas);
 	const markersRef = useRef(markers);
+	const activateRef = useRef(onMarkerActivate);
+	const resizeRef = useRef(onStageResize);
 	const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
 	// A new object with the same content must not restart the presentation.
@@ -83,6 +91,11 @@ export function useStage({
 	}, [stableMarkers]);
 
 	useEffect(() => {
+		activateRef.current = onMarkerActivate;
+		resizeRef.current = onStageResize;
+	}, [onMarkerActivate, onStageResize]);
+
+	useEffect(() => {
 		targetRef.current = stableTarget;
 		bindingRef.current?.setTarget(stableTarget);
 	}, [stableTarget]);
@@ -101,7 +114,9 @@ export function useStage({
 			target: targetRef.current,
 			atlas: atlasRef.current,
 			markers: markersRef.current,
-			observer
+			observer,
+			onMarkerActivate: (activation) => activateRef.current?.(activation),
+			onStageResize: () => resizeRef.current?.()
 		});
 		bindingRef.current = binding;
 

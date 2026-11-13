@@ -5,8 +5,8 @@ import { mountainIndexEntry, serendipeakDocument } from './serendipeak-contract.
 
 const contractsDirectory = new URL('../../../../contracts/v1/', import.meta.url);
 
-// `catalog` serves the vendored catalog's 73 mountains as the index, for tests that need real
-// density on the globe; every other route answers as in `ok`.
+// `catalog` serves the vendored catalog's mountains as the index, plus the close neighbours below,
+// for tests that need real density on the globe; every other route answers as in `ok`.
 export const SCENARIOS = [
 	'ok',
 	'unreachable',
@@ -48,9 +48,26 @@ const CONTINENTS = {
 	SA: 'South America'
 };
 
+// Real summits of the current catalog that the vendored one predates. Each sits a few kilometres
+// from a mountain already there (Fitz Roy 4.6 km, Aconcagua 66 km), the closest pairs on the globe.
+const CATALOG_ADDITIONS = [
+	{
+		slug: 'cerro-torre',
+		name: 'Cerro Torre',
+		coordinates: { latitude: -49.2906, longitude: -73.09901 },
+		elevationMeters: 3133
+	},
+	{
+		slug: 'cerro-el-plata',
+		name: 'Cerro El Plata',
+		coordinates: { latitude: -33.015925, longitude: -69.454922 },
+		elevationMeters: 5968
+	}
+];
+
 function catalogIndex(served) {
 	const catalog = JSON.parse(readFileSync(new URL('catalog.json', contractsDirectory), 'utf8'));
-	const mountains = catalog.mountains.map((mountain) => {
+	const mountains = [...catalog.mountains, ...CATALOG_ADDITIONS].map((mountain) => {
 		const known = served.get(mountain.slug);
 		if (known) {
 			return mountainIndexEntry(known);

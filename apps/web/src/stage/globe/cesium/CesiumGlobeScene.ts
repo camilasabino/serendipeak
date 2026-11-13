@@ -12,6 +12,8 @@ import type { GlobeScene, RefitResult } from '../GlobeScene';
 import { FailedLayerRemoval } from '../failedLayerRemoval';
 import type { LookState } from '../glidePath';
 import { ImageryMonitor } from '../imageryMonitor';
+import type { LabelSize } from '../labelDeclutter';
+import type { MarkerActivation } from '../markerActivation';
 import { SENTINEL2_ASSET_ID, createBaseLayer, type ImageryMode } from '../imagery';
 import {
 	createMountainCamera,
@@ -30,6 +32,7 @@ import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from '.
 import { ZOOM_FLIGHT_SECONDS, type ZoomDirection, type ZoomResult } from '../zoomStep';
 import { releaseBestEffort } from '../../releaseBestEffort';
 import { AtlasMarkers } from './AtlasMarkers';
+import { AtlasPicker } from './AtlasPicker';
 import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
 import { SummitMarkers } from './SummitMarkers';
@@ -79,6 +82,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly director: CameraDirector;
 	private readonly orbit: ViewerOrbit;
 	private readonly atlasMarkers: AtlasMarkers;
+	private readonly atlasPicker: AtlasPicker;
 	private readonly camera: MountainCamera;
 	private readonly terrainSession: TerrainCameraSession;
 	private readonly reducedMotion: MediaQueryList;
@@ -213,11 +217,15 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.flight = new ViewerCameraFlight(cesium, viewer, this.sampler, () => this.measureStage());
 		this.terrainSession = createTerrainCameraSession();
 		this.orbit = new ViewerOrbit(cesium, viewer, () => this.canOrbit());
+		const measureText = createTextMeasure();
 		this.atlasMarkers = new AtlasMarkers(cesium, viewer, {
 			listen: (onChange) => this.listenForViewChanges(onChange),
 			project: (position, result) =>
-				cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, position, result)
+				cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, position, result),
+			measureText,
+			refreshed: () => this.atlasPicker.refreshed()
 		});
+		this.atlasPicker = new AtlasPicker(cesium, viewer.scene.canvas, this.atlasMarkers);
 
 		const markers = new SummitMarkers(cesium, viewer);
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
@@ -337,6 +345,10 @@ export class CesiumGlobeScene implements GlobeScene {
 		if (!this.destroyed) {
 			this.atlasMarkers.set(markers);
 		}
+	}
+
+	subscribeMarkerActivation(listener: (activation: MarkerActivation) => void): () => void {
+		return this.destroyed ? noop : this.atlasPicker.subscribe(listener);
 	}
 
 	// Heard before Cesium's own handlers act on the event, so the orbit never fights a gesture.
@@ -532,6 +544,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['failed layer removal', () => this.failedBaseLayer?.release()],
 			['orientation tracker', releaseOrientation],
 			['scale tracker', releaseScale],
+			['atlas picker', () => this.atlasPicker.release()],
 			['atlas markers', () => this.atlasMarkers.release()],
 			['camera', () => this.camera.stop()],
 			['camera flight', () => this.flight.release()],
@@ -625,6 +638,27 @@ export class CesiumGlobeScene implements GlobeScene {
 			removeTiles();
 		};
 	}
+}
+
+// Measures label text the way Cesium rasterizes it, on a 2D canvas in the same font. A browser
+// without one gets an estimate rather than a failed scene: decluttering only needs a close box.
+function createTextMeasure(): (text: string, font: string) => LabelSize {
+	let context: CanvasRenderingContext2D | null | undefined;
+
+	return (text, font) => {
+		context ??= document.createElement('canvas').getContext('2d');
+		if (!context) {
+			const size = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? '13');
+			return { width: text.length * size * 0.6, height: size * 1.2 };
+		}
+		context.font = font;
+		const metrics = context.measureText(text);
+
+		return {
+			width: metrics.width,
+			height: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+		};
+	};
 }
 
 function ensureWidgetStyles(): Promise<void> {

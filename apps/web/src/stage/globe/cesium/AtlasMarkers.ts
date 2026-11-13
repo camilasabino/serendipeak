@@ -15,9 +15,12 @@ import {
 	isMarkerVisible,
 	markerPresentation,
 	type AtlasLayerReading,
-	type AtlasMarker
+	type AtlasMarker,
+	type ScreenBox
 } from '../atlasMarkers';
+import { declutterLabels, labelBox, type LabelCandidate, type LabelSize } from '../labelDeclutter';
 import { MARKER_LABEL_PLATE } from '../marker';
+import type { HitTarget } from '../markerHits';
 import type { CesiumModule } from './CesiumModule';
 
 export const ATLAS_LAYER_NAME = 'atlas';
@@ -27,6 +30,10 @@ export interface AtlasMarkersOptions {
 	listen(onChange: () => void): () => void;
 	/** Canvas position of a world point in CSS pixels from the top left, if it projects at all. */
 	project(position: Cartesian3, result: Cartesian2): Cartesian2 | undefined;
+	/** The size of a label's text in CSS pixels, set in `font`, as Cesium will draw it. */
+	measureText(text: string, font: string): LabelSize;
+	/** After every visibility pass, and when the layer is hidden: what can be hit has changed. */
+	refreshed?(): void;
 }
 
 interface MarkerEntry {
@@ -34,14 +41,19 @@ interface MarkerEntry {
 	entity: Entity;
 	position: Cartesian3;
 	visible: boolean;
-	labelled: boolean;
-	x: number;
-	y: number;
+	/** Within its label distance; whether the label shows is up to decluttering. */
+	labelInRange: boolean;
+	labelShown: boolean;
+	labelBox: ScreenBox | undefined;
+	text: LabelSize | undefined;
+	/** What the picker reads; its position and label follow the last visibility pass. */
+	target: HitTarget;
 }
 
 interface SharedStyle {
 	point: Color;
 	outline: Color;
+	hoverOutline: Color;
 	text: Color;
 	plate: Color;
 	platePadding: Cartesian2;
@@ -59,17 +71,20 @@ interface SharedStyle {
  * camera, above the horizon and inside the canvas. That decision is made here in one pass whenever
  * the view changes; the depth settings of the scene are left as Cesium has them.
  *
- * The layer draws and nothing else: it has no input handlers, selection or focus.
+ * The same pass declutters the labels and lists the markers on screen for hit testing, so a marker
+ * can be pressed exactly where it is drawn, and only while it is drawn, named or not.
  */
 export class AtlasMarkers {
 	private layer: CustomDataSource | undefined;
 	private attached: Promise<unknown> | undefined;
 	private readonly entries = new Map<string, MarkerEntry>();
+	private readonly visibleTargets: HitTarget[] = [];
 	private readonly occluder: EllipsoidalOccluder;
 	private readonly style: SharedStyle;
 	private readonly toMarker: Cartesian3;
 	private readonly window: Cartesian2;
 	private stopListening: (() => void) | undefined;
+	private emphasized: string | undefined;
 	private shown = false;
 	private released = false;
 
@@ -87,6 +102,7 @@ export class AtlasMarkers {
 		this.style = {
 			point: Color.fromCssColorString(style.pointColor),
 			outline: Color.fromCssColorString(style.outlineColor).withAlpha(style.outlineAlpha),
+			hoverOutline: Color.fromCssColorString(style.hoverOutlineColor),
 			text: Color.fromCssColorString(style.labelColor),
 			plate: Color.fromCssColorString(MARKER_LABEL_PLATE.color).withAlpha(MARKER_LABEL_PLATE.alpha),
 			platePadding: new Cartesian2(
@@ -133,6 +149,22 @@ export class AtlasMarkers {
 		this.refresh();
 	}
 
+	/** The markers on screen now, for hit testing; empty while the layer is hidden. */
+	get targets(): readonly HitTarget[] {
+		return this.visibleTargets;
+	}
+
+	/** Rings the marker under the mouse, or with `undefined` none. Restyles at most two entities. */
+	emphasize(slug: string | undefined): void {
+		const next = slug !== undefined && this.entries.has(slug) ? slug : undefined;
+		if (next === this.emphasized) {
+			return;
+		}
+		this.setOutline(this.emphasized, this.style.outline);
+		this.setOutline(next, this.style.hoverOutline);
+		this.emphasized = next;
+	}
+
 	read(): AtlasLayerReading | undefined {
 		if (this.viewer.isDestroyed()) {
 			return undefined;
@@ -142,21 +174,25 @@ export class AtlasMarkers {
 
 		const markers = [...this.entries.values()].map((entry) => {
 			const visible = this.shown && entry.visible;
+			const labelShown = visible && entry.labelShown;
 			const distanceMeters = Cartesian3.distance(camera, entry.position);
 			const { pointPixels } = markerPresentation(distanceMeters);
 
 			return {
 				slug: entry.marker.slug,
 				visible,
-				...(visible ? { window: { x: entry.x, y: entry.y } } : {}),
+				...(visible ? { window: { x: entry.target.x, y: entry.target.y } } : {}),
 				distanceMeters,
 				pointPixels,
-				labelShown: visible && entry.labelled
+				labelShown,
+				labelSuppressed: visible && entry.labelInRange && !entry.labelShown,
+				...(labelShown && entry.labelBox ? { label: { ...entry.labelBox } } : {})
 			};
 		});
 
 		return {
 			shown: this.shown,
+			...(this.emphasized ? { hovered: this.emphasized } : {}),
 			layers: this.attachedLayers(),
 			entities: this.layer?.entities.values.length ?? 0,
 			depthTestAgainstTerrain: this.viewer.scene.globe.depthTestAgainstTerrain,
@@ -198,10 +234,20 @@ export class AtlasMarkers {
 		const stopListening = this.stopListening;
 		this.stopListening = undefined;
 		this.shown = false;
+		this.visibleTargets.length = 0;
+		this.emphasize(undefined);
 		if (this.layer) {
 			this.layer.show = false;
 		}
 		stopListening?.();
+		this.options.refreshed?.();
+	}
+
+	private setOutline(slug: string | undefined, color: Color): void {
+		const point = slug === undefined ? undefined : this.entries.get(slug)?.entity.point;
+		if (point) {
+			point.outlineColor = new this.cesium.ConstantProperty(color);
+		}
 	}
 
 	private attachLayer(): CustomDataSource {
@@ -242,6 +288,9 @@ export class AtlasMarkers {
 		entities.suspendEvents();
 		try {
 			for (const slug of removed) {
+				if (slug === this.emphasized) {
+					this.emphasized = undefined;
+				}
 				entities.removeById(slug);
 				this.entries.delete(slug);
 			}
@@ -295,15 +344,29 @@ export class AtlasMarkers {
 			}
 		});
 
-		return { marker, entity, position, visible: false, labelled: false, x: 0, y: 0 };
+		return {
+			marker,
+			entity,
+			position,
+			visible: false,
+			labelInRange: false,
+			labelShown: false,
+			labelBox: undefined,
+			text: undefined,
+			target: targetOf(marker)
+		};
 	}
 
 	private update(entry: MarkerEntry, marker: AtlasMarker): void {
 		const { ConstantPositionProperty, ConstantProperty } = this.cesium;
 		const position = this.positionOf(marker);
 
+		if (entry.marker.name !== marker.name) {
+			entry.text = undefined;
+		}
 		entry.marker = marker;
 		entry.position = position;
+		entry.target = { ...targetOf(marker), x: entry.target.x, y: entry.target.y };
 		entry.entity.name = marker.name;
 		entry.entity.position = new ConstantPositionProperty(position);
 		if (entry.entity.label) {
@@ -315,20 +378,29 @@ export class AtlasMarkers {
 		return this.cesium.Cartesian3.fromDegrees(longitude, latitude, elevationMeters);
 	}
 
+	// Measured the first time the label could show, then kept: names rarely change.
+	private textOf(entry: MarkerEntry): LabelSize {
+		entry.text ??= this.options.measureText(entry.marker.name, ATLAS_MARKER_STYLE.labelFont);
+		return entry.text;
+	}
+
 	// O(n) per changed view: a dot product, a distance and a horizon test per marker, and a
-	// projection for the ones above the horizon. Entities are only shown or hidden, never rebuilt.
+	// projection for the ones above the horizon; then decluttering over the labels in range,
+	// O(m log m + m·k) for m in range and k kept. Entities are only shown or hidden, never rebuilt.
 	//
-	// A label is switched on only within its distance: the distance condition alone hides it on the
-	// GPU, but Cesium still builds and updates every glyph of a shown label, which on a software
-	// renderer costs more than all the points together.
+	// A label is switched on only within its distance and once decluttering keeps it: the distance
+	// condition alone hides it on the GPU, but Cesium still builds and updates every glyph of a
+	// shown label, which on a software renderer costs more than all the points together.
 	private refresh(): void {
 		if (!this.shown || this.viewer.isDestroyed()) {
 			return;
 		}
-		const { Cartesian3, ConstantProperty } = this.cesium;
+		const { Cartesian3 } = this.cesium;
 		const { camera, scene } = this.viewer;
 		const viewport = { width: scene.canvas.clientWidth, height: scene.canvas.clientHeight };
 		this.occluder.cameraPosition = camera.positionWC;
+		this.visibleTargets.length = 0;
+		const labels: LabelCandidate[] = [];
 
 		for (const entry of this.entries.values()) {
 			const toMarker = Cartesian3.subtract(entry.position, camera.positionWC, this.toMarker);
@@ -338,19 +410,60 @@ export class AtlasMarkers {
 			const visible = isMarkerVisible({ inFront, aboveHorizon, window }, viewport);
 
 			entry.visible = visible;
-			if (visible && window) {
-				entry.x = window.x;
-				entry.y = window.y;
-			}
 			if (entry.entity.show !== visible) {
 				entry.entity.show = visible;
 			}
+			entry.labelInRange = false;
+			entry.labelBox = undefined;
+			if (!visible || !window) {
+				continue;
+			}
 
-			const labelled = visible && markerPresentation(Cartesian3.magnitude(toMarker)).labelShown;
-			if (entry.labelled !== labelled && entry.entity.label) {
-				entry.labelled = labelled;
-				entry.entity.label.show = new ConstantProperty(labelled);
+			entry.target.x = window.x;
+			entry.target.y = window.y;
+			this.visibleTargets.push(entry.target);
+			const { labelShown: inRange, labelFading } = markerPresentation(
+				Cartesian3.magnitude(toMarker)
+			);
+			if (!inRange) {
+				continue;
+			}
+			entry.labelInRange = true;
+			entry.labelBox = labelBox({
+				x: window.x,
+				y: window.y,
+				text: this.textOf(entry),
+				offsetPixels: ATLAS_MARKER_STYLE.labelOffsetPixels
+			});
+			labels.push({
+				slug: entry.marker.slug,
+				elevationMeters: entry.marker.elevationMeters,
+				box: entry.labelBox,
+				fading: labelFading,
+				shown: entry.labelShown
+			});
+		}
+
+		this.applyLabels(labels.length > 0 ? declutterLabels(labels) : NO_LABELS);
+		this.options.refreshed?.();
+	}
+
+	private applyLabels(shown: ReadonlySet<string>): void {
+		const { ConstantProperty } = this.cesium;
+
+		for (const entry of this.entries.values()) {
+			const next = shown.has(entry.marker.slug);
+			entry.target.label = next ? entry.labelBox : undefined;
+			if (entry.labelShown !== next && entry.entity.label) {
+				entry.labelShown = next;
+				entry.entity.label.show = new ConstantProperty(next);
 			}
 		}
 	}
+}
+
+const NO_LABELS: ReadonlySet<string> = new Set();
+
+function targetOf({ slug, name, elevationMeters }: AtlasMarker): HitTarget {
+	return { slug, name, elevationMeters, x: 0, y: 0, label: undefined };
 }

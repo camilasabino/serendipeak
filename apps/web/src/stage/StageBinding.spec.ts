@@ -4,6 +4,7 @@ import { FakeSceneFactory } from '../test/FakeSceneFactory';
 import type { AtlasMarker } from './globe/atlasMarkers';
 import { atlasOverviewLook, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
+import type { MarkerActivation } from './globe/markerActivation';
 import { SceneStore } from './SceneStore';
 import { TransitionCoordinator } from './TransitionCoordinator';
 import { StageBinding } from './StageBinding';
@@ -43,6 +44,8 @@ function setup(
 		markers?: readonly AtlasMarker[];
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
+		onMarkerActivate?: (activation: MarkerActivation) => void;
+		onStageResize?: () => void;
 	} = {}
 ) {
 	const factory = new FakeSceneFactory();
@@ -57,7 +60,9 @@ function setup(
 			target: options.target,
 			atlas: options.atlas,
 			markers: options.markers,
-			observer: options.observer
+			observer: options.observer,
+			onMarkerActivate: options.onMarkerActivate,
+			onStageResize: options.onStageResize
 		});
 
 	return { factory, store, viewport, mount };
@@ -288,6 +293,23 @@ describe('StageBinding retry', () => {
 		]);
 	});
 
+	it('hands marker activations from the new attempt to the same listener, once', async () => {
+		const markers: AtlasMarker[] = [
+			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
+		];
+		const onMarkerActivate = vi.fn();
+		const { factory, binding } = await failedBinding({ markers, onMarkerActivate });
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+		scene.activate({ kind: 'mountain', mountain: { slug: 'a', name: 'A' } });
+
+		expect(onMarkerActivate).toHaveBeenCalledOnce();
+		binding.dispose();
+		expect(scene.liveSubscriptions).toBe(0);
+	});
+
 	it('keeps the latest atlas markers for the new attempt', async () => {
 		const first: AtlasMarker[] = [
 			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
@@ -439,6 +461,28 @@ describe('StageBinding resize', () => {
 		await flush();
 
 		expect(scene.stages).toEqual([{ width: 640, height: 360 }]);
+	});
+
+	it('tells its owner when the stage changes shape, not at the first measurement', async () => {
+		const onStageResize = vi.fn();
+		const { factory, viewport, mount } = setup({ onStageResize });
+		mount();
+		factory.resolve(0);
+		await flush();
+		const observer = FakeResizeObserver.instances[0]!;
+		expect(onStageResize).not.toHaveBeenCalled();
+
+		observer.fire();
+		expect(onStageResize).not.toHaveBeenCalled();
+
+		viewport.clientWidth = 640;
+		observer.fire();
+		observer.fire();
+		expect(onStageResize).toHaveBeenCalledTimes(1);
+
+		viewport.clientHeight = 300;
+		observer.fire();
+		expect(onStageResize).toHaveBeenCalledTimes(2);
 	});
 
 	it('registers no window resize listener', () => {

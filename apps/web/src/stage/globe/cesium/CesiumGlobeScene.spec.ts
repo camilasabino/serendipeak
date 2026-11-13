@@ -5,6 +5,8 @@ const cesium = vi.hoisted(() => ({
 	releaseLayerListener: vi.fn(),
 	releaseFlight: vi.fn(),
 	releaseAtlas: vi.fn(),
+	releasePicker: vi.fn(),
+	pickerListeners: [] as unknown[],
 	atlasSets: [] as unknown[],
 	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
 	holdInputs: vi.fn(),
@@ -94,6 +96,21 @@ vi.mock('./AtlasMarkers', () => ({
 		}
 		release() {
 			cesium.releaseAtlas();
+		}
+	}
+}));
+vi.mock('./AtlasPicker', () => ({
+	AtlasPicker: class {
+		subscribe(listener: unknown) {
+			cesium.pickerListeners.push(listener);
+			return () => {
+				cesium.pickerListeners.splice(cesium.pickerListeners.indexOf(listener), 1);
+			};
+		}
+		refreshed() {}
+		release() {
+			cesium.releasePicker();
+			cesium.pickerListeners.length = 0;
 		}
 	}
 }));
@@ -366,7 +383,7 @@ describe('CesiumGlobeScene.destroy', () => {
 		expect(order).toEqual(['reading', 'orientation', 'flight', 'viewer']);
 	});
 
-	it('releases the atlas markers and their reading before the viewer', async () => {
+	it('releases the atlas picker, markers and reading before the viewer', async () => {
 		const order: string[] = [];
 		cesium.viewer = fakeViewer(
 			() => {},
@@ -374,6 +391,7 @@ describe('CesiumGlobeScene.destroy', () => {
 			() => order.push('viewer')
 		);
 		cesium.releaseAtlas.mockImplementation(() => order.push('atlas markers'));
+		cesium.releasePicker.mockImplementation(() => order.push('atlas picker'));
 		const scene = await CesiumGlobeScene.create(
 			{} as HTMLElement,
 			{
@@ -387,7 +405,7 @@ describe('CesiumGlobeScene.destroy', () => {
 		scene.destroy();
 		scene.destroy();
 
-		expect(order).toEqual(['atlas reading', 'atlas markers', 'viewer']);
+		expect(order).toEqual(['atlas reading', 'atlas picker', 'atlas markers', 'viewer']);
 	});
 
 	it('still destroys the viewer when the first disposer throws', async () => {
@@ -699,6 +717,23 @@ describe('CesiumGlobeScene ambient orbit', () => {
 		scene.setAtlasMarkers(markers);
 
 		expect(cesium.atlasSets).toEqual([markers, undefined]);
+	});
+
+	it('hands marker activation to the picker, one listener at a time, and none once destroyed', async () => {
+		cesium.pickerListeners.length = 0;
+		const scene = await create();
+		const first = vi.fn();
+		const second = vi.fn();
+
+		const releaseFirst = scene.subscribeMarkerActivation(first);
+		releaseFirst();
+		scene.subscribeMarkerActivation(second);
+		expect(cesium.pickerListeners).toEqual([second]);
+
+		scene.destroy();
+		expect(cesium.pickerListeners).toEqual([]);
+		scene.subscribeMarkerActivation(first);
+		expect(cesium.pickerListeners).toEqual([]);
 	});
 
 	it('hears presses and wheels on the globe until released or destroyed', async () => {

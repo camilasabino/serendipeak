@@ -1563,3 +1563,75 @@ describe('SceneSession atlas markers', () => {
 		expect(scene.markerSets).toEqual([]);
 	});
 });
+
+describe('SceneSession marker activation', () => {
+	const MARKERS: AtlasMarker[] = [
+		{
+			slug: 'fitz-roy',
+			name: 'Fitz Roy',
+			latitude: -49.271,
+			longitude: -73.043,
+			elevationMeters: 3405
+		}
+	];
+	const OPEN_FITZ_ROY = {
+		kind: 'mountain',
+		mountain: { slug: 'fitz-roy', name: 'Fitz Roy' }
+	} as const;
+
+	async function onAtlas() {
+		const onMarkerActivate = vi.fn();
+		const context = setup({ onMarkerActivate });
+		context.session.setAtlas(ATLAS);
+		context.session.setAtlasMarkers(MARKERS);
+		const scene = context.factory.resolve(0);
+		await flush();
+		return { ...context, scene, onMarkerActivate };
+	}
+
+	it('passes on activations while markers are drawn', async () => {
+		const { scene, onMarkerActivate } = await onAtlas();
+
+		scene.activate(OPEN_FITZ_ROY);
+
+		expect(onMarkerActivate).toHaveBeenCalledWith(OPEN_FITZ_ROY);
+	});
+
+	it('passes on nothing once the markers are taken away for a mountain page', async () => {
+		const { session, scene, onMarkerActivate } = await onAtlas();
+
+		session.setAtlas(undefined);
+		session.setAtlasMarkers(undefined);
+		session.setTarget(ACONCAGUA);
+		scene.activate(OPEN_FITZ_ROY);
+
+		expect(onMarkerActivate).not.toHaveBeenCalled();
+	});
+
+	it('subscribes nothing when nobody listens', async () => {
+		const { scene } = await readySession();
+
+		expect(scene.liveSubscriptions).toBe(4);
+	});
+
+	it('ends the subscription when it stops, so a retry never doubles it', async () => {
+		const { session, scene, onMarkerActivate } = await onAtlas();
+		expect(scene.liveSubscriptions).toBe(5);
+
+		session.stop();
+		scene.activate(OPEN_FITZ_ROY);
+
+		expect(scene.liveSubscriptions).toBe(0);
+		expect(onMarkerActivate).not.toHaveBeenCalled();
+	});
+
+	it('does not move the camera or the orbit on an activation', async () => {
+		const { scene } = await onAtlas();
+
+		scene.activate(OPEN_FITZ_ROY);
+
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.shown).toEqual([]);
+		expect(scene.orbiting).toBe(true);
+	});
+});

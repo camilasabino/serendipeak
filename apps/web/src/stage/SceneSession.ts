@@ -10,6 +10,7 @@ import type { CameraReading } from './globe/cameraReading';
 import type { CameraOutcome } from './globe/choreography';
 import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
+import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
 import { stageAspect, type StageSize } from './globe/stageFrame';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
@@ -37,6 +38,8 @@ export interface SceneSessionOptions {
 	store: SceneStore;
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
+	/** Clicks and taps on atlas markers, heard only while markers are drawn. */
+	onMarkerActivate?: (activation: MarkerActivation) => void;
 }
 
 const noop = () => {};
@@ -55,11 +58,13 @@ export class SceneSession {
 	private readonly store: SceneStore;
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly observer: PresentationObserver | undefined;
+	private readonly onMarkerActivate: ((activation: MarkerActivation) => void) | undefined;
 	private scene: GlobeScene | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
 	private releaseImagery: () => void = noop;
 	private releaseInteraction: () => void = noop;
+	private releaseActivation: () => void = noop;
 	private stopScene: () => void = noop;
 	private imageryDegraded = false;
 	private settled = false;
@@ -76,10 +81,18 @@ export class SceneSession {
 	/** The reader paused the ambient orbit; kept until they resume it, across atlas visits. */
 	private rotationPaused = false;
 
-	constructor({ ionToken, createScene, store, onError, observer }: SceneSessionOptions) {
+	constructor({
+		ionToken,
+		createScene,
+		store,
+		onError,
+		observer,
+		onMarkerActivate
+	}: SceneSessionOptions) {
 		this.store = store;
 		this.onError = onError;
 		this.observer = observer;
+		this.onMarkerActivate = onMarkerActivate;
 
 		let token: string;
 		try {
@@ -236,12 +249,19 @@ export class SceneSession {
 		this.scene = undefined;
 		this.observer?.ended();
 
-		const { releaseOrientation, releaseScale, releaseImagery, releaseInteraction, stopScene } =
-			this;
+		const {
+			releaseOrientation,
+			releaseScale,
+			releaseImagery,
+			releaseInteraction,
+			releaseActivation,
+			stopScene
+		} = this;
 		this.releaseOrientation = noop;
 		this.releaseScale = noop;
 		this.releaseImagery = noop;
 		this.releaseInteraction = noop;
+		this.releaseActivation = noop;
 		this.stopScene = noop;
 
 		// The scene goes last: a retry must never meet a live Viewer because a release threw.
@@ -250,6 +270,7 @@ export class SceneSession {
 			['scale subscription', releaseScale],
 			['imagery subscription', releaseImagery],
 			['interaction subscription', releaseInteraction],
+			['marker activation subscription', releaseActivation],
 			['scene', stopScene]
 		]);
 	}
@@ -299,6 +320,14 @@ export class SceneSession {
 			}
 		});
 		this.releaseInteraction = ready.subscribeInteraction(() => this.interacted());
+		const onMarkerActivate = this.onMarkerActivate;
+		if (onMarkerActivate) {
+			this.releaseActivation = ready.subscribeMarkerActivation((activation) => {
+				if (!this.stopped && this.markers) {
+					onMarkerActivate(activation);
+				}
+			});
+		}
 
 		if (this.stage) {
 			ready.updateStage(this.stage);

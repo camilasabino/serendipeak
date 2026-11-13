@@ -1,9 +1,12 @@
 import type { APIRequestContext, Page } from '@playwright/test';
+import { ATLAS_MARKER_STYLE, markerPresentation } from '../../src/stage/globe/atlasMarkers';
 import { STUB_API_URL, resetStub, useScenario } from '../ssr/support';
 import {
 	ACONCAGUA,
 	OLYMPUS,
 	atlasLayer,
+	cameraAtRest,
+	dragGlobe,
 	expect,
 	expectCanonicalPose,
 	expectReadyStage,
@@ -54,6 +57,16 @@ async function openContinent(page: Page, name: string) {
 const atlasLink = (page: Page) =>
 	page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Atlas' });
 const pauseRotation = (page: Page) => page.getByRole('button', { name: 'Pause globe rotation' });
+
+// Every label that is up is one a reader can read; a fading one nearer the edge of its range is not.
+function expectNoFaintLabels(reading: AtlasLayerReading) {
+	for (const entry of reading.markers.filter((candidate) => candidate.labelShown)) {
+		expect(
+			markerPresentation(entry.distanceMeters).labelAlpha,
+			`${entry.slug} label alpha`
+		).toBeGreaterThanOrEqual(ATLAS_MARKER_STYLE.labelMinAlpha);
+	}
+}
 
 // The index the atlas is rendered with comes from the stub, so the expected markers are read
 // from the same answer rather than from a count written into the test.
@@ -191,37 +204,6 @@ async function expectOverviewSettled(page: Page) {
 	await expect.poll(async () => (await camera(page)).orbiting, { timeout: 30_000 }).toBe(true);
 }
 
-// Resolves once the camera has stopped, including any inertia a gesture left behind.
-async function cameraAtRest(page: Page) {
-	let previous = await camera(page);
-	await expect
-		.poll(
-			async () => {
-				await framesPass(page, 5);
-				const current = await camera(page);
-				const still =
-					Math.abs(current.longitude - previous.longitude) < 1e-7 &&
-					Math.abs(current.latitude - previous.latitude) < 1e-7 &&
-					Math.abs(current.distanceFromCenterMeters - previous.distanceFromCenterMeters) < 1;
-				previous = current;
-				return still;
-			},
-			{ timeout: 15_000 }
-		)
-		.toBe(true);
-}
-
-async function dragGlobe(page: Page, dxFraction: number, dyFraction = 0) {
-	const box = (await page.locator('main canvas').boundingBox())!;
-	const narrow = Math.min(box.width, box.height);
-	const x = box.x + box.width / 2;
-	const y = box.y + box.height / 2;
-	await page.mouse.move(x, y);
-	await page.mouse.down();
-	await page.mouse.move(x + narrow * dxFraction, y + narrow * dyFraction, { steps: 12 });
-	await page.mouse.up();
-}
-
 test.beforeEach(async ({ page }) => {
 	await page.setViewportSize(DESKTOP);
 });
@@ -355,13 +337,20 @@ test.describe('@webgl atlas markers on the catalog', () => {
 			await page.mouse.move(box.x + near.window!.x, box.y + near.window!.y);
 			await page.mouse.wheel(0, -600);
 			await framesPass(page, 8);
-			near = marker(await layer(page), 'mont-blanc');
+			const reading = await layer(page);
+			expectNoFaintLabels(reading);
+			near = marker(reading, 'mont-blanc');
 		}
 		await cameraAtRest(page);
 		near = marker(await layer(page), 'mont-blanc');
 
 		expect(near.labelShown).toBe(true);
-		expect(near.distanceMeters).toBeLessThan(far.distanceMeters / 10);
+		// A name shows only once its label is legible, which the overview is far from.
+		expect(far.distanceMeters).toBeGreaterThan(ATLAS_MARKER_STYLE.labelMaxMeters);
+		expect(markerPresentation(near.distanceMeters).labelAlpha).toBeGreaterThanOrEqual(
+			ATLAS_MARKER_STYLE.labelMinAlpha
+		);
+		expectNoFaintLabels(await layer(page));
 		expect(near.pointPixels).toBeGreaterThan(far.pointPixels);
 
 		// Summits well above the horizon from here but far beyond the frame are not drawn.
@@ -377,7 +366,7 @@ test.describe('@webgl atlas markers on the catalog', () => {
 		await expectGeometry(page, entries, false);
 	});
 
-	test('draws neighbouring summits as separate markers, each named, when the camera is near', async ({
+	test('draws neighbouring summits as separate markers when the camera is near, the higher one named', async ({
 		page
 	}) => {
 		await page.goto('/atlas');
@@ -399,7 +388,9 @@ test.describe('@webgl atlas markers on the catalog', () => {
 		const [mont, matterhorn] = [marker(reading, 'mont-blanc'), marker(reading, 'matterhorn')];
 		expect(reading.markers.filter((entry) => entry.slug === 'matterhorn')).toHaveLength(1);
 		expect([mont.visible, matterhorn.visible]).toEqual([true, true]);
-		expect([mont.labelShown, matterhorn.labelShown]).toEqual([true, true]);
+		expect(mont.labelShown).toBe(true);
+		// Its name may give way to Mont Blanc's while their plates overlap, but the marker stays.
+		expect(matterhorn.labelShown || matterhorn.labelSuppressed).toBe(true);
 		expect(
 			Math.hypot(mont.window!.x - matterhorn.window!.x, mont.window!.y - matterhorn.window!.y)
 		).toBeGreaterThan(1);

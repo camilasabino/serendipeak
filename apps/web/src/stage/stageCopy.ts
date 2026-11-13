@@ -59,6 +59,19 @@ export const TOUCH_NAVIGATION: NavigationHelpSection = {
 	]
 };
 
+// Shown only where the globe carries atlas markers.
+export const MARKER_NAVIGATION: NavigationHelpSection = {
+	heading: 'Mountains',
+	gestures: [
+		{ action: 'Open', gesture: "Click or tap a mountain's point or name." },
+		{
+			action: 'Close together',
+			gesture: 'Where points overlap, pick one from the short list that opens, or zoom in.'
+		},
+		{ action: 'Without the globe', gesture: 'Every mountain is also in the list and in Search.' }
+	]
+};
+
 export const BUTTON_NAVIGATION: NavigationHelpSection = {
 	heading: 'Buttons',
 	gestures: [

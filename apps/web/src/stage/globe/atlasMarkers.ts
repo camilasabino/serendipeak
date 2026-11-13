@@ -14,16 +14,23 @@ export interface ScreenPoint {
 	y: number;
 }
 
+/** An axis-aligned box on the canvas in CSS pixels; `top` is above `bottom`. */
+export interface ScreenBox {
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
+}
+
 /**
  * How atlas markers look at each camera distance. The scene hands these to Cesium as per-marker
  * distance properties evaluated on the GPU, so an oblique view labels the near ridge and not the
  * far one, and nothing is rebuilt as the camera moves.
  *
  * The overview sits 13,000 km or more from every marker, where points shrink and soften and no
- * label shows. Names come in from a regional distance. In captures a label looks fainter than its
- * fade value says, so the ramp starts where names should read comfortably, 1,200 km, and by 1,300
- * km they are a ghost of their full look. Summits a few kilometres apart (Cerro Torre and Fitz Roy,
- * Everest and Ama Dablam) still overlap there until labels are decluttered on screen.
+ * label shows. Names come in from a regional distance: fully legible up to 1,200 km, fading out to
+ * nothing at 1,600 km. Summits a few kilometres apart (Cerro Torre and Fitz Roy, Everest and Ama
+ * Dablam) still overlap there until labels are decluttered on screen.
  */
 export const ATLAS_MARKER_STYLE = {
 	pointPixelSize: 7,
@@ -44,18 +51,29 @@ export const ATLAS_MARKER_STYLE = {
 	/** Fully legible up to this distance, fading out to nothing at `labelMaxMeters`. */
 	labelFullMeters: 1_200_000,
 	labelMaxMeters: 1_600_000,
+	// Over the globe a label this faint cannot be read, so it is dropped: it takes no screen space
+	// from a legible neighbour and is not a place to press. Its marker still shows and still opens.
+	labelMinAlpha: 0.3,
 	// Vermilion with an ink outline reads over snow, desert, ocean and forest alike. Ink and paper are
 	// the stage's tokens; Cesium draws on its own canvas and cannot read CSS variables.
 	pointColor: '#f06445',
 	outlineColor: '#14202a',
 	outlineAlpha: 0.9,
-	labelColor: '#f1f3ef'
+	labelColor: '#f1f3ef',
+	// The marker under the mouse trades its ink ring for a paper one: same size and place, so it
+	// covers no more of a neighbour than before.
+	hoverOutlineColor: '#f1f3ef'
 } as const;
 
 export interface MarkerPresentation {
 	pointPixels: number;
 	pointAlpha: number;
+	/** How opaque a label is at this distance, as the GPU fades it. */
+	labelAlpha: number;
+	/** Legible enough to be named: alpha at or above `labelMinAlpha`. */
 	labelShown: boolean;
+	/** Within label distance but past full legibility, fading out. */
+	labelFading: boolean;
 }
 
 // Cesium's NearFarScalar: the near value up to `near`, the far value beyond `far`, linear between.
@@ -76,6 +94,8 @@ export function markerPresentation(distanceMeters: number): MarkerPresentation {
 		style.pointFarScale
 	);
 
+	const labelAlpha = nearFar(distanceMeters, style.labelFullMeters, 1, style.labelMaxMeters, 0);
+
 	return {
 		pointPixels: style.pointPixelSize * scale,
 		pointAlpha: nearFar(
@@ -85,7 +105,9 @@ export function markerPresentation(distanceMeters: number): MarkerPresentation {
 			style.pointFadedMeters,
 			style.pointFarAlpha
 		),
-		labelShown: distanceMeters < style.labelMaxMeters
+		labelAlpha,
+		labelShown: labelAlpha >= style.labelMinAlpha,
+		labelFading: distanceMeters > style.labelFullMeters
 	};
 }
 
@@ -188,11 +210,17 @@ export interface AtlasMarkerReading {
 	distanceMeters: number;
 	pointPixels: number;
 	labelShown: boolean;
+	/** Close enough to be named, but another label won the space. The marker still shows. */
+	labelSuppressed: boolean;
+	/** The plate of the shown label in CSS pixels, as decluttering measured it. */
+	label?: ScreenBox;
 }
 
 export interface AtlasLayerReading {
 	/** The layer is on the globe: markers set and not hidden. */
 	shown: boolean;
+	/** The marker the mouse rests on, emphasized, if one would open on a click. */
+	hovered?: string;
 	/** Atlas layers attached to the Viewer; never more than one. */
 	layers: number;
 	/** Entities in the atlas layer, shown or not. */

@@ -4,6 +4,7 @@ import type { SceneTarget } from './camera';
 import type { CameraReading } from './cameraReading';
 import type { CameraOutcome } from './choreography';
 import type { LookState } from './glidePath';
+import type { MarkerActivation } from './markerActivation';
 import type { MountainPlacement, ResetResult } from './mountainCamera';
 import type { ViewOrientation } from './orientation';
 import type { ScaleReading } from './scaleBar';
@@ -41,9 +42,14 @@ export interface GlobeScene extends Destroyable {
 	/**
 	 * Draws these mountains on the globe, replacing the set drawn before, or with `undefined` takes
 	 * them away at once. Markers only show where they can be seen: in front of the camera, above the
-	 * horizon and inside the stage. They take no input and never move the camera.
+	 * horizon and inside the stage, and never move the camera.
 	 */
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void;
+	/**
+	 * Clicks and taps on drawn atlas markers, resolved on screen; a drag is never one. Nothing is
+	 * heard while no markers are drawn. A new subscription replaces the previous one.
+	 */
+	subscribeMarkerActivation(listener: (activation: MarkerActivation) => void): () => void;
 	/** Direct input on the globe, a press or a wheel. A new subscription replaces the previous one. */
 	subscribeInteraction(listener: () => void): () => void;
 	/** Resolves when the view is ready, superseded by a later call, or the scene is destroyed. */

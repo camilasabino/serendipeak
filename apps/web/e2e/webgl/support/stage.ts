@@ -379,10 +379,13 @@ export interface AtlasMarkerReading {
 	distanceMeters: number;
 	pointPixels: number;
 	labelShown: boolean;
+	labelSuppressed: boolean;
+	label?: { left: number; top: number; right: number; bottom: number };
 }
 
 export interface AtlasLayerReading {
 	shown: boolean;
+	hovered?: string;
 	layers: number;
 	entities: number;
 	depthTestAgainstTerrain: boolean;
@@ -397,4 +400,41 @@ export async function atlasLayer(page: Page): Promise<AtlasLayerReading | undefi
 				window as Window & { __serendipeakAtlas?: () => AtlasLayerReading | undefined }
 			).__serendipeakAtlas?.() ?? undefined
 	);
+}
+
+/** Resolves once the camera has stopped, including any inertia a gesture left behind. */
+export async function cameraAtRest(page: Page) {
+	const read = async () => {
+		const position = await globePosition(page);
+		expect(position).toBeDefined();
+		return position!;
+	};
+	let previous = await read();
+	await expect
+		.poll(
+			async () => {
+				await framesPass(page, 5);
+				const current = await read();
+				const still =
+					Math.abs(current.longitude - previous.longitude) < 1e-7 &&
+					Math.abs(current.latitude - previous.latitude) < 1e-7 &&
+					Math.abs(current.distanceFromCenterMeters - previous.distanceFromCenterMeters) < 1;
+				previous = current;
+				return still;
+			},
+			{ timeout: 15_000 }
+		)
+		.toBe(true);
+}
+
+/** Drags the globe from the stage centre by fractions of the stage's narrower side. */
+export async function dragGlobe(page: Page, dxFraction: number, dyFraction = 0) {
+	const box = (await page.locator('main canvas').boundingBox())!;
+	const narrow = Math.min(box.width, box.height);
+	const x = box.x + box.width / 2;
+	const y = box.y + box.height / 2;
+	await page.mouse.move(x, y);
+	await page.mouse.down();
+	await page.mouse.move(x + narrow * dxFraction, y + narrow * dyFraction, { steps: 12 });
+	await page.mouse.up();
 }

@@ -1,5 +1,6 @@
 import type { AtlasMarker } from './globe/atlasMarkers';
 import type { AtlasView } from './globe/atlasView';
+import type { MarkerActivation } from './globe/markerActivation';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
@@ -27,6 +28,9 @@ export interface StageBindingOptions {
 	markers?: readonly AtlasMarker[];
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
+	onMarkerActivate?: (activation: MarkerActivation) => void;
+	/** The stage changed shape after it was first measured. */
+	onStageResize?: () => void;
 }
 
 function reportInitializationFailure(error: unknown): void {
@@ -115,13 +119,14 @@ export class StageBinding {
 	}
 
 	private openSession(): SceneSession {
-		const { store, ionToken, createScene, onError, observer } = this.options;
+		const { store, ionToken, createScene, onError, observer, onMarkerActivate } = this.options;
 		const session = new SceneSession({
 			ionToken,
 			createScene,
 			store,
 			onError: onError ?? reportInitializationFailure,
-			observer
+			observer,
+			onMarkerActivate
 		});
 		const { state } = store.getSnapshot();
 		if (state.status === 'failed' && state.failure === 'missing-token') {
@@ -148,7 +153,11 @@ export class StageBinding {
 		if (this.published?.width === width && this.published.height === height) {
 			return;
 		}
+		const resized = this.published !== undefined;
 		this.published = { width, height };
 		this.session.updateStage(this.published);
+		if (resized) {
+			this.options.onStageResize?.();
+		}
 	}
 }

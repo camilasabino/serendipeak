@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, type Ref } from 'react';
+import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import { sceneCanRetry } from './experience';
@@ -6,6 +6,7 @@ import type { AtlasMarker } from './globe/atlasMarkers';
 import type { AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
+import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
 import { StageControls } from './controls/StageControls';
 import styles from './MountainScene.module.css';
@@ -39,6 +40,11 @@ interface MountainSceneProps {
 	markers?: readonly AtlasMarker[];
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
+	onMarkerActivate?: (activation: MarkerActivation) => void;
+	/** The stage changed shape, so a point on the globe no longer marks the same place. */
+	onStageResize?: () => void;
+	/** Laid over the globe inside the stage, so it stays with the globe in fullscreen. */
+	children?: ReactNode;
 }
 
 export default function MountainScene({
@@ -47,7 +53,10 @@ export default function MountainScene({
 	atlas,
 	markers,
 	observer,
-	controllerRef
+	controllerRef,
+	onMarkerActivate,
+	onStageResize,
+	children
 }: MountainSceneProps) {
 	const { viewportRef, snapshot, resetView, zoomView, toggleRotation, readCamera, retry } =
 		useStage({
@@ -57,7 +66,9 @@ export default function MountainScene({
 			target,
 			atlas,
 			markers,
-			observer
+			observer,
+			onMarkerActivate,
+			onStageResize
 		});
 	useImperativeHandle(controllerRef, () => ({ readCamera, resetView }), [readCamera, resetView]);
 	const stageRef = useRef<HTMLDivElement>(null);
@@ -65,7 +76,13 @@ export default function MountainScene({
 	const { state } = snapshot;
 
 	return (
-		<div ref={stageRef} className={styles.scene}>
+		<div
+			ref={stageRef}
+			className={styles.scene}
+			// The page's stage anchor lies outside the fullscreen element and cannot hold focus there,
+			// so a surface closing inside fullscreen hands focus to this element instead.
+			tabIndex={fullscreen.active ? -1 : undefined}
+		>
 			<div ref={viewportRef} className={styles.viewport} />
 			<StageControls
 				snapshot={snapshot}
@@ -73,7 +90,9 @@ export default function MountainScene({
 				onZoom={zoomView}
 				onToggleRotation={toggleRotation}
 				fullscreen={fullscreen}
+				markers={markers !== undefined}
 			/>
+			{children}
 			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />
 		</div>
 	);

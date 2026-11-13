@@ -78,6 +78,12 @@ describe('atlas page', () => {
 		expect(html).not.toMatch(/On the atlas|Fly to|aria-current="true"|aria-live/);
 	});
 
+	it('tells how to open a mountain from the globe and from the list, and renders no chooser', () => {
+		expect(html).toContain('Click or tap a point to fly to that mountain and open its page');
+		expect(html).toContain('or choose one from the list by continent');
+		expect(html).not.toContain('Which mountain?');
+	});
+
 	it('marks Atlas as the current page and offers no mountain controls in the header', () => {
 		const nav = html.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 

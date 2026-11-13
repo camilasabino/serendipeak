@@ -62,7 +62,9 @@ describe('markerPresentation', () => {
 		expect(markerPresentation(100_000)).toEqual({
 			pointPixels: style.pointPixelSize,
 			pointAlpha: 1,
-			labelShown: true
+			labelAlpha: 1,
+			labelShown: true,
+			labelFading: false
 		});
 	});
 
@@ -84,15 +86,35 @@ describe('markerPresentation', () => {
 		expect(sizes.at(-1)).toBeCloseTo(sizes.at(-2)!);
 	});
 
-	it('names a marker only within the label distance', () => {
-		expect(markerPresentation(style.labelMaxMeters - 1).labelShown).toBe(true);
+	it('fades a label to nothing between its full and maximum distance', () => {
+		expect(markerPresentation(style.labelFullMeters).labelAlpha).toBe(1);
+		expect(markerPresentation(style.labelMaxMeters).labelAlpha).toBe(0);
+		const midway = (style.labelFullMeters + style.labelMaxMeters) / 2;
+		expect(markerPresentation(midway).labelAlpha).toBeCloseTo(0.5);
+	});
+
+	it('names a marker only while its label is legible, not as it fades to nothing', () => {
+		const readableMeters =
+			style.labelFullMeters +
+			(1 - style.labelMinAlpha) * (style.labelMaxMeters - style.labelFullMeters);
+
+		expect(markerPresentation(readableMeters - 1).labelShown).toBe(true);
+		expect(markerPresentation(readableMeters + 1).labelShown).toBe(false);
+		expect(markerPresentation(style.labelMaxMeters - 1).labelShown).toBe(false);
 		expect(markerPresentation(style.labelMaxMeters).labelShown).toBe(false);
+	});
+
+	it('marks a label fading once past full legibility', () => {
+		expect(markerPresentation(style.labelFullMeters).labelFading).toBe(false);
+		expect(markerPresentation(style.labelFullMeters + 1).labelFading).toBe(true);
 	});
 
 	it('keeps every distance threshold in increasing order', () => {
 		expect(style.pointNearMeters).toBeLessThan(style.pointFarMeters);
 		expect(style.pointOpaqueMeters).toBeLessThan(style.pointFadedMeters);
 		expect(style.labelFullMeters).toBeLessThan(style.labelMaxMeters);
+		expect(style.labelMinAlpha).toBeGreaterThan(0);
+		expect(style.labelMinAlpha).toBeLessThan(1);
 		expect(style.labelMaxMeters).toBeLessThan(style.pointFarMeters);
 	});
 });

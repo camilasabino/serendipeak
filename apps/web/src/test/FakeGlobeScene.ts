@@ -4,6 +4,7 @@ import type { CameraReading } from '../stage/globe/cameraReading';
 import type { CameraOutcome } from '../stage/globe/choreography';
 import type { LookState } from '../stage/globe/glidePath';
 import type { GlobeScene, RefitResult } from '../stage/globe/GlobeScene';
+import type { MarkerActivation } from '../stage/globe/markerActivation';
 import type { MountainPlacement, ResetResult } from '../stage/globe/mountainCamera';
 import type { ViewOrientation } from '../stage/globe/orientation';
 import type { ScaleReading } from '../stage/globe/scaleBar';
@@ -128,6 +129,7 @@ export class FakeGlobeScene implements GlobeScene {
 	private readonly scale = new ReplaceableSubscription<ScaleReading>(() => this.destroyed);
 	private readonly imagery = new Set<(degraded: boolean) => void>();
 	private interaction: (() => void) | undefined;
+	private activation: ((activation: MarkerActivation) => void) | undefined;
 	private degraded = false;
 
 	constructor({
@@ -176,7 +178,8 @@ export class FakeGlobeScene implements GlobeScene {
 			Number(this.orientation.live) +
 			Number(this.scale.live) +
 			this.imagery.size +
-			Number(this.interaction !== undefined)
+			Number(this.interaction !== undefined) +
+			Number(this.activation !== undefined)
 		);
 	}
 
@@ -287,6 +290,23 @@ export class FakeGlobeScene implements GlobeScene {
 		};
 	}
 
+	subscribeMarkerActivation(listener: (activation: MarkerActivation) => void): () => void {
+		if (this.destroyed) {
+			return () => {};
+		}
+		this.activation = listener;
+		return () => {
+			if (this.activation === listener) {
+				this.activation = undefined;
+			}
+		};
+	}
+
+	/** A click or tap that reached drawn markers. */
+	activate(activation: MarkerActivation): void {
+		this.activation?.(activation);
+	}
+
 	/** A press or a wheel on the globe. */
 	interact(): void {
 		this.interaction?.();
@@ -367,6 +387,7 @@ export class FakeGlobeScene implements GlobeScene {
 		this.scale.end();
 		this.imagery.clear();
 		this.interaction = undefined;
+		this.activation = undefined;
 		this.stopOrbit();
 		for (const waiter of this.viewWaiters.splice(0)) {
 			waiter.resolve();

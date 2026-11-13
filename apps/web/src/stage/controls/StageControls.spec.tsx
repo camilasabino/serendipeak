@@ -10,7 +10,11 @@ const READING = { label: '2 km', meters: 2000, widthPx: 96 };
 
 const UNSUPPORTED: StageFullscreen = { supported: false, active: false, toggle: () => {} };
 
-function render(snapshot: SceneSnapshot, fullscreen: StageFullscreen = UNSUPPORTED): string {
+function render(
+	snapshot: SceneSnapshot,
+	fullscreen: StageFullscreen = UNSUPPORTED,
+	markers = false
+): string {
 	return renderToStaticMarkup(
 		<StageControls
 			snapshot={snapshot}
@@ -18,6 +22,7 @@ function render(snapshot: SceneSnapshot, fullscreen: StageFullscreen = UNSUPPORT
 			onZoom={() => {}}
 			onToggleRotation={() => {}}
 			fullscreen={fullscreen}
+			markers={markers}
 		/>
 	);
 }
@@ -188,6 +193,24 @@ describe('StageControls navigation help', () => {
 		expect(pointer!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt and turn']);
 		expect(touch!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt', 'Turn']);
 		expect(buttons!.gestures.map((g) => g.action)).toEqual(['+ and −', 'Reset view']);
+	});
+
+	it('explains opening mountains from the globe first, only where it carries markers', () => {
+		const headings = (touchFirst: boolean, markers: boolean) =>
+			navigationHelpSections(touchFirst, markers).map((section) => section.heading);
+
+		expect(headings(false, true)).toEqual(['Mountains', 'Mouse and trackpad', 'Touch', 'Buttons']);
+		expect(headings(true, true)).toEqual(['Mountains', 'Touch', 'Mouse and trackpad', 'Buttons']);
+		expect(headings(false, false)).not.toContain('Mountains');
+	});
+
+	it('tells how to open a mountain, what overlapping points do, and where else to find it', () => {
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, true);
+
+		expect(html).toContain('Click or tap a mountain&#x27;s point or name.');
+		expect(html).toContain('pick one from the short list that opens');
+		expect(html).toContain('Every mountain is also in the list and in Search.');
+		expect(render(readyStore().getSnapshot())).not.toContain('point or name');
 	});
 
 	it('renders the help content without the browser', () => {

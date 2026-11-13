@@ -1,0 +1,94 @@
+.chooser {
+	position: absolute;
+	z-index: 3;
+	box-sizing: border-box;
+	width: max-content;
+	min-width: 11rem;
+	max-width: min(18rem, calc(100cqw - 1rem));
+	padding: 0.25rem 0 0.4rem;
+	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
+	border-radius: var(--sp-radius);
+	background: color-mix(in srgb, var(--sp-stage) 94%, transparent);
+	color: var(--sp-paper);
+	font-family: var(--sp-font-ui);
+	font-size: var(--sp-text-ui);
+	line-height: 1.35;
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-space-2);
+	padding-left: var(--sp-space-3);
+}
+
+.title {
+	margin: 0;
+	color: var(--sp-glacier-light);
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.close {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 2.75rem;
+	height: 2.5rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--sp-mist);
+	cursor: pointer;
+}
+
+.close:hover {
+	color: var(--sp-paper-bright);
+}
+
+.close:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: -4px;
+}
+
+.close svg {
+	width: 1.1rem;
+	height: 1.1rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.options {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.option {
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.4rem var(--sp-space-3);
+	color: var(--sp-paper);
+	font-size: 1rem;
+	font-weight: 500;
+	text-decoration: none;
+	overflow-wrap: anywhere;
+}
+
+.option:hover {
+	background: color-mix(in srgb, var(--sp-glacier) 18%, transparent);
+	color: var(--sp-paper-bright);
+}
+
+.option:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: -2px;
+}

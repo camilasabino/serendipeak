@@ -17,6 +17,8 @@ interface StageControlsProps {
 	onZoom: (direction: ZoomDirection) => void;
 	onToggleRotation: () => void;
 	fullscreen: StageFullscreen;
+	/** The globe carries atlas markers, which the help then explains. */
+	markers?: boolean;
 }
 
 export function StageControls({
@@ -24,7 +26,8 @@ export function StageControls({
 	onReset,
 	onZoom,
 	onToggleRotation,
-	fullscreen
+	fullscreen,
+	markers = false
 }: StageControlsProps) {
 	const { state, headingDegrees, scale, rotation } = snapshot;
 	const controls = stageControlsFor(state, snapshot);
@@ -38,7 +41,7 @@ export function StageControls({
 			<ScaleBar reading={scale} />
 			<div className={styles.navigation}>
 				<ZoomControls enabled={controls.zoomEnabled} onZoom={onZoom} />
-				<NavigationHelp />
+				<NavigationHelp markers={markers} />
 			</div>
 			<div className={styles.toolbar}>
 				<ResetControl enabled={controls.resetEnabled} onReset={onReset} />

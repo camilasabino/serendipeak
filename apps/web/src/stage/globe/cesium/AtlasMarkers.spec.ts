@@ -1,6 +1,8 @@
 import * as cesium from 'cesium';
 import { describe, expect, it, vi } from 'vitest';
-import { ATLAS_MARKER_STYLE, type AtlasMarker } from '../atlasMarkers';
+import { ATLAS_MARKER_STYLE, type AtlasMarker, type ScreenBox } from '../atlasMarkers';
+import { LABEL_DECLUTTER } from '../labelDeclutter';
+import { MARKER_HIT, resolveMarkerHit } from '../markerHits';
 import { ATLAS_LAYER_NAME, AtlasMarkers } from './AtlasMarkers';
 import type { CesiumModule } from './CesiumModule';
 
@@ -50,6 +52,17 @@ const CERRO_TORRE: AtlasMarker = {
 	longitude: -73.09901,
 	elevationMeters: 3133
 };
+
+// Close to the system face at 13 px: decluttering only needs plates of a realistic size.
+const CHARACTER_PIXELS = 7;
+const TEXT_HEIGHT_PIXELS = 13;
+function measureText(text: string) {
+	return { width: text.length * CHARACTER_PIXELS, height: TEXT_HEIGHT_PIXELS };
+}
+
+function boxesOverlap(a: ScreenBox, b: ScreenBox): boolean {
+	return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
 
 interface FakeCamera {
 	positionWC: cesium.Cartesian3;
@@ -129,9 +142,12 @@ function setup() {
 		};
 	});
 	const project = pinhole(camera, canvas);
+	const refreshed = vi.fn();
 	const markers = new AtlasMarkers(cesium as unknown as CesiumModule, viewer as never, {
 		listen,
-		project
+		project,
+		measureText,
+		refreshed
 	});
 
 	return {
@@ -142,6 +158,7 @@ function setup() {
 		listen,
 		listeners,
 		project,
+		refreshed,
 		/** What the scene's view-change listener does after the camera moved or the canvas resized. */
 		viewChanged: () => [...listeners].forEach((listener) => listener()),
 		destroyViewer: () => {
@@ -215,7 +232,7 @@ describe('AtlasMarkers layer', () => {
 		);
 	});
 
-	it('draws every marker the same: a vermilion point with a dark outline, no highlight state', async () => {
+	it('draws every marker the same: a vermilion point with a dark outline', async () => {
 		const { markers, entity } = setup();
 
 		markers.set([OLYMPUS, ACONCAGUA]);
@@ -449,6 +466,36 @@ describe('AtlasMarkers label work', () => {
 		expect(labelShown(entity(MONT_BLANC.slug))).toBe(false);
 	});
 
+	it('leaves a label too faint to read out of the layout and out of reach, the marker still pressable', async () => {
+		const { markers, camera, viewChanged, entity } = setup();
+		markers.set([MONT_BLANC]);
+		await attached();
+		const { labelFullMeters, labelMaxMeters, labelMinAlpha } = ATLAS_MARKER_STYLE;
+		const readableMeters =
+			labelFullMeters + (1 - labelMinAlpha) * (labelMaxMeters - labelFullMeters);
+		const lookFrom = (rangeMeters: number) => {
+			lookDown(
+				camera,
+				MONT_BLANC.latitude,
+				MONT_BLANC.longitude,
+				rangeMeters + MONT_BLANC.elevationMeters
+			);
+			viewChanged();
+		};
+
+		lookFrom(readableMeters - 5_000);
+		expect(markers.targets.map((target) => target.slug)).toEqual([MONT_BLANC.slug]);
+		expect(markers.targets[0]!.label).toBeDefined();
+
+		lookFrom(readableMeters + 5_000);
+		const reading = markers.read()!.markers[0]!;
+		expect(reading).toMatchObject({ visible: true, labelShown: false, labelSuppressed: false });
+		expect(reading.label).toBeUndefined();
+		expect(markers.targets.map((target) => target.slug)).toEqual([MONT_BLANC.slug]);
+		expect(markers.targets[0]!.label).toBeUndefined();
+		expect(labelShown(entity(MONT_BLANC.slug))).toBe(false);
+	});
+
 	it('switches off the label of a marker that leaves the view, however close', async () => {
 		const { markers, camera, canvas, viewChanged, entity } = setup();
 		markers.set([MONT_BLANC]);
@@ -635,8 +682,8 @@ describe('AtlasMarkers close summits', () => {
 		}
 	});
 
-	it('shows both and names both while the camera is near, each where it projects', async () => {
-		const { markers, camera, viewChanged } = setup();
+	it('names only the higher summit while their labels would overlap, and draws both points', async () => {
+		const { markers, camera, viewChanged, entity } = setup();
 		markers.set(PAIR);
 		await attached();
 
@@ -645,13 +692,32 @@ describe('AtlasMarkers close summits', () => {
 
 		const [torre, roy] = [reading(markers, 'cerro-torre'), reading(markers, 'fitz-roy')];
 		expect([torre.visible, roy.visible]).toEqual([true, true]);
-		expect([torre.labelShown, roy.labelShown]).toEqual([true, true]);
+		expect([roy.labelShown, torre.labelShown]).toEqual([true, false]);
+		expect(torre.labelSuppressed).toBe(true);
+		expect(entity('cerro-torre')!.label!.show!.getValue(NOW)).toBe(false);
 		expect(
 			Math.hypot(roy.window!.x - torre.window!.x, roy.window!.y - torre.window!.y)
 		).toBeGreaterThan(ATLAS_MARKER_STYLE.pointPixelSize);
+		expect(markers.targets.map((target) => target.slug).sort()).toEqual([
+			'cerro-torre',
+			'fitz-roy'
+		]);
 	});
 
-	it('still shows both when they overlap on screen: overlap is not suppression', async () => {
+	it('names both once the camera is close enough for their plates to clear each other', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 30_000);
+		viewChanged();
+
+		const [torre, roy] = [reading(markers, 'cerro-torre'), reading(markers, 'fitz-roy')];
+		expect([torre.labelShown, roy.labelShown]).toEqual([true, true]);
+		expect(boxesOverlap(torre.label!, roy.label!)).toBe(false);
+	});
+
+	it('still draws both points when they merge on screen, with one name', async () => {
 		const { markers, camera, viewChanged } = setup();
 		markers.set(PAIR);
 		await attached();
@@ -661,7 +727,7 @@ describe('AtlasMarkers close summits', () => {
 
 		const [torre, roy] = [reading(markers, 'cerro-torre'), reading(markers, 'fitz-roy')];
 		expect([torre.visible, roy.visible]).toEqual([true, true]);
-		expect([torre.labelShown, roy.labelShown]).toEqual([true, true]);
+		expect([roy.labelShown, torre.labelShown]).toEqual([true, false]);
 		expect(
 			Math.hypot(roy.window!.x - torre.window!.x, roy.window!.y - torre.window!.y)
 		).toBeLessThan(ATLAS_MARKER_STYLE.pointPixelSize);
@@ -678,5 +744,332 @@ describe('AtlasMarkers close summits', () => {
 		expect(reading(markers, 'fitz-roy').visible).toBe(true);
 		expect(reading(markers, 'cerro-torre').visible).toBe(false);
 		expect(markers.read()!.entities).toBe(2);
+	});
+});
+
+describe('AtlasMarkers hit targets', () => {
+	const PAIR = [FITZ_ROY, CERRO_TORRE];
+	const MIDPOINT = {
+		latitude: (FITZ_ROY.latitude + CERRO_TORRE.latitude) / 2,
+		longitude: (FITZ_ROY.longitude + CERRO_TORRE.longitude) / 2
+	};
+	const at = (markers: AtlasMarkers, slug: string) =>
+		markers.targets.find((target) => target.slug === slug)!;
+	const hitSlugs = (hit: ReturnType<typeof resolveMarkerHit>) =>
+		hit.kind === 'mountain'
+			? [hit.mountain.slug]
+			: hit.kind === 'choice'
+				? hit.mountains.map((mountain) => mountain.slug)
+				: [];
+
+	it('lists exactly the visible markers, where the reading places them', async () => {
+		const { markers } = setup();
+		markers.set([OLYMPUS, MONT_BLANC, ACONCAGUA]);
+		await attached();
+
+		const reading = markers.read()!;
+		const visible = reading.markers.filter((marker) => marker.visible);
+		expect(markers.targets.map((target) => target.slug).sort()).toEqual(
+			visible.map((marker) => marker.slug).sort()
+		);
+		for (const marker of visible) {
+			expect(at(markers, marker.slug)).toMatchObject(marker.window!);
+		}
+		expect(markers.targets.some((target) => target.slug === ACONCAGUA.slug)).toBe(false);
+	});
+
+	it('never hits a marker behind the horizon, even pressed where it would project', async () => {
+		const { markers, project } = setup();
+		markers.set([OLYMPUS, ACONCAGUA]);
+		await attached();
+
+		const ghost = project(
+			Cartesian3.fromDegrees(ACONCAGUA.longitude, ACONCAGUA.latitude, ACONCAGUA.elevationMeters),
+			new Cartesian2()
+		)!;
+
+		expect(resolveMarkerHit(markers.targets, ghost, 'coarse').kind).toBe('none');
+	});
+
+	it('never hits a marker outside the canvas, even pressed at the canvas edge nearest it', async () => {
+		const { markers, camera, canvas, viewChanged } = setup();
+		markers.set([MONT_BLANC]);
+		await attached();
+
+		lookDown(camera, MONT_BLANC.latitude, MONT_BLANC.longitude - 2, 200_000);
+		viewChanged();
+
+		expect(markers.read()!.markers[0]!.visible).toBe(false);
+		expect(
+			resolveMarkerHit(markers.targets, { x: canvas.clientWidth, y: 300 }, 'coarse').kind
+		).toBe('none');
+	});
+
+	it('lists nothing while the layer is hidden, and tells the picker', async () => {
+		const { markers, refreshed } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		expect(markers.targets).toHaveLength(1);
+		refreshed.mockClear();
+
+		markers.set(undefined);
+
+		expect(markers.targets).toEqual([]);
+		expect(refreshed).toHaveBeenCalledOnce();
+	});
+
+	it('tells the picker after every visibility pass', async () => {
+		const { markers, refreshed, viewChanged } = setup();
+		markers.set([OLYMPUS]);
+		refreshed.mockClear();
+
+		viewChanged();
+		viewChanged();
+
+		expect(refreshed).toHaveBeenCalledTimes(2);
+	});
+
+	it('asks which of Fitz Roy and Cerro Torre was meant while their dots merge', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 1_100_000);
+		viewChanged();
+
+		const roy = at(markers, 'fitz-roy');
+		expect(hitSlugs(resolveMarkerHit(markers.targets, roy, 'fine'))).toEqual([
+			'fitz-roy',
+			'cerro-torre'
+		]);
+	});
+
+	it('opens Cerro Torre from its dot though its label gave way to Fitz Roy', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 150_000);
+		viewChanged();
+
+		const torre = at(markers, 'cerro-torre');
+		expect(torre.label).toBeUndefined();
+		expect(hitSlugs(resolveMarkerHit(markers.targets, torre, 'fine'))).toEqual(['cerro-torre']);
+		expect(hitSlugs(resolveMarkerHit(markers.targets, torre, 'coarse'))).toEqual(['cerro-torre']);
+
+		const roy = at(markers, 'fitz-roy');
+		const between = { x: (roy.x + torre.x) / 2, y: (roy.y + torre.y) / 2 };
+		expect(resolveMarkerHit(markers.targets, between, 'coarse').kind).toBe('choice');
+	});
+
+	it('opens each of the pair, by dot or by name, once the camera is near', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 30_000);
+		viewChanged();
+
+		for (const slug of ['fitz-roy', 'cerro-torre']) {
+			const target = at(markers, slug);
+			const label = target.label!;
+			const onName = { x: (label.left + label.right) / 2, y: (label.top + label.bottom) / 2 };
+			expect(hitSlugs(resolveMarkerHit(markers.targets, target, 'coarse'))).toEqual([slug]);
+			expect(hitSlugs(resolveMarkerHit(markers.targets, onName, 'coarse'))).toEqual([slug]);
+		}
+	});
+
+	it('separates Mont Blanc and the Matterhorn by more than a finger once regional', async () => {
+		const MATTERHORN: AtlasMarker = {
+			slug: 'matterhorn',
+			name: 'Matterhorn',
+			latitude: 45.9764263,
+			longitude: 7.6586024,
+			elevationMeters: 4478
+		};
+		const { markers, camera, viewChanged } = setup();
+		markers.set([MONT_BLANC, MATTERHORN]);
+		await attached();
+
+		lookDown(camera, 45.9, 7.25, 600_000);
+		viewChanged();
+
+		const [blanc, matterhorn] = [at(markers, 'mont-blanc'), at(markers, 'matterhorn')];
+		expect(Math.hypot(blanc.x - matterhorn.x, blanc.y - matterhorn.y)).toBeGreaterThan(
+			MARKER_HIT.coarse.radiusPixels
+		);
+		expect(hitSlugs(resolveMarkerHit(markers.targets, matterhorn, 'coarse'))).toEqual([
+			'matterhorn'
+		]);
+	});
+});
+
+describe('AtlasMarkers label declutter', () => {
+	const PAIR = [FITZ_ROY, CERRO_TORRE];
+	const MIDPOINT = {
+		latitude: (FITZ_ROY.latitude + CERRO_TORRE.latitude) / 2,
+		longitude: (FITZ_ROY.longitude + CERRO_TORRE.longitude) / 2
+	};
+	const torreNamed = (markers: AtlasMarkers) =>
+		markers.read()!.markers.find((marker) => marker.slug === 'cerro-torre')!.labelShown;
+
+	it('never leaves two shown plates overlapping as the camera descends', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		for (let height = 1_500_000; height >= 10_000; height *= 0.85) {
+			lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, height);
+			viewChanged();
+			const plates = markers
+				.read()!
+				.markers.filter((marker) => marker.labelShown)
+				.map((marker) => marker.label!);
+			if (plates.length === 2) {
+				expect(boxesOverlap(plates[0]!, plates[1]!), `at ${Math.round(height)} m`).toBe(false);
+			}
+		}
+	});
+
+	it('holds its choice inside the return band, so small camera moves never blink a name', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+		const look = (height: number) => {
+			lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, height);
+			viewChanged();
+			return torreNamed(markers);
+		};
+
+		let appears = 200_000;
+		while (!look(appears)) {
+			appears *= 0.995;
+		}
+		let disappears = appears;
+		while (look(disappears)) {
+			disappears *= 1.005;
+		}
+		expect(disappears).toBeGreaterThan(appears * 1.05);
+
+		// Back and forth inside the band, it keeps whatever it last had.
+		const band = [appears * 1.01, disappears * 0.99, appears * 1.02, disappears * 0.98];
+		look(appears);
+		for (const height of band) {
+			expect(look(height)).toBe(true);
+		}
+		look(disappears);
+		for (const height of band) {
+			expect(look(height)).toBe(false);
+		}
+	});
+
+	it('switches a suppressed label off on the entity, so it builds no glyphs', async () => {
+		const { markers, camera, viewChanged, entity } = setup();
+		markers.set(PAIR);
+		await attached();
+
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 150_000);
+		viewChanged();
+
+		expect(entity('fitz-roy')!.label!.show!.getValue(NOW)).toBe(true);
+		expect(entity('cerro-torre')!.label!.show!.getValue(NOW)).toBe(false);
+	});
+
+	it('restores a suppressed label once its neighbour leaves the view', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set(PAIR);
+		await attached();
+		lookDown(camera, MIDPOINT.latitude, MIDPOINT.longitude, 150_000);
+		viewChanged();
+		expect(torreNamed(markers)).toBe(false);
+
+		lookDown(camera, CERRO_TORRE.latitude, CERRO_TORRE.longitude - 0.25, 30_000);
+		viewChanged();
+
+		const reading = markers.read()!.markers;
+		expect(reading.find((marker) => marker.slug === 'fitz-roy')!.visible).toBe(false);
+		expect(torreNamed(markers)).toBe(true);
+	});
+
+	it('caps the labels named in one view', async () => {
+		const { markers, camera, viewChanged } = setup();
+		const crowd: AtlasMarker[] = Array.from({ length: LABEL_DECLUTTER.maxLabels + 20 }, (_, i) => ({
+			slug: `peak-${i}`,
+			name: 'P',
+			latitude: 45 + Math.floor(i / 10) * 0.6,
+			longitude: 6 + (i % 10) * 0.9,
+			elevationMeters: 3000 + i
+		}));
+		markers.set(crowd);
+		await attached();
+
+		lookDown(camera, 47, 10, 900_000);
+		viewChanged();
+
+		const named = markers.read()!.markers.filter((marker) => marker.labelShown);
+		expect(named.length).toBeLessThanOrEqual(LABEL_DECLUTTER.maxLabels);
+		expect(markers.targets.length).toBeGreaterThan(LABEL_DECLUTTER.maxLabels);
+	});
+});
+
+describe('AtlasMarkers hover emphasis', () => {
+	const outlineOf = (entity: cesium.Entity | undefined) =>
+		entity!.point!.outlineColor!.getValue(NOW) as cesium.Color;
+	const PAPER = cesium.Color.fromCssColorString(ATLAS_MARKER_STYLE.hoverOutlineColor);
+
+	it('rings one marker in paper and returns the previous one to ink', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		const ink = outlineOf(entity(OLYMPUS.slug));
+
+		markers.emphasize(OLYMPUS.slug);
+		expect(outlineOf(entity(OLYMPUS.slug))).toEqual(PAPER);
+		expect(markers.read()!.hovered).toBe(OLYMPUS.slug);
+
+		markers.emphasize(MONT_BLANC.slug);
+		expect(outlineOf(entity(OLYMPUS.slug))).toEqual(ink);
+		expect(outlineOf(entity(MONT_BLANC.slug))).toEqual(PAPER);
+
+		markers.emphasize(undefined);
+		expect(outlineOf(entity(MONT_BLANC.slug))).toEqual(ink);
+		expect(markers.read()!.hovered).toBeUndefined();
+	});
+
+	it('keeps the size and the place of the emphasized marker', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+
+		expect(entity(OLYMPUS.slug)!.point!.pixelSize!.getValue(NOW)).toBe(
+			ATLAS_MARKER_STYLE.pointPixelSize
+		);
+		expect(entity(OLYMPUS.slug)!.point!.outlineWidth!.getValue(NOW)).toBe(
+			ATLAS_MARKER_STYLE.pointOutlinePixels
+		);
+	});
+
+	it('drops the emphasis when the layer is hidden', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+
+		markers.set(undefined);
+
+		expect(markers.read()!.hovered).toBeUndefined();
+		expect(outlineOf(entity(OLYMPUS.slug))).not.toEqual(PAPER);
+	});
+
+	it('ignores a slug it does not draw', async () => {
+		const { markers } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize('unknown');
+
+		expect(markers.read()!.hovered).toBeUndefined();
 	});
 });
