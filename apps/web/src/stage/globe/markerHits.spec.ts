@@ -31,7 +31,7 @@ describe('marker hit tolerances', () => {
 	] as const)('a %s press reaches a marker up to %i px from its centre', (precision, radius) => {
 		expect(resolveMarkerHit(lone, { x: 100 + radius, y: 100 }, precision)).toEqual({
 			kind: 'mountain',
-			mountain: { slug: 'lone', name: 'LONE' }
+			mountain: { slug: 'lone', name: 'LONE', elevationMeters: 3000 }
 		});
 		expect(resolveMarkerHit(lone, { x: 100 + radius + 0.5, y: 100 }, precision).kind).toBe('none');
 	});
@@ -148,6 +148,22 @@ describe('ambiguous hits', () => {
 			'named',
 			'covered'
 		]);
+	});
+});
+
+describe('what a hit carries', () => {
+	it('names each mountain of a choice with its slug, name and elevation, and nothing of the screen', () => {
+		const targets = [target('a', 100, 100, 5200), target('b', 102, 100, 4100)];
+
+		const hit = resolveMarkerHit(targets, { x: 101, y: 100 }, 'fine');
+
+		expect(hit).toEqual({
+			kind: 'choice',
+			mountains: [
+				{ slug: 'a', name: 'A', elevationMeters: 5200 },
+				{ slug: 'b', name: 'B', elevationMeters: 4100 }
+			]
+		});
 	});
 });
 

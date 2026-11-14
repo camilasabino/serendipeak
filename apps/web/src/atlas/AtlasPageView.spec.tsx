@@ -62,7 +62,7 @@ describe('atlas page', () => {
 		expect(groups).toHaveLength(2);
 		expect(groups.every((tag) => !/\sopen/.test(tag))).toBe(true);
 		expect(textsOf(html, 'summary')).toEqual(['Asia1 mountain', 'Europe2 mountains']);
-		expect(html).toContain('All 3 mountains on SerendiPeak');
+		expect(html).toContain('All 3 mountains on the globe');
 	});
 
 	it('keeps every mountain in the document as a link to its own page, in order', () => {
@@ -79,8 +79,8 @@ describe('atlas page', () => {
 	});
 
 	it('tells how to open a mountain from the globe and from the list, and renders no chooser', () => {
-		expect(html).toContain('Click or tap a point to fly to that mountain and open its page');
-		expect(html).toContain('or choose one from the list by continent');
+		expect(html).toContain('Click or tap a point to open its page');
+		expect(html).toContain('or browse by continent below');
 		expect(html).not.toContain('Which mountain?');
 	});
 

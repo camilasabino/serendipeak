@@ -2,9 +2,11 @@
 	position: absolute;
 	z-index: 3;
 	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
 	width: max-content;
-	min-width: 11rem;
-	max-width: min(18rem, calc(100cqw - 1rem));
+	min-width: min(12rem, calc(100cqw - 1rem));
+	max-width: min(20rem, calc(100cqw - 1rem));
 	padding: 0.25rem 0 0.4rem;
 	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
 	border-radius: var(--sp-radius);
@@ -15,7 +17,9 @@
 	line-height: 1.35;
 }
 
+/* The header never shrinks, so a list cut short scrolls beneath a close button that stays in view. */
 .header {
+	flex: none;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -38,7 +42,7 @@
 	align-items: center;
 	justify-content: center;
 	width: 2.75rem;
-	height: 2.5rem;
+	height: 2.75rem;
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -65,14 +69,20 @@
 }
 
 .options {
+	flex: 0 1 auto;
+	min-height: 0;
 	margin: 0;
 	padding: 0;
 	list-style: none;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .option {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-space-3);
 	box-sizing: border-box;
 	min-height: 2.75rem;
 	padding: 0.4rem var(--sp-space-3);
@@ -80,7 +90,27 @@
 	font-size: 1rem;
 	font-weight: 500;
 	text-decoration: none;
+}
+
+/* The full name stays, wrapping where it must; the elevation beside it never does. */
+.name {
+	min-width: 0;
 	overflow-wrap: anywhere;
+}
+
+.elevation {
+	flex: none;
+	margin-left: auto;
+	color: var(--sp-mist);
+	font-size: 0.875rem;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.option:hover .elevation {
+	color: var(--sp-paper);
 }
 
 .option:hover {

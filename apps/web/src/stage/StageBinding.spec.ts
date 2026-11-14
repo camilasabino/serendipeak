@@ -303,7 +303,7 @@ describe('StageBinding retry', () => {
 		binding.retry();
 		const scene = factory.resolve(1);
 		await flush();
-		scene.activate({ kind: 'mountain', mountain: { slug: 'a', name: 'A' } });
+		scene.activate({ kind: 'mountain', mountain: { slug: 'a', name: 'A', elevationMeters: 3000 } });
 
 		expect(onMarkerActivate).toHaveBeenCalledOnce();
 		binding.dispose();

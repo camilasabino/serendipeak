@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { ATLAS_MARKER_STYLE } from '../../src/stage/globe/atlasMarkers';
+import { resolveMarkerHit, type HitTarget } from '../../src/stage/globe/markerHits';
 import { resetStub, useScenario } from '../ssr/support';
 import { overlapping } from './support/atlas';
 import {
@@ -35,6 +36,28 @@ interface Point {
 const chooser = (page: Page) => page.getByRole('dialog', { name: 'Which mountain?' });
 const canvas = (page: Page) => page.locator('main canvas');
 
+// A chooser link reads as its mountain and its elevation, such as "Mount Everest 8,849 m".
+const ENTRY = /^.+ \d[\d,]* m$/;
+
+/**
+ * Every entry names its mountain and elevation, and the names run alphabetically, whatever the
+ * order of distance from the press; the first is the one that took focus.
+ */
+async function expectAlphabetical(page: Page): Promise<string[]> {
+	const links = chooser(page).getByRole('link');
+	for (const text of await links.allTextContents()) {
+		expect(text).toMatch(ENTRY);
+	}
+	const names = await links.evaluateAll((anchors) =>
+		anchors.map((anchor) => anchor.firstElementChild?.textContent ?? '')
+	);
+	const collator = new Intl.Collator('en', { sensitivity: 'base' });
+	expect(names).toEqual([...names].sort((a, b) => collator.compare(a, b)));
+	await expect(links.first()).toBeFocused();
+
+	return names;
+}
+
 async function layer(page: Page): Promise<AtlasLayerReading> {
 	const reading = await atlasLayer(page);
 	expect(reading).toBeDefined();
@@ -65,9 +88,13 @@ async function tapCanvas(page: Page, point: Point) {
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
-// The gap and margin the chooser keeps from the point pressed and the stage edges, in CSS pixels.
+// The gap and margin the chooser keeps from the point pressed and the stage edges, and the strip at
+// the bottom of the stage it keeps clear for the credits where it can, in CSS pixels.
 const CHOOSER_GAP = 12;
 const CHOOSER_MARGIN = 8;
+const CREDITS_STRIP = 40;
+const CREDITS_STRIP_WRAPPED = 58;
+const WRAPPED_CREDITS_STAGE = 380;
 
 interface Box {
 	x: number;
@@ -76,22 +103,32 @@ interface Box {
 	height: number;
 }
 
-/**
- * The chooser sits against the point that opened it, on the page and not merely inside the stage:
- * a gap above or below it where either has room, centred on it unless the stage edge pushes it
- * aside, and inside the stage either way. Compares boxes measured by the browser with the point
- * the test pressed, so a frame mix-up between the canvas and the chooser's container shows as a
- * displacement.
- */
-async function expectBeside(page: Page, pressed: Point) {
-	const box = (await chooser(page).boundingBox()) as Box;
+const stageBox = (page: Page) =>
 	// In fullscreen the stage is the fullscreen element, which the page's stage anchor lies outside.
-	const stage = await page.evaluate<Box>(() => {
+	page.evaluate<Box>(() => {
 		const frame = document.fullscreenElement ?? document.querySelector('[data-stage]')!;
 		const { x, y, width, height } = frame.getBoundingClientRect();
 
 		return { x, y, width, height };
 	});
+
+/** Whether the list is cut short and scrolls, rather than showing every mountain. */
+const scrolls = (page: Page) =>
+	chooser(page)
+		.getByRole('list')
+		.evaluate((list) => list.scrollHeight > list.clientHeight);
+
+/**
+ * The chooser sits against the point that opened it, on the page and not merely inside the stage:
+ * a gap above or below it where either has room, centred on it unless the stage edge pushes it
+ * aside, and inside the stage either way. A list too long for the stage fills it and scrolls
+ * instead. Compares boxes measured by the browser with the point the test pressed, so a frame
+ * mix-up between the canvas and the chooser's container shows as a displacement.
+ */
+async function expectBeside(page: Page, pressed: Point) {
+	const box = (await chooser(page).boundingBox()) as Box;
+	const stage = await stageBox(page);
+	const cut = await scrolls(page);
 	const right = box.x + box.width;
 	const bottom = box.y + box.height;
 
@@ -100,16 +137,24 @@ async function expectBeside(page: Page, pressed: Point) {
 	expect(box.y).toBeGreaterThanOrEqual(stage.y + CHOOSER_MARGIN - 1);
 	expect(bottom).toBeLessThanOrEqual(stage.y + stage.height - CHOOSER_MARGIN + 1);
 
+	const strip = stage.width < WRAPPED_CREDITS_STAGE ? CREDITS_STRIP_WRAPPED : CREDITS_STRIP;
+	const clear = !cut && box.height <= stage.height - 2 * CHOOSER_MARGIN - strip ? strip : 0;
 	const roomBelow =
-		stage.y + stage.height - CHOOSER_MARGIN - (pressed.y + CHOOSER_GAP) >= box.height;
+		stage.y + stage.height - CHOOSER_MARGIN - clear - (pressed.y + CHOOSER_GAP) >= box.height;
 	const roomAbove = pressed.y - CHOOSER_GAP - (stage.y + CHOOSER_MARGIN) >= box.height;
-	if (roomBelow || roomAbove) {
+	if (!cut && (roomBelow || roomAbove)) {
 		const gap = roomBelow ? box.y - pressed.y : pressed.y - bottom;
 		expect(Math.abs(gap - CHOOSER_GAP)).toBeLessThan(1.5);
 	}
+	// Never under the fingertip: its lifting would send a click to whatever stands there.
+	const under =
+		pressed.x >= box.x && pressed.x <= right && pressed.y >= box.y && pressed.y <= bottom;
+	expect(under, 'the chooser covers the press').toBe(false);
 	const pushed =
 		box.x <= stage.x + CHOOSER_MARGIN + 1 || right >= stage.x + stage.width - CHOOSER_MARGIN - 1;
-	if (!pushed) {
+	// Only a chooser above or below the press is centred on it; one beside it stands off to a side.
+	const vertical = pressed.y < box.y || pressed.y > bottom;
+	if (!pushed && vertical) {
 		expect(Math.abs(box.x + box.width / 2 - pressed.x)).toBeLessThan(1.5);
 	}
 }
@@ -271,7 +316,7 @@ test.describe('@webgl atlas marker chooser', () => {
 		await overviewAtRest(page);
 		const everest = (await shown(page, 'mount-everest')).window;
 
-		await test.step('the Himalaya merge: nearest and highest first, focus on the first, Escape closes', async () => {
+		await test.step('the Himalaya merge: alphabetical with elevations, focus on the first, Escape closes', async () => {
 			const reading = await layer(page);
 			const merged = reading.markers.filter(
 				(entry) => entry.visible && distance(entry.window!, everest) < MOUSE_CLEARANCE
@@ -284,9 +329,10 @@ test.describe('@webgl atlas marker chooser', () => {
 			await expect(dialog).toBeVisible();
 			const links = dialog.getByRole('link');
 			await expect(links).toHaveCount(merged.length);
-			await expect(links.first()).toHaveText('Mount Everest');
-			await expect(links.first()).toBeFocused();
-			await expect(links.first()).toHaveAttribute('href', '/mountains/mount-everest');
+			expect(await expectAlphabetical(page)).toContain('Mount Everest');
+			await expect(
+				dialog.getByRole('link', { name: /^Mount Everest \d[\d,]* m$/ })
+			).toHaveAttribute('href', '/mountains/mount-everest');
 			await page.keyboard.press('Tab');
 			await expect(links.nth(1)).toBeFocused();
 
@@ -325,7 +371,10 @@ test.describe('@webgl atlas marker chooser', () => {
 
 		await clickCanvas(page, between);
 		const dialog = chooser(page);
-		await expect(dialog.getByRole('link')).toHaveText([ACONCAGUA.name, 'Cerro El Plata']);
+		await expect(dialog.getByRole('link')).toHaveText([
+			new RegExp(`^${ACONCAGUA.name} \\d[\\d,]* m$`),
+			/^Cerro El Plata \d[\d,]* m$/
+		]);
 		await dialog.getByRole('link', { name: ACONCAGUA.name }).click();
 
 		await expect(page).toHaveURL(new RegExp(`/mountains/${ACONCAGUA.slug}$`));
@@ -438,7 +487,10 @@ test.describe('@webgl atlas close neighbours', () => {
 		expect(distance(merged.roy.window, merged.torre.window)).toBeLessThan(MOUSE_CLEARANCE);
 		expect(merged.torre.labelSuppressed).toBe(true);
 		await clickCanvas(page, merged.roy.window);
-		await expect(chooser(page).getByRole('link')).toHaveText(['Fitz Roy', 'Cerro Torre']);
+		await expect(chooser(page).getByRole('link')).toHaveText([
+			/^Cerro Torre \d[\d,]* m$/,
+			/^Fitz Roy \d[\d,]* m$/
+		]);
 		await chooser(page).getByRole('link', { name: 'Cerro Torre' }).click();
 		await expect(page).toHaveURL(/\/mountains\/cerro-torre$/);
 	});
@@ -500,12 +552,203 @@ test.describe('@webgl atlas markers by touch', () => {
 			);
 			expect(placed.y).toBeGreaterThanOrEqual(stage.y);
 			expect(placed.y + placed.height).toBeLessThanOrEqual(stage.y + stage.height);
-			await expect(dialog.getByRole('link').first()).toHaveText('Mount Everest');
+			expect(await expectAlphabetical(page)).toContain('Mount Everest');
 
 			const heading = (await page.getByRole('heading', { name: 'Atlas', level: 1 }).boundingBox())!;
 			await page.touchscreen.tap(heading.x + 10, heading.y + heading.height / 2);
 			await expect(dialog).toHaveCount(0);
 			await expect(page).toHaveURL(/\/atlas$/);
 		});
+	});
+});
+
+// Phone widths from the narrowest in use up to a large phone, and a phone on its side, where the
+// stage is shortest. A press at the Himalaya merge lists several mountains.
+const SCREENS = [
+	{ label: '320 px', width: 320, height: 640 },
+	{ label: '360 px', width: 360, height: 740 },
+	{ label: '390 px', width: 390, height: 844 },
+	{ label: '430 px', width: 430, height: 932 },
+	{ label: 'landscape 844 x 390 px', width: 844, height: 390 }
+] as const;
+
+/**
+ * Where a tap asks the most "which mountain?": the drawn marker whose touch press, judged by the
+ * picker's own rule on the markers as drawn, offers the longest list. The globe's size changes
+ * which markers merge, so no one mountain is a safe place to press at every width.
+ */
+async function crowdedPoint(page: Page): Promise<Point> {
+	const targets = (await layer(page)).markers.flatMap((entry): HitTarget[] =>
+		entry.visible && entry.window
+			? [
+					{
+						slug: entry.slug,
+						name: entry.slug,
+						elevationMeters: 0,
+						...entry.window,
+						label: undefined
+					}
+				]
+			: []
+	);
+	let best: { at: Point; count: number } | undefined;
+	for (const { x, y } of targets) {
+		const hit = resolveMarkerHit(targets, { x, y }, 'coarse');
+		const count = hit.kind === 'choice' ? hit.mountains.length : 0;
+		if (count > (best?.count ?? 1)) {
+			best = { at: { x, y }, count };
+		}
+	}
+	expect(best, 'a place where drawn markers merge').toBeDefined();
+
+	return best!.at;
+}
+
+// The touch target Apple and Material both ask for, in CSS pixels.
+const TARGET = 44;
+
+for (const screen of SCREENS) {
+	test.describe(`@webgl atlas marker chooser on a ${screen.label} screen`, () => {
+		const viewport = { width: screen.width, height: screen.height };
+		test.use({
+			viewport,
+			hasTouch: true,
+			isMobile: true,
+			deviceScaleFactor: 3,
+			reducedMotion: 'reduce'
+		});
+
+		test.beforeEach(async ({ page }) => {
+			await page.setViewportSize(viewport);
+		});
+
+		test('stays inside the stage with its close button in view, and every entry is a full touch target', async ({
+			page
+		}) => {
+			await overviewAtRest(page);
+			const crowded = await crowdedPoint(page);
+
+			await tapCanvas(page, crowded);
+
+			const dialog = chooser(page);
+			await expect(dialog).toBeVisible();
+			await expectBeside(page, await onPage(page, crowded));
+			await expectAlphabetical(page);
+			const box = (await dialog.boundingBox()) as Box;
+			const stage = await stageBox(page);
+			expect(box.x).toBeGreaterThanOrEqual(0);
+			expect(box.x + box.width).toBeLessThanOrEqual(screen.width);
+
+			const close = dialog.getByRole('button', { name: 'Close the list of mountains' });
+			const closeBox = (await close.boundingBox()) as Box;
+			expect(closeBox.width).toBeGreaterThanOrEqual(TARGET - 0.5);
+			expect(closeBox.height).toBeGreaterThanOrEqual(TARGET - 0.5);
+			expect(closeBox.y).toBeGreaterThanOrEqual(stage.y);
+			expect(closeBox.y + closeBox.height).toBeLessThanOrEqual(stage.y + stage.height);
+
+			const links = dialog.getByRole('link');
+			for (const link of await links.all()) {
+				expect(((await link.boundingBox()) as Box).height).toBeGreaterThanOrEqual(TARGET - 0.5);
+			}
+
+			// Names wrap rather than run past the chooser, and the elevation keeps its own line space.
+			const overflowing = await links.evaluateAll(
+				(anchors) => anchors.filter((anchor) => anchor.scrollWidth > anchor.clientWidth).length
+			);
+			expect(overflowing).toBe(0);
+			expect(
+				await page.evaluate(
+					() => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+				)
+			).toBe(true);
+		});
+
+		test('reaches every entry by keyboard while the close button stays put, and closes on Escape', async ({
+			page
+		}) => {
+			await overviewAtRest(page);
+			await tapCanvas(page, await crowdedPoint(page));
+			const dialog = chooser(page);
+			await expect(dialog).toBeVisible();
+			const close = dialog.getByRole('button', { name: 'Close the list of mountains' });
+			const links = dialog.getByRole('link');
+			const closeBefore = (await close.boundingBox()) as Box;
+			const cut = await scrolls(page);
+			const count = await links.count();
+
+			await links.last().focus();
+
+			await expect(links.last()).toBeFocused();
+			const list = (await dialog.getByRole('list').boundingBox()) as Box;
+			const last = (await links.last().boundingBox()) as Box;
+			expect(last.y).toBeGreaterThanOrEqual(list.y - 1);
+			expect(last.y + last.height).toBeLessThanOrEqual(list.y + list.height + 1);
+			expect(await close.boundingBox()).toEqual(closeBefore);
+			if (cut) {
+				expect(count).toBeGreaterThan(1);
+				expect(
+					await dialog.getByRole('list').evaluate((element) => element.scrollTop)
+				).toBeGreaterThan(0);
+			}
+
+			await page.keyboard.press('Escape');
+
+			await expect(dialog).toHaveCount(0);
+			await expect(page).toHaveURL(/\/atlas$/);
+		});
+	});
+}
+
+test.describe('@webgl atlas marker chooser ghost click', () => {
+	const SMALL = { width: 320, height: 460 };
+	test.use({
+		viewport: SMALL,
+		hasTouch: true,
+		isMobile: true,
+		deviceScaleFactor: 3,
+		reducedMotion: 'reduce'
+	});
+
+	test.beforeEach(async ({ page }) => {
+		await page.setViewportSize(SMALL);
+	});
+
+	// Where the chooser stands is the placement's business and depends on where the globe's markers
+	// merge on screen; this forces the case the placement avoids, a chooser covering the whole stage,
+	// so the click the browser sends when the opening tap ends always lands on one of its links.
+	test('the tap that opens the chooser opens no mountain, and a later tap on an entry does', async ({
+		page,
+		probe
+	}) => {
+		// The stub has no pages for most mountains: opening one ends on the not-found page, as intended.
+		probe.tolerate({ requests: /\/mountains\//, errors: /404 \(Not Found\)/ });
+		await overviewAtRest(page);
+		await page.addStyleTag({
+			content: `[data-marker-chooser] {
+				left: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important;
+				width: auto !important; max-width: none !important; max-height: none !important;
+			}`
+		});
+		const crowded = await crowdedPoint(page);
+
+		await tapCanvas(page, crowded);
+
+		const dialog = chooser(page);
+		await expect(dialog).toBeVisible();
+		await framesPass(page, 6);
+		const pressed = await onPage(page, crowded);
+		const under = await page.evaluate(({ x, y }) => {
+			const link = document.elementFromPoint(x, y)?.closest('[data-marker-chooser] a');
+
+			return link?.getAttribute('href') ?? null;
+		}, pressed);
+		expect(under, 'a chooser link stands under the press').toMatch(/^\/mountains\//);
+		await expect(page).toHaveURL(/\/atlas$/);
+		await expect(dialog).toBeVisible();
+
+		const link = (await dialog.getByRole('link').first().boundingBox()) as Box;
+		await page.touchscreen.tap(link.x + link.width / 2, link.y + link.height / 2);
+
+		await expect(page).toHaveURL(/\/mountains\/[^/]+$/);
 	});
 });

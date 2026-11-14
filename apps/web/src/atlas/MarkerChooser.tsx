@@ -4,13 +4,18 @@ import {
 	useEffect,
 	useId,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	type FocusEvent
 } from 'react';
 import { mountainHref } from '../explore/navigate';
+import { formatElevation } from '../formatElevation';
+import { scaleSpecForStage } from '../stage/globe/scaleBar';
 import { CLOSE_MARKER_CHOOSER_LABEL, MARKER_CHOOSER_TITLE } from './atlasCopy';
-import { placeChooser, type Point } from './chooserPlacement';
+import { isIntentionalClick } from './chooserClick';
+import { inChooserOrder } from './chooserOrder';
+import { placeChooser, type ChooserPlacement } from './chooserPlacement';
 import styles from './MarkerChooser.module.css';
 import type { MarkerChoice } from './useMarkerActivation';
 
@@ -20,16 +25,20 @@ interface MarkerChooserProps {
 }
 
 /**
- * The mountains a press on the globe could have meant, as plain links to their pages, beside the
- * point pressed. Non-modal like the navigation help: it takes focus so the keyboard and screen
+ * The mountains a press on the globe could have meant, as plain links to their pages, listed by
+ * name with their elevations, beside the point pressed and inside the stage: a list longer than
+ * the room scrolls under a header that keeps the close button in view. Non-modal like the navigation help: it takes focus so the keyboard and screen
  * readers find it, and any press, wheel or focus elsewhere, or Escape, dismisses it. Its owner
  * dismisses it when the stage changes shape, which the stage already observes.
  */
 export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 	const rootRef = useRef<HTMLDivElement>(null);
+	const optionsRef = useRef<HTMLUListElement>(null);
 	const firstRef = useRef<HTMLAnchorElement>(null);
 	const titleId = useId();
-	const [position, setPosition] = useState<Point | undefined>(undefined);
+	const pressBeganInside = useRef(false);
+	const [position, setPosition] = useState<ChooserPlacement | undefined>(undefined);
+	const mountains = useMemo(() => inChooserOrder(choice.mountains), [choice.mountains]);
 
 	// Dismissed from inside, focus goes back to the stage it was opened on rather than the page:
 	// to the fullscreen element while that is showing, since the page's stage lies outside it.
@@ -51,15 +60,20 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 
 	useLayoutEffect(() => {
 		const root = rootRef.current;
+		const options = optionsRef.current;
 		const stage = root?.offsetParent;
-		if (!root || !(stage instanceof HTMLElement)) {
+		if (!root || !options || !(stage instanceof HTMLElement)) {
 			return;
 		}
+		// What the list would take if nothing cut it short, whatever height it was last given: the
+		// chrome around the list plus the whole of the list, scrolled out of view or not.
+		const height = root.offsetHeight - options.clientHeight + options.scrollHeight;
 		setPosition(
 			placeChooser(
 				choice.at,
-				{ width: root.offsetWidth, height: root.offsetHeight },
-				{ width: stage.clientWidth, height: stage.clientHeight }
+				{ width: root.offsetWidth, height },
+				{ width: stage.clientWidth, height: stage.clientHeight },
+				scaleSpecForStage(stage.clientWidth).bottomPx
 			)
 		);
 	}, [choice]);
@@ -82,6 +96,8 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 		const onPointerDown = (event: PointerEvent) => {
 			if (outside(event)) {
 				close(false);
+			} else {
+				pressBeganInside.current = true;
 			}
 		};
 		const onWheel = (event: WheelEvent) => {
@@ -116,7 +132,7 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 			className={styles.chooser}
 			style={
 				position
-					? { left: position.x, top: position.y }
+					? { left: position.x, top: position.y, maxHeight: position.maxHeight }
 					: { left: choice.at.x, top: choice.at.y, visibility: 'hidden' }
 			}
 			onBlur={onBlur}
@@ -137,16 +153,26 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 					</svg>
 				</button>
 			</div>
-			<ul className={styles.options}>
-				{choice.mountains.map((mountain, index) => (
+			<ul ref={optionsRef} className={styles.options}>
+				{mountains.map((mountain, index) => (
 					<li key={mountain.slug}>
 						<Link
 							ref={index === 0 ? firstRef : undefined}
 							href={mountainHref(mountain.slug)}
 							prefetch={false}
 							className={styles.option}
+							onClick={(event) => {
+								const intentional = isIntentionalClick(event, pressBeganInside.current);
+								pressBeganInside.current = false;
+								if (!intentional) {
+									event.preventDefault();
+								}
+							}}
 						>
-							{mountain.name}
+							<span className={styles.name}>{mountain.name}</span>
+							{/* A flex container drops the space from the layout but not from the link's
+							    accessible name, which would otherwise run the two together. */}{' '}
+							<span className={styles.elevation}>{formatElevation(mountain.elevationMeters)}</span>
 						</Link>
 					</li>
 				))}

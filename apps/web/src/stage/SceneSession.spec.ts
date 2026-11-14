@@ -1576,7 +1576,7 @@ describe('SceneSession marker activation', () => {
 	];
 	const OPEN_FITZ_ROY = {
 		kind: 'mountain',
-		mountain: { slug: 'fitz-roy', name: 'Fitz Roy' }
+		mountain: { slug: 'fitz-roy', name: 'Fitz Roy', elevationMeters: 3405 }
 	} as const;
 
 	async function onAtlas() {

@@ -170,7 +170,9 @@ describe('AtlasPicker clicks', () => {
 
 		handler()!.click(103, 98);
 
-		expect(heard).toEqual([{ kind: 'mountain', mountain: { slug: 'peak', name: 'PEAK' } }]);
+		expect(heard).toEqual([
+			{ kind: 'mountain', mountain: { slug: 'peak', name: 'PEAK', elevationMeters: 3000 } }
+		]);
 	});
 
 	it('hears nothing from a click on bare globe', () => {
@@ -193,8 +195,8 @@ describe('AtlasPicker clicks', () => {
 			{
 				kind: 'choice',
 				mountains: [
-					{ slug: 'fitz-roy', name: 'FITZ-ROY' },
-					{ slug: 'cerro-torre', name: 'CERRO-TORRE' }
+					{ slug: 'fitz-roy', name: 'FITZ-ROY', elevationMeters: 3405 },
+					{ slug: 'cerro-torre', name: 'CERRO-TORRE', elevationMeters: 3133 }
 				],
 				at: { x: 100, y: 101 }
 			}

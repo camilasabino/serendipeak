@@ -46,8 +46,26 @@
 	border: 0;
 }
 
+/* The two zoom buttons are one control: joined, they read as a pair apart from the buttons around
+   them, and the pair takes a gap less of a short stage. */
 .group {
 	display: flex;
 	flex-direction: column;
-	gap: 0.4rem;
+}
+
+.group .button:first-child {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.group .button + .button {
+	margin-top: -1px;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+}
+
+.group .button:hover:not(:disabled),
+.group .button:focus-visible {
+	position: relative;
+	z-index: 1;
 }

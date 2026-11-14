@@ -35,6 +35,7 @@ export interface HitTarget {
 export interface HitMountain {
 	slug: string;
 	name: string;
+	elevationMeters: number;
 }
 
 export type MarkerHit =
@@ -123,6 +124,6 @@ export function resolveMarkerHit(
 	return { kind: 'choice', mountains: contenders.map(({ target }) => mountainOf(target)) };
 }
 
-function mountainOf({ slug, name }: HitTarget): HitMountain {
-	return { slug, name };
+function mountainOf({ slug, name, elevationMeters }: HitTarget): HitMountain {
+	return { slug, name, elevationMeters };
 }

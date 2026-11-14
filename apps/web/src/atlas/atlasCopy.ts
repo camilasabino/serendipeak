@@ -14,8 +14,8 @@ export function atlasLede(count: number): string {
 	}
 
 	return count === 1
-		? 'The one mountain on SerendiPeak, on the globe. Click or tap its point, or choose it from the list, to fly there and open its page.'
-		: `All ${count.toLocaleString('en')} mountains on SerendiPeak, on the globe. Click or tap a point to fly to that mountain and open its page, or choose one from the list by continent.`;
+		? 'The one mountain on SerendiPeak. Click or tap its point, or choose it below, to open its page.'
+		: `All ${count.toLocaleString('en')} mountains on the globe. Click or tap a point to open its page, or browse by continent below.`;
 }
 
 export const ATLAS_LIST_HEADING = 'All mountains';
