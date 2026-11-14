@@ -3,9 +3,12 @@ name: WebGL
 # The real-WebGL suites are slow and sensitive to renderer timing, so they never run on pushes or
 # pull requests and are not a required check. Production runs every scenario in two shards;
 # development runs only the scenarios tagged @lifecycle, which exist for React Strict Mode and the
-# Viewer lifecycle. A run uses the branch chosen in the dispatch form. No schedule is configured.
+# Viewer lifecycle. Scheduled runs use the default branch (Mondays, 06:00 UTC); a manual run uses
+# the branch chosen in the dispatch form.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
