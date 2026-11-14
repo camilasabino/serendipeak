@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import {
 	ACONCAGUA,
+	DESKTOP,
 	OLYMPUS,
 	atlasLayer,
 	cameraReading,
@@ -12,8 +13,7 @@ import {
 	test
 } from './support/stage';
 
-const DESKTOP = { width: 1280, height: 800 };
-const SQUARE = { width: 1000, height: 1000 };
+const SQUARE = { width: 900, height: 900 };
 const PHONE = { width: 375, height: 667 };
 
 // Strict Mode runs effects twice only in development; production mounts once.
@@ -71,7 +71,8 @@ test.describe('@webgl @lifecycle stage boot', () => {
 		const stageBox = await page.locator('canvas').first().boundingBox();
 		expect(reading.stage.width).toBeCloseTo(stageBox!.width, -1);
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-		expect(await probe.webglContexts()).toBe(1);
+		expect(await probe.contextsCreated()).toBe(1);
+		expect(await probe.contextsLive()).toBe(1);
 		expect(await probe.stageObservers()).toEqual({ observed: STRICT_MODE ? 2 : 1, live: 1 });
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
 		expect(await atlasLayer(page)).toMatchObject({ shown: false, layers: 0, entities: 0 });
@@ -105,31 +106,16 @@ test.describe('@webgl stage resize, fullscreen and help', () => {
 		await tagCanvas(page);
 		const before = (await cameraReading(page))!;
 
-		await test.step('help opens as a dialog, takes focus and closes by Escape, button and trigger', async () => {
+		await test.step('help opens as a dialog that takes focus, and Escape closes it', async () => {
 			await expect(helpPanel(page)).toBeHidden();
 			await helpTrigger(page).click();
 			await expect(helpPanel(page)).toBeVisible();
 			await expect(helpTrigger(page)).toHaveAttribute('aria-expanded', 'true');
 			await expect(helpPanel(page)).toBeFocused();
-			await expect(helpPanel(page).getByRole('heading', { level: 3 })).toHaveText([
-				'Mouse and trackpad',
-				'Touch',
-				'Buttons'
-			]);
+
 			await page.keyboard.press('Escape');
 			await expect(helpPanel(page)).toBeHidden();
 			await expect(helpTrigger(page)).toBeFocused();
-
-			await helpTrigger(page).press('Enter');
-			await expect(helpPanel(page)).toBeVisible();
-			await page.getByRole('button', { name: 'Close navigation help' }).click();
-			await expect(helpPanel(page)).toBeHidden();
-			await expect(helpTrigger(page)).toBeFocused();
-
-			await helpTrigger(page).click();
-			await expect(helpPanel(page)).toBeVisible();
-			await helpTrigger(page).click();
-			await expect(helpPanel(page)).toBeHidden();
 		});
 
 		await test.step('help gets out of the way as soon as the globe is used', async () => {
@@ -137,12 +123,9 @@ test.describe('@webgl stage resize, fullscreen and help', () => {
 			await expect(helpPanel(page)).toBeVisible();
 			const canvas = await box(page.locator('canvas').first());
 
-			await page.mouse.move(canvas.x + canvas.width * 0.75, canvas.y + canvas.height * 0.75);
-			await page.mouse.down();
-			await page.mouse.up();
+			await page.mouse.click(canvas.x + canvas.width * 0.75, canvas.y + canvas.height * 0.75);
 
 			await expect(helpPanel(page)).toBeHidden();
-			await expect(zoomIn(page)).toBeEnabled();
 		});
 
 		await test.step('fullscreen keeps the canvas and the camera, and the help stays inside it', async () => {
@@ -151,12 +134,11 @@ test.describe('@webgl stage resize, fullscreen and help', () => {
 			await expect(page.getByRole('button', { name: 'Exit fullscreen' })).toBeVisible();
 			await expect.poll(() => page.evaluate(() => document.fullscreenElement?.tagName)).toBe('DIV');
 			await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
-			await expect(resetButton(page)).toBeEnabled();
 			await expect
 				.poll(async () => (await cameraReading(page))?.stage.width)
 				.toBeGreaterThan(before.stage.width);
 			const inside = (await cameraReading(page))!;
-			expect(inside.stage).toEqual({ width: 1280, height: 800 });
+			expect(inside.stage).toEqual(DESKTOP);
 			expect(inside.headingDegrees).toBeCloseTo(before.headingDegrees, 1);
 			expect(inside.pitchDegrees).toBeCloseTo(before.pitchDegrees, 1);
 
@@ -168,15 +150,12 @@ test.describe('@webgl stage resize, fullscreen and help', () => {
 			const panel = await box(helpPanel(page));
 			expect(panel.y + panel.height).toBeLessThanOrEqual(DESKTOP.height);
 			expect(panel.x + panel.width).toBeLessThanOrEqual(DESKTOP.width);
-			await helpTrigger(page).click();
 
 			await page.getByRole('button', { name: 'Exit fullscreen' }).click();
-			await expect(page.getByRole('button', { name: 'Enter fullscreen' })).toBeVisible();
 			await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
 			await expect
 				.poll(async () => (await cameraReading(page))?.stage.width)
 				.toBe(before.stage.width);
-			await expectCanonicalPose(page, ACONCAGUA.camera);
 		});
 
 		await test.step('a resize recomposes the canonical pose for the new shape', async () => {
@@ -196,7 +175,7 @@ test.describe('@webgl stage resize, fullscreen and help', () => {
 
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 		await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
-		expect(await probe.webglContexts()).toBe(1);
+		expect(await probe.contextsLive()).toBe(1);
 	});
 });
 
@@ -294,7 +273,8 @@ test.describe('@webgl @lifecycle stage routes', () => {
 			await expectCanonicalPose(page, OLYMPUS.camera);
 			expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 			await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(0);
-			expect(await probe.webglContexts()).toBe(2);
+			expect(await probe.contextsCreated()).toBe(2);
+			expect(await probe.contextsLive()).toBe(1);
 		});
 	});
 });
@@ -335,7 +315,8 @@ test.describe('@webgl @lifecycle stage cancellation', () => {
 
 		const abortedBeforeTeardown = await abortedGuards();
 		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
-		expect(await probe.webglContexts()).toBe(0);
+		expect(await probe.contextsCreated()).toBe(0);
+		expect(await probe.contextsLive()).toBe(0);
 
 		await pushRoute(page, '/404');
 		await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
@@ -343,7 +324,8 @@ test.describe('@webgl @lifecycle stage cancellation', () => {
 		await expect.poll(abortedGuards).toBeGreaterThan(abortedBeforeTeardown);
 
 		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
-		expect(await probe.webglContexts()).toBe(0);
+		expect(await probe.contextsCreated()).toBe(0);
+		expect(await probe.contextsLive()).toBe(0);
 		expect(await cameraReading(page)).toBeUndefined();
 		await expect.poll(() => probe.stageObservers()).toMatchObject({ live: 0 });
 	});

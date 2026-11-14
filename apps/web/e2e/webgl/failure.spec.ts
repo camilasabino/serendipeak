@@ -1,5 +1,6 @@
 import {
 	ACONCAGUA,
+	DESKTOP,
 	expect,
 	expectCanonicalPose,
 	expectReadyStage,
@@ -7,7 +8,6 @@ import {
 	test
 } from './support/stage';
 
-const DESKTOP = { width: 1280, height: 800 };
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const TERRAIN_ENDPOINT = 'https://api.cesium.com/v1/assets/1/endpoint**';
 
@@ -41,7 +41,7 @@ test.describe('@webgl @lifecycle stage failure and retry', () => {
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
 		await expect(page.getByRole('button', { name: 'Reset view' })).toHaveCount(0);
 		expect(await liveViewers(page)).toEqual({ canvases: 0, viewers: 0 });
-		expect(await probe.webglContexts()).toBe(0);
+		expect(await probe.contextsCreated()).toBe(0);
 		const attemptsBeforeRetry = attempts;
 		const observedBeforeRetry = (await probe.stageObservers()).observed;
 
@@ -59,7 +59,8 @@ test.describe('@webgl @lifecycle stage failure and retry', () => {
 		await expectReadyStage(page);
 		await expectCanonicalPose(page, ACONCAGUA.camera);
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-		expect(await probe.webglContexts()).toBe(1);
+		expect(await probe.contextsCreated()).toBe(1);
+		expect(await probe.contextsLive()).toBe(1);
 		expect(await probe.stageObservers()).toEqual({ observed: observedBeforeRetry, live: 1 });
 		await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Reset view' })).toBeEnabled();

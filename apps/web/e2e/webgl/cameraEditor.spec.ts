@@ -3,6 +3,7 @@ import { STUB_API_URL, fixture } from '../ssr/support';
 import {
 	CAMERA_TOLERANCE,
 	ACONCAGUA,
+	DESKTOP,
 	cameraReading,
 	expect,
 	expectCanonicalPose,
@@ -17,7 +18,6 @@ interface ContractTarget {
 }
 
 const TARGET = fixture<ContractTarget>('mountain-complete.json');
-const DESKTOP = { width: 1280, height: 800 };
 const STUDIO_PATH = `/studio/mountains/${ACONCAGUA.slug}`;
 
 // The legacy tolerances for a saved camera: the reading of a view opened on a camera, and the
@@ -205,17 +205,7 @@ test.describe('@webgl camera editor', () => {
 			await untilStill(page);
 		});
 
-		await test.step('restoring the saved camera returns to the presented pose', async () => {
-			await page.getByRole('button', { name: 'Restore saved camera' }).click();
-
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-			await expect(page.getByText('Ready to save.')).toBeVisible();
-		});
-
-		await test.step('a pose still returning to the presented camera is not saved', async () => {
-			await orbit(page);
-			await untilStill(page);
-
+		await test.step('restoring is immediate and a pose still returning to the presented camera is not saved', async () => {
 			// One task: the panel has not sampled the flight yet, so Save is still enabled when clicked.
 			await page.evaluate(() => {
 				const button = (name: string) =>

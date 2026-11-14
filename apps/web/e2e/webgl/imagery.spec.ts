@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import {
 	ACONCAGUA,
+	DESKTOP,
 	IMAGERY_HOST,
 	TERRAIN_HOST,
 	cameraReading,
@@ -10,7 +11,6 @@ import {
 	test
 } from './support/stage';
 
-const DESKTOP = { width: 1280, height: 800 };
 const PHONE = { width: 390, height: 844 };
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const IMAGERY_ENDPOINT = 'https://api.cesium.com/v1/assets/3954/endpoint**';
@@ -101,9 +101,9 @@ async function expectNoticeClearOfAttribution(page: Page, notice: Locator) {
 	}
 }
 
-async function expectSingleViewer(page: Page, probe: { webglContexts(): Promise<number> }) {
+async function expectSingleViewer(page: Page, probe: { contextsLive(): Promise<number> }) {
 	expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-	expect(await probe.webglContexts()).toBe(1);
+	expect(await probe.contextsLive()).toBe(1);
 }
 
 test.describe('@webgl stage imagery degradation', () => {

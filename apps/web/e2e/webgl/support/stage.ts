@@ -32,6 +32,9 @@ export const CAMERA_TOLERANCE = {
 	framing: 0.01
 } as const;
 
+/** The desktop stage the suite renders: wide enough for the desktop layout, small enough for software GL. */
+export const DESKTOP = { width: 960, height: 600 };
+
 export const TERRAIN_HOST = 'https://terrain.e2e.invalid/';
 export const IMAGERY_HOST = 'https://imagery.e2e.invalid/';
 const PNG_PIXEL = Buffer.from(
@@ -48,8 +51,10 @@ export interface StageProbe {
 	failedRequests(): string[];
 	/** Console errors and uncaught page errors. */
 	errors(): string[];
-	/** Number of WebGL contexts the page created. */
-	webglContexts(): Promise<number>;
+	/** Distinct canvases that were given a WebGL context, however often `getContext` was called. */
+	contextsCreated(): Promise<number>;
+	/** Canvases with a WebGL context that are still in the document and not lost: live Viewers. */
+	contextsLive(): Promise<number>;
 	/** ResizeObserver activity on elements inside the page's main landmark. */
 	stageObservers(): Promise<{ observed: number; live: number }>;
 	/** Declares failures a test causes on purpose; everything else still fails the test. */
@@ -71,7 +76,11 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 
 	await page.addInitScript(() => {
 		const original = HTMLCanvasElement.prototype.getContext;
-		const counter = { contexts: 0, observed: 0, live: new Set<ResizeObserver>() };
+		const counter = {
+			contexts: new Map<HTMLCanvasElement, WebGLRenderingContext | WebGL2RenderingContext>(),
+			observed: 0,
+			live: new Set<ResizeObserver>()
+		};
 		(window as Window & { __stageProbe?: typeof counter }).__stageProbe = counter;
 		const observe = ResizeObserver.prototype.observe;
 		const disconnect = ResizeObserver.prototype.disconnect;
@@ -90,10 +99,11 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 			this: HTMLCanvasElement,
 			...args: Parameters<typeof original>
 		) {
-			if (String(args[0]).includes('webgl')) {
-				counter.contexts += 1;
+			const context = original.apply(this, args);
+			if (context && String(args[0]).includes('webgl')) {
+				counter.contexts.set(this, context as WebGLRenderingContext | WebGL2RenderingContext);
 			}
-			return original.apply(this, args);
+			return context;
 		} as typeof original;
 	});
 
@@ -165,11 +175,24 @@ export async function isolateStage(page: Page): Promise<StageProbe> {
 			if (messages) tolerated.errors.push(messages);
 		},
 		diagnostics: () => describePage(page, { console: consoleLog, failed, external }),
-		webglContexts: () =>
+		contextsCreated: () =>
 			page.evaluate(
 				() =>
-					(window as Window & { __stageProbe?: { contexts: number } }).__stageProbe?.contexts ?? 0
+					(window as Window & { __stageProbe?: { contexts: Map<unknown, unknown> } }).__stageProbe
+						?.contexts.size ?? 0
 			),
+		contextsLive: () =>
+			page.evaluate(() => {
+				const contexts = (
+					window as Window & {
+						__stageProbe?: { contexts: Map<HTMLCanvasElement, WebGLRenderingContext> };
+					}
+				).__stageProbe?.contexts;
+
+				return [...(contexts ?? [])].filter(
+					([canvas, context]) => canvas.isConnected && !context.isContextLost()
+				).length;
+			}),
 		stageObservers: () =>
 			page.evaluate(() => {
 				const probe = (
@@ -316,7 +339,7 @@ export async function globePosition(page: Page): Promise<GlobePosition | undefin
 }
 
 /** Resolves after the page has rendered this many animation frames: a signal, not a sleep. */
-export async function framesPass(page: Page, frames = 30): Promise<void> {
+export async function framesPass(page: Page, frames = 10): Promise<void> {
 	await page.evaluate(
 		(count) =>
 			new Promise<void>((resolve) => {

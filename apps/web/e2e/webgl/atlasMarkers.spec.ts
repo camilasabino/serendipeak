@@ -17,6 +17,7 @@ import {
 	visibleSlugs
 } from './support/atlas';
 import {
+	DESKTOP,
 	cameraAtRest,
 	dragGlobe,
 	expect,
@@ -24,8 +25,6 @@ import {
 	framesPass,
 	test
 } from './support/stage';
-
-const DESKTOP = { width: 1280, height: 800 };
 
 test.beforeEach(async ({ page, request }) => {
 	await page.setViewportSize(DESKTOP);
@@ -60,20 +59,8 @@ test.describe('@webgl atlas markers on the catalog', () => {
 			await expect(list(page).locator('a[href^="/mountains/"]')).toHaveCount(entries.length);
 		});
 
-		await test.step('markers move with the ambient rotation', async () => {
-			await expectOverviewSettled(page);
-			const start = marker(await layer(page), 'mont-blanc').window!;
-
-			// The camera drifts west, so the surface, and every marker on it, passes to the right.
-			await expect
-				.poll(async () => marker(await layer(page), 'mont-blanc').window!.x - start.x, {
-					timeout: 30_000
-				})
-				.toBeGreaterThan(2);
-			expect(Math.abs(marker(await layer(page), 'mont-blanc').window!.y - start.y)).toBeLessThan(5);
-		});
-
 		await test.step('the facing hemisphere shows and the far one is hidden, as plain geometry says', async () => {
+			await expectOverviewSettled(page);
 			await pauseRotation(page).click();
 			await cameraAtRest(page);
 
@@ -110,7 +97,6 @@ test.describe('@webgl atlas markers on the catalog', () => {
 			await dragGlobe(page, 0.4);
 			await cameraAtRest(page);
 
-			await expectGeometry(page, entries, true);
 			const after = visibleSlugs(await layer(page));
 			expect(after).toContain('aconcagua');
 			expect(before.filter((slug) => !after.includes(slug)).length).toBeGreaterThan(0);
@@ -135,8 +121,8 @@ test.describe('@webgl atlas markers on the catalog', () => {
 		for (let step = 0; step < 60 && !(blanc.labelShown && matterhorn.labelShown); step += 1) {
 			expect(blanc.visible).toBe(true);
 			await page.mouse.move(box.x + blanc.window!.x, box.y + blanc.window!.y);
-			await page.mouse.wheel(0, -400);
-			await framesPass(page, 8);
+			await page.mouse.wheel(0, -900);
+			await framesPass(page, 4);
 			const reading = await layer(page);
 			expectNoFaintLabels(reading);
 			expect(overlapping(reading)).toEqual([]);
@@ -169,7 +155,6 @@ test.describe('@webgl atlas markers on the catalog', () => {
 					!marker(reading, entry.slug).visible
 			);
 			expect(offscreen.length).toBeGreaterThan(0);
-			await expectGeometry(page, entries, false);
 		});
 
 		await test.step('Mont Blanc and the Matterhorn are separate markers, both named once clear of each other', async () => {

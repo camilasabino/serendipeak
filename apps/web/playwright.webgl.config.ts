@@ -24,9 +24,14 @@ export default defineConfig({
 	// parallel, which leaves the shards badly unbalanced. One worker still runs the tests in order.
 	fullyParallel: true,
 	workers: 1,
-	timeout: 120_000,
+	timeout: 90_000,
+	// Ends the run, and writes its report, before the CI job's own limit would cancel it.
+	globalTimeout: 16 * 60_000,
 	expect: { timeout: 15_000 },
-	use: { baseURL: `http://127.0.0.1:${WEB_PORT}`, trace: 'retain-on-failure' },
+	use: {
+		baseURL: `http://127.0.0.1:${WEB_PORT}`,
+		trace: { mode: 'retain-on-failure', snapshots: false, screenshots: false }
+	},
 	projects: [{ name: 'webgl', grep: /@webgl/, use: { browserName: 'chromium' } }],
 	webServer: [
 		{

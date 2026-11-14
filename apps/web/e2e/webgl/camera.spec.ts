@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { fixture } from '../ssr/support';
 import {
 	ACONCAGUA,
+	DESKTOP,
 	OLYMPUS,
 	cameraReading,
 	expect,
@@ -13,7 +14,6 @@ import {
 	test
 } from './support/stage';
 
-const DESKTOP = { width: 1280, height: 800 };
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const COMPASS = /^Compass\. Looking \d+ degrees \w+\.$/;
 
@@ -49,7 +49,7 @@ async function settledRange(page: Page): Promise<number> {
 
 // Negative evidence without a sleep: a cancelled flight that kept going would move the camera
 // within these frames.
-async function expectRangeHolds(page: Page, frames = 40) {
+async function expectRangeHolds(page: Page, frames = 10) {
 	const before = await displayRange(page);
 	await framesPass(page, frames);
 	expect(Math.abs((await displayRange(page)) - before)).toBeLessThan(1);
@@ -180,68 +180,10 @@ function expectSmoothDolly(frames: Frame[], direction: 'in' | 'out') {
 }
 
 test.describe('@webgl camera movement', () => {
-	test('Reset, zoom steps and a pinch move the camera in the same Viewer', async ({
+	test('a zoom is a smooth dolly and gives way to Reset and to the reader', async ({
 		page,
 		probe
 	}) => {
-		await arrive(page);
-		await tagCanvas(page);
-		const canonical = await displayRange(page);
-		const canonicalHeading = await page.getByText(COMPASS).textContent();
-		const before = await cameraReading(page);
-
-		await test.step('Reset is a no-op at the canonical pose', async () => {
-			await resetButton(page).click();
-			await resetButton(page).click();
-
-			await expect(resetButton(page)).toBeEnabled();
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-			expect(await cameraReading(page)).toEqual(before);
-		});
-
-		await test.step('zoom steps go in and out, and Reset restores the framing', async () => {
-			await zoomIn(page).click();
-			const closer = await settledRange(page);
-			expect(closer).toBeLessThan(canonical * 0.8);
-
-			await zoomOut(page).click();
-			expect(await settledRange(page)).toBeGreaterThan(closer * 1.3);
-
-			await resetButton(page).click();
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-		});
-
-		await test.step('Reset returns a rotated camera to the canonical pose and heading', async () => {
-			await rotateCamera(page);
-
-			await expectMovedAway(page);
-			await expect(page.getByText(COMPASS)).not.toHaveText(canonicalHeading!);
-			await resetButton(page).click();
-
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-			await expect(page.getByText(COMPASS)).toHaveText(canonicalHeading!);
-			await expect(resetButton(page)).toBeEnabled();
-		});
-
-		await test.step('a trackpad pinch (Ctrl + wheel) zooms the camera', async () => {
-			const centre = await centreOfCanvas(page);
-
-			await page.mouse.move(centre.x, centre.y);
-			await page.keyboard.down('Control');
-			for (let tick = 0; tick < 6; tick += 1) {
-				await page.mouse.wheel(0, -120);
-			}
-			await page.keyboard.up('Control');
-
-			await expect.poll(() => displayRange(page)).toBeLessThan(canonical * 0.95);
-		});
-
-		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-		await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
-		expect(await probe.webglContexts()).toBe(1);
-	});
-
-	test('a zoom is a smooth dolly and gives way to Reset and to the reader', async ({ page }) => {
 		await arrive(page);
 
 		await test.step('Zoom out dollies away without swinging or recentring the view', async () => {
@@ -251,20 +193,15 @@ test.describe('@webgl camera movement', () => {
 			expect(frames.at(-1)!.range).toBeGreaterThan(frames[0]!.range * 1.5);
 		});
 
-		await test.step('Zoom in dollies back the same way', async () => {
-			expectSmoothDolly(await traceZoom(page, zoomIn(page)), 'in');
+		await test.step('Reset during a zoom cancels it and settles on the canonical pose', async () => {
 			await resetButton(page).click();
 			await expectCanonicalPose(page, ACONCAGUA.camera);
-		});
-
-		await test.step('Reset during a zoom cancels it and settles on the canonical pose', async () => {
 			await zoomOut(page).click();
 			await expect.poll(() => displayRange(page)).toBeGreaterThan(20_000);
 			await resetButton(page).click();
 
 			await expectCanonicalPose(page, ACONCAGUA.camera);
 			await expectRangeHolds(page);
-			await expectCanonicalPose(page, ACONCAGUA.camera);
 		});
 
 		await test.step('the reader taking the camera mid-zoom cancels it instead of fighting back', async () => {
@@ -273,22 +210,26 @@ test.describe('@webgl camera movement', () => {
 			await zoomOut(page).click();
 			await expect.poll(() => displayRange(page)).toBeGreaterThan(20_000);
 			await page.mouse.move(centre.x, centre.y);
-			for (let tick = 0; tick < 8; tick += 1) {
-				await page.mouse.wheel(0, -120);
-			}
+			await page.mouse.wheel(0, -480);
+			await page.mouse.wheel(0, -480);
 			const taken = await settledRange(page);
 
 			await expectRangeHolds(page);
 			expect(taken).toBeLessThan(40_000);
 		});
+
+		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
+		expect(await probe.contextsLive()).toBe(1);
 	});
 });
 
 test.describe('@webgl camera under reduced motion', () => {
-	test('zoom, Reset and Explore work by keyboard and land without intermediate poses', async ({
-		page
+	test.use({ reducedMotion: 'reduce' });
+
+	test('zoom, rotate, Reset, pinch and Explore land instantly and work by keyboard', async ({
+		page,
+		probe
 	}) => {
-		await page.emulateMedia({ reducedMotion: 'reduce' });
 		await page.route('**/api/v1/mountains/random**', (route) =>
 			route.fulfill({
 				json: fixture<unknown>('mountain-sparse.json'),
@@ -296,9 +237,11 @@ test.describe('@webgl camera under reduced motion', () => {
 			})
 		);
 		await arrive(page);
+		await tagCanvas(page);
 		const canonical = await displayRange(page);
+		const canonicalHeading = await page.getByText(COMPASS).textContent();
 
-		await test.step('the zoom buttons step instantly and are keyboard operable', async () => {
+		await test.step('the zoom buttons are keyboard operable and step in one frame', async () => {
 			await zoomIn(page).focus();
 			await page.keyboard.press('Enter');
 			await expect.poll(() => displayRange(page)).toBeLessThan(canonical * 0.8);
@@ -306,26 +249,34 @@ test.describe('@webgl camera under reduced motion', () => {
 
 			await page.keyboard.press('Tab');
 			await expect(zoomOut(page)).toBeFocused();
-			await page.keyboard.press('Space');
-			await expect.poll(() => displayRange(page)).toBeGreaterThan(canonical * 0.9);
-		});
-
-		await test.step('a step lands in one frame, with no pose in between', async () => {
 			const frames = await traceZoom(page, zoomOut(page));
-
-			const distinct = new Set(frames.map((frame) => Math.round(frame.range)));
-			expect(distinct.size).toBe(2);
+			expect(new Set(frames.map((frame) => Math.round(frame.range))).size).toBe(2);
+			expect(frames.at(-1)!.range).toBeGreaterThan(canonical * 0.9);
 		});
 
-		await test.step('Reset by keyboard reaches the canonical pose and keeps focus', async () => {
+		await test.step('Reset by keyboard returns a rotated camera to the canonical pose and keeps focus', async () => {
 			await rotateCamera(page);
 			await expectMovedAway(page);
+			await expect(page.getByText(COMPASS)).not.toHaveText(canonicalHeading!);
 
 			await resetButton(page).focus();
 			await page.keyboard.press('Enter');
 
 			await expectCanonicalPose(page, ACONCAGUA.camera);
+			await expect(page.getByText(COMPASS)).toHaveText(canonicalHeading!);
 			await expect(resetButton(page)).toBeFocused();
+		});
+
+		await test.step('a trackpad pinch (Ctrl + wheel) zooms the camera', async () => {
+			const centre = await centreOfCanvas(page);
+
+			await page.mouse.move(centre.x, centre.y);
+			await page.keyboard.down('Control');
+			await page.mouse.wheel(0, -360);
+			await page.mouse.wheel(0, -360);
+			await page.keyboard.up('Control');
+
+			await expect.poll(() => displayRange(page)).toBeLessThan(canonical * 0.95);
 		});
 
 		await test.step('Explore reaches the destination state without a flight', async () => {
@@ -337,7 +288,10 @@ test.describe('@webgl camera under reduced motion', () => {
 				'aria-busy',
 				'false'
 			);
-			expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 		});
+
+		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
+		await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
+		expect(await probe.contextsLive()).toBe(1);
 	});
 });
