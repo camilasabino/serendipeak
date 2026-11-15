@@ -34,7 +34,7 @@ export interface StageBindingOptions {
 }
 
 function reportInitializationFailure(error: unknown): void {
-	console.error('Cesium viewer failed to initialize', error);
+	console.error('Cesium scene failed', error);
 }
 
 export class StageBinding {

@@ -129,6 +129,7 @@ export class FakeGlobeScene implements GlobeScene {
 	private readonly scale = new ReplaceableSubscription<ScaleReading>(() => this.destroyed);
 	private readonly imagery = new Set<(degraded: boolean) => void>();
 	private interaction: (() => void) | undefined;
+	private failure: ((error: unknown) => void) | undefined;
 	private activation: ((activation: MarkerActivation) => void) | undefined;
 	private degraded = false;
 
@@ -179,6 +180,7 @@ export class FakeGlobeScene implements GlobeScene {
 			Number(this.scale.live) +
 			this.imagery.size +
 			Number(this.interaction !== undefined) +
+			Number(this.failure !== undefined) +
 			Number(this.activation !== undefined)
 		);
 	}
@@ -378,6 +380,23 @@ export class FakeGlobeScene implements GlobeScene {
 		});
 	}
 
+	subscribeFailure(listener: (error: unknown) => void): () => void {
+		if (this.destroyed) {
+			return () => {};
+		}
+		this.failure = listener;
+		return () => {
+			if (this.failure === listener) {
+				this.failure = undefined;
+			}
+		};
+	}
+
+	/** The render loop failed, as Cesium reports it. */
+	failRendering(error: unknown): void {
+		this.failure?.(error);
+	}
+
 	destroy(): void {
 		this.destroyCount += 1;
 		if (this.destroyCount > 1) {
@@ -388,6 +407,7 @@ export class FakeGlobeScene implements GlobeScene {
 		this.imagery.clear();
 		this.interaction = undefined;
 		this.activation = undefined;
+		this.failure = undefined;
 		this.stopOrbit();
 		for (const waiter of this.viewWaiters.splice(0)) {
 			waiter.resolve();

@@ -65,6 +65,7 @@ export class SceneSession {
 	private releaseImagery: () => void = noop;
 	private releaseInteraction: () => void = noop;
 	private releaseActivation: () => void = noop;
+	private releaseFailure: () => void = noop;
 	private stopScene: () => void = noop;
 	private imageryDegraded = false;
 	private settled = false;
@@ -255,6 +256,7 @@ export class SceneSession {
 			releaseImagery,
 			releaseInteraction,
 			releaseActivation,
+			releaseFailure,
 			stopScene
 		} = this;
 		this.releaseOrientation = noop;
@@ -262,6 +264,7 @@ export class SceneSession {
 		this.releaseImagery = noop;
 		this.releaseInteraction = noop;
 		this.releaseActivation = noop;
+		this.releaseFailure = noop;
 		this.stopScene = noop;
 
 		// The scene goes last: a retry must never meet a live Viewer because a release threw.
@@ -271,13 +274,15 @@ export class SceneSession {
 			['imagery subscription', releaseImagery],
 			['interaction subscription', releaseInteraction],
 			['marker activation subscription', releaseActivation],
+			['render failure subscription', releaseFailure],
 			['scene', stopScene]
 		]);
 	}
 
-	// A throw while wiring a scene that exists must still end in the failed state; stop() releases
-	// whatever was wired and destroys the scene, so a retry never meets a second live Viewer.
-	private failSetup(error: unknown): void {
+	// A scene that exists but cannot be wired, or stops rendering later, must still end in the failed
+	// state; stop() releases whatever was wired and destroys the scene, so a retry never meets a
+	// second live Viewer. A late or repeated report finds the session stopped and does nothing.
+	private failScene(error: unknown): void {
 		if (this.stopped) {
 			return;
 		}
@@ -294,7 +299,7 @@ export class SceneSession {
 		try {
 			this.wire(ready);
 		} catch (error) {
-			this.failSetup(error);
+			this.failScene(error);
 		}
 	}
 
@@ -320,6 +325,7 @@ export class SceneSession {
 			}
 		});
 		this.releaseInteraction = ready.subscribeInteraction(() => this.interacted());
+		this.releaseFailure = ready.subscribeFailure((error) => this.failScene(error));
 		const onMarkerActivate = this.onMarkerActivate;
 		if (onMarkerActivate) {
 			this.releaseActivation = ready.subscribeMarkerActivation((activation) => {
@@ -356,7 +362,7 @@ export class SceneSession {
 		try {
 			outcome = await ready.showOverview(atlasOverviewLook(atlas, this.stage), false);
 		} catch (error) {
-			this.failSetup(error);
+			this.failScene(error);
 			return;
 		}
 		if (!this.isCurrent(ticket)) {
@@ -532,7 +538,7 @@ export class SceneSession {
 		try {
 			cinematic = ready.prepareReveal(next);
 		} catch (error) {
-			this.failSetup(error);
+			this.failScene(error);
 			return;
 		}
 		if (cinematic) {

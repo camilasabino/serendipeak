@@ -145,8 +145,13 @@ interface FakeViewer {
 		imageryLayers: { remove(): void };
 		screenSpaceCameraController: { zoomEventTypes: unknown };
 		preUpdate: { addEventListener(listener: () => void): () => void };
+		renderError: {
+			addEventListener(listener: (scene: unknown, error: unknown) => void): () => void;
+		};
 		canvas: EventTarget;
 	};
+	/** Cesium raising its renderError event, as its render loop does when a frame throws. */
+	raiseRenderError(error: unknown): void;
 	screenSpaceEventHandler: { removeInputAction(type: number): void };
 	isDestroyed(): boolean;
 	destroy: ReturnType<typeof vi.fn>;
@@ -162,6 +167,7 @@ function fakeViewer(
 	destroyViewer: () => void = () => {}
 ): FakeViewer {
 	let destroyed = false;
+	const renderErrorListeners = new Set<(scene: unknown, error: unknown) => void>();
 	return {
 		camera: { positionCartographic: { height: 5000 } },
 		resize: () => {},
@@ -169,7 +175,18 @@ function fakeViewer(
 			imageryLayers: { remove: () => {} },
 			screenSpaceCameraController: { zoomEventTypes: [3] },
 			preUpdate: { addEventListener: () => removeFrameListener },
+			renderError: {
+				addEventListener: (listener) => {
+					renderErrorListeners.add(listener);
+					return () => renderErrorListeners.delete(listener);
+				}
+			},
 			canvas: new EventTarget()
+		},
+		raiseRenderError: (error) => {
+			for (const listener of [...renderErrorListeners]) {
+				listener({}, error);
+			}
 		},
 		screenSpaceEventHandler: { removeInputAction },
 		isDestroyed: () => destroyed,
@@ -757,5 +774,86 @@ describe('CesiumGlobeScene ambient orbit', () => {
 		expect(heard).toHaveBeenCalledTimes(2);
 		expect(cesium.orbits.every((orbit) => !orbit.running)).toBe(true);
 		expect(scene.canOrbit()).toBe(false);
+	});
+});
+
+describe('CesiumGlobeScene render failures', () => {
+	const settle = () => Promise.resolve();
+
+	beforeEach(() => {
+		vi.stubGlobal('requestAnimationFrame', () => 1);
+		vi.stubGlobal('cancelAnimationFrame', () => {});
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	it('reports a render loop error after the failing frame has returned', async () => {
+		const scene = await create();
+		const failed = vi.fn();
+		const failure = new Error('Expected width to be greater than 0, actual value was 0');
+		scene.subscribeFailure(failed);
+
+		cesium.viewer.raiseRenderError(failure);
+		expect(failed).not.toHaveBeenCalled();
+		await settle();
+
+		expect(failed).toHaveBeenCalledExactlyOnceWith(failure);
+		expect(cesium.viewer.destroy).not.toHaveBeenCalled();
+	});
+
+	it('reports only the first of several render errors', async () => {
+		const scene = await create();
+		const failed = vi.fn();
+		scene.subscribeFailure(failed);
+		const first = new Error('first');
+
+		cesium.viewer.raiseRenderError(first);
+		cesium.viewer.raiseRenderError(new Error('second'));
+		await settle();
+		cesium.viewer.raiseRenderError(new Error('third'));
+		await settle();
+
+		expect(failed).toHaveBeenCalledExactlyOnceWith(first);
+	});
+
+	it('reports nothing once released, replaced or destroyed', async () => {
+		const scene = await create();
+		const released = vi.fn();
+		const replaced = vi.fn();
+		const current = vi.fn();
+		scene.subscribeFailure(released)();
+		scene.subscribeFailure(replaced);
+		scene.subscribeFailure(current);
+
+		cesium.viewer.raiseRenderError(new Error('boom'));
+		await settle();
+		expect(released).not.toHaveBeenCalled();
+		expect(replaced).not.toHaveBeenCalled();
+		expect(current).toHaveBeenCalledOnce();
+	});
+
+	it('drops an error that was already on its way when the scene is destroyed', async () => {
+		const scene = await create();
+		const failed = vi.fn();
+		scene.subscribeFailure(failed);
+
+		cesium.viewer.raiseRenderError(new Error('boom'));
+		scene.destroy();
+		await settle();
+		cesium.viewer.raiseRenderError(new Error('late'));
+		await settle();
+
+		expect(failed).not.toHaveBeenCalled();
+		expect(scene.subscribeFailure(failed)).toBeTypeOf('function');
+		cesium.viewer.raiseRenderError(new Error('after'));
+		await settle();
+		expect(failed).not.toHaveBeenCalled();
 	});
 });

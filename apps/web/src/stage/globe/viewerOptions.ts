@@ -8,7 +8,9 @@ export const VIEWER_OPTIONS = {
 	infoBox: false,
 	selectionIndicator: false,
 	navigationHelpButton: false,
-	fullscreenButton: false
+	fullscreenButton: false,
+	// Cesium's own panel prints the raw DeveloperError; the scene reports render failures instead.
+	showRenderLoopErrors: false
 } as const;
 
 interface CameraEventBinding {

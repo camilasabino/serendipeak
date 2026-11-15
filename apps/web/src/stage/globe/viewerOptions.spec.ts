@@ -43,6 +43,10 @@ describe('VIEWER_OPTIONS', () => {
 		});
 	});
 
+	it('keeps Cesium from drawing its technical render error panel', () => {
+		expect(VIEWER_OPTIONS.showRenderLoopErrors).toBe(false);
+	});
+
 	it('does not touch the credit display', () => {
 		expect(VIEWER_OPTIONS).not.toHaveProperty('creditContainer');
 		expect(VIEWER_OPTIONS).not.toHaveProperty('creditViewport');

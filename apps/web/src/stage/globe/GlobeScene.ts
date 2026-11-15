@@ -58,6 +58,12 @@ export interface GlobeScene extends Destroyable {
 	/** A new subscription replaces the previous one. */
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void;
 	subscribeImageryHealth(listener: (degraded: boolean) => void): () => void;
+	/**
+	 * The scene can no longer render: its render loop failed and does not come back. Heard at most
+	 * once, never from inside a call into the scene, and never after destroy. A new subscription
+	 * replaces the previous one.
+	 */
+	subscribeFailure(listener: (error: unknown) => void): () => void;
 	/** A new subscription replaces the previous one. */
 	subscribeScale(listener: (reading: ScaleReading | undefined) => void): () => void;
 	resetView(): ResetResult;

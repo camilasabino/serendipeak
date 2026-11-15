@@ -168,7 +168,7 @@ describe('SceneSession lifecycle ownership', () => {
 
 	it('destroys the scene once and releases every subscription on repeated stop', async () => {
 		const { session, scene } = await readySession();
-		expect(scene.liveSubscriptions).toBe(4);
+		expect(scene.liveSubscriptions).toBe(5);
 
 		session.stop();
 		session.stop();
@@ -693,6 +693,112 @@ describe('SceneSession synchronous setup failures', () => {
 
 		expect(onError).not.toHaveBeenCalled();
 		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+	});
+});
+
+describe('SceneSession render failures', () => {
+	const FAILED = {
+		status: 'failed',
+		failure: 'initialization-failed',
+		message: 'The 3D globe could not be loaded.'
+	};
+
+	it('ends in the controlled failure and destroys the scene when rendering stops', async () => {
+		const onError = vi.fn();
+		const { store, factory } = setup({ onError });
+		const scene = factory.resolve(0);
+		await flush();
+		const failure = new Error('Expected width to be greater than 0, actual value was 0');
+
+		scene.failRendering(failure);
+
+		expect(store.getSnapshot().state).toEqual(FAILED);
+		expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+		expect(scene.destroyCount).toBe(1);
+		expect(scene.liveSubscriptions).toBe(0);
+	});
+
+	it('clears what the failed scene had published and reports the end of the session', async () => {
+		const { store, scene, observer } = await observed();
+		scene.emitScale({ label: '1 km', meters: 1000, widthPx: 90 });
+		scene.emitOrientation(30);
+		expect(store.getSnapshot()).toMatchObject({ headingDegrees: 30, settled: true });
+
+		scene.failRendering(new Error('boom'));
+
+		expect(store.getSnapshot()).toMatchObject({
+			headingDegrees: undefined,
+			scale: undefined,
+			settled: false,
+			free: false
+		});
+		expect(observer.log.at(-1)).toBe('ended');
+	});
+
+	it('fails a scene that is still revealing its first mountain', async () => {
+		const { store, scene } = await observed({ holdShow: true, holdViewReady: true });
+
+		scene.failRendering(new Error('boom'));
+		scene.pendingShows[0]?.resolve({ status: 'arrived' });
+		await flush();
+
+		expect(store.getSnapshot().state).toEqual(FAILED);
+	});
+
+	it('reports a repeated failure once', async () => {
+		const onError = vi.fn();
+		const { factory } = setup({ onError });
+		const scene = factory.resolve(0);
+		await flush();
+
+		scene.failRendering(new Error('first'));
+		scene.failRendering(new Error('second'));
+
+		expect(onError).toHaveBeenCalledOnce();
+		expect(scene.destroyCount).toBe(1);
+	});
+
+	it('ignores a failure that arrives after stop', async () => {
+		const onError = vi.fn();
+		const { store, factory, session } = setup({ onError });
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.stop();
+		scene.failRendering(new Error('late'));
+
+		expect(onError).not.toHaveBeenCalled();
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(scene.destroyCount).toBe(1);
+	});
+
+	it('does not let the failed scene move its replacement', async () => {
+		const { store, factory, open, session } = setup();
+		const scene = factory.resolve(0);
+		await flush();
+		scene.failRendering(new Error('boom'));
+
+		const next = open();
+		const replacement = factory.resolve(1);
+		await flush();
+		scene.failRendering(new Error('stale'));
+
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(replacement.destroyCount).toBe(0);
+		expect(session.resetView()).toBe('unavailable');
+		next.stop();
+	});
+
+	it('destroys the scene even when a release throws while failing', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { store, factory } = setup();
+		const scene = factory.resolve(0, { throwOnRelease: { scale: new Error('scale') } });
+		await flush();
+
+		scene.failRendering(new Error('boom'));
+
+		expect(scene.destroyCount).toBe(1);
+		expect(store.getSnapshot().state).toEqual(FAILED);
 	});
 });
 
@@ -1611,12 +1717,12 @@ describe('SceneSession marker activation', () => {
 	it('subscribes nothing when nobody listens', async () => {
 		const { scene } = await readySession();
 
-		expect(scene.liveSubscriptions).toBe(4);
+		expect(scene.liveSubscriptions).toBe(5);
 	});
 
 	it('ends the subscription when it stops, so a retry never doubles it', async () => {
 		const { session, scene, onMarkerActivate } = await onAtlas();
-		expect(scene.liveSubscriptions).toBe(5);
+		expect(scene.liveSubscriptions).toBe(6);
 
 		session.stop();
 		scene.activate(OPEN_FITZ_ROY);

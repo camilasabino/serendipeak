@@ -360,6 +360,43 @@ describe('StageBinding retry', () => {
 		expect(factory.log).toEqual(['create:1', 'destroy:1', 'create:2']);
 	});
 
+	it('offers retry after the globe stops rendering and destroys the failed scene first', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, store, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		scene.failRendering(new Error('Expected width to be greater than 0, actual value was 0'));
+		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
+		binding.retry();
+
+		expect(factory.log).toEqual(['create:1', 'destroy:1', 'create:2']);
+		const replacement = factory.resolve(1);
+		await flush();
+		scene.failRendering(new Error('stale'));
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(replacement.shown.map(({ target }) => target.slug)).toEqual(['aconcagua']);
+		binding.dispose();
+	});
+
+	it('logs the render failure for development without changing the visitor state', async () => {
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, store, mount } = setup();
+		mount();
+		const scene = factory.resolve(0);
+		await flush();
+		const failure = new Error('render failed');
+
+		scene.failRendering(failure);
+
+		expect(log).toHaveBeenCalledWith('Cesium scene failed', failure);
+		expect(store.getSnapshot().state).toMatchObject({
+			status: 'failed',
+			message: 'The 3D globe could not be loaded.'
+		});
+	});
+
 	it('serves a second failure and allows another retry', async () => {
 		const { factory, store, binding } = await failedBinding();
 

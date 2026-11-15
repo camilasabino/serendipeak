@@ -94,6 +94,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseGlobePosition: () => void = noop;
 	private releaseAtlasLayer: () => void = noop;
 	private releaseInteraction: () => void = noop;
+	private releaseFailure: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
 	private destroyed = false;
 
@@ -509,6 +510,41 @@ export class CesiumGlobeScene implements GlobeScene {
 		return this.imagery.subscribe(listener);
 	}
 
+	// Cesium stops its render loop at the first error. The report leaves the frame that failed
+	// first, so the owner can destroy the Viewer without tearing it down from inside its own render.
+	subscribeFailure(listener: (error: unknown) => void): () => void {
+		this.releaseFailure();
+		this.releaseFailure = noop;
+		if (this.destroyed) {
+			return noop;
+		}
+
+		let live = true;
+		const removeListener = this.viewer.scene.renderError.addEventListener((_scene, error) => {
+			if (!live) {
+				return;
+			}
+			live = false;
+			queueMicrotask(() => {
+				if (!this.destroyed) {
+					listener(error);
+				}
+			});
+		});
+		const release = () => {
+			live = false;
+			removeListener();
+		};
+		this.releaseFailure = release;
+
+		return () => {
+			release();
+			if (this.releaseFailure === release) {
+				this.releaseFailure = noop;
+			}
+		};
+	}
+
 	readCamera(): CameraReading | undefined {
 		return this.director.busy() ? undefined : this.sampleCamera();
 	}
@@ -523,12 +559,14 @@ export class CesiumGlobeScene implements GlobeScene {
 		const releaseGlobePosition = this.releaseGlobePosition;
 		const releaseAtlasLayer = this.releaseAtlasLayer;
 		const releaseInteraction = this.releaseInteraction;
+		const releaseFailure = this.releaseFailure;
 		const releaseOrientation = this.releaseOrientation;
 		const releaseScale = this.releaseScale;
 		this.releaseCameraReading = noop;
 		this.releaseGlobePosition = noop;
 		this.releaseAtlasLayer = noop;
 		this.releaseInteraction = noop;
+		this.releaseFailure = noop;
 		this.releaseOrientation = noop;
 		this.releaseScale = noop;
 
@@ -538,6 +576,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['globe position', releaseGlobePosition],
 			['atlas layer reading', releaseAtlasLayer],
 			['interaction listeners', releaseInteraction],
+			['render failure listener', releaseFailure],
 			['orbit', () => this.orbit.stop()],
 			['view-ready waiter', () => this.viewReadyWaiter?.settle()],
 			['imagery monitor', () => this.imagery.release()],
