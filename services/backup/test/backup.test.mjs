@@ -101,6 +101,7 @@ function environmentFor(sandbox, overrides) {
 		PATH: `${sandbox.bin}:/usr/bin:/bin`,
 		TMPDIR: sandbox.scratch,
 		STATE: sandbox.state,
+		FAKE_WEEKDAY: '1',
 		...baseEnv,
 		...overrides
 	};
