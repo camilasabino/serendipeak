@@ -3,6 +3,7 @@ import type { Mountain } from '../api/contract';
 import { FakeMountainApi } from '../api/test-support/FakeMountainApi';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { loadMountainPage } from './loadMountainPage';
+import { isPermanentRedirect } from './pageModel';
 
 const mountain = contractFixture('mountain-complete.json') as Mountain;
 
@@ -81,4 +82,59 @@ describe('loadMountainPage', () => {
 			expect(api.getMountainCalls).toEqual([slug]);
 		}
 	);
+
+	describe('a slug the mountain used to have', () => {
+		const renamed: Mountain = { ...mountain, slug: 'aconcagua-renamed' };
+
+		it('redirects to the current address of the mountain', async () => {
+			const api = new FakeMountainApi({ mountain: { kind: 'found', mountain: renamed } });
+
+			const load = await loadMountainPage(api, 'aconcagua');
+
+			expect(load).toEqual({
+				destination: '/mountains/aconcagua-renamed',
+				cacheControl: 'no-store'
+			});
+			expect(api.getMountainCalls).toEqual(['aconcagua']);
+		});
+
+		it('is not a page load, so no page is rendered for the old address', async () => {
+			const api = new FakeMountainApi({ mountain: { kind: 'found', mountain: renamed } });
+
+			expect(isPermanentRedirect(await loadMountainPage(api, 'aconcagua'))).toBe(true);
+			expect(
+				isPermanentRedirect(
+					await loadMountainPage(
+						new FakeMountainApi({ mountain: { kind: 'found', mountain } }),
+						mountain.slug
+					)
+				)
+			).toBe(false);
+		});
+
+		it('never builds a destination outside the mountain paths of this site', async () => {
+			const api = new FakeMountainApi({
+				mountain: { kind: 'found', mountain: { ...mountain, slug: '//evil.example' } }
+			});
+
+			const load = await loadMountainPage(api, 'aconcagua');
+
+			expect(load).toEqual({
+				destination: '/mountains/%2F%2Fevil.example',
+				cacheControl: 'no-store'
+			});
+		});
+
+		it('still maps an unknown slug and a failing API as before', async () => {
+			expect(
+				await loadMountainPage(new FakeMountainApi({ mountain: { kind: 'not-found' } }), 'old-peak')
+			).toEqual({ model: { kind: 'error', reason: 'not-found' }, status: 404 });
+			expect(
+				await loadMountainPage(
+					new FakeMountainApi({ mountain: { kind: 'unreachable' } }),
+					'old-peak'
+				)
+			).toEqual({ model: { kind: 'error', reason: 'unreachable' }, status: 503 });
+		});
+	});
 });

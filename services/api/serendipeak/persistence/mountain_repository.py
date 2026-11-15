@@ -32,6 +32,16 @@ class DjangoMountainRepository:
 
         return None if record is None else to_mountain(record)
 
+    def find_public_by_former_slug(self, slug: str) -> Mountain | None:
+        with translate_database_errors():
+            record = (
+                with_geography(MountainRecord.objects.select_related("image"))
+                .filter(former_slugs__slug=slug, status__in=_PUBLIC_STATUS_VALUES)
+                .first()
+            )
+
+        return None if record is None else to_mountain(record)
+
     def list_active_candidates(self) -> Sequence[CandidateMountain]:
         with translate_database_errors():
             # Code point order, so the order does not depend on the database collation.

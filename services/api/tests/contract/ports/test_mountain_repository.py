@@ -4,6 +4,7 @@ from serendipeak.catalog.bootstrap.ports import CatalogMountain
 from serendipeak.catalog.entities import CandidateMountain, Coordinates, MountainStatus
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
+from serendipeak.persistence.models import MountainSlugAliasRecord
 from serendipeak.persistence.mountain_repository import DjangoMountainRepository
 from tests.support.catalog import (
     CREATED_AT,
@@ -41,12 +42,16 @@ CATALOG = (ACONCAGUA, WITHOUT_DIMENSIONS, INACTIVE_WITHOUT_IMAGE, BARE, DRAFT)
 @pytest.fixture(params=["in-memory", "django"])
 def repository_holding(request):
     if request.param == "in-memory":
-        return lambda *entries: InMemoryMountainRepository(entry.mountain for entry in entries)
+        return lambda *entries, former_slugs=None: InMemoryMountainRepository(
+            (entry.mountain for entry in entries), former_slugs
+        )
 
     request.getfixturevalue("db")
 
-    def arrange(*entries):
+    def arrange(*entries, former_slugs=None):
         DjangoCatalogStore().load(catalog_of(*entries))
+        for slug, mountain_id in (former_slugs or {}).items():
+            MountainSlugAliasRecord.objects.create(slug=slug, mountain_id=mountain_id)
         return DjangoMountainRepository()
 
     return arrange
@@ -267,3 +272,35 @@ def test_the_index_skips_the_region_query_when_no_mountain_has_a_region(
 def test_an_empty_index_is_one_query(django_assert_num_queries):
     with django_assert_num_queries(1):
         assert DjangoMountainRepository().list_active_index() == ()
+
+
+FORMER_SLUGS = {
+    "old-aconcagua": ACONCAGUA.mountain.id,
+    "old-pit": INACTIVE_WITHOUT_IMAGE.mountain.id,
+    "old-draft": DRAFT.mountain.id,
+}
+
+
+@pytest.mark.parametrize(
+    ("former_slug", "entry"),
+    [("old-aconcagua", ACONCAGUA), ("old-pit", INACTIVE_WITHOUT_IMAGE)],
+)
+def test_a_former_slug_finds_the_active_or_inactive_mountain_under_its_current_slug(
+    repository_holding, former_slug, entry
+):
+    repository = repository_holding(*CATALOG, former_slugs=FORMER_SLUGS)
+
+    assert repository.find_public_by_former_slug(former_slug) == entry.mountain
+
+
+def test_a_former_slug_of_a_draft_mountain_is_not_found(repository_holding):
+    repository = repository_holding(*CATALOG, former_slugs=FORMER_SLUGS)
+
+    assert repository.find_public_by_former_slug("old-draft") is None
+
+
+@pytest.mark.parametrize("slug", ["aconcagua", "unknown-peak", "Old-Aconcagua", "old-aconc"])
+def test_only_an_exact_former_slug_is_found_as_one(repository_holding, slug):
+    repository = repository_holding(*CATALOG, former_slugs=FORMER_SLUGS)
+
+    assert repository.find_public_by_former_slug(slug) is None

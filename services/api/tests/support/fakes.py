@@ -143,8 +143,11 @@ class InMemoryCatalogStore:
 
 
 class InMemoryMountainRepository:
-    def __init__(self, mountains=()):
+    """former_slugs maps a former slug to the id of the mountain that had it."""
+
+    def __init__(self, mountains=(), former_slugs=None):
         self._mountains = {mountain.slug: mountain for mountain in mountains}
+        self._former_slugs = {} if former_slugs is None else former_slugs
 
     def find_public_by_slug(self, slug):
         mountain = self._mountains.get(slug)
@@ -152,6 +155,14 @@ class InMemoryMountainRepository:
             return None
 
         return mountain
+
+    def find_public_by_former_slug(self, slug):
+        mountain_id = self._former_slugs.get(slug)
+        for mountain in self._mountains.values():
+            if mountain.id == mountain_id and mountain.status in PUBLIC_STATUSES:
+                return mountain
+
+        return None
 
     def list_active_candidates(self):
         return tuple(
@@ -410,16 +421,17 @@ class InMemoryMountainLocationStore:
 class InMemoryMountainCreationStore:
     """Holds the reference data of tests.support.geography and the given regions."""
 
-    def __init__(self, mountains=(), regions=()):
+    def __init__(self, mountains=(), regions=(), former_slugs=None):
         self._mountains = {mountain.slug: mountain for mountain in mountains}
         self._regions = {region.id: region for region in regions}
+        self._former_slugs = {} if former_slugs is None else former_slugs
         self.calls = 0
 
     def create_draft(self, mountain, image):
         self.calls += 1
         reference = geography_reference()
         wanted = set(mountain.country_codes)
-        if mountain.slug in self._mountains:
+        if mountain.slug in self._mountains or mountain.slug in self._former_slugs:
             raise SlugTaken(mountain.slug)
         if mountain.continent_code not in reference.continents:
             raise UnknownContinent(mountain.continent_code)
@@ -481,9 +493,10 @@ def _prospective_image(current, image, update):
 class InMemoryMountainUpdateStore:
     """Holds the reference data of tests.support.geography and the given regions."""
 
-    def __init__(self, mountains=(), regions=()):
+    def __init__(self, mountains=(), regions=(), former_slugs=None):
         self._mountains = {mountain.id: mountain for mountain in mountains}
         self._regions = {region.id: region for region in regions}
+        self._former_slugs = {} if former_slugs is None else former_slugs
         self.calls = 0
 
     def update(self, mountain_id, update, gate, image=None):
@@ -495,6 +508,8 @@ class InMemoryMountainUpdateStore:
         reference = geography_reference()
         wanted = set(update.country_codes)
         if any(m.slug == update.slug and m.id != mountain_id for m in self._mountains.values()):
+            raise SlugTaken(update.slug)
+        if self._former_slugs.get(update.slug, mountain_id) != mountain_id:
             raise SlugTaken(update.slug)
         if update.continent_code not in reference.continents:
             raise UnknownContinent(update.continent_code)
@@ -529,6 +544,10 @@ class InMemoryMountainUpdateStore:
             raise PublicationRejected(violations)
 
         self._mountains[mountain_id] = prospective
+        if prospective.slug != current.slug:
+            self._former_slugs.pop(prospective.slug, None)
+            if current.status is not MountainStatus.DRAFT:
+                self._former_slugs[current.slug] = mountain_id
 
         return prospective
 

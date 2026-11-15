@@ -7,7 +7,7 @@ from serendipeak.catalog.new_mountain import NewMountain, NewPhotograph
 from serendipeak.catalog.regions import UnknownRegion
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.mapping import to_mountain
-from serendipeak.persistence.models import MountainRecord
+from serendipeak.persistence.models import MountainRecord, MountainSlugAliasRecord
 from serendipeak.persistence.mountain_creation_store import DjangoMountainCreationStore
 from tests.support.catalog import catalog_mountain, catalog_of, photograph_media, primary_image
 from tests.support.fakes import InMemoryMountainCreationStore
@@ -43,6 +43,9 @@ def new_mountain(**overrides):
     return NewMountain(**fields)
 
 
+FORMER_SLUG = "former-peak"
+
+
 class Arrangement:
     def __init__(self, store, mountain_of):
         self.store = store
@@ -52,11 +55,14 @@ class Arrangement:
 @pytest.fixture(params=["in-memory", "django"])
 def arranged(request):
     if request.param == "in-memory":
-        store = InMemoryMountainCreationStore([TAKEN.mountain], REGIONS)
+        store = InMemoryMountainCreationStore(
+            [TAKEN.mountain], REGIONS, former_slugs={FORMER_SLUG: TAKEN.mountain.id}
+        )
         return Arrangement(store, store.mountain)
 
     request.getfixturevalue("db")
     DjangoCatalogStore().load(catalog_of(catalog_mountain("taken-peak", region=PATH)))
+    MountainSlugAliasRecord.objects.create(slug=FORMER_SLUG, mountain_id=TAKEN.mountain.id)
 
     def stored(slug):
         record = MountainRecord.objects.filter(slug=slug).first()
@@ -131,6 +137,14 @@ def test_a_taken_slug_is_refused_and_leaves_the_mountain_as_it_was(arranged):
 
     assert refused.value.slug == "taken-peak"
     assert arranged.mountain_of("taken-peak") == before
+
+
+def test_a_former_slug_of_another_mountain_is_refused_and_nothing_is_stored(arranged):
+    with pytest.raises(SlugTaken) as refused:
+        arranged.store.create_draft(new_mountain(slug=FORMER_SLUG), IMAGE)
+
+    assert refused.value.slug == FORMER_SLUG
+    assert arranged.mountain_of(FORMER_SLUG) is None
 
 
 def test_a_store_that_refused_can_still_create(arranged):

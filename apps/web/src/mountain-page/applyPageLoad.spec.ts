@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applyPageLoad } from './applyPageLoad';
+import { applyPageLoad, applyPermanentRedirect } from './applyPageLoad';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import type { Mountain } from '../api/contract';
-import { failedLoad, NO_STORE, previewLoad } from './pageModel';
+import { failedLoad, NO_STORE, permanentRedirect, previewLoad } from './pageModel';
 
 function fakeResponse() {
 	return { statusCode: 200, setHeader: vi.fn() };
@@ -37,5 +37,16 @@ describe('applyPageLoad', () => {
 		expect(response.statusCode).toBe(200);
 		expect(response.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
 		expect(response.setHeader).toHaveBeenCalledWith('X-Robots-Tag', 'noindex');
+	});
+});
+
+describe('applyPermanentRedirect', () => {
+	it('answers with a 308 to the destination and a bounded cache lifetime', () => {
+		const response = { setHeader: vi.fn() };
+
+		const result = applyPermanentRedirect(response, permanentRedirect('/mountains/aconcagua'));
+
+		expect(result).toEqual({ redirect: { destination: '/mountains/aconcagua', statusCode: 308 } });
+		expect(response.setHeader).toHaveBeenCalledExactlyOnceWith('Cache-Control', 'no-store');
 	});
 });

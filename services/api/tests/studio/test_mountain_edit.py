@@ -119,9 +119,10 @@ def test_a_new_slug_moves_the_mountain_to_its_new_address(catalog, editor_client
 
 def test_a_mountain_on_the_site_warns_that_its_slug_is_its_public_address(catalog, editor_client):
     for slug in ("aconcagua", "old-peak"):
-        assert "Changing the slug changes its public address" in text_of(
-            editor_client.get(edit_url(slug))
-        )
+        body = text_of(editor_client.get(edit_url(slug)))
+
+        assert "Changing the slug changes its public address" in body
+        assert "Links to the old address keep working: they redirect to the new one" in body
     assert "Changing the slug changes" not in text_of(editor_client.get(edit_url("draft-peak")))
 
 
@@ -132,6 +133,35 @@ def test_the_public_slug_policy_is_unchanged_a_published_slug_can_still_be_edite
 
     assert response["Location"] == detail_url("aconcagua-peak")
     assert stored("aconcagua-peak").status == MountainStatus.ACTIVE.value
+
+
+def test_the_old_slug_of_a_mountain_on_the_site_cannot_be_taken_by_another_mountain(
+    catalog, editor_client
+):
+    save(editor_client, "aconcagua", slug="aconcagua-peak")
+
+    response = save(editor_client, "draft-peak", slug="aconcagua")
+
+    assert response.status_code == 200
+    assert "Slug: Another mountain already uses or has used this slug." in text_of(response)
+    assert stored("draft-peak").name_en == "Draft Peak"
+
+
+def test_a_mountain_on_the_site_may_take_back_its_old_slug(catalog, editor_client):
+    save(editor_client, "aconcagua", slug="aconcagua-peak")
+
+    response = save(editor_client, "aconcagua-peak", slug="aconcagua")
+
+    assert response["Location"] == detail_url("aconcagua")
+    assert stored("aconcagua").status == MountainStatus.ACTIVE.value
+
+
+def test_the_slug_a_draft_gave_up_is_free_for_another_mountain(catalog, editor_client):
+    save(editor_client, "draft-peak", slug="renamed-peak")
+
+    response = save(editor_client, "old-peak", slug="draft-peak")
+
+    assert response["Location"] == detail_url("draft-peak")
 
 
 def test_every_error_is_shown_and_the_stored_mountain_is_untouched(catalog, editor_client):
@@ -152,7 +182,7 @@ def test_a_slug_another_mountain_uses_is_refused_and_the_rest_is_kept(catalog, e
     body = text_of(response)
 
     assert response.status_code == 200
-    assert "Slug: Another mountain already uses this slug." in body
+    assert "Slug: Another mountain already uses or has used this slug." in body
     assert 'value="Renamed"' in body
     assert stored("draft-peak").name_en == "Draft Peak"
 

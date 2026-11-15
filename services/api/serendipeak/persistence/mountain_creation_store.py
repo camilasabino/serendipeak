@@ -21,6 +21,7 @@ from serendipeak.persistence.models import (
     MountainRecord,
     MountainRegionRecord,
 )
+from serendipeak.persistence.mountain_slugs import slug_is_unavailable
 
 
 class DjangoMountainCreationStore:
@@ -79,7 +80,7 @@ def _image_record(record: MountainRecord, image: PrimaryImage) -> MountainImageR
 def _refusal(mountain: NewMountain) -> ApplicationError | None:
     """The reason a creation was refused, in the order the port promises, or None when the
     integrity error has another cause."""
-    if MountainRecord.objects.filter(slug=mountain.slug).exists():
+    if slug_is_unavailable(mountain.slug):
         return SlugTaken(mountain.slug)
 
     if not ContinentRecord.objects.filter(pk=mountain.continent_code).exists():

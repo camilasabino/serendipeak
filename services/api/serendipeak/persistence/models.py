@@ -347,6 +347,34 @@ class MountainRecord(models.Model):
         return self.slug
 
 
+class MountainSlugAliasRecord(models.Model):
+    """A slug a public mountain held before its current one, kept so its old address still
+    resolves. Rows are written by the mountain table's slug trigger, never by application code,
+    so no writer of the slug can forget one; the same trigger and the one on this table keep a
+    slug from being both current for one mountain and former for another."""
+
+    slug = models.TextField(primary_key=True)
+    mountain = models.ForeignKey(
+        MountainRecord, on_delete=models.PROTECT, related_name="former_slugs"
+    )
+    created_at = models.DateTimeField(db_default=Now())
+
+    class Meta:
+        db_table = "mountain_slug_alias"
+        constraints = [
+            CheckConstraint(
+                condition=Q(slug__regex=SLUG_PATTERN), name="mountain_slug_alias_slug_format"
+            ),
+            CheckConstraint(
+                condition=~Q(slug__in=sorted(RESERVED_SLUGS)),
+                name="mountain_slug_alias_slug_not_reserved",
+            ),
+        ]
+
+    def __str__(self):
+        return self.slug
+
+
 class MountainCountryRecord(models.Model):
     pk = models.CompositePrimaryKey("mountain_id", "country_id")
     # The primary key serves the lookups by mountain and the index below those by country, so

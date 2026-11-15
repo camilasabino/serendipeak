@@ -1,5 +1,11 @@
 import type { ServerResponse } from 'node:http';
-import type { ErrorModel, MountainModel, PageLoad, PageModel } from './pageModel';
+import type {
+	ErrorModel,
+	MountainModel,
+	PageLoad,
+	PageModel,
+	PermanentRedirect
+} from './pageModel';
 
 export type MountainPageModel = MountainModel | ErrorModel;
 
@@ -21,4 +27,13 @@ export function applyPageLoad<M extends PageModel>(
 	}
 
 	return { props: { model: load.model } };
+}
+
+export function applyPermanentRedirect(
+	response: Pick<ServerResponse, 'setHeader'>,
+	redirect: PermanentRedirect
+): { redirect: { destination: string; statusCode: 308 } } {
+	response.setHeader('Cache-Control', redirect.cacheControl);
+
+	return { redirect: { destination: redirect.destination, statusCode: 308 } };
 }

@@ -28,7 +28,7 @@ describe('loadMountainPreviewPage', () => {
 
 		const load = await loadMountainPreviewPage(api, mountain.slug, undefined);
 
-		expect(load.model).toEqual({ kind: 'mountain', mountain });
+		expect(load).toMatchObject({ model: { kind: 'mountain', mountain } });
 		expect(load).not.toHaveProperty('noindex');
 		expect(api.getMountainPreviewCalls).toEqual([]);
 	});
@@ -43,7 +43,7 @@ describe('loadMountainPreviewPage', () => {
 
 		expect(api.getMountainPreviewCalls).toEqual([]);
 		expect(api.getMountainCalls).toEqual(['other-peak']);
-		expect(load.model).toEqual({ kind: 'error', reason: 'not-found' });
+		expect(load).toMatchObject({ model: { kind: 'error', reason: 'not-found' } });
 	});
 
 	it('falls back to the public page when the preview answers for another slug', async () => {
@@ -55,7 +55,7 @@ describe('loadMountainPreviewPage', () => {
 
 		const load = await loadMountainPreviewPage(api, mountain.slug, grant);
 
-		expect(load.model).toEqual({ kind: 'error', reason: 'not-found' });
+		expect(load).toMatchObject({ model: { kind: 'error', reason: 'not-found' } });
 		expect(load).not.toHaveProperty('noindex');
 	});
 
@@ -68,8 +68,18 @@ describe('loadMountainPreviewPage', () => {
 
 		const load = await loadMountainPreviewPage(api, mountain.slug, grant);
 
-		expect(load.model).toEqual({ kind: 'error', reason: 'not-found' });
-		expect(load.status).toBe(404);
+		expect(load).toMatchObject({ model: { kind: 'error', reason: 'not-found' } });
+		expect(load).toMatchObject({ status: 404 });
 		expect(api.getMountainCalls).toEqual([mountain.slug]);
+	});
+
+	it('redirects a former slug through the public page, since a preview never answers for it', async () => {
+		const api = new FakeMountainApi({
+			mountain: { kind: 'found', mountain: { ...mountain, slug: 'renamed-peak' } }
+		});
+
+		const load = await loadMountainPreviewPage(api, mountain.slug, undefined);
+
+		expect(load).toMatchObject({ destination: '/mountains/renamed-peak' });
 	});
 });

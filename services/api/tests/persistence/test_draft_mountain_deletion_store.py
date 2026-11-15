@@ -104,10 +104,10 @@ def test_a_refusal_rolls_back_only_the_deletion_inside_a_callers_transaction(sto
     assert rows_of(ACTIVE.mountain.id)[0] == 1
 
 
-def test_a_deletion_is_a_lock_two_dependent_deletes_the_orms_four_protect_reads_and_the_delete(
+def test_a_deletion_is_a_lock_two_dependent_deletes_the_orms_five_protect_reads_and_the_delete(
     store, django_assert_num_queries
 ):
-    with django_assert_num_queries(14) as captured:
+    with django_assert_num_queries(15) as captured:
         store.delete_draft(ID)
 
     statements = [query["sql"] for query in captured.captured_queries]

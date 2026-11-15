@@ -1,7 +1,7 @@
 import type { MountainApi, MountainPreviewApi } from '../api/MountainApi';
 import type { PreviewGrant } from '../editorial/preview/previewGrant';
 import { loadMountainPage } from './loadMountainPage';
-import { previewLoad, type PageLoad } from './pageModel';
+import { previewLoad, type PageLoad, type PermanentRedirect } from './pageModel';
 import type { MountainPageModel } from './applyPageLoad';
 
 // A grant counts only for the page it was made for. Anything else, an expired or refused token
@@ -11,7 +11,7 @@ export async function loadMountainPreviewPage(
 	api: MountainApi & MountainPreviewApi,
 	slug: string,
 	grant: PreviewGrant | undefined
-): Promise<PageLoad<MountainPageModel>> {
+): Promise<PageLoad<MountainPageModel> | PermanentRedirect> {
 	if (grant?.slug === slug) {
 		const result = await api.getMountainPreview(grant.token);
 		if (result.kind === 'found' && result.mountain.slug === slug) {

@@ -27,6 +27,7 @@ from serendipeak.persistence.models import (
     MountainRecord,
     MountainRegionRecord,
 )
+from serendipeak.persistence.mountain_slugs import slug_is_unavailable
 
 
 class DjangoMountainUpdateStore:
@@ -195,7 +196,7 @@ def _remove_image(mountain_id: UUID) -> bool:
 def _refusal(mountain_id: UUID, update: MountainUpdate) -> ApplicationError | None:
     """The reason an update was refused, in the order the port promises, or None when the
     integrity error has another cause."""
-    if MountainRecord.objects.filter(slug=update.slug).exclude(pk=mountain_id).exists():
+    if slug_is_unavailable(update.slug, mountain_id):
         return SlugTaken(update.slug)
 
     if not ContinentRecord.objects.filter(pk=update.continent_code).exists():

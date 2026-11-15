@@ -120,7 +120,7 @@ def test_a_creation_without_countries_skips_their_insert_and_the_region_read(
 
 
 def test_a_refusal_adds_only_the_reads_that_explain_it(store, django_assert_max_num_queries):
-    with django_assert_max_num_queries(13):
+    with django_assert_max_num_queries(14):
         with pytest.raises(UnknownCountries):
             store.create_draft(new_mountain(country_codes=("ZZ",)), IMAGE)
 

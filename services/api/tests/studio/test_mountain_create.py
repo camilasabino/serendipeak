@@ -159,7 +159,7 @@ def test_a_taken_slug_is_a_field_error_and_the_typed_values_stay(editor_client, 
     body = text_of(response)
 
     assert response.status_code == 200
-    assert "Slug: Another mountain already uses this slug." in body
+    assert "Slug: Another mountain already uses or has used this slug." in body
     assert 'value="Another Peak"' in body
     assert MountainRecord.objects.count() == 1
 

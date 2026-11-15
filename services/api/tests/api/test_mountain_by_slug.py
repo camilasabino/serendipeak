@@ -12,6 +12,7 @@ from serendipeak.catalog.entities import MountainStatus
 from serendipeak.errors import ApplicationError, InfrastructureError
 from serendipeak.httpapi.views import MountainBySlugView, RandomMountainView, TodaysMountainView
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
+from serendipeak.persistence.models import MountainRecord
 from tests.support.catalog import (
     CREATED_AT,
     UPDATED_AT,
@@ -70,14 +71,68 @@ def test_non_ascii_text_is_served_unescaped(catalog, client):
     assert "Bjørn Christian Tørrissen".encode() in response.content
 
 
-def test_a_lookup_is_three_queries_and_an_unknown_slug_one(
+def test_a_lookup_is_three_queries_and_an_unknown_slug_two(
     catalog, client, django_assert_num_queries
 ):
     with django_assert_num_queries(3):
         assert client.get("/api/v1/mountains/aconcagua").status_code == 200
 
-    with django_assert_num_queries(1):
+    with django_assert_num_queries(2):
         assert client.get("/api/v1/mountains/unknown-peak").status_code == 404
+
+
+def rename(slug, new_slug):
+    MountainRecord.objects.filter(slug=slug).update(slug=new_slug)
+
+
+def test_a_former_slug_serves_the_mountain_under_its_current_slug_with_the_v1_schema(
+    catalog, client
+):
+    rename("aconcagua", "aconcagua-renamed")
+
+    response = client.get("/api/v1/mountains/aconcagua")
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == CONTENT_TYPE
+    assert "Cache-Control" not in response
+    expected = served_by_serendipeak(
+        load_fixture("mountain-complete.json"), settings.MEDIA_PUBLIC_BASE_URL, media_of
+    )
+    assert body(response) == {**expected, "slug": "aconcagua-renamed"}
+    assert body(response) == body(client.get("/api/v1/mountains/aconcagua-renamed"))
+
+
+def test_a_former_slug_is_one_hop_from_the_current_one_after_consecutive_renames(catalog, client):
+    rename("aconcagua", "second-peak")
+    rename("second-peak", "third-peak")
+
+    for slug in ("aconcagua", "second-peak", "third-peak"):
+        assert body(client.get(f"/api/v1/mountains/{slug}"))["slug"] == "third-peak"
+
+
+def test_a_mountain_that_took_its_slug_back_is_served_by_it_without_a_detour(catalog, client):
+    rename("aconcagua", "second-peak")
+    rename("second-peak", "aconcagua")
+
+    assert body(client.get("/api/v1/mountains/aconcagua"))["slug"] == "aconcagua"
+    assert body(client.get("/api/v1/mountains/second-peak"))["slug"] == "aconcagua"
+
+
+def test_a_former_slug_is_four_queries(catalog, client, django_assert_num_queries):
+    rename("aconcagua", "aconcagua-renamed")
+
+    with django_assert_num_queries(4):
+        assert client.get("/api/v1/mountains/aconcagua").status_code == 200
+
+
+def test_the_former_slug_of_an_unlisted_mountain_is_served_but_not_that_of_a_draft(catalog, client):
+    MountainRecord.objects.filter(slug="mount-olympus").update(status="inactive")
+    rename("mount-olympus", "olympus")
+    rename("draft-peak", "renamed-draft")
+
+    assert body(client.get("/api/v1/mountains/mount-olympus"))["slug"] == "olympus"
+    assert client.get("/api/v1/mountains/draft-peak").status_code == 404
+    assert client.get("/api/v1/mountains/renamed-draft").status_code == 404
 
 
 @pytest.mark.parametrize(

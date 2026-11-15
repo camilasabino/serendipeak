@@ -32,6 +32,14 @@ class MountainRepository(Protocol):
         Returns None for an unknown slug and for a draft mountain.
         """
 
+    def find_public_by_former_slug(self, slug: str) -> Mountain | None:
+        """Return the active or inactive mountain that once had slug as its public slug, with its
+        image, under its current slug.
+
+        Returns None when no mountain ever had slug, for a draft mountain, and for the slug of a
+        mountain that has taken it back, which find_public_by_slug answers.
+        """
+
     def list_active_candidates(self) -> Sequence[CandidateMountain]:
         """Return the id and slug of every active mountain, ordered by slug code points.
 
@@ -192,10 +200,10 @@ class MountainCreationStore(Protocol):
         country codes are one link. The returned mountain is what was stored, with its
         continent, countries and region path.
 
-        Raises SlugTaken when a mountain already has the slug, UnknownContinent for a continent
-        code, UnknownRegion for a region id and UnknownCountries for country codes that
-        reference data does not hold, and writes nothing. When several apply, the first of
-        them in this order is raised.
+        Raises SlugTaken when a mountain already has the slug or once had it as its public slug,
+        UnknownContinent for a continent code, UnknownRegion for a region id and
+        UnknownCountries for country codes that reference data does not hold, and writes
+        nothing. When several apply, the first of them in this order is raised.
         """
 
 
@@ -223,11 +231,15 @@ class MountainUpdateStore(Protocol):
         gate receives the mountain as it would be stored, whatever its status, and a non-empty
         answer rejects the update.
 
-        Raises UnknownMountain, SlugTaken (the slug of another mountain), UnknownContinent,
-        UnknownRegion and UnknownCountries for references that reference data does not hold,
-        MountainHasNoPhotograph for a credit given to a mountain without a photograph row, and
-        PublicationRejected with the gate's answer, and writes nothing. When several apply,
-        the first of them in this order is raised.
+        A change of slug on an active or inactive mountain keeps the old slug as one of its former
+        slugs, for good, in the same write; a draft's old slug is released. A mountain may take
+        back one of its own former slugs.
+
+        Raises UnknownMountain, SlugTaken (the current or former slug of another mountain),
+        UnknownContinent, UnknownRegion and UnknownCountries for references that reference data
+        does not hold, MountainHasNoPhotograph for a credit given to a mountain without a
+        photograph row, and PublicationRejected with the gate's answer, and writes nothing. When
+        several apply, the first of them in this order is raised.
         """
 
 

@@ -460,3 +460,67 @@ def test_the_gate_refuses_removing_the_photograph_of_a_public_mountain(arranged,
 
     assert PublicationViolation.PRIMARY_IMAGE_MISSING in rejected.value.violations
     assert arranged.mountain_of(mountain) == before
+
+
+def test_the_old_slug_of_a_renamed_public_mountain_is_never_taken_by_another_mountain(arranged):
+    arranged.update(slug="renamed-peak")
+
+    with pytest.raises(SlugTaken) as refused:
+        arranged.update(OTHER, slug="target-peak")
+
+    assert refused.value.slug == "target-peak"
+
+
+def test_the_old_slug_of_a_renamed_inactive_mountain_is_never_taken_by_another_mountain(arranged):
+    arranged.update(INACTIVE, slug="renamed-old-peak")
+
+    with pytest.raises(SlugTaken):
+        arranged.update(OTHER, slug="old-peak")
+
+
+def test_every_slug_a_public_mountain_left_stays_reserved(arranged):
+    arranged.update(slug="second-peak")
+    arranged.update(slug="third-peak")
+
+    for slug in ("target-peak", "second-peak"):
+        with pytest.raises(SlugTaken):
+            arranged.update(OTHER, slug=slug)
+
+
+def test_a_public_mountain_may_take_back_a_slug_it_left_and_reserves_the_one_it_leaves(arranged):
+    arranged.update(slug="second-peak")
+
+    restored = arranged.update(slug="target-peak")
+
+    assert restored.slug == "target-peak"
+    for slug in ("second-peak",):
+        with pytest.raises(SlugTaken):
+            arranged.update(OTHER, slug=slug)
+
+    arranged.update(slug="third-peak")
+    with pytest.raises(SlugTaken):
+        arranged.update(OTHER, slug="target-peak")
+
+
+def test_the_slug_a_draft_leaves_is_released(arranged):
+    arranged.update(DRAFT, slug="renamed-draft")
+
+    taken = arranged.update(OTHER, slug="draft-peak")
+
+    assert taken.slug == "draft-peak"
+
+
+def test_a_refused_rename_reserves_nothing(arranged):
+    with pytest.raises(PublicationRejected):
+        arranged.update(slug="renamed-peak", remove_photograph=True)
+
+    assert arranged.mountain_of(TARGET) == TARGET
+    assert arranged.update(OTHER, slug="renamed-peak").slug == "renamed-peak"
+
+
+def test_an_update_that_keeps_the_slug_reserves_nothing(arranged):
+    arranged.update(name="Renamed Target")
+    arranged.update(name="Target Peak")
+
+    with pytest.raises(SlugTaken):
+        arranged.update(OTHER, slug="target-peak")

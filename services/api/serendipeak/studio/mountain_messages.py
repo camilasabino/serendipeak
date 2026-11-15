@@ -32,7 +32,7 @@ CREDIT_NOT_REVIEWED = (
     "The author and license are those of the photograph being replaced. Update them, or confirm "
     "that they also describe the new photograph."
 )
-SLUG_TAKEN = "Another mountain already uses this slug."
+SLUG_TAKEN = "Another mountain already uses or has used this slug."
 CONTINENT_UNKNOWN = "This continent is not in the reference data. Reload the page and choose again."
 REGION_UNKNOWN = "This region no longer exists. Reload the page and choose again."
 COUNTRIES_UNKNOWN = "A selected country is not in the reference data: {}."
@@ -47,8 +47,9 @@ CAMERA_RESET_REQUIRED = (
     "saved coordinates."
 )
 SLUG_CHANGES_PUBLIC_ADDRESS = (
-    "This mountain is on the site. Changing the slug changes its public address, and links to the "
-    "old address stop working."
+    "This mountain is on the site. Changing the slug changes its public address. Links to the old "
+    "address keep working: they redirect to the new one, and no other mountain can ever use the "
+    "old slug."
 )
 
 SUMMARY_MESSAGES = {
