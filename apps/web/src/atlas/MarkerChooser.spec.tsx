@@ -30,6 +30,13 @@ function links(html: string) {
 }
 
 describe('MarkerChooser', () => {
+	it('takes focus on the dialog itself, so no entry looks chosen before one is', () => {
+		const html = render();
+
+		expect(html).toMatch(/<div role="dialog"[^>]*tabindex="-1"/);
+		expect(html).not.toMatch(/<a[^>]*(autofocus|tabindex)/i);
+	});
+
 	it('is a dialog named by its visible title', () => {
 		const html = render();
 		const [, labelledBy] = /role="dialog" aria-labelledby="([^"]+)"/.exec(html) ?? [];

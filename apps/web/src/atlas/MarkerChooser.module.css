@@ -17,6 +17,11 @@
 	line-height: 1.35;
 }
 
+/* Only the dialog's own programmatic focus: its controls keep their focus rings. */
+.chooser:focus-visible {
+	outline: none;
+}
+
 /* The header never shrinks, so a list cut short scrolls beneath a close button that stays in view. */
 .header {
 	flex: none;

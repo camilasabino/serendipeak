@@ -27,14 +27,13 @@ interface MarkerChooserProps {
 /**
  * The mountains a press on the globe could have meant, as plain links to their pages, listed by
  * name with their elevations, beside the point pressed and inside the stage: a list longer than
- * the room scrolls under a header that keeps the close button in view. Non-modal like the navigation help: it takes focus so the keyboard and screen
+ * the room scrolls under a header that keeps the close button in view. Non-modal like the navigation help: it takes focus, on the dialog and not on an entry, so the keyboard and screen
  * readers find it, and any press, wheel or focus elsewhere, or Escape, dismisses it. Its owner
  * dismisses it when the stage changes shape, which the stage already observes.
  */
 export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 	const rootRef = useRef<HTMLDivElement>(null);
 	const optionsRef = useRef<HTMLUListElement>(null);
-	const firstRef = useRef<HTMLAnchorElement>(null);
 	const titleId = useId();
 	const pressBeganInside = useRef(false);
 	const [position, setPosition] = useState<ChooserPlacement | undefined>(undefined);
@@ -78,10 +77,12 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 		);
 	}, [choice]);
 
-	// Only once placed: until then it is hidden, and a hidden link cannot take focus.
+	// Only once placed: until then it is hidden, and a hidden element cannot take focus. Focus lands
+	// on the dialog itself, not a link: a link focused by script after a touch can draw the keyboard
+	// focus ring, which reads as a mountain already chosen. Tab still reaches the controls in order.
 	useEffect(() => {
 		if (position) {
-			firstRef.current?.focus({ preventScroll: true });
+			rootRef.current?.focus({ preventScroll: true });
 		}
 	}, [position]);
 
@@ -129,6 +130,7 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 			ref={rootRef}
 			role="dialog"
 			aria-labelledby={titleId}
+			tabIndex={-1}
 			className={styles.chooser}
 			style={
 				position
@@ -154,10 +156,9 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 				</button>
 			</div>
 			<ul ref={optionsRef} className={styles.options}>
-				{mountains.map((mountain, index) => (
+				{mountains.map((mountain) => (
 					<li key={mountain.slug}>
 						<Link
-							ref={index === 0 ? firstRef : undefined}
 							href={mountainHref(mountain.slug)}
 							prefetch={false}
 							className={styles.option}

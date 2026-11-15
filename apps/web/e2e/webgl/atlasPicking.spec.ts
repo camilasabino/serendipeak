@@ -41,7 +41,7 @@ const ENTRY = /^.+ \d[\d,]* m$/;
 
 /**
  * Every entry names its mountain and elevation, and the names run alphabetically, whatever the
- * order of distance from the press; the first is the one that took focus.
+ * order of distance from the press.
  */
 async function expectAlphabetical(page: Page): Promise<string[]> {
 	const links = chooser(page).getByRole('link');
@@ -53,8 +53,6 @@ async function expectAlphabetical(page: Page): Promise<string[]> {
 	);
 	const collator = new Intl.Collator('en', { sensitivity: 'base' });
 	expect(names).toEqual([...names].sort((a, b) => collator.compare(a, b)));
-	await expect(links.first()).toBeFocused();
-
 	return names;
 }
 
@@ -316,7 +314,7 @@ test.describe('@webgl atlas marker chooser', () => {
 		await overviewAtRest(page);
 		const everest = (await shown(page, 'mount-everest')).window;
 
-		await test.step('the Himalaya merge: alphabetical with elevations, focus on the first, Escape closes', async () => {
+		await test.step('the Himalaya merge: alphabetical with elevations, focus on the dialog, Tab walks it, Escape closes', async () => {
 			const reading = await layer(page);
 			const merged = reading.markers.filter(
 				(entry) => entry.visible && distance(entry.window!, everest) < MOUSE_CLEARANCE
@@ -333,8 +331,14 @@ test.describe('@webgl atlas marker chooser', () => {
 			await expect(
 				dialog.getByRole('link', { name: /^Mount Everest \d[\d,]* m$/ })
 			).toHaveAttribute('href', '/mountains/mount-everest');
+			await expect(dialog).toBeFocused();
+			await expect(links.first()).not.toHaveCSS('outline-style', 'solid');
 			await page.keyboard.press('Tab');
-			await expect(links.nth(1)).toBeFocused();
+			await expect(
+				dialog.getByRole('button', { name: 'Close the list of mountains' })
+			).toBeFocused();
+			await page.keyboard.press('Tab');
+			await expect(links.first()).toBeFocused();
 
 			await page.keyboard.press('Escape');
 			await expect(dialog).toHaveCount(0);
@@ -408,7 +412,7 @@ test.describe('@webgl atlas marker chooser', () => {
 			await clickCanvas(page, inside);
 			await expect(chooser(page)).toBeVisible();
 			await expectBeside(page, await onPage(page, inside));
-			await expect(chooser(page).getByRole('link').first()).toBeFocused();
+			await expect(chooser(page)).toBeFocused();
 
 			await page.keyboard.press('Escape');
 
