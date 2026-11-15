@@ -1,3 +1,4 @@
+import { formatElevation } from '../formatElevation';
 import type { MountainPageModel } from './applyPageLoad';
 import type { FailureReason } from './pageModel';
 
@@ -29,14 +30,22 @@ export function describeFailure(reason: FailureReason): ErrorContent {
 	return reason === 'not-found' ? MOUNTAIN_NOT_FOUND : LOAD_FAILED;
 }
 
+export const SITE_NAME = 'SerendiPeak';
+export const SITE_DESCRIPTION =
+	'Discover one mountain every day, with real photography, interactive 3D terrain and curated geography, then explore the collection in the atlas.';
+
 export function documentTitle(title: string): string {
-	return `${title} · SerendiPeak`;
+	return `${title} · ${SITE_NAME}`;
 }
 
 export function pageTitle(model: MountainPageModel): string {
 	switch (model.kind) {
 		case 'mountain':
-			return documentTitle(model.preview ? `Preview: ${model.mountain.name}` : model.mountain.name);
+			return documentTitle(
+				model.preview
+					? `Preview: ${model.mountain.name}`
+					: `${model.mountain.name} (${formatElevation(model.mountain.elevationMeters)})`
+			);
 		case 'daily':
 			return documentTitle(`Today's discovery: ${model.daily.mountain.name}`);
 		case 'error':

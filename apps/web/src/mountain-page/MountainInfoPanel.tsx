@@ -5,9 +5,17 @@ import { formatElevation } from '../formatElevation';
 import { formatCoordinates, formatCountries, formatRegion } from './format';
 import { googleMapsUrl } from './googleMaps';
 import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
+import type { MountainShare } from './shareLink';
+import { ShareControl } from './ShareControl';
 import styles from './MountainInfoPanel.module.css';
 
-export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
+interface MountainInfoPanelProps {
+	mountain: Mountain;
+	/** Present only where the mountain's permanent address may be shared. */
+	share?: MountainShare;
+}
+
+export function MountainInfoPanel({ mountain, share }: MountainInfoPanelProps) {
 	const { continent, coordinates, countries, region, summary } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
 
@@ -35,6 +43,7 @@ export function MountainInfoPanel({ mountain }: { mountain: Mountain }) {
 					</ExternalLink>
 				</Fact>
 			</Facts>
+			{share && <ShareControl key={mountain.slug} title={mountain.name} share={share} />}
 		</section>
 	);
 }

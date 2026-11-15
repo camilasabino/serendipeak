@@ -37,6 +37,13 @@ export function readSiteOrigin(
 	return url.origin;
 }
 
+/** The configured origin as a page prop: serializable, and `null` when none is published. */
+export function siteOriginProp(
+	env: SiteEnv = { SITE_ORIGIN: process.env.SITE_ORIGIN }
+): string | null {
+	return readSiteOrigin(env) ?? null;
+}
+
 export function canonicalUrl(path: string, env: SiteEnv): string | null {
 	const origin = readSiteOrigin(env);
 

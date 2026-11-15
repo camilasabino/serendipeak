@@ -171,7 +171,11 @@ describe('sheet', () => {
 		const html = render(complete);
 
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
-		expect(textsOf(html, 'button')).toEqual(['Explore another→', 'View photo fullscreen']);
+		expect(textsOf(html, 'button')).toEqual([
+			'Copy link',
+			'Explore another→',
+			'View photo fullscreen'
+		]);
 	});
 });
 
@@ -207,5 +211,18 @@ describe('atlas link', () => {
 		['a draft preview', false, true]
 	])('is absent from %s', (_name, daily, preview) => {
 		expect(render(complete, daily, preview)).not.toContain('Back to atlas');
+	});
+});
+
+describe('share control', () => {
+	it.each([
+		['a mountain page', false],
+		['the daily page', true]
+	])('is offered on %s', (_name, daily) => {
+		expect(textsOf(render(complete, daily), 'button')).toContain('Copy link');
+	});
+
+	it('is never offered on a draft preview', () => {
+		expect(textsOf(render(complete, false, true), 'button')).not.toContain('Copy link');
 	});
 });

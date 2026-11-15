@@ -50,7 +50,11 @@ describe.each([
 
 	it('renders the loader as the only stage content before the globe mounts', () => {
 		expect(countOf(html, 'canvas')).toBe(0);
-		expect(textsOf(html, 'button')).toEqual(['Explore another→', 'View photo fullscreen']);
+		expect(textsOf(html, 'button')).toEqual([
+			'Copy link',
+			'Explore another→',
+			'View photo fullscreen'
+		]);
 		expect(html).not.toMatch(/role="alert"|cesium/i);
 	});
 });

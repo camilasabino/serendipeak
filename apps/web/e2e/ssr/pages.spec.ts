@@ -12,6 +12,7 @@ import {
 interface Mountain {
 	slug: string;
 	name: string;
+	elevationMeters: number;
 }
 
 const daily = fixture<{ mountain: Mountain }>('daily-mountain.json');
@@ -109,7 +110,9 @@ test.describe('permalink page', () => {
 			const html = await response.text();
 
 			expect(response.status()).toBe(200);
-			expect(titleOf(html)).toBe(`${mountain.name} · SerendiPeak`);
+			expect(titleOf(html)).toBe(
+				`${mountain.name} (${mountain.elevationMeters.toLocaleString('en-US')} m) · SerendiPeak`
+			);
 			expect(headingsOf(html)).toEqual([mountain.name]);
 		});
 	}

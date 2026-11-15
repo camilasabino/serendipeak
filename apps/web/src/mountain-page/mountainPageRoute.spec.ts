@@ -45,6 +45,18 @@ describe('the mountain route', () => {
 		expect(response.statusCode).toBe(200);
 	});
 
+	it('passes the configured site origin to the page, or null', async () => {
+		vi.stubEnv('SITE_ORIGIN', 'https://serendipeak.example');
+		expect(await request('aconcagua-renamed').result).toHaveProperty(
+			'props.siteOrigin',
+			'https://serendipeak.example'
+		);
+
+		vi.stubEnv('SITE_ORIGIN', '');
+		expect(await request('aconcagua-renamed').result).toHaveProperty('props.siteOrigin', null);
+		vi.unstubAllEnvs();
+	});
+
 	it.each(['Aconcagua', 'a--b', 'today', '..'])(
 		'keeps a malformed slug (%s) a 404 without asking the API',
 		async (slug) => {

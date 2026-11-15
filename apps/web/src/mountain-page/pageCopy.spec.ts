@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import { formatElevation } from '../formatElevation';
 import { describeFailure, pageTitle } from './pageCopy';
 import type { FailureReason } from './pageModel';
 
@@ -9,7 +10,9 @@ const daily = contractFixture('daily-mountain.json') as DailyMountain;
 
 describe('pageTitle', () => {
 	it('titles a permalink with the mountain name', () => {
-		expect(pageTitle({ kind: 'mountain', mountain })).toBe(`${mountain.name} · SerendiPeak`);
+		expect(pageTitle({ kind: 'mountain', mountain })).toBe(
+			`${mountain.name} (${formatElevation(mountain.elevationMeters)}) · SerendiPeak`
+		);
 	});
 
 	it("titles the daily page with today's discovery", () => {

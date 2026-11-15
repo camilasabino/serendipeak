@@ -5,15 +5,22 @@ import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
+import { mountainShare } from './socialMetadata';
 import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
 
 interface MountainViewProps {
 	mountain: Mountain;
 	daily: boolean;
 	preview?: boolean;
+	siteOrigin?: string | null;
 }
 
-export function MountainView({ mountain, daily, preview = false }: MountainViewProps) {
+export function MountainView({
+	mountain,
+	daily,
+	preview = false,
+	siteOrigin = null
+}: MountainViewProps) {
 	const { primaryImage, sources } = mountain;
 
 	return (
@@ -24,7 +31,10 @@ export function MountainView({ mountain, daily, preview = false }: MountainViewP
 				</p>
 			)}
 			{daily && <p className={styles.eyebrow}>{DAILY_EYEBROW}</p>}
-			<MountainInfoPanel mountain={mountain} />
+			<MountainInfoPanel
+				mountain={mountain}
+				share={preview ? undefined : mountainShare(mountain.slug, siteOrigin)}
+			/>
 			<div className={styles.explore}>
 				<ExploreControl slug={mountain.slug} placement="panel" />
 			</div>

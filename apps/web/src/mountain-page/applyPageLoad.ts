@@ -11,6 +11,8 @@ export type MountainPageModel = MountainModel | ErrorModel;
 
 export interface MountainPageProps {
 	model: MountainPageModel;
+	/** Absent when the site origin is not configured; no absolute URL is then published. */
+	siteOrigin: string | null;
 }
 
 export function applyPageLoad<M extends PageModel>(

@@ -1,11 +1,10 @@
-import { documentTitle } from '../mountain-page/pageCopy';
+import { SITE_DESCRIPTION, documentTitle } from '../mountain-page/pageCopy';
 
 export const ABOUT_PATH = '/about';
 export const ABOUT_LINK_LABEL = 'About';
 
 export const ABOUT_TITLE = documentTitle('About');
-export const ABOUT_DESCRIPTION =
-	'Discover one mountain every day, with real photography, interactive 3D terrain and curated geography, then explore the collection in the atlas.';
+export const ABOUT_DESCRIPTION = SITE_DESCRIPTION;
 
 export const ABOUT_EYEBROW = 'About SerendiPeak';
 export const ABOUT_HEADING = 'Discover one mountain every day.';

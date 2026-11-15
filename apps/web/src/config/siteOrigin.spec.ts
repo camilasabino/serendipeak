@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canonicalUrl, readSiteOrigin } from './siteOrigin';
+import { canonicalUrl, readSiteOrigin, siteOriginProp } from './siteOrigin';
 
 describe('readSiteOrigin', () => {
 	it.each([
@@ -34,5 +34,16 @@ describe('canonicalUrl', () => {
 			'https://serendipeak.example/atlas'
 		);
 		expect(canonicalUrl('/atlas', {})).toBeNull();
+	});
+});
+
+describe('siteOriginProp', () => {
+	it('is the origin, or null for an unset or invalid value', () => {
+		expect(siteOriginProp({ SITE_ORIGIN: 'https://serendipeak.example/' })).toBe(
+			'https://serendipeak.example'
+		);
+		expect(siteOriginProp({})).toBeNull();
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		expect(siteOriginProp({ SITE_ORIGIN: 'serendipeak.example' })).toBeNull();
 	});
 });

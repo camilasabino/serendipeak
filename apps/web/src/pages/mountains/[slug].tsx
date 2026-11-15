@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from 'next';
 import { createServerMountainApi } from '../../api/serverMountainApi';
+import { siteOriginProp } from '../../config/siteOrigin';
 import { parsePreviewGrant } from '../../editorial/preview/previewGrant';
 import {
 	applyPageLoad,
@@ -27,9 +28,15 @@ export const getServerSideProps: GetServerSideProps<MountainPageProps> = async (
 		? await loadMountainPreviewPage(api, slug, parsePreviewGrant(previewData))
 		: await loadMountainPage(api, slug);
 
-	return isPermanentRedirect(load) ? applyPermanentRedirect(res, load) : applyPageLoad(res, load);
+	if (isPermanentRedirect(load)) {
+		return applyPermanentRedirect(res, load);
+	}
+
+	const { props } = applyPageLoad(res, load);
+
+	return { props: { ...props, siteOrigin: siteOriginProp() } };
 };
 
-export default function MountainPage({ model }: MountainPageProps) {
-	return <MountainPageView model={model} />;
+export default function MountainPage(props: MountainPageProps) {
+	return <MountainPageView {...props} />;
 }
