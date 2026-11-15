@@ -7,7 +7,8 @@ import type {
 
 export interface MountainApi {
 	getMountain(slug: string): Promise<MountainResult>;
-	getMountainIndex(): Promise<MountainIndexResult>;
+	// `fresh` skips every HTTP cache for a server-side consumer that must not publish a stale answer.
+	getMountainIndex(options?: { fresh?: boolean }): Promise<MountainIndexResult>;
 	getDailyMountain(): Promise<DailyMountainResult>;
 	getRandomMountain(exclude?: string): Promise<RandomMountainResult>;
 }

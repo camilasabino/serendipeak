@@ -19,6 +19,7 @@ export class FakeMountainApi implements MountainApi, MountainPreviewApi {
 	readonly getMountainPreviewCalls: string[] = [];
 	getDailyMountainCalls = 0;
 	getMountainIndexCalls = 0;
+	readonly getMountainIndexOptions: ({ fresh?: boolean } | undefined)[] = [];
 	readonly getRandomMountainCalls: (string | undefined)[] = [];
 
 	constructor(private readonly results: FakeMountainApiResults = {}) {}
@@ -28,8 +29,9 @@ export class FakeMountainApi implements MountainApi, MountainPreviewApi {
 		return this.results.mountain ?? { kind: 'unreachable' };
 	}
 
-	async getMountainIndex(): Promise<MountainIndexResult> {
+	async getMountainIndex(options?: { fresh?: boolean }): Promise<MountainIndexResult> {
 		this.getMountainIndexCalls += 1;
+		this.getMountainIndexOptions.push(options);
 		return this.results.index ?? { kind: 'unreachable' };
 	}
 

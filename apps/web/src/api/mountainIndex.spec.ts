@@ -75,6 +75,15 @@ describe('HttpMountainApi.getMountainIndex', () => {
 		expect(requestedInit(fetch).cache).toBeUndefined();
 	});
 
+	it('skips every cache and asks intermediaries to revalidate when a fresh index is required', async () => {
+		const fetch = serving({ mountains: [] });
+
+		await new HttpMountainApi({ baseUrl: BASE_URL, fetch }).getMountainIndex({ fresh: true });
+
+		expect(requestedInit(fetch).cache).toBe('no-store');
+		expect(requestedInit(fetch).headers).toEqual({ 'Cache-Control': 'no-cache' });
+	});
+
 	it('returns the entries of a valid index unchanged', async () => {
 		expect(await apiServing(index).api.getMountainIndex()).toEqual({
 			kind: 'found',

@@ -57,8 +57,10 @@ export class HttpMountainApi implements MountainApi, MountainPreviewApi {
 	}
 
 	// The API lets the browser cache the index briefly, so this request honours HTTP caching.
-	async getMountainIndex(): Promise<MountainIndexResult> {
-		const exchange = await this.get('/api/v1/mountains', { noStore: false });
+	async getMountainIndex({
+		fresh = false
+	}: { fresh?: boolean } = {}): Promise<MountainIndexResult> {
+		const exchange = await this.get('/api/v1/mountains', { noStore: fresh, revalidate: fresh });
 		if (exchange.kind === 'unreachable') {
 			return exchange;
 		}
@@ -121,7 +123,7 @@ export class HttpMountainApi implements MountainApi, MountainPreviewApi {
 
 	private async get(
 		path: string,
-		{ noStore, bearer }: { noStore: boolean; bearer?: string }
+		{ noStore, bearer, revalidate }: { noStore: boolean; bearer?: string; revalidate?: boolean }
 	): Promise<Exchange> {
 		// The signal stays armed while the body streams, so a stalled body also times out.
 		const init: RequestInit = { signal: AbortSignal.timeout(this.timeoutMs) };
@@ -130,6 +132,11 @@ export class HttpMountainApi implements MountainApi, MountainPreviewApi {
 		}
 		if (bearer !== undefined) {
 			init.headers = { Authorization: `Bearer ${bearer}` };
+		}
+		// A shared cache between this server and the API honours the request directive even when
+		// the runtime's own fetch cache is off.
+		if (revalidate) {
+			init.headers = { ...init.headers, 'Cache-Control': 'no-cache' };
 		}
 
 		let response: Response;
