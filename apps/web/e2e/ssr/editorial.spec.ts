@@ -109,6 +109,7 @@ test.describe('daily page', () => {
 		expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/"[^>]*>Today<\/a>/);
 		expect(textsOf(html, 'button')).toEqual([
 			'Search mountains',
+			'Copy link',
 			'Explore another→',
 			'Explore another→',
 			'View photo fullscreen'

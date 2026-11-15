@@ -80,7 +80,7 @@ test.describe('atlas page', () => {
 		expect(response.status()).toBe(200);
 		expect(response.url()).toBe(`${new URL(response.url()).origin}/mountains/${ACONCAGUA.slug}`);
 		expect(headingsOf(html)).toEqual([ACONCAGUA.name]);
-		expect(canonicalsOf(html)).toEqual([]);
+		expect(canonicalsOf(html)).toEqual([`${SITE_ORIGIN}/mountains/${ACONCAGUA.slug}`]);
 	});
 
 	test('lands an unknown legacy selection on the bare atlas with its canonical, once', async ({
@@ -140,12 +140,10 @@ test.describe('atlas page', () => {
 		});
 	}
 
-	test('leaves mountain pages without a canonical link of their own, as before', async ({
-		request
-	}) => {
+	test('gives mountain pages their own canonical link', async ({ request }) => {
 		const html = await (await request.get(`/mountains/${ACONCAGUA.slug}`)).text();
 
-		expect(canonicalsOf(html)).toEqual([]);
+		expect(canonicalsOf(html)).toEqual([`${SITE_ORIGIN}/mountains/${ACONCAGUA.slug}`]);
 		expect(html).toMatch(/<a [^>]*href="\/atlas"[^>]*>[\s\S]*?Back to atlas/);
 	});
 });
