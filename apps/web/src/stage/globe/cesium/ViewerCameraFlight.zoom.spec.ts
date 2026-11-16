@@ -1,5 +1,6 @@
 import * as cesium from 'cesium';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cameraOffsetFromPose, cesiumVerticalFovRadians, lookAxesForFraming } from '../framing';
 import { zoomProgress } from '../zoomStep';
 import type { CesiumModule } from './CesiumModule';
 import { ViewerCameraFlight } from './ViewerCameraFlight';
@@ -22,20 +23,34 @@ const UP = Cartesian3.normalize(
 	new Cartesian3()
 );
 
+function ellipsoidPoint(ray: cesium.Ray): cesium.Cartesian3 | undefined {
+	const hit = cesium.IntersectionTests.rayEllipsoid(ray, cesium.Ellipsoid.WGS84);
+	return hit && hit.start > 0 ? cesium.Ray.getPoint(ray, hit.start) : undefined;
+}
+
 interface SetView {
 	destination: cesium.Cartesian3;
 	orientation: { direction: cesium.Cartesian3; up: cesium.Cartesian3 };
 }
 
-function setup({ groundHeight = 0 }: { groundHeight?: number } = {}) {
+interface SetupOptions {
+	groundHeight?: number;
+	pose?: { position: cesium.Cartesian3; direction: cesium.Cartesian3; up: cesium.Cartesian3 };
+	// The surface the centre ray meets, or undefined when it meets none.
+	pick?: (ray: cesium.Ray) => cesium.Cartesian3 | undefined;
+	heightAt?: (cartographic: cesium.Cartographic) => number;
+}
+
+function setup({ groundHeight = 0, pose, pick, heightAt }: SetupOptions = {}) {
 	const listeners = new Set<() => void>();
 	const views: SetView[] = [];
 	const camera = {
-		positionWC: Cartesian3.clone(START),
-		directionWC: Cartesian3.clone(DIRECTION),
-		upWC: Cartesian3.clone(UP),
-		getPickRay: () => ({}),
-		pickEllipsoid: () => GROUND,
+		positionWC: Cartesian3.clone(pose?.position ?? START),
+		directionWC: Cartesian3.clone(pose?.direction ?? DIRECTION),
+		upWC: Cartesian3.clone(pose?.up ?? UP),
+		getPickRay: () => new cesium.Ray(camera.positionWC, camera.directionWC),
+		pickEllipsoid: () =>
+			pose ? ellipsoidPoint(new cesium.Ray(camera.positionWC, camera.directionWC)) : GROUND,
 		flyTo: vi.fn(),
 		cancelFlight: vi.fn(),
 		setView(options: SetView) {
@@ -55,7 +70,10 @@ function setup({ groundHeight = 0 }: { groundHeight?: number } = {}) {
 		scene: {
 			canvas: { clientWidth: 1000, clientHeight: 600 },
 			ellipsoid: cesium.Ellipsoid.WGS84,
-			globe: { pick: () => GROUND, getHeight: () => groundHeight },
+			globe: {
+				pick: pick ?? (() => GROUND),
+				getHeight: heightAt ?? (() => groundHeight)
+			},
 			screenSpaceCameraController: { enableInputs: true },
 			preUpdate: {
 				addEventListener(listener: () => void) {
@@ -302,5 +320,165 @@ describe('ViewerCameraFlight.zoom', () => {
 		expect(flight.zoom('in', 0.5)).toBe('limit');
 		expect(listeners.size).toBe(0);
 		expect(views).toHaveLength(0);
+	});
+});
+
+// A summit framed from near its own height, looking slightly above the horizon: the centre ray
+// meets neither terrain nor the ellipsoid, so a step has no surface focus to scale by.
+describe('ViewerCameraFlight.zoom with a centre ray that meets no surface', () => {
+	const SUMMIT = { slug: 'peak', name: 'Peak', latitude: -27.1095, longitude: -68.5415 } as const;
+	const SUMMIT_METERS = 6_891;
+	const OFFSET = {
+		headingRadians: (191.67 * Math.PI) / 180,
+		pitchRadians: (-0.21 * Math.PI) / 180,
+		rollRadians: 0,
+		rangeMeters: 8_790,
+		framingX: 0.0075,
+		framingY: -0.0768
+	};
+	const SUMMIT_POINT = Cartesian3.fromDegrees(SUMMIT.longitude, SUMMIT.latitude, SUMMIT_METERS);
+
+	function framedPose({ width, height } = { width: 1440, height: 800 }) {
+		const aspect = width / height;
+		const local = cameraOffsetFromPose(191.67, -0.21, OFFSET.rangeMeters);
+		const axes = lookAxesForFraming(
+			local,
+			{ x: OFFSET.framingX, y: OFFSET.framingY },
+			cesiumVerticalFovRadians(Math.PI / 3, aspect),
+			aspect
+		)!;
+		const enu = cesium.Transforms.eastNorthUpToFixedFrame(SUMMIT_POINT);
+		const toWorld = (vector: { x: number; y: number; z: number }) =>
+			cesium.Matrix4.multiplyByPointAsVector(
+				enu,
+				new Cartesian3(vector.x, vector.y, vector.z),
+				new Cartesian3()
+			);
+
+		return {
+			position: cesium.Matrix4.multiplyByPoint(
+				enu,
+				new Cartesian3(local.x, local.y, local.z),
+				new Cartesian3()
+			),
+			direction: Cartesian3.normalize(toWorld(axes.direction), new Cartesian3()),
+			up: Cartesian3.normalize(toWorld(axes.up), new Cartesian3())
+		};
+	}
+
+	function arrive(options: SetupOptions = {}, stage?: { width: number; height: number }) {
+		const pose = framedPose(stage);
+		const scene = setup({ pose, pick: () => undefined, ...options });
+		(scene.camera as unknown as { viewBoundingSphere: () => void }).viewBoundingSphere = () => {};
+		scene.flight.jump(
+			{ ...SUMMIT, elevationMeters: SUMMIT_METERS },
+			{ ...OFFSET, framingX: 0, framingY: 0 }
+		);
+		Cartesian3.clone(pose.position, scene.camera.positionWC);
+		Cartesian3.clone(pose.direction, scene.camera.directionWC);
+		Cartesian3.clone(pose.up, scene.camera.upWC);
+
+		return { ...scene, pose };
+	}
+
+	const depthOf = (pose: ReturnType<typeof framedPose>) =>
+		Cartesian3.dot(
+			Cartesian3.subtract(SUMMIT_POINT, pose.position, new Cartesian3()),
+			pose.direction
+		);
+	const alongView = (position: cesium.Cartesian3, pose: ReturnType<typeof framedPose>) =>
+		Cartesian3.dot(Cartesian3.subtract(position, pose.position, new Cartesian3()), pose.direction);
+
+	let now = 0;
+
+	beforeEach(() => {
+		now = 1_000;
+		vi.spyOn(performance, 'now').mockImplementation(() => now);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('is the geometry that left both picks empty: the view looks above the horizon', () => {
+		const { camera, pose } = arrive();
+		const surfaceUp = cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(pose.position, new Cartesian3());
+
+		expect(Cartesian3.dot(pose.direction, surfaceUp)).toBeGreaterThan(0);
+		expect(camera.pickEllipsoid()).toBeUndefined();
+	});
+
+	it.each([
+		['in', 1],
+		['out', -1]
+	] as const)('moves the camera along its view line on Zoom %s', (step, sign) => {
+		const { flight, camera, views, pose } = arrive();
+		const depth = depthOf(pose);
+
+		expect(flight.zoom(step, 0)).toBe('zoomed');
+
+		const travelled = alongView(camera.positionWC, pose);
+		expect(travelled * sign).toBeGreaterThan(depth / 2 - 1);
+		expect(Math.abs(travelled)).toBeCloseTo(step === 'in' ? depth / 2 : depth, 0);
+		expect(Cartesian3.distance(camera.positionWC, pose.position)).toBeCloseTo(
+			Math.abs(travelled),
+			3
+		);
+		expect(
+			Cartesian3.equalsEpsilon(views.at(-1)!.orientation.direction, pose.direction, 1e-12)
+		).toBe(true);
+		expect(Cartesian3.equalsEpsilon(views.at(-1)!.orientation.up, pose.up, 1e-12)).toBe(true);
+	});
+
+	it('animates the dolly to the same destination on a narrow portrait stage', () => {
+		const { flight, camera, frame, pose } = arrive({}, { width: 390, height: 700 });
+
+		expect(flight.zoom('out', 0.5)).toBe('zoomed');
+		frame();
+		now += 600;
+		frame();
+
+		expect(-alongView(camera.positionWC, pose)).toBeCloseTo(depthOf(pose), 0);
+	});
+
+	it('still stops Zoom out short of rising terrain instead of ignoring clearance', () => {
+		const { flight, camera, pose } = arrive({ heightAt: () => 6_850 });
+		const startHeight = Cartographic.fromCartesian(pose.position).height;
+		expect(startHeight).toBeGreaterThan(6_850 + 50);
+
+		expect(flight.zoom('out', 0)).toBe('zoomed');
+
+		const travelled = -alongView(camera.positionWC, pose);
+		expect(travelled).toBeGreaterThan(0);
+		expect(travelled).toBeLessThan(depthOf(pose) / 2);
+		expect(Cartographic.fromCartesian(camera.positionWC).height).toBeGreaterThanOrEqual(
+			6_850 + 50 - 1
+		);
+	});
+
+	it('reports a limit instead of moving when terrain blocks the whole way back', () => {
+		const { flight, views } = arrive({ heightAt: () => 6_900 });
+
+		expect(flight.zoom('out', 0)).toBe('limit');
+		expect(views).toHaveLength(1);
+	});
+
+	it('is unavailable when no summit was ever framed', () => {
+		const pose = framedPose();
+		const { flight, views } = setup({ pose, pick: () => undefined });
+
+		expect(flight.zoom('in', 0)).toBe('unavailable');
+		expect(flight.zoom('out', 0)).toBe('unavailable');
+		expect(views).toHaveLength(0);
+	});
+
+	it('is unavailable when the summit lies behind the camera', () => {
+		const { flight, camera, views } = arrive();
+		const framed = views.length;
+		camera.directionWC = Cartesian3.negate(camera.directionWC, new Cartesian3());
+
+		expect(flight.zoom('in', 0)).toBe('unavailable');
+		expect(flight.zoom('out', 0)).toBe('unavailable');
+		expect(views).toHaveLength(framed);
 	});
 });

@@ -3,6 +3,7 @@ import { fixture } from '../ssr/support';
 import {
 	ACONCAGUA,
 	DESKTOP,
+	type ContractMountain,
 	OLYMPUS,
 	cameraReading,
 	expect,
@@ -16,6 +17,25 @@ import {
 
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
 const COMPASS = /^Compass\. Looking \d+ degrees \w+\.$/;
+
+const exploreButton = (page: Page) =>
+	page.getByRole('button', { name: /^Explore another|^Exploring/ });
+
+// Framed from about its own height and looking slightly above the horizon, as a high summit is
+// when nothing rises beyond it: the centre of the view meets no terrain and no ellipsoid.
+const HORIZON_PEAK = {
+	...fixture<Record<string, unknown> & ContractMountain>('mountain-sparse.json'),
+	slug: 'horizon-peak',
+	name: 'Horizon Peak',
+	coordinates: { latitude: -27.1095372, longitude: -68.5414835 },
+	elevationMeters: 6891,
+	camera: {
+		headingDegrees: 191.67,
+		pitchDegrees: -0.21,
+		rangeMeters: 8790,
+		framing: { x: 0.0075, y: -0.0768 }
+	}
+};
 
 const zoomIn = (page: Page) => page.getByRole('button', { name: 'Zoom in' });
 const zoomOut = (page: Page) => page.getByRole('button', { name: 'Zoom out' });
@@ -294,4 +314,40 @@ test.describe('@webgl camera under reduced motion', () => {
 		await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
 		expect(await probe.contextsLive()).toBe(1);
 	});
+});
+
+test.describe('@webgl zoom with a view that meets no surface', () => {
+	for (const [name, viewport] of [
+		['desktop', DESKTOP],
+		['phone', { width: 390, height: 700 }]
+	] as const) {
+		test(`both zoom buttons move the camera on a horizon-framed summit on a ${name} stage`, async ({
+			page,
+			probe
+		}) => {
+			await page.route('**/api/v1/mountains/random**', (route) =>
+				route.fulfill({
+					json: HORIZON_PEAK,
+					headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
+				})
+			);
+			await page.setViewportSize(viewport);
+			await page.goto(PERMALINK);
+			await expectReadyStage(page);
+			await exploreButton(page).click();
+			await expectCanonicalPose(page, HORIZON_PEAK.camera);
+			await expect(zoomIn(page)).toBeEnabled();
+			const arrived = await settledRange(page);
+
+			await zoomIn(page).click();
+			await expect.poll(() => displayRange(page)).toBeLessThan(arrived * 0.75);
+			const closer = await settledRange(page);
+
+			await zoomOut(page).click();
+			await expect.poll(() => displayRange(page)).toBeGreaterThan(closer * 1.5);
+			await settledRange(page);
+
+			expect(await probe.contextsLive()).toBe(1);
+		});
+	}
 });

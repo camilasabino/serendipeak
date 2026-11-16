@@ -405,15 +405,18 @@ export class ViewerCameraFlight implements CameraFlight {
 		const focus = (ray && scene.globe.pick(ray, scene)) ?? camera.pickEllipsoid(center);
 		const start = Cartesian3.clone(camera.positionWC);
 		const here = Cartographic.fromCartesian(start);
-		if (!focus || !here) {
+		const direction = Cartesian3.clone(camera.directionWC);
+		const focusDistance = focus
+			? Cartesian3.distance(start, focus)
+			: this.summitDepthMeters(start, direction);
+		if (focusDistance === undefined || !here) {
 			return 'unavailable';
 		}
 
-		const direction = Cartesian3.clone(camera.directionWC);
 		const up = Cartesian3.clone(camera.upWC);
 		const surfaceUp = scene.ellipsoid.geodeticSurfaceNormal(start, new Cartesian3());
 		const wanted = zoomTravelMeters(step, {
-			focusDistanceMeters: Cartesian3.distance(start, focus),
+			focusDistanceMeters: focusDistance,
 			cameraHeightMeters: here.height,
 			climbPerMeterBack: -Cartesian3.dot(direction, surfaceUp)
 		});
@@ -491,6 +494,25 @@ export class ViewerCameraFlight implements CameraFlight {
 		});
 
 		return 'zoomed';
+	}
+
+	// A view framed at the horizon or above it has a centre ray that meets neither terrain nor the
+	// ellipsoid, so there is no surface focus to scale a step by. The summit it was framed around
+	// still gives the scale: how far ahead of the camera, along its view line, the summit lies.
+	private summitDepthMeters(start: Cartesian3, direction: Cartesian3): number | undefined {
+		if (!this.anchor) {
+			return undefined;
+		}
+
+		const { Cartesian3 } = this.cesium;
+		const summit = Cartesian3.fromDegrees(
+			this.anchor.longitude,
+			this.anchor.latitude,
+			this.anchor.altitudeMeters
+		);
+		const depth = Cartesian3.dot(Cartesian3.subtract(summit, start, summit), direction);
+
+		return depth > 0 && Number.isFinite(depth) ? depth : undefined;
 	}
 
 	holdInputs(): void {
