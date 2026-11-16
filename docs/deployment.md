@@ -101,7 +101,7 @@ openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 
 | Variable      | Value                                                                                                     |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| `SITE_ORIGIN` | `https://serendipeak.camilasabino.dev` (no path or trailing slash); without it the atlas has no canonical |
+| `SITE_ORIGIN` | `https://serendipeak.camilasabino.dev` (no path or trailing slash); without it no canonical links are published and `/sitemap.xml` answers 500 |
 
 **Service settings:**
 
@@ -425,7 +425,7 @@ To pause alerts for planned work, pause the monitor in Better Stack and resume i
 
 ### Daily discovery retention
 
-Production has no scheduled job for this: the environment holds only `web`, `api`, `postgres` and `backup`. Nothing fails without it; the `daily_discovery` table just grows by one row a day. The command `python manage.py prune_daily_discoveries` is idempotent and safe to run at any time, and the database refuses to delete a discovery inside the retention window. Run it from the operator shell when needed (see "Operator shell"). Scheduling it would be a new cron service built from `services/api` with the same variables as `api`, and it would have to join the list in "Trusting forwarded headers". See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
+Production has no scheduled job for this: the environment holds only `web`, `api`, `postgres`, `backup` and `offsite-backup`. Nothing fails without it; the `daily_discovery` table just grows by one row a day. The command `python manage.py prune_daily_discoveries` is idempotent and safe to run at any time, and the database refuses to delete a discovery inside the retention window. Run it from the operator shell when needed (see "Operator shell"). Scheduling it would be a new cron service built from `services/api` with the same variables as `api`, and it would have to join the list in "Trusting forwarded headers". See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
 
 ## 3. R2 buckets and media domain
 
@@ -606,6 +606,21 @@ curl -si -H 'Origin: https://other.example' "$API/api/v1/mountains/<slug>" | gre
 
 **Web and WebGL** (Chromium with WebGL2): `$WEB/` and `$WEB/mountains/<slug>` render; the globe loads, flies to the mountain and shows the curated camera framing; the browser console has no error; the network list shows only `$WEB`, `$API`, `$MEDIA` and the Cesium ion and imagery hosts. With the API stopped for a moment the pages show their unavailable state (HTTP 503), not a blank page.
 
+**Search and sharing**: the checks below are read-only. Set `SLUG` to a published mountain and `OLD` to a former slug of a renamed one, if any exists.
+
+```sh
+curl -si "$WEB/sitemap.xml" | head -12                                              # 200, application/xml, /, /atlas, /about and one /mountains/<slug> per active mountain
+curl -s  "$WEB/sitemap.xml" | grep -c '<loc>'                                       # the active mountain count plus 3
+curl -s  "$WEB/robots.txt"                                                          # Disallow: /api/, /editorial/, /preview and Sitemap: $WEB/sitemap.xml
+curl -s  "$WEB/mountains/$SLUG" | grep -o '<link rel="canonical"[^>]*>'             # href is $WEB/mountains/$SLUG
+curl -s  "$WEB/mountains/$SLUG" | grep -o '<meta property="og:[a-z:]*"[^>]*>'       # og:url, og:title, og:description, og:image
+curl -sI "$WEB/mountains/$OLD" | grep -iE '^(HTTP|location|cache-control)'          # 308, Location: /mountains/<current slug>, Cache-Control: no-store
+curl -sI "$WEB/atlas" | head -1                                                     # 200
+curl -si "$API/api/v1/mountains" | grep -iE '^(HTTP|cache-control)'                 # 200, public, max-age=300
+```
+
+A sitemap that answers 500 means `SITE_ORIGIN` is missing or invalid on `web`; a 503 with `Retry-After` means the API's mountain index was unreachable (see the [developer reference](engineering/developer-reference.md#sitemap-and-robotstxt)). Neither publishes a partial sitemap. Google Search Console is configured for the production site and the production sitemap (`$WEB/sitemap.xml`) has been submitted successfully. Use it to see which pages Google has discovered and indexed, and to re-check the sitemap after a change to its rules. The ownership verification token and account details are not kept in this repository.
+
 **Preview**: in the Studio, preview a draft from its page. The web opens it with the draft visible; a fresh browser context requesting the same URL gets the public 404; the preview cookie is `Secure; HttpOnly`, scoped to that mountain and expires in 15 minutes; no token appears in a URL or in the page source.
 
 ## 7. Rollback and recovery
@@ -627,7 +642,7 @@ Reversing the first migration drops the `postgis` extension and fails if other o
 Django believes `X-Forwarded-Proto` only when `TRUSTED_PROXY_HOPS` is above `0` (`SECURE_PROXY_SSL_HEADER`), and uses the same value to pick the client address out of `X-Forwarded-For`. Gunicorn is configured not to derive the scheme from any header, `X-Forwarded-Host` is never trusted, and `ALLOWED_HOSTS` is an exact list. On Railway, `TRUSTED_PROXY_HOPS=1` is correct while **all** of these are true:
 
 1. **Every outside request passes through Railway's HTTP edge.** The edge states `X-Forwarded-Proto: https` for what it forwards and redirects plain HTTP (a plain POST is turned into a GET and redirected), so a request that reaches the service from the internet was received over HTTPS. The `api` service has no TCP proxy and no other public route.
-2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `backup`). `web` calls the API through its public HTTPS address, not through the private one.
+2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `backup`, `offsite-backup`). `web` calls the API through its public HTTPS address, not through the private one.
 3. **The edge replaces the header; Django fails closed otherwise.** Django compares the whole header value with `https`. `http`, an empty value or a list such as `http, https` make the request insecure, which turns into a redirect or a refused form post, never into a request treated as secure. A forged `X-Forwarded-Proto: https` from the internet is harmless, because the edge only forwards requests that really arrived over HTTPS. The smoke test above checks that the edge does not pass a client's `http` through.
 4. **The hop count matches the proxies that append to `X-Forwarded-For`.** One for Railway's edge. Django reads the entry that many places from the right, so a client-supplied left-hand entry is ignored. Railway's documentation does not say whether the edge strips or appends client-supplied `X-Forwarded-For` values; reading from the right works in both cases. Adding another proxy in front (a Cloudflare-proxied record for the API host) makes it `2`. A wrong count is visible in the throttling check of the smoke tests.
 5. **The health check needs none of this.** It arrives over plain HTTP from `healthcheck.railway.app`, carries no forwarding header, and is exempt from the redirect.

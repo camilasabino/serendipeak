@@ -29,12 +29,14 @@
 
 SerendiPeak is a mountain discovery experience. Every day it features one mountain from a curated catalog, inviting visitors to explore the landscape and learn about the place behind it.
 
-- **Discover today's mountain.** A daily selection shared by every visitor and kept across restarts.
+- **Discover today's mountain.** A daily selection, chosen per UTC date, shared by every visitor and kept across restarts.
 - **Explore another.** Travel to a different mountain without leaving the 3D experience.
-- **Explore the terrain.** Navigate a Cesium-powered 3D scene with mountain-specific camera framing, compass, scale, reset, and fullscreen controls.
+- **Browse the atlas.** Every published mountain on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent.
+- **Search by name.** Find a mountain from any page, ignoring case and accents.
+- **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale, reset, and fullscreen controls. Visitors who prefer reduced motion get direct moves instead of animated flights.
 - **Understand the geography.** See elevation, coordinates, continent, countries, and the mountain's region hierarchy, with links to supporting geographic data.
 - **See the mountain beyond the map.** View a real photograph with its author, license, and source.
-- **Share a place.** Each mountain has a direct URL such as [Aconcagua](https://serendipeak.camilasabino.dev/mountains/aconcagua).
+- **Share a place.** Each mountain has a permanent URL such as [Aconcagua](https://serendipeak.camilasabino.dev/mountains/aconcagua). If a mountain's slug changes, its former address redirects permanently to the new one. Pages carry canonical URLs and social preview metadata, and a share control uses the native share sheet or copies the link.
 
 The public experience is open without an account and responds to small screens:
 
@@ -76,6 +78,9 @@ flowchart LR
     Studio --> PG
     Backup["Scheduled backup job"] --> PG
     Backup --> R2Backup["Cloudflare R2<br/>private backups"]
+    Offsite["Scheduled offsite job"] --> R2
+    Offsite --> R2Backup
+    Offsite --> B2["Backblaze B2<br/>independent copy"]
 ```
 
 - **Catalog and discovery.** PostgreSQL/PostGIS is the source of truth. The daily mountain is a deterministic function of the UTC date and is persisted, so every visitor gets the same answer.
@@ -83,7 +88,8 @@ flowchart LR
 - **Photograph delivery.** The Studio stores each upload as a private original plus public renditions. The public API only derives URLs from stored keys and makes no outbound requests.
 - **3D scene lifecycle.** Navigating between mountain pages reuses one Cesium viewer instead of recreating its WebGL context for every destination.
 - **Publishing.** Drafts are invisible to the public API. Draft previews use signed, time-limited, single-mountain tokens.
-- **Operations.** Web and API run as separate Docker images on Railway. A separate scheduled service dumps the database to private storage.
+- **Search engines.** The web app serves a dynamic `sitemap.xml` and `robots.txt` built from the public mountain index, so only published mountains are listed.
+- **Operations.** Web and API run as separate Docker images on Railway. A scheduled service dumps the database to private storage, and a second one keeps an independent copy of the media and dumps at another provider.
 
 ### Engineering decisions
 
@@ -114,7 +120,8 @@ serendipeak/
 │   └── web/             # Next.js app, Cesium scene, UI and browser tests
 ├── services/
 │   ├── api/             # Django API, domain logic, Studio and migrations
-│   └── backup/          # Scheduled PostgreSQL backup container
+│   ├── backup/          # Scheduled PostgreSQL backup container
+│   └── offsite-backup/  # Scheduled offsite copy of media and database dumps
 ├── contracts/
 │   └── v1/              # Frozen API contract fixtures
 ├── docs/
@@ -122,7 +129,7 @@ serendipeak/
 │   ├── media/           # README screenshots
 │   ├── brand/           # Social preview
 │   └── deployment.md    # Production runbook
-├── scripts/             # Contract verification and API check tools
+├── scripts/             # Contract and API checks, dev and catalog refresh commands
 └── docker-compose.yml   # Local PostgreSQL/PostGIS
 ```
 
@@ -198,13 +205,13 @@ npm ci
 npm run contracts:verify
 ```
 
-API tests run against a real PostGIS database rather than mocks, and the browser suites exercise real WebGL in Chromium. GitHub Actions runs commit-message, contract, API and web checks, including the browser suites, on pull requests and on pushes to `main`. The two WebGL suites (development server and production build) each run split across two runners, and a pull request or a push to `main` that changes only documentation skips them. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
+API tests run against a real PostGIS database rather than mocks, and the WebGL suites exercise real WebGL in Chromium. **Core CI** (GitHub Actions, on pull requests and pushes to `main`) runs commit-message, frozen-contract, API, web (lint, type check, unit tests, production build and gate, SSR and no-WebGL browser tests) and script checks. The real-WebGL suites are a separate **WebGL** workflow that is not a required check: it runs weekly and on manual dispatch, with the production-build suite split across two runners and a lean subset of development-server scenarios. Run `npm run test:webgl` or `npm run test:webgl:prod` locally when you change the 3D scene. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
 
 ## Deployment
 
-The web app and the API run as separate Docker-based services on Railway, with PostgreSQL/PostGIS and the scheduled database backup as further services. Cloudflare R2 serves the optimized public photographs and keeps originals in a private bucket.
+The web app and the API run as separate Docker-based services on Railway, with PostgreSQL/PostGIS and the scheduled database and offsite backup jobs as further services. Cloudflare R2 serves the optimized public photographs and keeps originals in a private bucket; Backblaze B2 holds the independent offsite copy.
 
-See [docs/deployment.md](docs/deployment.md) for configuration, health checks and recovery procedures.
+See [docs/deployment.md](docs/deployment.md) for configuration, health checks, monitoring, backups, smoke tests (including sitemap and redirect checks) and recovery procedures.
 
 ## Documentation
 
