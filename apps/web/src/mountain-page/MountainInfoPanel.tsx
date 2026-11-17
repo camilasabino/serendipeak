@@ -2,20 +2,29 @@ import { Fragment, type ReactNode } from 'react';
 import type { Mountain } from '../api/contract';
 import { ExternalLink } from '../links/ExternalLink';
 import { formatElevationValue } from '../formatElevation';
-import { formatCoordinates, formatCountries, formatPlaceParts, formatRegion } from './format';
+import {
+	distinctCountryNames,
+	formatCoordinates,
+	formatCountries,
+	formatPlaceParts,
+	formatRegion
+} from './format';
 import { googleMapsUrl } from './googleMaps';
 import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
 import styles from './MountainInfoPanel.module.css';
 
 interface MountainInfoPanelProps {
 	mountain: Mountain;
+	/** The photograph, placed between the place line and the lede. */
+	plate?: ReactNode;
 	/** The page's primary action, placed between the lede and the facts. */
 	action?: ReactNode;
 }
 
-export function MountainInfoPanel({ mountain, action }: MountainInfoPanelProps) {
+export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanelProps) {
 	const { continent, coordinates, countries, region, summary } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
+	const countryNames = distinctCountryNames(continent, countries);
 
 	return (
 		<section aria-labelledby={MOUNTAIN_HEADING_ID}>
@@ -26,16 +35,17 @@ export function MountainInfoPanel({ mountain, action }: MountainInfoPanelProps) 
 				<ElevationFigure meters={mountain.elevationMeters} />
 				<PlaceLine parts={formatPlaceParts(continent, countries, region)} />
 			</div>
+			{plate}
 			{summary && <p className={styles.lede}>{summary}</p>}
 			{action && <div className={styles.action}>{action}</div>}
 			<Facts>
-				<Fact term="Continent">{continent.name}</Fact>
-				{countries.length > 0 && (
-					<Fact term={countries.length === 1 ? 'Country' : 'Countries'}>
-						{formatCountries(countries.map((country) => country.name))}
+				{region && <Fact term="Region">{formatRegion(region)}</Fact>}
+				{countryNames.length > 0 && (
+					<Fact term={countryNames.length === 1 ? 'Country' : 'Countries'}>
+						{formatCountries(countryNames)}
 					</Fact>
 				)}
-				{region && <Fact term="Region">{formatRegion(region)}</Fact>}
+				<Fact term="Continent">{continent.name}</Fact>
 				<Fact term="Coordinates">
 					<ExternalLink
 						href={googleMapsUrl(coordinates.latitude, coordinates.longitude)}

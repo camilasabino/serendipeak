@@ -100,18 +100,20 @@ test.describe('minimal permalink', () => {
 });
 
 test.describe('daily page', () => {
-	test('composes the eyebrow, the cue and no link to itself', async ({ request }) => {
+	test('composes the eyebrow, the closing band and no link to itself', async ({ request }) => {
 		const html = await (await request.get('/?utm=x')).text();
 		expect(headingsOf(html)).toEqual([daily.mountain.name]);
-		expect(html.indexOf('Today&#x27;s discovery')).toBeGreaterThan(-1);
-		expect(html.indexOf('Today&#x27;s discovery')).toBeLessThan(html.indexOf('<h1'));
+		expect(html.indexOf('>Today</p>')).toBeGreaterThan(-1);
+		expect(html.indexOf('>Today</p>')).toBeLessThan(html.indexOf('<h1'));
+		expect(html).not.toContain('<time');
+		expect(html).toContain('A new mountain is chosen every day at 00:00 UTC.');
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));
 		expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/"[^>]*>Today<\/a>/);
 		expect(textsOf(html, 'button')).toEqual([
 			'Search mountains',
 			'Copy link',
-			'Explore another',
-			'View photo fullscreen'
+			'View photo fullscreen',
+			'Explore another'
 		]);
 		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>\s*<span[^>]*>View photo fullscreen/);
 	});

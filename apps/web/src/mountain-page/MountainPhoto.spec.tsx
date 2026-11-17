@@ -123,9 +123,27 @@ describe('MountainPhoto', () => {
 
 	it('draws the frame from the size the shared preloader already measured', () => {
 		const preloader = new ImagePreloader({ create: () => undefined });
-		preloader.remember(pageRendition(image), { width: 1000, height: 1000 });
+		preloader.remember(pageRendition(image), { width: 1500, height: 1000 });
 
-		expect(render(image, preloader)).toMatch(/aspect-ratio:1[;"]/);
+		expect(render(image, preloader)).toMatch(/aspect-ratio:1\.5[;"]/);
+	});
+
+	it('fills the frame with a photograph inside the plate band', () => {
+		expect(render(image)).not.toContain('data-matted');
+	});
+
+	it('shows a panorama whole on a mat inside the widest frame', () => {
+		const html = render({ ...image, width: 6000, height: 2000 });
+
+		expect(html).toContain('aspect-ratio:2');
+		expect(html).toContain('data-matted="true"');
+	});
+
+	it('shows a portrait whole on a mat inside the tallest frame', () => {
+		const html = render({ ...image, width: 1867, height: 2800 });
+
+		expect(html).toMatch(/aspect-ratio:1\.33/);
+		expect(html).toContain('data-matted="true"');
 	});
 
 	it('renders no viewer until it is opened', () => {

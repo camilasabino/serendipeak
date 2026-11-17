@@ -61,15 +61,15 @@ describe.each([
 describe('complete fixture', () => {
 	const html = render(complete);
 
-	it('renders summary, continent, country, region, elevation and coordinates in order', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
+	it('renders elevation, photograph, summary, region, country, continent and coordinates in order', () => {
+		expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual([
-			'South America',
-			'Argentina',
 			'Principal Cordillera',
+			'Argentina',
+			'South America',
 			'32.6531° S, 70.0120° W'
 		]);
-		const order = ['Elevation', complete.summary, 'Continent', '<figure', 'Data sources'].map(
+		const order = ['Elevation', '<figure', complete.summary, 'Region', 'Data sources'].map(
 			(fragment) => html.indexOf(fragment ?? '')
 		);
 		expect(order.every((position) => position > -1)).toBe(true);
@@ -97,7 +97,7 @@ describe('sparse fixture', () => {
 	const html = render(sparse);
 
 	it('keeps the region, the photograph and the data sources', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
 		expect(html).toContain('<figure');
 		expect(html).toContain('Data sources');
 	});
@@ -133,12 +133,22 @@ describe('permalink composition', () => {
 describe('daily composition', () => {
 	const html = render(complete, true);
 
-	it('shows the eyebrow before the name and the cue after the content', () => {
-		expect(textsOf(html, 'p')).toEqual(expect.arrayContaining(["Today's discovery"]));
-		expect(html.indexOf("Today's discovery")).toBeLessThan(html.indexOf('<h1'));
+	it('shows the closing band after the content', () => {
+		expect(textsOf(html, 'p')).toEqual(
+			expect.arrayContaining([
+				'Tomorrow, another mountain.',
+				'A new mountain is chosen every day at 00:00 UTC.'
+			])
+		);
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeGreaterThan(
 			html.indexOf('Data sources')
 		);
+	});
+
+	it('shows only the Today eyebrow before the name, with no date', () => {
+		expect(textsOf(html, 'p')).toContain('Today');
+		expect(html.indexOf('>Today<')).toBeLessThan(html.indexOf('<h1'));
+		expect(html).not.toContain('<time');
 	});
 
 	it('does not link back to itself', () => {
@@ -160,8 +170,8 @@ describe('sheet', () => {
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
 		expect(textsOf(html, 'button')).toEqual([
 			'Copy link',
-			'Explore another',
-			'View photo fullscreen'
+			'View photo fullscreen',
+			'Explore another'
 		]);
 	});
 });

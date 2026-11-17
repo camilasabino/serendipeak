@@ -64,13 +64,25 @@
 	color: var(--sp-text);
 }
 
+/* The band bleeds to the sheet's edges and floor, like the running head does at the top. */
+.closing {
+	margin: var(--sp-space-6) calc(-1 * var(--sheet-gutter)) calc(-1 * var(--sp-space-6));
+	padding: 1.75rem var(--sheet-gutter) 2rem;
+	border-top: 2px solid var(--sp-divider-accent);
+	background: var(--sp-surface-raised);
+}
+
 .cue {
-	margin: var(--sp-space-6) 0 0;
-	font-family: var(--sp-font-display);
-	font-size: 1.125rem;
-	letter-spacing: -0.01em;
-	line-height: 1.35;
+	margin: 0;
+	font: 400 1.75rem / 1.1 var(--sp-face-display);
+	color: var(--sp-text);
 	text-wrap: balance;
+}
+
+.closingNote {
+	margin: 0.6rem 0 0;
+	font: 400 0.875rem / 1.45 var(--sp-face-ui);
+	color: var(--sp-text-muted);
 }
 
 @media (min-width: 56rem) {

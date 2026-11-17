@@ -7,7 +7,7 @@ import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
 import { ShareControl } from './ShareControl';
 import { mountainShare } from './socialMetadata';
-import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
+import { DAILY_CLOSING_NOTE, DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
 
 interface MountainViewProps {
 	mountain: Mountain;
@@ -44,10 +44,18 @@ export function MountainView({
 					{PREVIEW_NOTICE}
 				</p>
 			)}
-			<MountainInfoPanel mountain={mountain} action={<ExploreControl slug={mountain.slug} />} />
-			{primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
+			<MountainInfoPanel
+				mountain={mountain}
+				plate={primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
+				action={<ExploreControl slug={mountain.slug} />}
+			/>
 			<DataSources sources={sources} />
-			{daily && <p className={styles.cue}>{DAILY_CUE}</p>}
+			{daily && (
+				<div className={styles.closing}>
+					<p className={styles.cue}>{DAILY_CUE}</p>
+					<p className={styles.closingNote}>{DAILY_CLOSING_NOTE}</p>
+				</div>
+			)}
 		</div>
 	);
 }

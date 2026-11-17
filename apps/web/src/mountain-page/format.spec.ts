@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { formatCoordinates, formatCountries, formatPlaceParts } from './format';
+import {
+	distinctCountryNames,
+	formatCoordinates,
+	formatCountries,
+	formatPlaceParts
+} from './format';
 
 describe('formatCoordinates', () => {
 	it('labels north and east', () => {
@@ -92,6 +97,23 @@ describe('formatPlaceParts', () => {
 
 		expect(formatPlaceParts(antarctica, [antarctica], range)).toEqual([
 			'Sentinel Range',
+			'Antarctica'
+		]);
+	});
+});
+
+describe('distinctCountryNames', () => {
+	const antarctica = { code: 'AN', name: 'Antarctica' };
+	const chile = { code: 'CL', name: 'Chile' };
+
+	it('drops a country that only repeats the continent', () => {
+		expect(distinctCountryNames(antarctica, [antarctica])).toEqual([]);
+		expect(distinctCountryNames(antarctica, [antarctica, chile])).toEqual(['Chile']);
+	});
+
+	it('keeps every other country in order', () => {
+		expect(distinctCountryNames({ code: 'EU', name: 'Europe' }, [chile, antarctica])).toEqual([
+			'Chile',
 			'Antarctica'
 		]);
 	});

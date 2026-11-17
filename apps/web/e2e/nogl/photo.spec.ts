@@ -595,8 +595,8 @@ test.describe('@nogl Photograph focus visibility', () => {
 		});
 		expect(ring.style).toBe('solid');
 		expect(ring.width).toBe('3px');
-		expect(ring.color).toBe('rgb(247, 248, 245)');
-		expect(ring.shadow).toContain('rgb(11, 18, 25)');
+		expect(ring.color).toBe('rgb(243, 238, 232)');
+		expect(ring.shadow).toContain('rgb(17, 15, 14)');
 		expect(ring.shadow).toContain('inset');
 	});
 });

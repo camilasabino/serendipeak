@@ -55,8 +55,9 @@ export function pageTitle(model: MountainPageModel): string {
 
 export const PREVIEW_NOTICE =
 	'Preview of the saved draft. This mountain is not published, so visitors cannot see this page.';
-export const DAILY_EYEBROW = "Today's discovery";
+export const DAILY_EYEBROW = 'Today';
 export const DAILY_CUE = 'Tomorrow, another mountain.';
+export const DAILY_CLOSING_NOTE = 'A new mountain is chosen every day at 00:00 UTC.';
 export const TODAY_LINK_LABEL = 'Today';
 export const TODAY_PATH = '/';
 

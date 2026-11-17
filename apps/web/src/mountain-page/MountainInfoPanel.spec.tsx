@@ -19,17 +19,17 @@ describe('MountainInfoPanel', () => {
 		expect(html).toContain('<h1 id="mountain-name"');
 	});
 
-	it('shows the continent first, by its name', () => {
-		const continent = { code: 'AF', name: 'Africa' };
-
-		expect(textsOf(render({ continent }), 'dt')[0]).toBe('Continent');
-		expect(textsOf(render({ continent }), 'dd')[0]).toBe('Africa');
+	it('lists the facts from the most specific place to the least, then the coordinates', () => {
+		expect(textsOf(render({}), 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
 	});
 
-	it('shows the continent whatever the countries, even none', () => {
-		const html = render({ continent: { code: 'AN', name: 'Antarctica' }, countries: [] });
+	it('shows the continent by its name, whatever the countries, even none', () => {
+		const continent = { code: 'AF', name: 'Africa' };
+		const none = render({ continent, countries: [] });
 
-		expect(textsOf(html, 'dd')[0]).toBe('Antarctica');
+		expect(textsOf(render({ continent }), 'dd')).toContain('Africa');
+		expect(textsOf(none, 'dt')).toEqual(['Region', 'Continent', 'Coordinates']);
+		expect(textsOf(none, 'dd')[1]).toBe('Africa');
 	});
 
 	it('labels one country as Country and several as Countries', () => {
@@ -43,10 +43,34 @@ describe('MountainInfoPanel', () => {
 
 	it('omits the country row for an empty list', () => {
 		expect(textsOf(render({ countries: [] }), 'dt')).toEqual([
-			'Continent',
 			'Region',
+			'Continent',
 			'Coordinates'
 		]);
+	});
+
+	describe('Antarctica', () => {
+		const antarctica = { code: 'AN', name: 'Antarctica' };
+		const sentinel = { slug: 'sentinel-range', name: 'Sentinel Range', ancestors: [] };
+
+		it('shows the continent once when the only country is the continent', () => {
+			const html = render({ continent: antarctica, countries: [antarctica], region: sentinel });
+
+			expect(textsOf(html, 'dt')).toEqual(['Region', 'Continent', 'Coordinates']);
+			expect(textsOf(html, 'dd').filter((text) => text === 'Antarctica')).toHaveLength(1);
+		});
+
+		it('keeps a real country next to the continent', () => {
+			const chile = { code: 'CL', name: 'Chile' };
+			const html = render({
+				continent: antarctica,
+				countries: [antarctica, chile],
+				region: sentinel
+			});
+
+			expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
+			expect(textsOf(html, 'dd').slice(0, 3)).toEqual(['Sentinel Range', 'Chile', 'Antarctica']);
+		});
 	});
 
 	it('omits the summary and the region when absent', () => {
@@ -59,17 +83,13 @@ describe('MountainInfoPanel', () => {
 		expect(complete.region).not.toBeNull();
 		expect(textsOf(html, 'p')).not.toContain(summary);
 		expect(textsOf(html, 'p')).toHaveLength(2);
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Coordinates']);
-	});
-
-	it('shows the region between the countries and the coordinates', () => {
-		expect(textsOf(render({}), 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual(['Country', 'Continent', 'Coordinates']);
 	});
 
 	it('shows a root region by its name alone', () => {
 		const region = { slug: 'alpha-chain', name: 'Alpha Chain', ancestors: [] };
 
-		expect(textsOf(render({ region }), 'dd')[2]).toBe('Alpha Chain');
+		expect(textsOf(render({ region }), 'dd')[0]).toBe('Alpha Chain');
 	});
 
 	it('shows the region followed by its nearest ancestor only', () => {
@@ -82,7 +102,27 @@ describe('MountainInfoPanel', () => {
 			]
 		};
 
-		expect(textsOf(render({ region }), 'dd')[2]).toBe('Gamma Ridge, Beta Range');
+		expect(textsOf(render({ region }), 'dd')[0]).toBe('Gamma Ridge, Beta Range');
+	});
+
+	it('places the plate between the place line and the lede, and the action before the facts', () => {
+		const html = renderToStaticMarkup(
+			<MountainInfoPanel
+				mountain={complete}
+				plate={<figure>plate</figure>}
+				action={<button type="button">act</button>}
+			/>
+		);
+		const order = [
+			complete.region?.name ?? '',
+			'<figure>',
+			complete.summary ?? '',
+			'<button',
+			'<dl'
+		].map((fragment) => html.indexOf(fragment));
+
+		expect(order.every((position) => position > -1)).toBe(true);
+		expect(order).toEqual([...order].sort((a, b) => a - b));
 	});
 
 	it('speaks the coordinates as a map link', () => {

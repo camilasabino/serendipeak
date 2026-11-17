@@ -1,9 +1,8 @@
 .disclosure {
 	min-width: 0;
 	overflow-wrap: anywhere;
-	font-size: var(--sp-text-ui);
-	line-height: 1.45;
-	color: var(--sp-mist);
+	font: 400 0.8125rem / 1.45 var(--sp-face-ui);
+	color: var(--sp-text-muted);
 }
 
 .disclosure summary {
@@ -15,6 +14,10 @@
 	min-height: 2.75rem;
 	cursor: pointer;
 	list-style: none;
+}
+
+.disclosure summary:hover {
+	color: var(--sp-text);
 }
 
 .disclosure summary::-webkit-details-marker {
@@ -32,7 +35,7 @@
 	height: 0.8125rem;
 	background: currentColor;
 	clip-path: polygon(32% 22%, 46% 22%, 72% 50%, 46% 78%, 32% 78%, 58% 50%);
-	transition: transform 160ms ease;
+	transition: transform var(--sp-duration-short) ease;
 }
 
 .disclosure[open] > summary::before {
@@ -40,11 +43,16 @@
 }
 
 .disclosure a {
-	color: var(--sp-link-on-stage);
+	color: var(--sp-link);
+	text-decoration: underline;
+	text-decoration-color: var(--sp-link-rule);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
 }
 
 .disclosure a:hover {
-	color: var(--sp-link-on-stage-hover);
+	color: var(--sp-text);
+	text-decoration-color: currentColor;
 }
 
 .disclosure p {

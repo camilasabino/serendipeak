@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MountainImage } from '../api/contract';
-import { FALLBACK_RATIO, intrinsicRatio, pageRatio } from './aspect';
+import { FALLBACK_RATIO, intrinsicRatio, pageRatio, plateFrame } from './aspect';
 
 const image: MountainImage = {
 	url: 'https://upload.wikimedia.org/wikipedia/commons/a/a0/Aconcagua.jpg',
@@ -55,5 +55,26 @@ describe('pageRatio', () => {
 		expect(pageRatio(unknown, 1.8)).toBe(1.8);
 		expect(pageRatio(unknown, 0)).toBe(FALLBACK_RATIO);
 		expect(pageRatio(unknown, Number.NaN)).toBe(FALLBACK_RATIO);
+	});
+});
+
+describe('plateFrame', () => {
+	it('keeps a ratio inside the band and fills the frame', () => {
+		expect(plateFrame(4994 / 2758)).toEqual({ ratio: 4994 / 2758, matted: false });
+		expect(plateFrame(4 / 3)).toEqual({ ratio: 4 / 3, matted: false });
+		expect(plateFrame(2)).toEqual({ ratio: 2, matted: false });
+	});
+
+	it('crops a photograph within ten percent of the band edge instead of matting it', () => {
+		expect(plateFrame(1.25)).toEqual({ ratio: 4 / 3, matted: false });
+		expect(plateFrame(2.15)).toEqual({ ratio: 2, matted: false });
+	});
+
+	it('shows a panorama whole on a mat inside the widest frame', () => {
+		expect(plateFrame(3)).toEqual({ ratio: 2, matted: true });
+	});
+
+	it('shows a portrait whole on a mat inside the tallest frame', () => {
+		expect(plateFrame(1867 / 2800)).toEqual({ ratio: 4 / 3, matted: true });
 	});
 });

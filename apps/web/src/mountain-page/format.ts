@@ -38,6 +38,11 @@ export function formatRegion({ name, ancestors }: Region): string {
 	return parent === undefined ? name : `${name}, ${parent.name}`;
 }
 
+/** The country names that say more than the continent does; Antarctica is both. */
+export function distinctCountryNames(continent: Continent, countries: Country[]): string[] {
+	return countries.map(({ name }) => name).filter((name) => name !== continent.name);
+}
+
 /**
  * The geographic line under the name, most specific first: the region, then the countries. A
  * country that only repeats the continent (Antarctica) says nothing more, so the continent
@@ -48,7 +53,7 @@ export function formatPlaceParts(
 	countries: Country[],
 	region: Region | null | undefined
 ): string[] {
-	const names = countries.map(({ name }) => name).filter((name) => name !== continent.name);
+	const names = distinctCountryNames(continent, countries);
 	const where = names.length > 0 ? formatCountries(names) : continent.name;
 
 	return region ? [region.name, where] : [where];

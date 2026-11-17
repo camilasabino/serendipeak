@@ -82,7 +82,8 @@
 }
 
 .facts {
-	margin: var(--sp-space-6) 0 0;
+	margin: 2.25rem 0 0;
+	border-top: 2px solid var(--sp-divider-accent);
 }
 
 .fact {
@@ -91,21 +92,26 @@
 	column-gap: var(--sp-space-4);
 	align-items: baseline;
 	padding: 0.7rem 0;
-	border-top: 1px solid var(--sp-divider);
+	border-bottom: 1px solid var(--sp-divider);
+}
+
+.fact:last-child {
+	border-bottom-color: var(--sp-divider-strong);
 }
 
 .fact dt {
-	font-size: var(--sp-text-ui);
-	line-height: 1.35;
+	font: 600 0.6875rem / 1.5 var(--sp-face-ui);
+	font-stretch: var(--sp-stretch-caps);
+	letter-spacing: 0.13em;
+	text-transform: uppercase;
 	color: var(--sp-text-muted);
 }
 
 .fact dd {
 	min-width: 0;
 	margin: 0;
-	font-size: 0.9375rem;
-	font-weight: 500;
-	line-height: 1.45;
+	font: 400 0.9375rem / 1.4 var(--sp-face-ui);
+	font-variant-numeric: lining-nums tabular-nums;
 	color: var(--sp-text);
 	overflow-wrap: break-word;
 }

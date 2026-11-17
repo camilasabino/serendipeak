@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { MountainImage } from '../api/contract';
+import { plateFrame } from '../media/aspect';
 import { PhotoCredit } from '../media/PhotoCredit';
 import { PhotoViewer, type ViewerStart } from '../media/PhotoViewer';
 import { photoAlt } from '../media/primaryPhoto';
@@ -21,6 +22,7 @@ export function MountainPhoto({
 }) {
 	const { rendition, imageRef, bind, hidden, ready, ratio } = usePhotoReveal(image);
 	const [viewing, setViewing] = useState<OpenViewer>();
+	const plate = plateFrame(ratio);
 
 	if (viewing && viewing.source !== rendition.src) {
 		setViewing(undefined);
@@ -47,8 +49,9 @@ export function MountainPhoto({
 		<figure className={styles.photo}>
 			<div
 				className={styles.frame}
-				style={{ aspectRatio: ratio }}
+				style={{ aspectRatio: plate.ratio }}
 				data-state={ready ? 'ready' : 'pending'}
+				data-matted={plate.matted ? 'true' : undefined}
 			>
 				{/* eslint-disable-next-line @next/next/no-img-element -- remote photograph, sized by the contract */}
 				<img
