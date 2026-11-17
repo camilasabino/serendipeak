@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { fixture } from '../ssr/support';
+import { fixture, resetStub, serveMountain } from '../ssr/support';
 import {
 	ACONCAGUA,
 	DESKTOP,
@@ -317,6 +317,10 @@ test.describe('@webgl camera under reduced motion', () => {
 });
 
 test.describe('@webgl zoom with a view that meets no surface', () => {
+	// Explore lands on the permalink, which the server renders from the API, not from the browser.
+	test.beforeEach(({ request }) => serveMountain(request, HORIZON_PEAK));
+	test.afterEach(({ request }) => resetStub(request));
+
 	for (const [name, viewport] of [
 		['desktop', DESKTOP],
 		['phone', { width: 390, height: 700 }]

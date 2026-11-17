@@ -18,7 +18,7 @@ test.describe('@webgl @lifecycle stage failure and retry', () => {
 	}) => {
 		probe.tolerate({
 			requests: /api\.cesium\.com\/v1\/assets\/1\/endpoint/,
-			errors: /Cesium viewer failed to initialize|Failed to load resource/
+			errors: /Cesium scene failed|Failed to load resource/
 		});
 		let available = false;
 		let attempts = 0;

@@ -108,6 +108,14 @@ function buildRoutes() {
 	};
 }
 
+async function readJson(request) {
+	const chunks = [];
+	for await (const chunk of request) {
+		chunks.push(chunk);
+	}
+	return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
 function decodeSlug(encoded) {
 	try {
 		return decodeURIComponent(encoded);
@@ -121,6 +129,10 @@ export function createStubApi() {
 		buildRoutes();
 	let scenario = 'ok';
 	let requests = [];
+	// Served by slug only, never in the index or by random, so a test that adds one leaves every
+	// other test's catalog as it was. A mountain page renders on the server, which a browser route
+	// cannot reach, so a test that hands the browser a mountain of its own adds it here as well.
+	const addedMountains = new Map();
 
 	function handleControl(request, response, pathname) {
 		const send = (status, body) => {
@@ -134,7 +146,20 @@ export function createStubApi() {
 		} else if (request.method === 'POST' && action === 'reset') {
 			scenario = 'ok';
 			requests = [];
+			addedMountains.clear();
 			send(200, { scenario });
+		} else if (request.method === 'POST' && action === 'mountains') {
+			readJson(request).then(
+				(mountain) => {
+					if (typeof mountain?.slug !== 'string' || mountainsBySlug.has(mountain.slug)) {
+						send(400, { error: 'a mountain needs a slug the stub does not serve yet' });
+						return;
+					}
+					addedMountains.set(mountain.slug, mountain);
+					send(200, { slug: mountain.slug });
+				},
+				() => send(400, { error: 'the body is not JSON' })
+			);
 		} else if (request.method === 'POST' && action.startsWith('scenario/')) {
 			const requested = action.slice('scenario/'.length);
 			if (!SCENARIOS.includes(requested)) {
@@ -204,7 +229,8 @@ export function createStubApi() {
 			);
 			send(200, eligible[0] ?? daily.mountain, headers);
 		} else {
-			const mountain = slug === null ? undefined : mountainsBySlug.get(slug);
+			const mountain =
+				slug === null ? undefined : (mountainsBySlug.get(slug) ?? addedMountains.get(slug));
 			send(mountain ? 200 : 404, mountain ?? notFound);
 		}
 	});

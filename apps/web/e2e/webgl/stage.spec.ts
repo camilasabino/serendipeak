@@ -91,9 +91,13 @@ test.describe('@webgl @lifecycle stage boot', () => {
 		const heading = Number(/Looking (\d+) degrees/.exec(spoken)![1]);
 		const offset = Math.abs(heading - ACONCAGUA.camera.headingDegrees);
 		expect(Math.min(offset, 360 - offset)).toBeLessThan(5);
-		await expect(
-			page.locator('main').getByRole('button').filter({ hasNotText: 'View photo fullscreen' })
-		).toHaveText(['Zoom in', 'Zoom out', 'How to navigate', 'Reset view', 'Enter fullscreen']);
+		await expect(page.locator('[data-stage]').getByRole('button')).toHaveText([
+			'Zoom in',
+			'Zoom out',
+			'How to navigate',
+			'Reset view',
+			'Enter fullscreen'
+		]);
 	});
 });
 
@@ -207,8 +211,16 @@ test.describe('@webgl stage on a phone', () => {
 			expect(current.height).toBeGreaterThanOrEqual(44);
 			expect(current.y + current.height).toBeLessThanOrEqual(stage.y + stage.height);
 			expect(overlaps(current, compass), `button ${index} and compass`).toBe(false);
-			for (const other of boxes.slice(index + 1)) {
-				expect(overlaps(current, other)).toBe(false);
+		}
+
+		// The zoom pair is one joined control: its buttons stack and share a single border line.
+		const [zoomInBox, zoomOutBox] = boxes;
+		expect(zoomOutBox!.x).toBeCloseTo(zoomInBox!.x, 0);
+		expect(zoomInBox!.y + zoomInBox!.height - zoomOutBox!.y).toBeLessThanOrEqual(1);
+		const controls = [await box(page.getByRole('group', { name: 'Zoom' })), ...boxes.slice(2)];
+		for (const [index, current] of controls.entries()) {
+			for (const other of controls.slice(index + 1)) {
+				expect(overlaps(current, other), `control ${index} overlaps another`).toBe(false);
 			}
 		}
 

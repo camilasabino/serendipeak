@@ -15,6 +15,14 @@ export async function resetStub(request: APIRequestContext) {
 	await request.post(`${STUB_API_URL}/__control/reset`);
 }
 
+/** Serves one more mountain by its slug until the next reset; the index and random never list it. */
+export async function serveMountain(request: APIRequestContext, mountain: { slug: string }) {
+	const response = await request.post(`${STUB_API_URL}/__control/mountains`, { data: mountain });
+	if (!response.ok()) {
+		throw new Error(`the stub refused ${mountain.slug}: ${await response.text()}`);
+	}
+}
+
 export async function useScenario(request: APIRequestContext, scenario: string) {
 	await request.post(`${STUB_API_URL}/__control/scenario/${scenario}`);
 }
