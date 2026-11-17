@@ -13,6 +13,6 @@ export const getServerSideProps: GetServerSideProps<MountainPageProps> = async (
 	return { props: { ...props, siteOrigin: siteOriginProp() } };
 };
 
-export default function DailyMountainPage(props: MountainPageProps) {
-	return <MountainPageView {...props} />;
-}
+// The same component for every mountain route, so React keeps the sheet, and the Explore control in
+// it, mounted while a visitor explores from Today to a permalink and on to the next mountain.
+export default MountainPageView;

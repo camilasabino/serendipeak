@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
 import { ABOUT_LINK_LABEL, ABOUT_PATH } from '../about/aboutCopy';
 import { ATLAS_LINK_LABEL } from '../atlas/atlasCopy';
 import { ATLAS_PATH } from '../atlas/atlasQuery';
@@ -8,17 +7,20 @@ import { SearchControl } from '../search/SearchControl';
 import { BrandMark } from './BrandMark';
 import styles from './SiteHeader.module.css';
 
+const BRAND_LINK_LABEL = 'SerendiPeak home';
+
 interface SiteHeaderProps {
 	pathname?: string;
-	children?: ReactNode;
 }
 
-export function SiteHeader({ pathname, children }: SiteHeaderProps) {
+export function SiteHeader({ pathname }: SiteHeaderProps) {
 	return (
 		<header className={styles.header}>
-			<Link className={styles.brand} href={TODAY_PATH}>
-				<BrandMark size={36} />
-				<span className={styles.name}>SerendiPeak</span>
+			<Link className={styles.brand} href={TODAY_PATH} aria-label={BRAND_LINK_LABEL}>
+				<BrandMark size={32} />
+				<span className={styles.wordmark}>
+					Serend<span className={styles.tittle}>i</span>Peak
+				</span>
 			</Link>
 			<nav className={styles.nav} aria-label="Primary">
 				<SearchControl />
@@ -43,7 +45,6 @@ export function SiteHeader({ pathname, children }: SiteHeaderProps) {
 				>
 					{ABOUT_LINK_LABEL}
 				</Link>
-				{children}
 			</nav>
 		</header>
 	);

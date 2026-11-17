@@ -37,8 +37,11 @@ export function anchorsOf(html: string): Anchor[] {
 	});
 }
 
+// A live region has to exist before it has anything to say, so an empty one is not a defect.
 export function hasEmptyElement(html: string): boolean {
-	const withoutGraphics = html.replace(/<svg[\s\S]*?<\/svg>/g, '');
+	const withoutGraphics = html
+		.replace(/<svg[\s\S]*?<\/svg>/g, '[graphic]')
+		.replace(/<(\w+)\s[^>]*aria-live="polite"[^>]*>\s*<\/\1>/g, '');
 
 	return /<(\w+)(?:\s[^>]*)?>\s*<\/\1>/.test(withoutGraphics);
 }

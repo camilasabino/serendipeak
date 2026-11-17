@@ -1,6 +1,7 @@
 import { isValidElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import { textsOf } from '../mountain-page/test-support/markup';
 import { ExploreButton } from './ExploreControl';
 
 const noop = () => {};
@@ -18,12 +19,14 @@ describe('ExploreButton', () => {
 		expect(html).not.toMatch(/\sdisabled(=""|\s|>)/);
 	});
 
-	it('hides the decorative arrow from assistive technology', () => {
+	it('names the action by its label alone and hides the arrow from assistive technology', () => {
 		const html = renderToStaticMarkup(
 			<ExploreButton slug="aconcagua" state={{ status: 'idle' }} onExplore={noop} />
 		);
 
-		expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*>→<\/span>/);
+		expect(textsOf(html, 'button')).toEqual(['Explore another']);
+		expect(html).toMatch(/<span[^>]*aria-hidden="true"[^>]*><svg[\s\S]*<\/svg><\/span>/);
+		expect(html).not.toContain('aria-label');
 	});
 
 	it('exposes the busy state while exploring and stays focusable', () => {
@@ -35,7 +38,8 @@ describe('ExploreButton', () => {
 		expect(html).toContain('aria-disabled="true"');
 		expect(html).toContain('Exploring…');
 		expect(html).not.toContain('Explore another');
-		expect(html).not.toContain('→');
+		expect(textsOf(html, 'button')).toEqual(['Exploring…']);
+		expect(html).toContain('<svg');
 		expect(html).not.toMatch(/\sdisabled(=""|\s|>)/);
 	});
 
@@ -66,7 +70,9 @@ describe('ExploreButton', () => {
 			/>
 		);
 
-		expect(html).toMatch(/<p[^>]*role="alert"[^>]*>No mountain is available right now\.<\/p>/);
+		expect(html).toMatch(/<p[^>]*role="alert"[^>]*>/);
+		expect(textsOf(html, 'p')).toEqual(['No mountain is available right now.']);
+		expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
 	});
 
 	it('does not show the failure of another mountain page', () => {

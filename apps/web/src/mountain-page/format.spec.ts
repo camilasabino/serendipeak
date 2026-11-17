@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCoordinates, formatCountries } from './format';
+import { formatCoordinates, formatCountries, formatPlaceParts } from './format';
 
 describe('formatCoordinates', () => {
 	it('labels north and east', () => {
@@ -56,5 +56,43 @@ describe('formatCountries', () => {
 		expect(formatCountries(['Austria', 'Italy', 'Switzerland'])).toBe(
 			'Austria, Italy, and Switzerland'
 		);
+	});
+});
+
+describe('formatPlaceParts', () => {
+	const europe = { code: 'EU', name: 'Europe' };
+	const france = { code: 'FR', name: 'France' };
+	const italy = { code: 'IT', name: 'Italy' };
+	const massif = { slug: 'mont-blanc-massif', name: 'Mont Blanc massif', ancestors: [] };
+
+	it('puts the region before the countries', () => {
+		expect(formatPlaceParts(europe, [france, italy], massif)).toEqual([
+			'Mont Blanc massif',
+			'France and Italy'
+		]);
+	});
+
+	it('names the region alone, without its ancestors', () => {
+		const region = { ...massif, ancestors: [{ slug: 'alps', name: 'Alps' }] };
+
+		expect(formatPlaceParts(europe, [france], region)).toEqual(['Mont Blanc massif', 'France']);
+	});
+
+	it('shows the countries alone when there is no region', () => {
+		expect(formatPlaceParts(europe, [france], null)).toEqual(['France']);
+	});
+
+	it('falls back to the continent when there are no countries', () => {
+		expect(formatPlaceParts(europe, [], null)).toEqual(['Europe']);
+	});
+
+	it('does not repeat a country that is the continent', () => {
+		const antarctica = { code: 'AN', name: 'Antarctica' };
+		const range = { slug: 'sentinel-range', name: 'Sentinel Range', ancestors: [] };
+
+		expect(formatPlaceParts(antarctica, [antarctica], range)).toEqual([
+			'Sentinel Range',
+			'Antarctica'
+		]);
 	});
 });

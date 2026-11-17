@@ -9,17 +9,10 @@ interface ExploreButtonProps {
 	state: ExploreState;
 	onExplore: () => void;
 	buttonRef?: Ref<HTMLButtonElement>;
-	placement?: 'header' | 'panel';
 }
 
 // Stays focusable while busy: the explorer ignores repeated activations itself.
-export function ExploreButton({
-	slug,
-	state,
-	onExplore,
-	buttonRef,
-	placement = 'header'
-}: ExploreButtonProps) {
+export function ExploreButton({ slug, state, onExplore, buttonRef }: ExploreButtonProps) {
 	const busy = state.status === 'loading';
 
 	return (
@@ -32,27 +25,45 @@ export function ExploreButton({
 				aria-disabled={busy}
 				onClick={onExplore}
 			>
-				{busy ? EXPLORING_LABEL : EXPLORE_LABEL}
-				{!busy && <span aria-hidden="true">→</span>}
+				<span>{busy ? EXPLORING_LABEL : EXPLORE_LABEL}</span>
+				<span className={styles.disc} aria-hidden="true">
+					<svg
+						className={styles.arrow}
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<path d="M6 12h12M13 7l5 5-5 5" />
+					</svg>
+				</span>
 			</button>
 			{state.status === 'failed' && state.from === slug && (
-				<p
-					className={placement === 'panel' ? `${styles.error} ${styles.inlineError}` : styles.error}
-					role="alert"
-				>
-					{state.message}
+				<p className={styles.error} role="alert">
+					<svg
+						className={styles.errorIcon}
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.75"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						aria-hidden="true"
+					>
+						<circle cx="12" cy="12" r="8.5" />
+						<path d="M12 7.5v5.5" />
+						<circle cx="12" cy="16.3" r=".7" fill="currentColor" />
+					</svg>
+					<span>{state.message}</span>
 				</p>
 			)}
 		</>
 	);
 }
 
-interface ExploreControlProps {
-	slug: string;
-	placement?: 'header' | 'panel';
-}
-
-export function ExploreControl({ slug, placement }: ExploreControlProps) {
+export function ExploreControl({ slug }: { slug: string }) {
 	const buttonRef = useRef<HTMLButtonElement>(null);
 	const explorer = useExplorer(buttonRef);
 	const state = useSyncExternalStore(
@@ -66,7 +77,6 @@ export function ExploreControl({ slug, placement }: ExploreControlProps) {
 			slug={slug}
 			state={state}
 			buttonRef={buttonRef}
-			placement={placement}
 			onExplore={() => void explorer.explore(slug)}
 		/>
 	);

@@ -1,4 +1,7 @@
 .photo {
+	/* The ring sits over any photograph, so it keeps the light line the sheet's copper would replace. */
+	--sp-focus: var(--sp-paper-bright);
+
 	min-width: 0;
 	margin: var(--sp-space-5) 0 0;
 }

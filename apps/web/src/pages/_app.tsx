@@ -1,5 +1,7 @@
+import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource/instrument-sans/400.css';
 import '@fontsource/instrument-sans/500.css';
+import '@fontsource/marcellus/400.css';
 import '@fontsource/spectral/400.css';
 import type { AppProps } from 'next/app';
 import Router from 'next/router';

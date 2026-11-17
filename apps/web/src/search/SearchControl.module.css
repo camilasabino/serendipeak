@@ -2,28 +2,39 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.4rem;
+	gap: 0.45rem;
 	box-sizing: border-box;
 	min-width: 2.75rem;
 	min-height: 2.75rem;
-	padding: 0 0.25rem;
+	padding: 0 0.4rem;
 	border: 0;
+	border-radius: 4px;
 	background: transparent;
-	color: var(--sp-mist);
-	font-family: var(--sp-font-ui);
-	font-size: var(--sp-text-ui);
-	line-height: 1.2;
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
+	font-size: 0.8125rem;
+	font-stretch: var(--sp-stretch-nav);
+	font-weight: 500;
+	letter-spacing: 0.07em;
+	line-height: 1;
+	text-transform: uppercase;
 	white-space: nowrap;
 	cursor: pointer;
+	transition: color var(--sp-duration-short) var(--sp-ease-out);
 }
 
 .button:hover {
-	color: var(--sp-glacier-light);
+	color: var(--sp-state-accent);
 }
 
-.button:hover .label {
-	text-decoration: underline;
-	text-underline-offset: 0.18em;
+.button:active {
+	background: var(--sp-state-hover);
+}
+
+/* Inset, matching the header's other controls at the viewport edge. */
+.button:focus-visible {
+	outline: 2px solid var(--sp-focus-ring);
+	outline-offset: -2px;
 }
 
 .icon {
@@ -32,7 +43,7 @@
 	height: 1.125rem;
 	fill: none;
 	stroke: currentColor;
-	stroke-width: 1.6;
+	stroke-width: 1.75;
 	stroke-linecap: round;
 }
 
@@ -43,6 +54,13 @@
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+@media (min-width: 56rem) {
+	.button {
+		padding-inline: 0.6rem;
+		letter-spacing: 0.12em;
+	}
 }
 
 /* On a narrow header the magnifier stands alone; the button keeps its full accessible name. */

@@ -43,12 +43,6 @@
 	max-width: 28rem;
 }
 
-.lockup img {
-	display: block;
-	width: 4rem;
-	height: 4rem;
-}
-
 .name {
 	margin: 0;
 	font-family: var(--sp-font-display);

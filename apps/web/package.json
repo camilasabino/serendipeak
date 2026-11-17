@@ -25,7 +25,9 @@
 		"test:webgl:prod": "npm run cesium:assets && WEBGL_SERVER=production playwright test --config=playwright.webgl.config.ts"
 	},
 	"dependencies": {
+		"@fontsource-variable/archivo": "^5.3.0",
 		"@fontsource/instrument-sans": "^5.3.0",
+		"@fontsource/marcellus": "^5.3.0",
 		"@fontsource/spectral": "^5.3.0",
 		"cesium": "1.146.0",
 		"next": "16.4.3",

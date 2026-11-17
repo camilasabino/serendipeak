@@ -5,6 +5,7 @@ import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
+import { ShareControl } from './ShareControl';
 import { mountainShare } from './socialMetadata';
 import { DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
 
@@ -23,26 +24,27 @@ export function MountainView({
 }: MountainViewProps) {
 	const { primaryImage, sources } = mountain;
 
+	const share = preview ? undefined : mountainShare(mountain.slug, siteOrigin);
+	const runningHead = daily ? (
+		<p className={styles.eyebrow}>{DAILY_EYEBROW}</p>
+	) : (
+		!preview && <AtlasReturnLink />
+	);
+
 	return (
 		<div className={styles.sheet}>
+			{(runningHead || share) && (
+				<div className={styles.runhead}>
+					{runningHead}
+					{share && <ShareControl key={mountain.slug} title={mountain.name} share={share} />}
+				</div>
+			)}
 			{preview && (
 				<p className={styles.preview} role="note">
 					{PREVIEW_NOTICE}
 				</p>
 			)}
-			{daily && <p className={styles.eyebrow}>{DAILY_EYEBROW}</p>}
-			<MountainInfoPanel
-				mountain={mountain}
-				share={preview ? undefined : mountainShare(mountain.slug, siteOrigin)}
-			/>
-			<div className={styles.explore}>
-				<ExploreControl slug={mountain.slug} placement="panel" />
-			</div>
-			{!daily && !preview && (
-				<p className={styles.atlas}>
-					<AtlasReturnLink />
-				</p>
-			)}
+			<MountainInfoPanel mountain={mountain} action={<ExploreControl slug={mountain.slug} />} />
 			{primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
 			<DataSources sources={sources} />
 			{daily && <p className={styles.cue}>{DAILY_CUE}</p>}

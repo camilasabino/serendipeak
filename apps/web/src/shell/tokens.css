@@ -27,16 +27,78 @@
 	--sp-space-5: 1.5rem;
 	--sp-space-6: 2rem;
 	--sp-radius: 2px;
+
+	--sp-basalt: #110f0e;
+	--sp-basalt-1: #181514;
+	--sp-basalt-2: #211d1b;
+	--sp-basalt-3: #2b2623;
+	--sp-snow: #f3eee8;
+	--sp-snow-muted: #b3a99f;
+	--sp-copper: #df9a66;
+	--sp-copper-deep: #d18a55;
+	--sp-copper-light: #e3a171;
+	--sp-copper-ink: #140c07;
+	--sp-ice: #9fd2da;
+
+	--sp-surface-base: var(--sp-basalt);
+	--sp-surface-sheet: var(--sp-basalt-1);
+	--sp-surface-raised: var(--sp-basalt-2);
+	--sp-text: var(--sp-snow);
+	--sp-text-muted: var(--sp-snow-muted);
+	--sp-text-accent: var(--sp-copper);
+	--sp-link: var(--sp-ice);
+	--sp-link-rule: color-mix(in srgb, var(--sp-ice) 45%, transparent);
+	--sp-action: var(--sp-copper-deep);
+	--sp-action-hover: var(--sp-copper-light);
+	--sp-on-action: var(--sp-copper-ink);
+	--sp-state-accent: var(--sp-copper);
+	--sp-state-hover: color-mix(in srgb, var(--sp-snow) 8%, transparent);
+	--sp-selection: color-mix(in srgb, var(--sp-copper) 35%, transparent);
+	--sp-focus-ring: var(--sp-copper);
+	--sp-divider: color-mix(in srgb, var(--sp-snow) 10%, transparent);
+	--sp-divider-strong: color-mix(in srgb, var(--sp-snow) 30%, transparent);
+	--sp-divider-control: color-mix(in srgb, var(--sp-snow) 40%, transparent);
+	--sp-divider-chrome: color-mix(in srgb, var(--sp-snow) 9%, transparent);
+	--sp-divider-accent: var(--sp-copper);
+	--sp-photo-mat: var(--sp-basalt-3);
+	--sp-chip: color-mix(in srgb, var(--sp-basalt) 80%, transparent);
+	--sp-chip-rule: color-mix(in srgb, var(--sp-snow) 14%, transparent);
+	--sp-chip-text: var(--sp-snow);
+	--sp-geo-label: var(--sp-snow);
+	--sp-geo-elevation: var(--sp-copper);
+	--sp-geo-plate: var(--sp-basalt);
+	--sp-geo-plate-ring: color-mix(in srgb, var(--sp-snow) 16%, transparent);
+	--sp-contour: color-mix(in srgb, var(--sp-copper) 20%, transparent);
+	--sp-contour-index: color-mix(in srgb, var(--sp-copper) 34%, transparent);
+
+	/* Marcellus has a single weight and no tabular figures, so every figure is set in Archivo. */
+	--sp-face-display: 'Marcellus', 'Optima', 'Candara', serif;
+	--sp-face-ui: 'Archivo Variable', 'Helvetica Neue', Arial, sans-serif;
+	--sp-stretch-label: 92%;
+	--sp-stretch-figure: 88%;
+	--sp-stretch-nav: 87.5%;
+	--sp-stretch-caps: 85%;
+
+	--sp-duration-short: 160ms;
+	--sp-duration-medium: 240ms;
+	--sp-duration-long: 420ms;
+	--sp-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
 	margin: 0;
-	background: var(--sp-surface-stage);
-	color: var(--sp-text-on-stage);
-	font-family: var(--sp-font-ui);
+	background: var(--sp-surface-base);
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
 	font-size: var(--sp-text-body);
 	font-synthesis: none;
 	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: var(--sp-selection);
+	color: var(--sp-text);
 }
 
 a:focus-visible,

@@ -66,16 +66,20 @@ describe('AppFrame stage', () => {
 describe('AppFrame header', () => {
 	it('links the brand home on every page', () => {
 		for (const props of [{}, { model: permalink }]) {
-			expect(anchorsOf(render(props))[0]).toMatchObject({ href: '/', text: 'SerendiPeak' });
+			const [brand] = anchorsOf(render(props));
+
+			expect(brand).toMatchObject({ href: '/', text: 'SerendiPeak' });
+			expect(brand?.attributes).toContain('aria-label="SerendiPeak home"');
 		}
 	});
 
-	it('offers a usable Explore control in the header on a permalink', () => {
+	it('keeps Explore out of the header on a permalink, where the sheet owns it', () => {
 		const html = render({ model: permalink });
+		const header = html.match(/<header[\s\S]*<\/header>/)?.[0] ?? '';
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
-		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
-		expect(html).toContain('aria-busy="false"');
+		expect(textsOf(header, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
+		expect(html).not.toContain('Explore');
 	});
 
 	it('offers Today once, in the header, on the daily page and on a permalink', () => {
@@ -91,11 +95,11 @@ describe('AppFrame header', () => {
 		}
 	});
 
-	it('offers the Explore control on the daily page', () => {
+	it('keeps Explore out of the header on the daily page', () => {
 		const html = render({ model: dailyModel });
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'Explore another→']);
-		expect(html).not.toMatch(/<button[^>]*\sdisabled(=""|\s|>)/);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
+		expect(html).not.toContain('Explore');
 	});
 
 	it.each([
@@ -131,11 +135,11 @@ describe('AppFrame About link', () => {
 		expect(html.indexOf('</nav>')).toBeLessThan(html.indexOf('</header>'));
 	});
 
-	it('keeps the Explore control in the same navigation after About', () => {
+	it('keeps the primary navigation to search and the three destinations on a permalink', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
 		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Today', 'Atlas', 'About']);
-		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'Explore another→']);
+		expect(textsOf(nav, 'button')).toEqual(['Search mountains']);
 	});
 
 	it.each([

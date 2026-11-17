@@ -52,7 +52,7 @@ describe.each([
 		expect(countOf(html, 'canvas')).toBe(0);
 		expect(textsOf(html, 'button')).toEqual([
 			'Copy link',
-			'Explore another→',
+			'Explore another',
 			'View photo fullscreen'
 		]);
 		expect(html).not.toMatch(/role="alert"|cesium/i);

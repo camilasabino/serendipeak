@@ -67,6 +67,27 @@ test.describe('@nogl Explore', () => {
 		expect(watched.pageErrors).toEqual([]);
 	});
 
+	test('lands on the new heading and becomes usable again when started from Today', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		await page.goto('/');
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(DAILY.name);
+
+		const button = exploreButton(page);
+		await button.evaluate((element) => element.setAttribute('data-probe', 'persistent'));
+		await button.focus();
+		await page.keyboard.press('Enter');
+
+		await expect(page).toHaveURL(new RegExp(`/mountains/${BARE_PEAK.slug}$`));
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(BARE_PEAK.name);
+		await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+		await expect(page.locator('button[data-probe="persistent"]')).toHaveCount(1);
+		await expect(button).toHaveAttribute('aria-busy', 'false');
+		await expect(button).toHaveAccessibleName(/^Explore another/);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
 	test('keeps the daily identity: / still serves today’s mountain after exploring from it', async ({
 		page
 	}) => {
@@ -211,7 +232,7 @@ test.describe('@nogl Explore', () => {
 
 			await exploreButton(page).click();
 
-			const alert = page.locator('header').getByRole('alert');
+			const alert = page.locator('main section').getByRole('alert');
 			await expect(alert).toHaveText(message);
 			await expect(alert).not.toContainText(/50\d|error|stack/i);
 			await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'false');
@@ -222,7 +243,7 @@ test.describe('@nogl Explore', () => {
 			await exploreButton(page).click();
 
 			await expect(page).toHaveURL(new RegExp(`/mountains/${BARE_PEAK.slug}$`));
-			await expect(page.locator('header').getByRole('alert')).toHaveCount(0);
+			await expect(page.locator('main section').getByRole('alert')).toHaveCount(0);
 			expect(watched.pageErrors).toEqual([]);
 		});
 	}
@@ -263,7 +284,7 @@ async function expectSettledOn(page: Page, mountain: Named, path = `/mountains/$
 	await expect(page).toHaveURL(new RegExp(`${path}$`));
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(mountain.name);
 	await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'false');
-	await expect(page.locator('header').getByRole('alert')).toHaveCount(0);
+	await expect(page.locator('main section').getByRole('alert')).toHaveCount(0);
 }
 
 // Negative evidence needs a settled network, not a sleep: the late answer must have been consumed.

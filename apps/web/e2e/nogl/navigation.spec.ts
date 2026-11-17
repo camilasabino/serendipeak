@@ -11,7 +11,6 @@ const DAILY = fixture<{ mountain: Named }>('daily-mountain.json').mountain;
 
 const WIDTHS = [320, 360, 375, 390, 414, 430, 768, 1024, 1440];
 const PAGES = ['/', `/mountains/${ACONCAGUA.slug}`, '/atlas', '/about'];
-const SPLIT_LAYOUT_MIN_WIDTH = 896;
 
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
 const brand = (page: Page) => page.getByRole('banner').getByRole('link', { name: 'SerendiPeak' });
@@ -96,6 +95,29 @@ test.describe('@nogl global navigation', () => {
 		await expect(page.getByRole('dialog', { name: 'Search mountains' })).toBeVisible();
 	});
 
+	for (const [width, height] of [
+		[960, 540],
+		[1280, 720],
+		[1440, 900]
+	] as const) {
+		test(`keeps the header on one row at ${width}×${height}`, async ({ page }) => {
+			await page.setViewportSize({ width, height });
+			await page.goto(`/mountains/${ACONCAGUA.slug}`);
+
+			const links = [
+				primary(page).getByRole('button', { name: 'Search mountains' }),
+				primary(page).getByRole('link', { name: 'Today' }),
+				primary(page).getByRole('link', { name: 'Atlas' }),
+				primary(page).getByRole('link', { name: 'About' })
+			];
+			const rows = (await boxes(links)).map(({ y }) => Math.round(y));
+			const header = await page.getByRole('banner').boundingBox();
+
+			expect(new Set(rows).size).toBe(1);
+			expect(header?.height).toBeLessThanOrEqual(57);
+		});
+	}
+
 	for (const width of WIDTHS) {
 		test(`lays the header out without overlap or overflow at ${width}px`, async ({ page }) => {
 			await page.setViewportSize({ width, height: 800 });
@@ -132,6 +154,7 @@ test.describe('@nogl global navigation', () => {
 
 				const wordmark = await brand(page)
 					.locator('span')
+					.first()
 					.evaluate((element) => element.getBoundingClientRect().width > 1);
 				expect(wordmark, `${path} wordmark`).toBe(width > 384);
 
@@ -142,19 +165,19 @@ test.describe('@nogl global navigation', () => {
 			}
 		});
 
-		test(`offers one visible Explore control on a mountain at ${width}px`, async ({ page }) => {
+		test(`offers one Explore control, in the sheet and not the header, at ${width}px`, async ({
+			page
+		}) => {
 			await page.setViewportSize({ width, height: 800 });
 			await page.goto(`/mountains/${ACONCAGUA.slug}`);
 
 			await expect(exploreButtons(page)).toHaveCount(1);
-			const inHeader =
-				(await page
-					.getByRole('banner')
-					.getByRole('button', {
-						name: /^Explore another/
-					})
-					.count()) === 1;
-			expect(inHeader).toBe(width >= SPLIT_LAYOUT_MIN_WIDTH);
+			await expect(
+				page.getByRole('banner').getByRole('button', { name: /^Explore another/ })
+			).toHaveCount(0);
+			await expect(
+				page.locator('main').getByRole('button', { name: /^Explore another/ })
+			).toHaveCount(1);
 		});
 	}
 });

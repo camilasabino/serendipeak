@@ -95,7 +95,7 @@ test.describe('minimal permalink', () => {
 	test('collapses to elevation and coordinates', async ({ request }) => {
 		const html = await (await request.get(`/mountains/${minimal.slug}`)).text();
 
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Coordinates']);
 	});
 });
 
@@ -109,9 +109,8 @@ test.describe('daily page', () => {
 		expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/"[^>]*>Today<\/a>/);
 		expect(textsOf(html, 'button')).toEqual([
 			'Search mountains',
-			'Explore another→',
 			'Copy link',
-			'Explore another→',
+			'Explore another',
 			'View photo fullscreen'
 		]);
 		expect(html).toMatch(/<button[^>]*disabled=""[^>]*>\s*<span[^>]*>View photo fullscreen/);

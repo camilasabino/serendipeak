@@ -1,4 +1,4 @@
-import type { Coordinates, Region } from '../api/contract';
+import type { Continent, Coordinates, Country, Region } from '../api/contract';
 
 const COORDINATE_DECIMALS = 4;
 
@@ -36,4 +36,20 @@ export function formatRegion({ name, ancestors }: Region): string {
 	const parent = ancestors.at(-1);
 
 	return parent === undefined ? name : `${name}, ${parent.name}`;
+}
+
+/**
+ * The geographic line under the name, most specific first: the region, then the countries. A
+ * country that only repeats the continent (Antarctica) says nothing more, so the continent
+ * stands alone, and a mountain with no countries still gets a place.
+ */
+export function formatPlaceParts(
+	continent: Continent,
+	countries: Country[],
+	region: Region | null | undefined
+): string[] {
+	const names = countries.map(({ name }) => name).filter((name) => name !== continent.name);
+	const where = names.length > 0 ? formatCountries(names) : continent.name;
+
+	return region ? [region.name, where] : [where];
 }

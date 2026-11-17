@@ -8,6 +8,19 @@ describe('markup helpers', () => {
 		expect(hasEmptyElement('<div><p>text</p><svg><path d="M0"></path></svg></div>')).toBe(false);
 	});
 
+	it('counts a wrapper that holds only a graphic as filled', () => {
+		expect(
+			hasEmptyElement('<div><span aria-hidden="true"><svg><path d="M0"></path></svg></span></div>')
+		).toBe(false);
+	});
+
+	it('allows an empty live region and nothing else empty beside it', () => {
+		expect(hasEmptyElement('<div>a<span aria-live="polite" class="x"></span></div>')).toBe(false);
+		expect(
+			hasEmptyElement('<div>a<span aria-live="polite"></span><span class="x"></span></div>')
+		).toBe(true);
+	});
+
 	it('counts whole tag names only', () => {
 		expect(countOf('<h1 id="a">x</h1><header>', 'h1')).toBe(1);
 		expect(countOf('<h1>x</h1><h2>y</h2>', 'h[2-6]')).toBe(1);

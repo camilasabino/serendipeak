@@ -45,7 +45,6 @@ describe('MountainInfoPanel', () => {
 		expect(textsOf(render({ countries: [] }), 'dt')).toEqual([
 			'Continent',
 			'Region',
-			'Elevation',
 			'Coordinates'
 		]);
 	});
@@ -58,18 +57,13 @@ describe('MountainInfoPanel', () => {
 
 		expect(summary).toBeDefined();
 		expect(complete.region).not.toBeNull();
-		expect(html).not.toContain('<p');
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Elevation', 'Coordinates']);
+		expect(textsOf(html, 'p')).not.toContain(summary);
+		expect(textsOf(html, 'p')).toHaveLength(2);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Coordinates']);
 	});
 
-	it('shows the region between the countries and the elevation', () => {
-		expect(textsOf(render({}), 'dt')).toEqual([
-			'Continent',
-			'Country',
-			'Region',
-			'Elevation',
-			'Coordinates'
-		]);
+	it('shows the region between the countries and the coordinates', () => {
+		expect(textsOf(render({}), 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
 	});
 
 	it('shows a root region by its name alone', () => {
@@ -93,5 +87,50 @@ describe('MountainInfoPanel', () => {
 
 	it('speaks the coordinates as a map link', () => {
 		expect(render({})).toContain('aria-label="32.6531° S, 70.0120° W on Google Maps"');
+	});
+
+	describe('masthead', () => {
+		it('orders the name, the elevation, the place and the lede', () => {
+			const html = render({});
+			const order = ['<h1', 'Elevation', complete.region?.name ?? '', complete.summary ?? ''].map(
+				(fragment) => html.indexOf(fragment)
+			);
+
+			expect(order.every((position) => position > -1)).toBe(true);
+			expect(order).toEqual([...order].sort((a, b) => a - b));
+		});
+
+		it('sets the elevation as a grouped figure, named for assistive technology', () => {
+			const html = render({ elevationMeters: 6961 });
+
+			expect(textsOf(html, 'p')[0]).toBe('Elevation 6,961 m');
+			expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
+		});
+
+		it('names the region and the countries on the place line', () => {
+			const html = render({
+				region: { slug: 'andes', name: 'Andes', ancestors: [] },
+				countries: [
+					{ code: 'AR', name: 'Argentina' },
+					{ code: 'CL', name: 'Chile' }
+				]
+			});
+
+			expect(textsOf(html, 'p')[1]).toBe('Andes· Argentina and Chile');
+		});
+
+		it('keeps a place line without a region or a summary', () => {
+			const { summary, ...rest } = complete;
+			const html = renderToStaticMarkup(
+				<MountainInfoPanel mountain={{ ...rest, region: null } as Mountain} />
+			);
+
+			expect(summary).toBeDefined();
+			expect(textsOf(html, 'p')[1]).toBe(complete.countries.map(({ name }) => name).join(', '));
+		});
+
+		it('hides the separators from assistive technology', () => {
+			expect(render({})).toContain('aria-hidden="true">·</span>');
+		});
 	});
 });

@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	useSyncExternalStore,
+	type ReactNode,
+	type Ref
+} from 'react';
 import {
 	copyLink,
 	readShareEnvironment,
@@ -32,51 +41,231 @@ export function feedbackFor(outcome: ShareOutcome, url: string): ShareFeedback {
 	}
 }
 
-function feedbackText(feedback: ShareFeedback): string {
+function announcementFor(feedback: ShareFeedback): string {
 	switch (feedback.status) {
 		case 'shared':
 			return SHARED_MESSAGE;
 		case 'copied':
 			return COPIED_MESSAGE;
 		case 'failed':
-			return `${COPY_FAILED_MESSAGE} ${feedback.url}`;
 		case 'idle':
 			return '';
 	}
 }
 
+export function shareButtonLabel(title: string): string {
+	return `${SHARE_LABEL} ${title}`;
+}
+
+export function copyFallbackLabel(title: string): string {
+	return `Link to ${title}`;
+}
+
+export interface Dismissal {
+	/** Escape returns focus to Copy link; a click or Tab elsewhere leaves it where the visitor put it. */
+	restoreFocus: boolean;
+}
+
 interface ShareButtonProps {
+	title: string;
 	native: boolean;
 	feedback: ShareFeedback;
 	onShare: () => void;
 	onCopy: () => void;
+	onDismiss: (dismissal: Dismissal) => void;
+	copyRef?: Ref<HTMLButtonElement>;
 }
 
-export function ShareButton({ native, feedback, onShare, onCopy }: ShareButtonProps) {
+export function ShareButton({
+	title,
+	native,
+	feedback,
+	onShare,
+	onCopy,
+	onDismiss,
+	copyRef
+}: ShareButtonProps) {
+	const boundary = useRef<HTMLDivElement>(null);
+	const failed = feedback.status === 'failed';
+	const shared = feedback.status === 'shared';
+	const copied = feedback.status === 'copied';
+
+	useEffect(() => {
+		if (!failed) {
+			return;
+		}
+
+		const dismissOutside = (event: PointerEvent) => {
+			const inside = event.target instanceof Node && boundary.current?.contains(event.target);
+			if (!inside) {
+				onDismiss({ restoreFocus: false });
+			}
+		};
+		const dismissOnEscape = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				onDismiss({ restoreFocus: true });
+			}
+		};
+
+		document.addEventListener('pointerdown', dismissOutside);
+		document.addEventListener('keydown', dismissOnEscape);
+
+		return () => {
+			document.removeEventListener('pointerdown', dismissOutside);
+			document.removeEventListener('keydown', dismissOnEscape);
+		};
+	}, [failed, onDismiss]);
+
 	return (
-		<div className={styles.share}>
-			<div className={styles.actions}>
+		<div
+			ref={boundary}
+			className={styles.share}
+			onBlur={(event) => {
+				// A null target is the window or tab losing focus, which is not a decision to leave.
+				const left =
+					event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget);
+				if (failed && left) {
+					onDismiss({ restoreFocus: false });
+				}
+			}}
+		>
+			<span role="group" aria-label={SHARE_LABEL} className={styles.group}>
 				{native && (
-					<button type="button" className={styles.button} onClick={onShare}>
-						{SHARE_LABEL}
-					</button>
+					<ActionButton
+						label={shareButtonLabel(title)}
+						tip={shared ? SHARED_MESSAGE : SHARE_LABEL}
+						done={shared}
+						icon={shared ? <CheckIcon /> : <ShareIcon />}
+						onClick={onShare}
+					/>
 				)}
-				<button type="button" className={styles.button} onClick={onCopy}>
-					{COPY_LINK_LABEL}
-				</button>
-			</div>
-			{feedback.status !== 'idle' && (
-				<p className={styles.status} role="status">
-					{feedback.status === 'failed' ? (
-						<>
-							{COPY_FAILED_MESSAGE} <span className={styles.url}>{feedback.url}</span>
-						</>
-					) : (
-						feedbackText(feedback)
-					)}
-				</p>
-			)}
+				<ActionButton
+					label={COPY_LINK_LABEL}
+					tip={copied ? COPIED_MESSAGE : COPY_LINK_LABEL}
+					done={copied}
+					icon={copied ? <CheckIcon /> : <LinkIcon />}
+					onClick={onCopy}
+					buttonRef={copyRef}
+				/>
+			</span>
+			<span aria-live="polite" aria-atomic="true" className={styles.hidden}>
+				{announcementFor(feedback)}
+			</span>
+			{feedback.status === 'failed' && <CopyFallback title={title} attempt={feedback} />}
 		</div>
+	);
+}
+
+interface ActionButtonProps {
+	label: string;
+	tip: string;
+	done: boolean;
+	icon: ReactNode;
+	onClick: () => void;
+	buttonRef?: Ref<HTMLButtonElement>;
+}
+
+// The name comes from aria-label, so the tip is a courtesy that assistive technology skips.
+function ActionButton({ label, tip, done, icon, onClick, buttonRef }: ActionButtonProps) {
+	return (
+		<button
+			ref={buttonRef}
+			type="button"
+			className={styles.button}
+			aria-label={label}
+			data-done={done || undefined}
+			onClick={onClick}
+		>
+			{icon}
+			<span className={styles.tip} aria-hidden="true">
+				{tip}
+			</span>
+		</button>
+	);
+}
+
+// Focus lands on the read-only field with the link selected, which is the next thing a visitor
+// whose clipboard was refused needs to do. Each failed attempt is a new object, so a retry that
+// fails again brings focus back to the field instead of leaving it silent on the button.
+function CopyFallback({
+	title,
+	attempt
+}: {
+	title: string;
+	attempt: Extract<ShareFeedback, { status: 'failed' }>;
+}) {
+	const field = useRef<HTMLInputElement>(null);
+	const messageId = useId();
+
+	useEffect(() => {
+		const input = field.current;
+		if (!input) {
+			return;
+		}
+
+		input.focus();
+		input.select();
+		// Selecting scrolls a long link to its end; the start is what identifies it.
+		input.scrollLeft = 0;
+	}, [attempt]);
+
+	return (
+		<div role="group" aria-labelledby={messageId} className={styles.popover}>
+			<p id={messageId} className={styles.message}>
+				{COPY_FAILED_MESSAGE}
+			</p>
+			<input
+				ref={field}
+				readOnly
+				value={attempt.url}
+				aria-label={copyFallbackLabel(title)}
+				aria-describedby={messageId}
+				className={styles.field}
+			/>
+		</div>
+	);
+}
+
+function Icon({ children }: { children: ReactNode }) {
+	return (
+		<svg
+			className={styles.icon}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.75"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			{children}
+		</svg>
+	);
+}
+
+function ShareIcon() {
+	return (
+		<Icon>
+			<path d="M12 3v12M7 8l5-5 5 5" />
+			<path d="M5 13v6.5h14V13" />
+		</Icon>
+	);
+}
+
+function LinkIcon() {
+	return (
+		<Icon>
+			<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+			<path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+		</Icon>
+	);
+}
+
+function CheckIcon() {
+	return (
+		<Icon>
+			<path d="M5 12.5l4.5 4.5L19 7.5" />
+		</Icon>
 	);
 }
 
@@ -89,11 +278,14 @@ const subscribeNever = () => () => {};
 const supportsNativeShare = () => typeof navigator.share === 'function';
 const serverSupport = () => false;
 
+const IDLE: ShareFeedback = { status: 'idle' };
+
 // Native sharing is only known in the browser; the server and the first client render both show
 // the clipboard action, so hydration matches.
 export function ShareControl({ title, share }: ShareControlProps) {
 	const native = useSyncExternalStore(subscribeNever, supportsNativeShare, serverSupport);
-	const [feedback, setFeedback] = useState<ShareFeedback>({ status: 'idle' });
+	const [feedback, setFeedback] = useState<ShareFeedback>(IDLE);
+	const copyButton = useRef<HTMLButtonElement>(null);
 	const sharing = useRef(false);
 
 	useEffect(() => {
@@ -101,10 +293,17 @@ export function ShareControl({ title, share }: ShareControlProps) {
 			return;
 		}
 
-		const timer = setTimeout(() => setFeedback({ status: 'idle' }), FEEDBACK_MS);
+		const timer = setTimeout(() => setFeedback(IDLE), FEEDBACK_MS);
 
 		return () => clearTimeout(timer);
 	}, [feedback]);
+
+	const dismiss = useCallback(({ restoreFocus }: Dismissal) => {
+		setFeedback((current) => (current.status === 'failed' ? IDLE : current));
+		if (restoreFocus) {
+			copyButton.current?.focus();
+		}
+	}, []);
 
 	async function run(action: typeof shareLink) {
 		if (sharing.current) {
@@ -123,10 +322,13 @@ export function ShareControl({ title, share }: ShareControlProps) {
 
 	return (
 		<ShareButton
+			title={title}
 			native={native}
 			feedback={feedback}
+			copyRef={copyButton}
 			onShare={() => void run(shareLink)}
 			onCopy={() => void run(({ url }, environment) => copyLink(url, environment))}
+			onDismiss={dismiss}
 		/>
 	);
 }

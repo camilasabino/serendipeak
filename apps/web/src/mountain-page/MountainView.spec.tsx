@@ -62,22 +62,15 @@ describe('complete fixture', () => {
 	const html = render(complete);
 
 	it('renders summary, continent, country, region, elevation and coordinates in order', () => {
-		expect(textsOf(html, 'dt')).toEqual([
-			'Continent',
-			'Country',
-			'Region',
-			'Elevation',
-			'Coordinates'
-		]);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
 		expect(textsOf(html, 'dd')).toEqual([
 			'South America',
 			'Argentina',
 			'Principal Cordillera',
-			'6,961 m',
 			'32.6531° S, 70.0120° W'
 		]);
-		const order = [complete.summary, 'Elevation', '<figure', 'Data sources'].map((fragment) =>
-			html.indexOf(fragment ?? '')
+		const order = ['Elevation', complete.summary, 'Continent', '<figure', 'Data sources'].map(
+			(fragment) => html.indexOf(fragment ?? '')
 		);
 		expect(order.every((position) => position > -1)).toBe(true);
 		expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -104,13 +97,7 @@ describe('sparse fixture', () => {
 	const html = render(sparse);
 
 	it('keeps the region, the photograph and the data sources', () => {
-		expect(textsOf(html, 'dt')).toEqual([
-			'Continent',
-			'Country',
-			'Region',
-			'Elevation',
-			'Coordinates'
-		]);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Country', 'Region', 'Coordinates']);
 		expect(html).toContain('<figure');
 		expect(html).toContain('Data sources');
 	});
@@ -120,9 +107,9 @@ describe('minimal fixture', () => {
 	const html = render(minimal);
 
 	it('collapses to the name and the facts that exist', () => {
-		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
-		expect(textsOf(html, 'dd')).toEqual(['Europe', '2,000 m', '45.0000° N, 10.0000° E']);
-		expect(textsOf(html, 'p')).toEqual(['←Back to atlas']);
+		expect(textsOf(html, 'dt')).toEqual(['Continent', 'Coordinates']);
+		expect(textsOf(html, 'dd')).toEqual(['Europe', '45.0000° N, 10.0000° E']);
+		expect(textsOf(html, 'p')).toEqual(['Elevation 2,000 m', 'Europe']);
 	});
 
 	it.each(['Countr', 'Region', 'Data sources', '<figure', 'About this photo'])(
@@ -161,7 +148,7 @@ describe('daily composition', () => {
 	it('renders the minimal fixture without the cue becoming a placeholder row', () => {
 		const minimalDaily = render(minimal, true);
 
-		expect(textsOf(minimalDaily, 'dt')).toEqual(['Continent', 'Elevation', 'Coordinates']);
+		expect(textsOf(minimalDaily, 'dt')).toEqual(['Continent', 'Coordinates']);
 		expect(minimalDaily).toContain('Tomorrow, another mountain.');
 	});
 });
@@ -173,7 +160,7 @@ describe('sheet', () => {
 		expect(html).not.toMatch(/<main|<canvas|<script|<iframe|cesium|role="status"/i);
 		expect(textsOf(html, 'button')).toEqual([
 			'Copy link',
-			'Explore another→',
+			'Explore another',
 			'View photo fullscreen'
 		]);
 	});

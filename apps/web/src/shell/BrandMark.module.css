@@ -1,0 +1,13 @@
+.mark {
+	display: block;
+	flex: none;
+}
+
+.rings {
+	fill: none;
+	stroke: currentColor;
+}
+
+.summit {
+	fill: var(--sp-copper);
+}

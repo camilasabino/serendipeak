@@ -2,12 +2,8 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 100dvh;
-	background: var(--sp-surface-stage);
-	color: var(--sp-text-on-stage);
-}
-
-.split > header {
-	border-bottom: 1px solid var(--sp-rule);
+	background: var(--sp-surface-base);
+	color: var(--sp-text);
 }
 
 @media (min-width: 56rem) {
