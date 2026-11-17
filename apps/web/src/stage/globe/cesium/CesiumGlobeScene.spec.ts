@@ -600,6 +600,27 @@ describe('CesiumGlobeScene camera reads and zoom steps', () => {
 		expect(scene.readCamera()).toBeDefined();
 	});
 
+	it('holds direct input while a restore flies', async () => {
+		const scene = await sceneWithMountain();
+
+		expect(scene.resetView()).toBe('reset');
+
+		expect(cesium.flightCallbacks).toEqual([expect.objectContaining({ kind: 'fly' })]);
+		expect(cesium.holdInputs).toHaveBeenCalledOnce();
+	});
+
+	it('leaves direct input free after an instant restore under reduced motion', async () => {
+		const motion = { matches: false };
+		vi.stubGlobal('window', { matchMedia: () => motion });
+		const scene = await sceneWithMountain();
+		motion.matches = true;
+
+		expect(scene.resetView()).toBe('reset');
+
+		expect(cesium.flightCallbacks).toEqual([]);
+		expect(cesium.holdInputs).not.toHaveBeenCalled();
+	});
+
 	it('refuses a zoom step while the reveal or a restore owns the camera', async () => {
 		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
 		const arrival = scene.showMountain(TARGET, 'initial');

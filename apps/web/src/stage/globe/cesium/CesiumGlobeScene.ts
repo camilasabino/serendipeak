@@ -425,7 +425,8 @@ export class CesiumGlobeScene implements GlobeScene {
 
 		this.orbit.stop();
 		const result = this.camera.reset();
-		if (result === 'reset') {
+		// Only a flight needs protecting; an instant restore under reduced motion hands input back.
+		if (result === 'reset' && this.director.busy()) {
 			this.flight.holdInputs();
 		}
 
