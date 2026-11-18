@@ -4,7 +4,7 @@ import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { TestExperience } from '../test/TestExperience';
 import { AppFrame } from './AppFrame';
-import { anchorsOf, countOf, textsOf } from './test-support/markup';
+import { anchorsOf, countOf, textsOf, type Anchor } from './test-support/markup';
 import { pageModelOf, type PageModel } from './pageModel';
 
 const mountain = contractFixture('mountain-complete.json') as Mountain;
@@ -22,6 +22,11 @@ function render(pageProps: object, pathname?: string): string {
 			</AppFrame>
 		</TestExperience>
 	);
+}
+
+// An icon-only link takes its name from aria-label; the brand images are decorative (alt="").
+function accessibleNameOf({ attributes, text }: Anchor): string {
+	return /aria-label="([^"]*)"/.exec(attributes)?.[1] ?? text;
 }
 
 const permalink: PageModel = { kind: 'mountain', mountain };
@@ -66,10 +71,13 @@ describe('AppFrame stage', () => {
 describe('AppFrame header', () => {
 	it('links the brand home on every page', () => {
 		for (const props of [{}, { model: permalink }]) {
-			const [brand] = anchorsOf(render(props));
+			const html = render(props);
+			const [brand] = anchorsOf(html);
 
-			expect(brand).toMatchObject({ href: '/', text: 'SerendiPeak' });
-			expect(brand?.attributes).toContain('aria-label="SerendiPeak home"');
+			expect(brand).toMatchObject({ href: '/', text: '' });
+			expect(brand && accessibleNameOf(brand)).toBe('SerendiPeak home');
+			expect(brand?.attributes).not.toContain('aria-hidden');
+			expect(html.match(/<img[^>]*>/g)?.every((img) => img.includes('alt=""'))).toBe(true);
 		}
 	});
 
@@ -86,12 +94,13 @@ describe('AppFrame header', () => {
 		for (const props of [{ model: dailyModel }, { model: permalink }]) {
 			const html = render(props);
 
-			expect(
-				anchorsOf(html)
-					.filter(({ href }) => href === '/')
-					.map(({ text }) => text)
-			).toEqual(['SerendiPeak', 'Today']);
-			expect(anchorsOf(html).map(({ text }) => text)).not.toContain("Today's mountain");
+			const anchors = anchorsOf(html);
+
+			expect(anchors.filter(({ href }) => href === '/').map(accessibleNameOf)).toEqual([
+				'SerendiPeak home',
+				'Today'
+			]);
+			expect(anchors.map(accessibleNameOf)).not.toContain("Today's mountain");
 		}
 	});
 

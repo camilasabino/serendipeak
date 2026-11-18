@@ -190,6 +190,8 @@ npm run test:webgl
 npm run test:webgl:prod
 ```
 
+While implementing, run the focused specs for the code you touch. Before closing a batch that changes a shared frontend component or contract (header, layout, brand, navigation, tokens), run the full `npm test` and review the specs that consume it indirectly, such as page and layout specs that assert on its markup. Lint and type checking do not replace tests, and a batch is not fully validated when relevant tests were skipped.
+
 API checks, from `services/api` with local PostGIS running:
 
 ```bash
