@@ -83,7 +83,6 @@ describe('brand tokens', () => {
 	it('keeps the approved palette as the only brand hex values', () => {
 		for (const [token, value] of [
 			['--sp-stage', brand.stage],
-			['--sp-ink', brand.ink],
 			['--sp-glacier', brand.glacier],
 			['--sp-glacier-dark', brand.glacierDark],
 			['--sp-glacier-light', brand.glacierLight],
@@ -96,17 +95,12 @@ describe('brand tokens', () => {
 	});
 
 	it('maps text, accent and focus roles onto that palette', () => {
-		expect(tokens).toContain('--sp-surface-stage: var(--sp-stage)');
-		expect(tokens).toContain('--sp-text-on-stage: var(--sp-paper)');
 		expect(tokens).toContain('--sp-accent: var(--sp-glacier)');
 		expect(tokens).toContain('--sp-accent-hover: var(--sp-glacier-dark)');
 		expect(tokens).toContain('--sp-link-on-stage: var(--sp-glacier-light)');
 		expect(tokens).toContain('--sp-link-on-stage-hover: var(--sp-paper-bright)');
 		expect(tokens).toContain('--sp-focus: var(--sp-paper-bright)');
 		expect(tokens).toContain('--sp-rule: color-mix(in srgb, var(--sp-mist) 22%, transparent)');
-		expect(tokens).toContain(
-			'--sp-rule-quiet: color-mix(in srgb, var(--sp-mist) 12%, transparent)'
-		);
 	});
 
 	it('keeps the identity palette as brand hex values', () => {

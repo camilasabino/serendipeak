@@ -181,56 +181,6 @@
 	margin-top: var(--sp-space-3);
 }
 
-/* Dashed edge and hollow markers set the future apart from the solid list of what exists today. */
-.ideas {
-	margin-top: var(--sp-space-5);
-	padding: var(--sp-space-4) var(--sp-space-5);
-	border: 1px dashed var(--sp-divider-strong);
-	border-radius: 10px;
-	background: var(--sp-surface-raised);
-}
-
-.prose .ideasTitle {
-	color: var(--sp-text-accent);
-	font-size: 0.75rem;
-	font-stretch: var(--sp-stretch-caps);
-	font-weight: 600;
-	letter-spacing: 0.14em;
-	line-height: 1.5;
-	text-transform: uppercase;
-}
-
-.prose .ideasNote {
-	margin-top: 0.25rem;
-	color: var(--sp-text-muted);
-	font-size: 0.9375rem;
-	line-height: 1.5;
-}
-
-.ideas ul {
-	margin: var(--sp-space-3) 0 0;
-	padding: 0;
-	list-style: none;
-}
-
-.ideas li {
-	position: relative;
-	padding: 0.4rem 0 0.4rem 1.25rem;
-	line-height: 1.45;
-}
-
-.ideas li::before {
-	content: '';
-	position: absolute;
-	top: 0.95em;
-	left: 0;
-	box-sizing: border-box;
-	width: 0.5rem;
-	height: 0.5rem;
-	border: 1px solid var(--sp-state-accent);
-	border-radius: 50%;
-}
-
 @media (min-width: 64rem) {
 	.page {
 		--page-pad-top: clamp(2rem, 8vh, 5rem);
