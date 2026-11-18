@@ -1,51 +1,64 @@
 # SerendiPeak media
 
-Screenshots used in the root [README](../../README.md). The social preview card lives in [`docs/brand/`](../brand/) and is described at the end of this file.
+Screenshots for the root [README](../../README.md) and technical reference. The README masthead and the social preview card live in [`docs/brand/`](../brand/) and are described at the end of this file.
 
 ```text
 docs/media/
-├── mountain-view.webp         # mountain page, desktop 1440x900
-├── mountain-view-mobile.webp  # mountain page, mobile 390x844
-└── camera-editor.webp         # Camera Editor opened on a saved camera, desktop 1440x900
+├── atlas.webp                 # Atlas, desktop 1920x1080
+├── mountain-view.webp         # K2 mountain page, desktop 1920x1080
+├── mountain-view-mobile.webp  # Fitz Roy mountain page, mobile 390x844
+└── camera-editor.webp         # Camera Editor on the saved camera of Kilimanjaro, desktop 1440x900 (technical reference, not used in the README; an earlier capture with Sentinel-2 imagery, see Credits)
 ```
 
-All three show Aconcagua; see [Credits and rights](#credits-and-rights).
+The README images show different mountains on purpose. See [Credits and rights](#credits-and-rights).
 
 ## Conventions
 
-- Capture real product pages, never mockups, in a Chromium with working WebGL.
-- Capture at 1440x900 (desktop) or 390x844 (mobile), in English, without browser chrome.
+- Capture real product pages, never mockups, in a Chromium with working WebGL. Headless Chromium with software WebGL (`--use-angle=swiftshader --enable-unsafe-swiftshader`) is enough.
+- Capture at 1920x1080 (desktop) or 390x844 (mobile), in English, without browser chrome. The saved camera of a mountain adapts to the stage size, so the desktop size matters: at 1440x900 Half Dome is partly hidden behind a ridge that the 1920x1080 framing clears.
+- Open the mountain's route directly and capture without touching the camera: no `setView`, `flyTo` or `lookAt`, no Camera Editor query and no manual orbit or zoom.
+- Use the production imagery configuration, `NEXT_PUBLIC_CESIUM_IMAGERY_MODE=world`. Sentinel-2, the development default, renders snow nearly white and does not look like the deployed site.
+- Serve a production build (`next build` with `NEXT_PUBLIC_CESIUM_IMAGERY_MODE=world`, then `next start`) so the Next.js development indicator never appears in the scene. Set `NEXT_DIST_DIR` to keep the build away from the `.next` that a running development server uses.
+- Capture one page at a time. Several browsers loading terrain at once leave tiles at a low level of detail, and a scene can fail to load entirely.
 - Wait for the real scene before capturing: no status message left in the stage, no `role="alert"`, the photograph decoded, the fonts loaded, and a few seconds for terrain and imagery tiles to settle. A loading or failure state is never acceptable.
 - Use public pages only. The Camera Editor reads everything from its query and writes nothing; use only data the public API already serves for a published mountain, and never click **Save camera…**.
 - Never crop, cover or retouch the Cesium ion logo or the **Data attribution** link in the scene; they must stay visible in every capture and in anything derived from it.
-- Keep each file under about 300 KB. Terrain imagery compresses poorly, so the set is roughly 0.5 MB.
+- Keep each file under about 300 KB. Terrain imagery compresses poorly, so the set is roughly 0.35 MB at these sizes.
 
 ## Regenerating a screenshot
 
-1. Open the page at the target viewport, for example `https://serendipeak.camilasabino.dev/mountains/aconcagua`.
-2. For the Camera Editor, use `/editorial/camera?mountain=<id>&slug=<slug>&name=<name>&lat=<lat>&lon=<lon>&elevation=<m>&heading=<deg>&pitch=<deg>&range=<m>&fx=<x>&fy=<y>`, with the values from the mountain's public API response.
-3. Take a PNG screenshot of the viewport (Playwright's `page.screenshot` works well).
+1. Open the page at the target viewport, for example `http://localhost:3100/mountains/k2` against a local API with a published catalog. The Atlas is `/atlas`.
+2. Only for a Camera Editor reference (never for the public pages), use `/editorial/camera?mountain=<id>&slug=<slug>&name=<name>&lat=<lat>&lon=<lon>&elevation=<m>&heading=<deg>&pitch=<deg>&range=<m>&fx=<x>&fy=<y>`, with the values from the mountain's public API response.
+3. Take a PNG screenshot of the viewport (Playwright's `page.screenshot` works well). The Atlas globe turns slowly, so each capture frames it slightly differently.
 4. Convert it with `cwebp` (`brew install webp`):
 
 ```bash
 cwebp -q 82 -m 6 screenshot.png -o docs/media/mountain-view.webp
 ```
 
-## Social preview
+## Brand images
 
-`docs/brand/social-preview.png` is 1280x640 (the size GitHub recommends) and about 340 KB (an indexed PNG; the Cesium ion logo colors are preserved exactly). It reuses the existing brand mark (`apps/web/public/brand/serendipeak-mark.png`), the Spectral and Instrument Sans typefaces, the `--sp-stage` background and the `--sp-glacier` accent from `apps/web/src/shell/tokens.css`, with a crop of the real Aconcagua scene on the right, the imagery and terrain credits as visible text, and, unmodified, the scene's own Cesium ion attribution strip at the bottom right. It does not introduce a new logo.
+Both images use the approved symbol and wordmark SVGs from `apps/web/public/brand/` unmodified. Those artworks are snow-colored, so they would disappear on GitHub's light theme; the images therefore set them on the product's basalt surface, which reads the same in both themes.
 
-To recreate it, lay out a 1280x640 HTML page with those elements, render it in Chromium with the fonts loaded (they are in `apps/web/node_modules/@fontsource/`), and save a PNG screenshot. GitHub does not read the card from the repository: upload it under Settings → General → Social preview.
+- **`docs/brand/readme-masthead.png`** is 2560x300 (shown at the README's width, so it stays sharp on high-density screens). It is the symbol and wordmark on `--sp-basalt` (`#110f0e`) and nothing else; the tagline is Markdown text in the README.
+- **`docs/brand/social-preview.png`** is 1280x640 (the size GitHub recommends) and about 600 KB (an RGB PNG: quantizing it to a palette bands the sky and washes out the Cesium ion logo colors). It lays out the symbol, the wordmark, the tagline and a short description in Marcellus and Archivo (the product's typefaces) on `--sp-basalt`, `--sp-snow`, `--sp-snow-muted` and `--sp-copper` from `apps/web/src/shell/tokens.css`. On the right is a crop of the real Half Dome scene without any scene controls, the imagery and terrain credits as visible text and, unmodified, the scene's own Cesium ion attribution strip at the bottom right. It does not introduce a new logo.
+
+To recreate the social preview, lay out a 1280x640 HTML page with those elements, render it in Chromium with the fonts loaded (they are in `apps/web/node_modules/@fontsource/` and `@fontsource-variable/`), and save a PNG screenshot. The strip and the terrain crop come from one capture of the Half Dome page at 1920x1080: the terrain from the scene area clear of the controls, and the strip copied pixel for pixel from the scene's bottom-left corner.
+
+GitHub does not read the card from the repository: upload it under Settings → General → Social preview.
 
 ## Credits and rights
 
 The repository license ("All rights reserved") does not cover the third-party material shown in these images.
 
-- **Photograph** (shown in `mountain-view.webp` only): "Aconcagua2016.jpg" by Bjørn Christian Tørrissen, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Aconcagua2016.jpg). The captures show it resized inside the product page, where the product itself credits its author and license under **About this photo**.
-- **3D terrain**: Cesium World Terrain, streamed through Cesium ion. Cesium's terms allow images of its services in promotional material provided its attribution stays intact, and its [content usage and attribution guide](https://cesium.com/learn/ion/content-usage-and-attribution-guide/) requires the Cesium ion logo to be prominent and the data attribution details to be visible in static images (the "Data attribution" link alone is not enough). The social preview therefore shows the logo and the terrain credits as text: data available from the U.S. Geological Survey; © CGIAR-CSI; produced using Copernicus data and information funded by the European Union - EU-DEM layers; LINZ - Land Information New Zealand; based on Geoscience Australia material; © Environment Agency copyright and/or database right 2015, all rights reserved (the sources listed on the [Cesium World Terrain](https://cesium.com/platform/cesium-ion/content/cesium-world-terrain/) page).
-- **Satellite imagery**: Sentinel-2 imagery from Cesium ion (asset 3954), which is the EOxCloudless 2021 layer. Required credit, reproduced in the social preview: "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2021)", linking to [cloudless.eox.at](https://cloudless.eox.at) and [EOX IT Services GmbH](https://eox.at). EOX licenses it under [CC BY-NC-SA 4.0](https://cloudless.eox.at/license-non-commercial) (attribution, non-commercial, share-alike); these captures document a non-commercial portfolio project. The images contain no Bing Maps imagery.
-- **Brand mark and typefaces**: the SerendiPeak mark, and Spectral and Instrument Sans, which are open-licensed fonts self-hosted by the product.
+- **Photographs**: the captures show them resized inside the product page, where the product itself credits the author and license under **About this photo**.
+  - `mountain-view.webp` (K2): "Chogori.jpg" by Zacharie Grossen, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Chogori.jpg).
+  - `mountain-view-mobile.webp` (Fitz Roy): "Vue du Fitz Roy.jpg" by Sebgigon, licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), from [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Vue_du_Fitz_Roy.jpg).
+  - `atlas.webp`, `camera-editor.webp` and the social preview show no photograph.
+- **3D terrain** (all images): Cesium World Terrain, streamed through Cesium ion. Cesium's terms allow images of its services in promotional material provided its attribution stays intact, and its [content usage and attribution guide](https://cesium.com/learn/ion/content-usage-and-attribution-guide/) requires the Cesium ion logo to be prominent and the data attribution details to be visible in static images (the "Data attribution" link alone is not enough). The social preview therefore shows the logo and the credits as text. The terrain credits, as the scene's own **Data attribution** panel lists them: data available from the U.S. Geological Survey, © CGIAR-CSI, produced using Copernicus data and information funded by the European Union - EU-DEM layers, data available from Land Information New Zealand, data available from data.gov.uk, data courtesy Geoscience Australia.
+- **Satellite imagery** (`atlas.webp`, `mountain-view.webp`, `mountain-view-mobile.webp` and the social preview): Cesium World Imagery from Cesium ion, the imagery the deployed site uses (`world` mode). Credits as the scene's **Data attribution** panel lists them, and as the social preview reproduces them: © 2026 Microsoft Corporation, © Mapbox, © Maxar, ©CNES (2026) Distribution Airbus DS, Earthstar Geographics SIO. These images show the product as a portfolio project; Cesium World Imagery stays subject to its providers' terms, which the repository license does not cover. The attribution strip in each capture is the scene's own.
+- **Camera Editor reference** (`camera-editor.webp`): an earlier capture whose imagery is Sentinel-2 from Cesium ion (asset 3954, the EOxCloudless 2021 layer), so it does not look like the deployed site. Its credit: "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2021)", licensed by EOX under [CC BY-NC-SA 4.0](https://cloudless.eox.at/license-non-commercial) (non-commercial, share-alike). It is not used in the README.
+- **Starfield**: the Atlas capture shows CesiumJS's built-in sky box, whose star images come from NASA (see the [CesiumJS license notices](https://github.com/CesiumGS/cesium/blob/main/LICENSE.md), "Sky box images from NASA", and [NASA's media guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/)).
+- **Brand artwork and typefaces**: the SerendiPeak symbol and wordmark, and Marcellus and Archivo, which are open-licensed (SIL Open Font License) fonts self-hosted by the product.
 
-The captures were taken from a local development build with `NEXT_PUBLIC_CESIUM_IMAGERY_MODE=sentinel2` (the development default). Production keeps its own imagery configuration.
-
-The three screenshots in this folder show the Cesium ion logo and the scene's "Data attribution" link; the full terrain and imagery credits above apply to them and to the social preview.
+The README images and the social preview were captured from a local production build with `NEXT_PUBLIC_CESIUM_IMAGERY_MODE=world`, and match the deployed site for the same viewport. Each shows the Cesium ion logo and the scene's "Data attribution" link, and the credits above apply to it.

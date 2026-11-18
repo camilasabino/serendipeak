@@ -1,60 +1,39 @@
-<p align="center">
-  <img src="apps/web/public/brand/serendipeak-mark.png" alt="SerendiPeak brand mark" width="96" />
-</p>
+![SerendiPeak](docs/brand/readme-masthead.png)
 
-<h1 align="center">SerendiPeak</h1>
+**A world of mountains to explore.**
 
-<p align="center">
-  <strong>A world of mountains to explore.</strong><br />
-  Explore the world's mountains through an interactive 3D globe, curated geography, and real photography.
-</p>
+SerendiPeak is a mountain discovery and exploration experience. Explore the world's mountains through an interactive 3D globe, curated geography, and real photography, with one featured mountain every day.
 
-<p align="center">
-  <a href="https://serendipeak.camilasabino.dev"><strong>Explore SerendiPeak →</strong></a>
-</p>
+[**Explore SerendiPeak →**](https://serendipeak.camilasabino.dev) &nbsp;·&nbsp; [![CI](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml/badge.svg)](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml)
 
-<p align="center">
-  <a href="https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml">
-    <img alt="CI" src="https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml/badge.svg" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="docs/media/mountain-view.webp">
-    <img src="docs/media/mountain-view.webp" alt="SerendiPeak mountain page for Aconcagua: a 3D terrain scene beside the mountain's geography and photograph" width="920" />
-  </a>
-</p>
+[![The SerendiPeak Atlas: a 3D globe with a red marker for every published mountain, beside a list grouped by continent](docs/media/atlas.webp)](docs/media/atlas.webp)
 
 ## What it does
 
-SerendiPeak is a mountain discovery experience. Every day it features one mountain from a curated catalog, inviting visitors to explore the landscape and learn about the place behind it.
+Every day the site features one mountain from a curated catalog, inviting visitors to explore the landscape and learn about the place behind it.
 
 - **Discover today's mountain.** A daily selection, chosen per UTC date, shared by every visitor and kept across restarts.
 - **Explore another.** Travel to a different mountain without leaving the 3D experience.
-- **Browse the atlas.** Every published mountain on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent.
-- **Search by name.** Find a mountain from any page, ignoring case and accents.
-- **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale, reset, and fullscreen controls. Visitors who prefer reduced motion get direct moves instead of animated flights.
+- **Browse the atlas.** Every published mountain as a marker on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent. Nearby markers are decluttered, and a chooser opens where several overlap.
+- **Search by name.** Find a mountain from any page, ignoring case and accents. Search is keyboard operable and announces its results.
+- **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale bar, zoom, reset, fullscreen and a navigation help panel. Visitors who prefer reduced motion get direct moves instead of animated flights.
 - **Understand the geography.** See elevation, coordinates, continent, countries, and the mountain's region hierarchy, with links to supporting geographic data.
 - **See the mountain beyond the map.** View a real photograph with its author, license, and source.
 - **Share a place.** Each mountain has a permanent URL such as [Aconcagua](https://serendipeak.camilasabino.dev/mountains/aconcagua). If a mountain's slug changes, its former address redirects permanently to the new one. Pages carry canonical URLs and social preview metadata, and a share control uses the native share sheet or copies the link.
 
-The public experience is open without an account and responds to small screens:
+[![SerendiPeak page for K2: a 3D terrain scene of the mountain beside its elevation, region, photograph and details](docs/media/mountain-view.webp)](docs/media/mountain-view.webp)
+
+The public experience is open without an account and adapts to small screens:
 
 <p align="center">
   <a href="docs/media/mountain-view-mobile.webp">
-    <img src="docs/media/mountain-view-mobile.webp" alt="SerendiPeak on a 390 px wide viewport: the 3D scene above the mountain's details" width="260" />
+    <img src="docs/media/mountain-view-mobile.webp" alt="SerendiPeak on a 390 px wide viewport: the mountain name and elevation above the 3D scene of Fitz Roy, with the details below" width="260" />
   </a>
 </p>
 
 ## Editorial workflow
 
-Behind the public site is an authenticated editorial workspace, the **Studio**, built with Django. Editors maintain mountain records and the region taxonomy, curate photographs, preview drafts, and adjust a mountain's saved viewpoint in a visual **Camera Editor**. The editor renders the same 3D scene as the public site; saving a camera goes through an Editor-only confirmation in the Studio. Publication is separate from drafting, so unpublished changes never appear on the public site.
-
-<p align="center">
-  <a href="docs/media/camera-editor.webp">
-    <img src="docs/media/camera-editor.webp" alt="SerendiPeak Camera Editor opened on the saved camera of Aconcagua, with heading, pitch, range and framing readouts" width="920" />
-  </a>
-</p>
+Behind the public site is an authenticated editorial workspace, the **Studio**, built with Django. Editors maintain mountain records and the region taxonomy, curate photographs, preview drafts, and adjust a mountain's saved viewpoint in a visual **Camera Editor**. The editor renders the same 3D scene as the public site; saving a camera goes through an Editor-only confirmation in the Studio. Publication is separate from drafting, so unpublished changes never appear on the public site. The [developer reference](docs/engineering/developer-reference.md#editorial-studio) documents the Studio and the camera flow.
 
 ## Architecture
 
@@ -127,7 +106,7 @@ serendipeak/
 ├── docs/
 │   ├── engineering/     # Developer reference
 │   ├── media/           # README screenshots
-│   ├── brand/           # Social preview
+│   ├── brand/           # README masthead and social preview
 │   └── deployment.md    # Production runbook
 ├── scripts/             # Contract and API checks, dev and catalog refresh commands
 └── docker-compose.yml   # Local PostgreSQL/PostGIS
@@ -170,7 +149,7 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000` (use `localhost`, not `127.0.0.1`, to match the API's CORS origin). The API listens on `http://localhost:8000`. Without a Cesium ion token the page still renders, but the 3D globe reports that it is unavailable.
+Open `http://localhost:3000` (use `localhost`, not `127.0.0.1`, to match the API's CORS origin). The API listens on `http://localhost:8000`. Without a Cesium ion token the page still renders, but the 3D globe reports that it is unavailable. From the repository root, `npm run dev:start` starts PostGIS and restarts both dev servers, `npm run dev:restart` restarts only the servers, and `npm run dev:stop` stops them.
 
 **Catalog availability.** The editable catalog, production database and original photographs are intentionally not part of this repository, so a fresh database has no published mountains. Automated tests use their own fixtures and stubs. To explore the product locally, create an editor with `manage.py create_editor <username>`, sign in to the Studio at `http://localhost:8000/studio/`, and add and publish a mountain, or load a catalog snapshot you supply. See the [developer reference](docs/engineering/developer-reference.md#catalog-snapshot) for the management commands.
 
@@ -190,7 +169,7 @@ npm run test:webgl
 npm run test:webgl:prod
 ```
 
-While implementing, run the focused specs for the code you touch. Before closing a batch that changes a shared frontend component or contract (header, layout, brand, navigation, tokens), run the full `npm test` and review the specs that consume it indirectly, such as page and layout specs that assert on its markup. Lint and type checking do not replace tests, and a batch is not fully validated when relevant tests were skipped.
+While working, run the focused specs for the code you touch. When you change a shared frontend component or contract (header, layout, brand, navigation, tokens), also run the specs that consume it indirectly, such as page and layout specs that assert on its markup. Lint and type checking do not replace tests.
 
 The `ssr` and `nogl` Playwright projects assume a production build: `npm run test:ssr` and `npm run test:nogl` build first, and the build inlines `NEXT_PUBLIC_*` values, so a local `.env.local` with an ion token also breaks the `stageFailure` scenarios, which expect none. Pointing them at `next dev` reports failures that production does not have, because styles and route changes settle later there.
 
