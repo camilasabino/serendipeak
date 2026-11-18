@@ -45,7 +45,7 @@ describe('SummitSprites', () => {
 		host.fontsReady = new Promise((resolve) => (release = resolve));
 		const sprites = new SummitSprites(host);
 
-		const pill = sprites.pill('Matterhorn', '4,478 m', 2);
+		const pill = sprites.pill('Matterhorn', '4,478 m', 2, 300);
 		await Promise.resolve();
 		expect(host.events).toEqual(['faces:2:Matterhorn 4,478 m']);
 		expect(host.canvases).toBe(0);
@@ -61,26 +61,37 @@ describe('SummitSprites', () => {
 		const host = new FakeHost();
 		const sprites = new SummitSprites(host);
 
-		const first = await sprites.pill('Matterhorn', '4,478 m', 1);
+		const first = await sprites.pill('Matterhorn', '4,478 m', 1, 300);
 		const canvases = host.canvases;
-		const again = await sprites.pill('Matterhorn', '4,478 m', 1);
+		const again = await sprites.pill('Matterhorn', '4,478 m', 1, 300);
 
 		expect(again).toBe(first);
 		expect(host.canvases).toBe(canvases);
 		expect(sprites.disc(1)).toBe(sprites.disc(1));
-		expect((await sprites.pill('Matterhorn', '4,478 m', 2)).image).not.toBe(first.image);
+		expect((await sprites.pill('Matterhorn', '4,478 m', 2, 300)).image).not.toBe(first.image);
+	});
+
+	it('draws a narrower pill for a narrower stage and keeps the two apart', async () => {
+		const host = new FakeHost();
+		const sprites = new SummitSprites(host);
+
+		const wide = await sprites.pill('Piton de la Fournaise', '2,632 m', 1, 300);
+		const narrow = await sprites.pill('Piton de la Fournaise', '2,632 m', 1, 170);
+
+		expect(narrow.width).toBeLessThan(wide.width);
+		expect(await sprites.pill('Piton de la Fournaise', '2,632 m', 1, 170)).toBe(narrow);
 	});
 
 	it('keeps a bounded number of pills', async () => {
 		const host = new FakeHost();
 		const sprites = new SummitSprites(host);
 
-		const first = await sprites.pill('Peak 0', '1 m', 1);
+		const first = await sprites.pill('Peak 0', '1 m', 1, 300);
 		for (let index = 1; index <= 16; index += 1) {
-			await sprites.pill(`Peak ${index}`, '1 m', 1);
+			await sprites.pill(`Peak ${index}`, '1 m', 1, 300);
 		}
 
-		expect(await sprites.pill('Peak 0', '1 m', 1)).not.toBe(first);
+		expect(await sprites.pill('Peak 0', '1 m', 1, 300)).not.toBe(first);
 	});
 
 	it('forgets a draw that failed so the next request tries again', async () => {
@@ -88,9 +99,9 @@ describe('SummitSprites', () => {
 		host.failContext = true;
 		const sprites = new SummitSprites(host);
 
-		await expect(sprites.pill('Matterhorn', '4,478 m', 1)).rejects.toThrow('2D canvas');
+		await expect(sprites.pill('Matterhorn', '4,478 m', 1, 300)).rejects.toThrow('2D canvas');
 		host.failContext = false;
-		await expect(sprites.pill('Matterhorn', '4,478 m', 1)).resolves.toMatchObject({
+		await expect(sprites.pill('Matterhorn', '4,478 m', 1, 300)).resolves.toMatchObject({
 			image: expect.stringMatching(/^data:image\/png/)
 		});
 	});

@@ -1,6 +1,11 @@
 import * as cesium from 'cesium';
 import { describe, expect, it } from 'vitest';
-import { SUMMIT_MARKER_STYLE, type SummitSprite, type SummitSpriteSource } from '../marker';
+import {
+	SUMMIT_MARKER_STYLE,
+	summitPillMaxContentWidth,
+	type SummitSprite,
+	type SummitSpriteSource
+} from '../marker';
 import type { CesiumModule } from './CesiumModule';
 import { SummitMarkers } from './SummitMarkers';
 
@@ -14,7 +19,12 @@ const SUMMIT = {
 };
 
 class FakeSprites implements SummitSpriteSource {
-	readonly pillRequests: { name: string; elevation: string; ratio: number }[] = [];
+	readonly pillRequests: {
+		name: string;
+		elevation: string;
+		ratio: number;
+		maxContentWidth: number;
+	}[] = [];
 	private readonly waiting: { resolve(sprite: SummitSprite): void; reject(error: Error): void }[] =
 		[];
 
@@ -22,8 +32,13 @@ class FakeSprites implements SummitSpriteSource {
 		return { image: `disc@${ratio}`, width: 21, height: 21, bottomInset: 0 };
 	}
 
-	pill(name: string, elevation: string, ratio: number): Promise<SummitSprite> {
-		this.pillRequests.push({ name, elevation, ratio });
+	pill(
+		name: string,
+		elevation: string,
+		ratio: number,
+		maxContentWidth: number
+	): Promise<SummitSprite> {
+		this.pillRequests.push({ name, elevation, ratio, maxContentWidth });
 
 		return new Promise((resolve, reject) => this.waiting.push({ resolve, reject }));
 	}
@@ -107,9 +122,27 @@ describe('SummitMarkers', () => {
 
 		markers.show(SUMMIT);
 
-		expect(sprites.pillRequests).toEqual([{ name: 'Matterhorn', elevation: '4,478 m', ratio: 2 }]);
+		expect(sprites.pillRequests).toEqual([
+			{
+				name: 'Matterhorn',
+				elevation: '4,478 m',
+				ratio: 2,
+				maxContentWidth: SUMMIT_MARKER_STYLE.pill.maxContentWidth
+			}
+		]);
 		expect(viewer.entities.getById('summit-marker')!.billboard!.image!.getValue(NOW)).toBe(
 			'disc@2'
+		);
+	});
+
+	it('keeps the pill between the control columns on a narrow stage', () => {
+		const { markers, sprites } = setup({ width: 320, clientWidth: 320 });
+
+		markers.show(SUMMIT);
+
+		expect(sprites.pillRequests[0]!.maxContentWidth).toBe(summitPillMaxContentWidth(320));
+		expect(sprites.pillRequests[0]!.maxContentWidth).toBeLessThan(
+			SUMMIT_MARKER_STYLE.pill.maxContentWidth
 		);
 	});
 

@@ -8,6 +8,7 @@ import type {
 import {
 	SUMMIT_MARKER_STYLE,
 	renderRatio,
+	summitPillMaxContentWidth,
 	type SummitMarker,
 	type SummitMarkerDisplay,
 	type SummitSpriteSource
@@ -16,6 +17,14 @@ import type { CesiumModule } from './CesiumModule';
 
 const SUMMIT_MARKER_ID = 'summit-marker';
 const SUMMIT_LABEL_ID = 'summit-label';
+
+function rootFontPixels(): number {
+	if (typeof document === 'undefined') {
+		return 16;
+	}
+
+	return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+}
 
 /**
  * The summit on stage: a disc at the summit and a pill naming it just above, both billboards
@@ -43,7 +52,9 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		this.hide();
 
 		const generation = this.generation;
-		const ratio = renderRatio(this.viewer.scene.canvas);
+		const { canvas } = this.viewer.scene;
+		const ratio = renderRatio(canvas);
+		const maxContentWidth = summitPillMaxContentWidth(canvas.clientWidth, rootFontPixels());
 		const position = this.cesium.Cartesian3.fromDegrees(
 			marker.longitude,
 			marker.latitude,
@@ -60,7 +71,7 @@ export class SummitMarkers implements SummitMarkerDisplay {
 			}
 		});
 
-		void this.showPill(marker, position, ratio, generation);
+		void this.showPill(marker, position, ratio, maxContentWidth, generation);
 	}
 
 	hide(): void {
@@ -76,11 +87,12 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		{ name, elevation }: SummitMarker,
 		position: Cartesian3,
 		ratio: number,
+		maxContentWidth: number,
 		generation: number
 	): Promise<void> {
 		let sprite;
 		try {
-			sprite = await this.sprites.pill(name, elevation, ratio);
+			sprite = await this.sprites.pill(name, elevation, ratio, maxContentWidth);
 		} catch {
 			// The page names the mountain in text, so the stage keeps the disc alone rather than fail.
 			return;

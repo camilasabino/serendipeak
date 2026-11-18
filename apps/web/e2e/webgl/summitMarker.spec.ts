@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { SUMMIT_MARKER_STYLE } from '../../src/stage/globe/marker';
+import { serveMountain } from '../ssr/support';
 import {
 	ACONCAGUA,
 	DESKTOP,
@@ -135,5 +136,34 @@ test.describe('@webgl summit marker', () => {
 			const next = await expectPillAboveDisc(page);
 			expect(next.width).not.toBe(first.width);
 		});
+	});
+
+	test('keeps a long name between the stage controls on a phone-wide stage', async ({
+		page,
+		request
+	}) => {
+		const piton = {
+			...OLYMPUS,
+			slug: 'piton-de-la-fournaise',
+			name: 'Piton de la Fournaise',
+			coordinates: { latitude: -21.2444, longitude: 55.7139 },
+			elevationMeters: 2632
+		};
+		await serveMountain(request, piton);
+		await page.setViewportSize({ width: 320, height: 640 });
+		await page.goto('/mountains/piton-de-la-fournaise');
+		await expectReadyStage(page);
+		await expectPillAboveDisc(page);
+
+		const stage = (await page.locator('canvas').first().boundingBox())!;
+		const { pill } = (await readSummit(page))!;
+		const fullscreen = (await page
+			.getByRole('button', { name: 'Enter fullscreen' })
+			.boundingBox())!;
+		const zoomIn = (await page.getByRole('button', { name: 'Zoom in' }).boundingBox())!;
+
+		expect(stage.x + pill!.right).toBeLessThan(fullscreen.x);
+		expect(stage.x + pill!.left).toBeGreaterThan(zoomIn.x + zoomIn.width);
+		await expect(page.getByRole('button', { name: 'Enter fullscreen' })).toBeEnabled();
 	});
 });

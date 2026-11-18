@@ -25,7 +25,12 @@ export interface SummitSprite {
 
 export interface SummitSpriteSource {
 	disc(ratio: number): SummitSprite;
-	pill(name: string, elevation: string, ratio: number): Promise<SummitSprite>;
+	pill(
+		name: string,
+		elevation: string,
+		ratio: number,
+		maxContentWidth: number
+	): Promise<SummitSprite>;
 }
 
 /** The dark plate under every atlas label, so names read over snow as well as over rock. */
@@ -62,6 +67,8 @@ export const SUMMIT_MARKER_STYLE = {
 		gap: 8.8,
 		/** Longest name plus elevation the pill will draw; longer names end in an ellipsis. */
 		maxContentWidth: 300,
+		/** Narrowest run a narrow stage may shrink it to, so a name still reads. */
+		minContentWidth: 140,
 		ringAlpha: 0.16,
 		shadow: { blur: 10, offsetY: 4, alpha: 0.5 },
 		name: {
@@ -79,6 +86,24 @@ export const SUMMIT_MARKER_STYLE = {
 		}
 	}
 } as const;
+
+/** The stage's control columns: a 0.6 rem inset, a 2.75 rem button and a 0.4 rem gap on each edge. */
+const CONTROL_GUTTER_REM = 3.75;
+
+/**
+ * The widest name-and-elevation run a pill may hold on a stage `stageWidth` pixels wide. The pill is
+ * centred on the summit, so it stays between the control columns instead of running under them.
+ */
+export function summitPillMaxContentWidth(stageWidth: number, rootFontPixels = 16): number {
+	const { maxContentWidth, minContentWidth, paddingLeft, paddingRight } = SUMMIT_MARKER_STYLE.pill;
+	if (!(stageWidth > 0)) {
+		return maxContentWidth;
+	}
+
+	const clear = stageWidth - 2 * CONTROL_GUTTER_REM * rootFontPixels - paddingLeft - paddingRight;
+
+	return Math.floor(Math.min(maxContentWidth, Math.max(minContentWidth, clear)));
+}
 
 export function planSummitMarker(target: SceneTarget): SummitMarker {
 	const { name, latitude, longitude, elevationMeters } = target;
@@ -125,10 +150,10 @@ export function fitText(text: string, maxWidth: number, measure: (text: string) 
 export function layoutSummitPill(
 	measure: MeasurePillText,
 	name: string,
-	elevation: string
+	elevation: string,
+	maxContentWidth: number = SUMMIT_MARKER_STYLE.pill.maxContentWidth
 ): PillLayout {
-	const { height, paddingLeft, paddingRight, gap, maxContentWidth, shadow } =
-		SUMMIT_MARKER_STYLE.pill;
+	const { height, paddingLeft, paddingRight, gap, shadow } = SUMMIT_MARKER_STYLE.pill;
 	const elevationWidth = measure(elevation, 'elevation');
 	const nameBudget = maxContentWidth - elevationWidth - gap;
 	const shown = fitText(name, nameBudget, (text) => measure(text, 'name'));

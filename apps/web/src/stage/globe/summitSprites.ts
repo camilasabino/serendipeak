@@ -105,8 +105,13 @@ export class SummitSprites implements SummitSpriteSource {
 		return sprite;
 	}
 
-	pill(name: string, elevation: string, ratio: number): Promise<SummitSprite> {
-		const key = `${ratio}\u0000${elevation}\u0000${name}`;
+	pill(
+		name: string,
+		elevation: string,
+		ratio: number,
+		maxContentWidth: number
+	): Promise<SummitSprite> {
+		const key = `${ratio}\u0000${maxContentWidth}\u0000${elevation}\u0000${name}`;
 		const cached = this.pills.get(key);
 		if (cached) {
 			this.pills.delete(key);
@@ -114,7 +119,7 @@ export class SummitSprites implements SummitSpriteSource {
 			return cached;
 		}
 
-		const drawn = this.drawPill(name, elevation, ratio);
+		const drawn = this.drawPill(name, elevation, ratio, maxContentWidth);
 		this.pills.set(key, drawn);
 		evictOldest(this.pills);
 		drawn.catch(() => this.pills.delete(key));
@@ -146,7 +151,12 @@ export class SummitSprites implements SummitSpriteSource {
 		};
 	}
 
-	private async drawPill(name: string, elevation: string, ratio: number): Promise<SummitSprite> {
+	private async drawPill(
+		name: string,
+		elevation: string,
+		ratio: number,
+		maxContentWidth: number
+	): Promise<SummitSprite> {
 		await this.host.loadFaces(
 			[
 				`${pill.name.weight} ${pill.name.sizePixels}px ${firstFamily(pill.name.family)}`,
@@ -162,7 +172,8 @@ export class SummitSprites implements SummitSpriteSource {
 				return probe.measureText(text).width;
 			},
 			name,
-			elevation
+			elevation,
+			maxContentWidth
 		);
 		const { canvas, context } = this.surface(layout.imageWidth, layout.imageHeight, ratio);
 		paintPill(context, layout, elevation);

@@ -6,7 +6,8 @@ import {
 	fitText,
 	layoutSummitPill,
 	planSummitMarker,
-	renderRatio
+	renderRatio,
+	summitPillMaxContentWidth
 } from './marker';
 
 describe('planSummitMarker', () => {
@@ -80,6 +81,45 @@ describe('layoutSummitPill', () => {
 		expect(layout.pillWidth).toBeLessThanOrEqual(
 			Math.ceil(maxContentWidth + paddingLeft + paddingRight)
 		);
+	});
+
+	it('shortens to the width it is given, keeping the elevation whole', () => {
+		const { paddingLeft, paddingRight } = SUMMIT_MARKER_STYLE.pill;
+		const layout = layoutSummitPill(measure, 'Piton de la Fournaise', '2,632 m', 170);
+
+		expect(layout.name.endsWith('…')).toBe(true);
+		expect(layout.pillWidth).toBeLessThanOrEqual(Math.ceil(170 + paddingLeft + paddingRight));
+		expect(layout.elevationX).toBeGreaterThan(layout.nameX);
+	});
+});
+
+describe('summitPillMaxContentWidth', () => {
+	const { maxContentWidth, minContentWidth, paddingLeft, paddingRight } = SUMMIT_MARKER_STYLE.pill;
+	const columns = 2 * 3.75 * 16;
+
+	it('leaves the full width wherever the control columns leave room for it', () => {
+		for (const stage of [448, 624, 960, 1440]) {
+			expect(summitPillMaxContentWidth(stage)).toBe(maxContentWidth);
+		}
+	});
+
+	it('keeps the pill between the control columns on phone-wide stages', () => {
+		for (const stage of [320, 375, 390]) {
+			const pill = summitPillMaxContentWidth(stage) + paddingLeft + paddingRight;
+
+			expect(pill).toBeLessThanOrEqual(stage - columns);
+			expect(summitPillMaxContentWidth(stage)).toBeLessThan(maxContentWidth);
+		}
+	});
+
+	it('grows the control columns with the root font size', () => {
+		expect(summitPillMaxContentWidth(390, 20)).toBeLessThan(summitPillMaxContentWidth(390, 16));
+	});
+
+	it('never shrinks below a readable run, and ignores a stage that is not measured', () => {
+		expect(summitPillMaxContentWidth(200)).toBe(minContentWidth);
+		expect(summitPillMaxContentWidth(0)).toBe(maxContentWidth);
+		expect(summitPillMaxContentWidth(Number.NaN)).toBe(maxContentWidth);
 	});
 });
 
