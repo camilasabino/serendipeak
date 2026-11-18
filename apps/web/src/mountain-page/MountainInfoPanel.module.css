@@ -1,4 +1,5 @@
 .masthead {
+	container-type: inline-size;
 	margin-top: 2.25rem;
 }
 
@@ -134,13 +135,30 @@
 	outline-offset: 0.25rem;
 }
 
+/* On a phone the masthead is its own grid row above the stage, and the section reads lede, action,
+   photograph, facts. Both are items of the page's grid because the sheet around them is
+   display: contents; see StageLayout.module.css. */
 @media (max-width: 55.99rem) {
 	.masthead {
-		margin-top: var(--sp-space-5);
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 0.875rem;
+		row-gap: 0.35rem;
+		grid-row: 1;
+		margin-top: 0;
+		padding: var(--sp-space-4) var(--sheet-gutter) 0.9rem;
+		border-bottom: 1px solid var(--sp-basalt);
 	}
 
 	.name {
+		flex: 0 0 100%;
 		font-size: clamp(2.125rem, 10cqi, 2.625rem);
+	}
+
+	.figure,
+	.place {
+		margin: 0;
 	}
 
 	.num {
@@ -151,8 +169,20 @@
 		font-size: 0.6875rem;
 	}
 
+	.body {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		padding: 0 var(--sheet-gutter);
+	}
+
 	.lede {
+		order: -2;
 		margin-top: var(--sp-space-4);
 		font-size: 1.125rem;
+	}
+
+	.action {
+		order: -1;
 	}
 }

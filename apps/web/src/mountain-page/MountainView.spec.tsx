@@ -35,7 +35,7 @@ describe.each([
 		(daily) => {
 			const html = render(mountain, daily);
 
-			expect(html).toMatch(/<section aria-labelledby="mountain-name">/);
+			expect(html).toMatch(/<section aria-labelledby="mountain-name"[ >]/);
 			expect(html).toMatch(/<h1 id="mountain-name" tabindex="-1"/);
 		}
 	);

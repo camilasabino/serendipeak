@@ -34,7 +34,7 @@ export function MountainView({
 	);
 
 	return (
-		<div className={styles.sheet}>
+		<div className={`${styles.sheet} ${styles.page}`}>
 			{(runningHead || share) && (
 				<div className={styles.runhead}>
 					{runningHead}

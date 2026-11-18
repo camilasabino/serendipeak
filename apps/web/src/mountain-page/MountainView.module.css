@@ -101,6 +101,27 @@
 	color: var(--sp-text-muted);
 }
 
+/* On a phone the sheet's parts become items of the page grid, so the masthead can sit above the
+   stage while the DOM, and the Viewer, stay where they are. Gutters come from the inherited
+   --sheet-gutter, and the grid's own padding closes the page. */
+@media (max-width: 55.99rem) {
+	.page {
+		display: contents;
+	}
+
+	.runhead {
+		margin-inline: 0;
+	}
+
+	.preview {
+		margin-inline: var(--sheet-gutter);
+	}
+
+	.closing {
+		margin-inline: 0;
+	}
+}
+
 @media (min-width: 56rem) {
 	.sheet {
 		--sheet-gutter: var(--sp-space-5);

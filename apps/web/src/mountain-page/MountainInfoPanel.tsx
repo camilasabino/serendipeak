@@ -27,7 +27,7 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 	const countryNames = distinctCountryNames(continent, countries);
 
 	return (
-		<section aria-labelledby={MOUNTAIN_HEADING_ID}>
+		<>
 			<div className={styles.masthead}>
 				<h1 id={MOUNTAIN_HEADING_ID} tabIndex={-1} className={styles.name}>
 					{mountain.name}
@@ -35,27 +35,29 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 				<ElevationFigure meters={mountain.elevationMeters} />
 				<PlaceLine parts={formatPlaceParts(continent, countries, region)} />
 			</div>
-			{plate}
-			{summary && <p className={styles.lede}>{summary}</p>}
-			{action && <div className={styles.action}>{action}</div>}
-			<Facts>
-				{region && <Fact term="Region">{formatRegion(region)}</Fact>}
-				{countryNames.length > 0 && (
-					<Fact term={countryNames.length === 1 ? 'Country' : 'Countries'}>
-						{formatCountries(countryNames)}
+			<section aria-labelledby={MOUNTAIN_HEADING_ID} className={styles.body}>
+				{plate}
+				{summary && <p className={styles.lede}>{summary}</p>}
+				{action && <div className={styles.action}>{action}</div>}
+				<Facts>
+					{region && <Fact term="Region">{formatRegion(region)}</Fact>}
+					{countryNames.length > 0 && (
+						<Fact term={countryNames.length === 1 ? 'Country' : 'Countries'}>
+							{formatCountries(countryNames)}
+						</Fact>
+					)}
+					<Fact term="Continent">{continent.name}</Fact>
+					<Fact term="Coordinates">
+						<ExternalLink
+							href={googleMapsUrl(coordinates.latitude, coordinates.longitude)}
+							aria-label={`${formattedCoordinates} on Google Maps`}
+						>
+							{formattedCoordinates}
+						</ExternalLink>
 					</Fact>
-				)}
-				<Fact term="Continent">{continent.name}</Fact>
-				<Fact term="Coordinates">
-					<ExternalLink
-						href={googleMapsUrl(coordinates.latitude, coordinates.longitude)}
-						aria-label={`${formattedCoordinates} on Google Maps`}
-					>
-						{formattedCoordinates}
-					</ExternalLink>
-				</Fact>
-			</Facts>
-		</section>
+				</Facts>
+			</section>
+		</>
 	);
 }
 

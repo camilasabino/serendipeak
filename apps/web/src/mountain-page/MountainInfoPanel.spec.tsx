@@ -15,8 +15,18 @@ describe('MountainInfoPanel', () => {
 	it('is a region named by its h1', () => {
 		const html = render({});
 
-		expect(html).toContain('<section aria-labelledby="mountain-name">');
+		expect(html).toMatch(/<section aria-labelledby="mountain-name"[ >]/);
 		expect(html).toContain('<h1 id="mountain-name"');
+	});
+
+	it('keeps the masthead ahead of the section so a phone can lift it above the stage', () => {
+		const html = render({});
+		const section = html.indexOf('<section');
+
+		expect(html.indexOf('<h1')).toBeLessThan(section);
+		expect(html.indexOf('Elevation')).toBeLessThan(section);
+		expect(html.slice(section)).not.toContain('<h1');
+		expect(html.match(/<h1/g)).toHaveLength(1);
 	});
 
 	it('lists the facts from the most specific place to the least, then the coordinates', () => {

@@ -368,7 +368,10 @@ test.describe('@nogl Share and Copy link', () => {
 			await page.goto(PERMALINK);
 
 			const group = page.getByRole('group', { name: 'Share', exact: true });
-			const sheet = await box(page.locator('main section').first().locator('..'));
+			// Below 896 px the sheet is display: contents and its parts are rows of the page grid.
+			const sheet = await box(
+				width < 896 ? page.locator('main') : page.locator('main section').first().locator('..')
+			);
 			const placed = await box(group);
 			expect(placed.x).toBeGreaterThanOrEqual(sheet.x);
 			expect(placed.x + placed.width).toBeLessThanOrEqual(sheet.x + sheet.width + 0.5);

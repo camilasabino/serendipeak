@@ -15,6 +15,23 @@
 	height: clamp(18rem, 62dvh, 40rem);
 }
 
+/* On a phone a mountain page reads name, stage, then the rest of its sheet. The sheet is
+   display: contents (MountainView.module.css), so its parts are rows of this grid beside the
+   stage: the masthead takes row 1, the stage row 2, and the others follow in document order. */
+@media (max-width: 55.99rem) {
+	.mountain {
+		grid-template-areas: none;
+		padding-bottom: var(--sp-space-6);
+		background: var(--sp-surface-sheet);
+	}
+
+	.mountain .stage {
+		grid-area: auto;
+		grid-row: 2;
+		height: clamp(14rem, 38dvh, 22rem);
+	}
+}
+
 @media (min-width: 56rem) {
 	.layout {
 		grid-template-areas: none;

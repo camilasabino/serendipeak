@@ -15,3 +15,9 @@
 	content: '·';
 	margin-left: 0.5rem;
 }
+
+@media (max-width: 55.99rem) {
+	.sources {
+		padding-inline: var(--sheet-gutter, 1rem);
+	}
+}

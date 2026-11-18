@@ -45,7 +45,7 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 
 	return (
 		<OpenContinentsProvider value={openContinents}>
-			<main className={onAtlas ? `${styles.layout} ${styles.atlas}` : styles.layout}>
+			<main className={`${styles.layout} ${onAtlas ? styles.atlas : styles.mountain}`}>
 				{children}
 				<StageShell
 					store={store}
