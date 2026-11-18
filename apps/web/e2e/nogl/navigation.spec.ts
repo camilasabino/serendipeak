@@ -156,8 +156,8 @@ test.describe('@nogl global navigation', () => {
 					brand(page)
 						.locator(`img[src$="${src}"]`)
 						.evaluate((element) => element.getBoundingClientRect().width > 1);
-				expect(await shown('serendipeak-wordmark.svg'), `${path} wordmark`).toBe(width > 384);
-				expect(await shown('serendipeak-symbol.svg'), `${path} symbol`).toBe(width <= 384);
+				expect(await shown('serendipeak-symbol.svg'), `${path} symbol`).toBe(true);
+				expect(await shown('serendipeak-wordmark.svg'), `${path} wordmark`).toBe(width >= 576);
 
 				const overflow = await page.evaluate(
 					() => document.documentElement.scrollWidth - document.documentElement.clientWidth

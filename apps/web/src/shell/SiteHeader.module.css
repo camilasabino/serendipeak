@@ -19,6 +19,7 @@
 	display: inline-flex;
 	flex: 0 1 auto;
 	align-items: center;
+	gap: 0.625rem;
 	min-width: 0;
 	min-height: 2.75rem;
 	border-radius: 4px;
@@ -31,12 +32,16 @@
 	display: block;
 	flex: none;
 	width: auto;
+}
+
+/* Beside the symbol the wordmark needs about 500 px next to search, Today, Atlas and About, so
+   below 36 rem the symbol stands alone. The link keeps its accessible name. */
+.wordmark {
+	display: none;
 	height: 1.5rem;
 }
 
-/* The compact logo only replaces the wordmark where the wordmark no longer fits. */
 .symbol {
-	display: none;
 	height: 2rem;
 }
 
@@ -108,14 +113,8 @@
 	}
 }
 
-/* Below this width the wordmark no longer fits beside search, Today, Atlas and About, so the
-   symbol stands in for it. The link keeps its accessible name. */
-@media (max-width: 24rem) {
+@media (min-width: 36rem) {
 	.wordmark {
-		display: none;
-	}
-
-	.symbol {
 		display: block;
 	}
 }
@@ -125,8 +124,16 @@
 		padding-inline: var(--sp-space-4);
 	}
 
+	.brand {
+		gap: 0.75rem;
+	}
+
 	.wordmark {
 		height: 1.75rem;
+	}
+
+	.symbol {
+		height: 2.25rem;
 	}
 
 	.nav {

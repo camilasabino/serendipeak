@@ -157,7 +157,7 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	for (const width of [390, 430]) {
+	for (const width of [576, 768]) {
 		test(`keeps the wordmark beside search and About at ${width}px`, async ({ page }) => {
 			await watch(page);
 			await page.setViewportSize({ width, height: 740 });
@@ -166,7 +166,8 @@ test.describe('@nogl About page responsiveness', () => {
 			const [wordmarkRight, searchLeft] = await page.evaluate(() => {
 				const header = document.querySelector('header')!;
 				return [
-					header.querySelector('a img')!.getBoundingClientRect().right,
+					header.querySelector('a img[src$="serendipeak-wordmark.svg"]')!.getBoundingClientRect()
+						.right,
 					header.querySelector('nav button')!.getBoundingClientRect().left
 				];
 			});
@@ -176,16 +177,16 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	test('keeps the brand link named when the symbol replaces the wordmark on a very narrow screen', async ({
-		page
-	}) => {
-		await watch(page);
-		await page.setViewportSize({ width: 320, height: 640 });
-		await page.goto('/about');
+	for (const width of [320, 390, 575]) {
+		test(`shows only the symbol in the brand link at ${width}px`, async ({ page }) => {
+			await watch(page);
+			await page.setViewportSize({ width, height: 640 });
+			await page.goto('/about');
 
-		await expect(page.getByRole('link', { name: 'SerendiPeak' }).first()).toHaveAttribute(
-			'href',
-			'/'
-		);
-	});
+			const brand = page.getByRole('banner').getByRole('link', { name: 'SerendiPeak home' });
+			await expect(brand).toHaveAttribute('href', '/');
+			await expect(brand.locator('img[src$="serendipeak-symbol.svg"]')).toBeVisible();
+			await expect(brand.locator('img[src$="serendipeak-wordmark.svg"]')).toBeHidden();
+		});
+	}
 });

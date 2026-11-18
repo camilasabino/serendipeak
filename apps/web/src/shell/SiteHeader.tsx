@@ -17,8 +17,8 @@ export function SiteHeader({ pathname }: SiteHeaderProps) {
 	return (
 		<header className={styles.header}>
 			<Link className={styles.brand} href={TODAY_PATH} aria-label={BRAND_LINK_LABEL}>
-				<BrandWordmark className={styles.wordmark} />
 				<BrandSymbol className={styles.symbol} />
+				<BrandWordmark className={styles.wordmark} />
 			</Link>
 			<nav className={styles.nav} aria-label="Primary">
 				<SearchControl />
