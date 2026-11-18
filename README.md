@@ -192,6 +192,8 @@ npm run test:webgl:prod
 
 While implementing, run the focused specs for the code you touch. Before closing a batch that changes a shared frontend component or contract (header, layout, brand, navigation, tokens), run the full `npm test` and review the specs that consume it indirectly, such as page and layout specs that assert on its markup. Lint and type checking do not replace tests, and a batch is not fully validated when relevant tests were skipped.
 
+The `ssr` and `nogl` Playwright projects assume a production build: `npm run test:ssr` and `npm run test:nogl` build first, and the build inlines `NEXT_PUBLIC_*` values, so a local `.env.local` with an ion token also breaks the `stageFailure` scenarios, which expect none. Pointing them at `next dev` reports failures that production does not have, because styles and route changes settle later there.
+
 API checks, from `services/api` with local PostGIS running:
 
 ```bash

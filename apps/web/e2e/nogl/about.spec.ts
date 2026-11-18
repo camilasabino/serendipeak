@@ -162,6 +162,9 @@ test.describe('@nogl About page responsiveness', () => {
 			await watch(page);
 			await page.setViewportSize({ width, height: 740 });
 			await page.goto('/about');
+			await expect(
+				page.getByRole('banner').locator('a img[src$="serendipeak-wordmark.svg"]')
+			).toBeVisible();
 
 			const [wordmarkRight, searchLeft] = await page.evaluate(() => {
 				const header = document.querySelector('header')!;

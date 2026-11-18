@@ -364,14 +364,18 @@ test.describe('@nogl Explore superseded by navigation', () => {
 	}) => {
 		const watched = await watch(page);
 		const data = deferred();
+		const requested = deferred();
 		await page.goto(`/mountains/${ACONCAGUA.slug}`);
 		await page.route(`**/_next/data/**/mountains/${BARE_PEAK.slug}.json*`, async (route) => {
+			requested.release();
 			await data.released;
 			await route.continue();
 		});
 
 		await exploreButton(page).click();
 		await expect(exploreButton(page)).toHaveAttribute('aria-busy', 'true');
+		// Busy also covers the destination lookup; only the held request proves the route change is under way.
+		await requested.released;
 		await pushRoute(page, `/mountains/${OLYMPUS.slug}`);
 
 		await expectSettledOn(page, OLYMPUS);
