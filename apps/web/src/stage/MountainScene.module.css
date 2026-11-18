@@ -2,7 +2,7 @@
 	position: absolute;
 	inset: 0;
 	container-type: inline-size;
-	background: var(--sp-stage);
+	background: var(--sp-surface-base);
 }
 
 .scene:focus-visible {
@@ -14,4 +14,22 @@
 	position: relative;
 	width: 100%;
 	height: 100%;
+}
+
+/* A chip behind Cesium's attribution so it stays legible over snow. Only colour and padding change:
+   the credit keeps Cesium's position and every link, so nothing is hidden. The extra specificity
+   beats the widget stylesheet, which loads after this one. */
+.scene :global(.cesium-viewer .cesium-widget-credits) {
+	display: inline-block;
+	box-sizing: border-box;
+	max-width: 100%;
+	padding: 0 0.45rem;
+	border-radius: 6px;
+	background: var(--sp-chip);
+	color: var(--sp-chip-text);
+	text-shadow: none;
+}
+
+.scene :global(.cesium-viewer .cesium-widget-credits a) {
+	color: var(--sp-chip-text);
 }

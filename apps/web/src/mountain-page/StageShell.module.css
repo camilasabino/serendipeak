@@ -1,7 +1,7 @@
 .stage {
 	position: relative;
 	min-width: 0;
-	background: var(--sp-stage);
+	background: var(--sp-surface-base);
 }
 
 .stage:focus-visible {

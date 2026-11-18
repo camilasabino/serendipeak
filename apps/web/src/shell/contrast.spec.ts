@@ -292,6 +292,16 @@ describe('contrast', () => {
 		expect(contrast(identity.snow, plateOnSnowfield)).toBeGreaterThan(7);
 		expect(contrast(identity.copper, plateOnSnowfield)).toBeGreaterThanOrEqual(4.5);
 	});
+
+	it('keeps the stage notices legible on both surfaces they can appear on', () => {
+		const bannerOnSnowfield = over(identity.basalt, 0.8, white);
+
+		expect(contrast(identity.snow, bannerOnSnowfield), 'degraded banner').toBeGreaterThanOrEqual(7);
+		expect(contrast(identity.snowMuted, identity.basalt), 'failure hint').toBeGreaterThanOrEqual(7);
+		expect(contrast(identity.copperInk, identity.copperDeep), 'retry label').toBeGreaterThanOrEqual(
+			4.5
+		);
+	});
 });
 
 describe('fonts', () => {

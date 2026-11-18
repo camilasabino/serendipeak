@@ -1,14 +1,22 @@
 .scale {
+	--chip-pad-x: 0.45rem;
+	--chip-pad-top: 0.2rem;
+	--chip-pad-bottom: 0.3rem;
+
 	position: absolute;
 	z-index: 1;
-	left: var(--scale-inset);
-	bottom: var(--scale-bottom);
+	/* The view is sampled at the unpadded offsets, so the chip grows outward and the rule stays put. */
+	left: calc(var(--scale-inset) - var(--chip-pad-x));
+	bottom: calc(var(--scale-bottom) - var(--chip-pad-bottom));
 	display: flex;
 	flex-direction: column;
 	gap: 0.15rem;
+	padding: var(--chip-pad-top) var(--chip-pad-x) var(--chip-pad-bottom);
+	border-radius: 6px;
+	background: var(--sp-chip);
 	pointer-events: none;
-	color: var(--sp-paper);
-	font-family: var(--sp-font-ui);
+	color: var(--sp-chip-text);
+	font-family: var(--sp-face-ui);
 	font-size: 0.75rem;
 	letter-spacing: 0.03em;
 	line-height: 1;
@@ -17,7 +25,7 @@
 /* Must match WRAPPED_CREDITS_STAGE_PX: below it the credits wrap onto a second line. */
 @container (max-width: 379.98px) {
 	.scale {
-		bottom: var(--scale-bottom-narrow);
+		bottom: calc(var(--scale-bottom-narrow) - var(--chip-pad-bottom));
 	}
 }
 
@@ -25,8 +33,6 @@
 	margin: 0;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	-webkit-text-stroke: 3px var(--sp-stage);
-	paint-order: stroke fill;
 }
 
 .bar {
@@ -41,12 +47,12 @@
 }
 
 .casing {
-	stroke: var(--sp-stage);
+	stroke: var(--sp-surface-base);
 	stroke-width: 4;
 }
 
 .rule {
-	stroke: var(--sp-paper);
+	stroke: var(--sp-chip-text);
 	stroke-width: 2;
 }
 

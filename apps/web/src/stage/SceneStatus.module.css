@@ -10,41 +10,72 @@
 	padding: var(--sp-space-4);
 	text-align: center;
 	pointer-events: none;
-	color: var(--sp-text-on-stage);
+	color: var(--sp-text);
 }
 
-/* Top edge: the bottom edge holds Cesium's attribution, which must stay unobscured. The inline
-   padding clears the 2.75rem toolbar buttons and their 0.6rem inset, on both sides to stay centred. */
+/* Over live imagery, so the surface is the chip and both lines are full snow: the chip is only 80 %
+   opaque and muted text falls to about 4.5:1 on pure white terrain. Top edge: the bottom edge holds
+   Cesium's attribution, which must stay unobscured. The inline padding clears the 2.75rem toolbar
+   buttons and their 0.6rem inset, on both sides to stay centred. */
 .polite {
 	inset: 0 0 auto;
 	padding: var(--sp-space-3) calc(2.75rem + 1.2rem);
-	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
+	border-bottom: 1px solid var(--sp-chip-rule);
+	background: var(--sp-chip);
+	color: var(--sp-chip-text);
+	font-size: var(--sp-text-ui);
 }
 
 .notice p {
 	margin: 0;
 }
 
+/* A failure leaves no imagery to read against, so the message can take the display face. */
+.notice:not(.polite) > p:first-child {
+	font-family: var(--sp-face-display);
+	font-size: 1.375rem;
+	line-height: 1.25;
+	text-wrap: balance;
+}
+
 .hint {
 	font-size: var(--sp-text-ui);
-	color: var(--sp-mist);
+	color: var(--sp-text-muted);
+}
+
+.polite .hint {
+	color: inherit;
 }
 
 .retry {
-	margin-top: var(--sp-space-2);
-	padding: 0.5rem 1rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	margin-top: var(--sp-space-3);
+	padding: 0 1.25rem;
 	min-height: 2.75rem;
-	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
-	border-radius: var(--sp-radius);
-	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
-	color: var(--sp-paper);
-	font: inherit;
+	border: 0;
+	border-radius: 999px;
+	background: var(--sp-action);
+	color: var(--sp-on-action);
+	font: 600 0.9375rem / 1 var(--sp-face-ui);
 	cursor: pointer;
 	pointer-events: auto;
+	transition: background-color var(--sp-duration-short);
 }
 
 .retry:hover {
-	border-color: var(--sp-glacier-light);
-	background: var(--sp-glacier-dark);
-	color: var(--sp-paper-bright);
+	background: var(--sp-action-hover);
+}
+
+.retry:focus-visible {
+	outline: 2px solid var(--sp-focus-ring);
+	outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.retry {
+		transition: none;
+	}
 }
