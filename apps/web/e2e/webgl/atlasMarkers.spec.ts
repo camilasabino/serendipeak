@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { ATLAS_MARKER_STYLE, markerPresentation } from '../../src/stage/globe/atlasMarkers';
 import { resetStub, useScenario } from '../ssr/support';
 import {
@@ -34,6 +35,25 @@ test.beforeEach(async ({ page, request }) => {
 test.afterEach(async ({ request }) => {
 	await resetStub(request);
 });
+
+// Wheel zoom keeps coasting after the event, and cameraAtRest demands sub-metre stillness, which a
+// camera millions of metres out takes dozens of frames to reach. Reading at a fraction of the
+// range is still stable, and every frame is a signal, not a sleep.
+async function zoomSettled(page: Page) {
+	let previous = (await camera(page)).distanceFromCenterMeters;
+	await expect
+		.poll(
+			async () => {
+				await framesPass(page, 3);
+				const current = (await camera(page)).distanceFromCenterMeters;
+				const still = Math.abs(current - previous) <= current * 0.002;
+				previous = current;
+				return still;
+			},
+			{ timeout: 15_000 }
+		)
+		.toBe(true);
+}
 
 test.describe('@webgl atlas markers on the catalog', () => {
 	test('draws every mountain once, on the facing hemisphere only, where the geography puts it', async ({
@@ -115,14 +135,17 @@ test.describe('@webgl atlas markers on the catalog', () => {
 		const far = marker(await layer(page), 'mont-blanc');
 		expect(far.labelShown).toBe(false);
 
-		// Each wheel step zooms towards the cursor, which follows Mont Blanc as it moves on screen.
+		// Each wheel step zooms towards the cursor, which follows Mont Blanc as it moves on screen. A
+		// mouse resting on a marker emphasizes it, and its preview stands in for the ordinary label, so
+		// the pointer leaves the marker before the labels are read.
 		let blanc = far;
 		let matterhorn = marker(await layer(page), 'matterhorn');
 		for (let step = 0; step < 60 && !(blanc.labelShown && matterhorn.labelShown); step += 1) {
 			expect(blanc.visible).toBe(true);
 			await page.mouse.move(box.x + blanc.window!.x, box.y + blanc.window!.y);
-			await page.mouse.wheel(0, -900);
-			await framesPass(page, 4);
+			await page.mouse.wheel(0, -240);
+			await zoomSettled(page);
+			await page.mouse.move(box.x + 4, box.y + 4);
 			const reading = await layer(page);
 			expectNoFaintLabels(reading);
 			expect(overlapping(reading)).toEqual([]);

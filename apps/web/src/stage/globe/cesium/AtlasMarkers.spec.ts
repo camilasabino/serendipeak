@@ -1383,3 +1383,112 @@ describe('AtlasMarkers preview', () => {
 		expect(() => markers.highlight(OLYMPUS.slug)).not.toThrow();
 	});
 });
+
+describe('AtlasMarkers refresh listener', () => {
+	// What the picker does on every pass: hit test the markers the pass just listed, at a mouse that
+	// has not moved, and emphasize whatever it rests on.
+	function pointerAt(
+		markers: AtlasMarkers,
+		refreshed: ReturnType<typeof vi.fn>,
+		pointer: { x: number; y: number }
+	) {
+		refreshed.mockImplementation(() => {
+			const hit = resolveMarkerHit(markers.targets, pointer, 'fine');
+			markers.emphasize(hit.kind === 'mountain' ? hit.mountain.slug : undefined);
+		});
+	}
+
+	function labelCentre(markers: AtlasMarkers, slug: string) {
+		const label = markers.read()!.markers.find((marker) => marker.slug === slug)!.label!;
+
+		return { x: (label.left + label.right) / 2, y: (label.top + label.bottom) / 2 };
+	}
+
+	async function labelled() {
+		const context = setup();
+		lookDown(context.camera, MONT_BLANC.latitude, MONT_BLANC.longitude, 300_000);
+		context.markers.set([MONT_BLANC]);
+		await attached();
+		context.refreshed.mockClear();
+
+		return context;
+	}
+
+	it('settles on a mouse resting on a label: the marker is emphasized and stays so', async () => {
+		const { markers, refreshed, viewChanged } = await labelled();
+		const pointer = labelCentre(markers, MONT_BLANC.slug);
+		const dot = markers.read()!.markers[0]!.window!;
+		expect(Math.hypot(pointer.x - dot.x, pointer.y - dot.y)).toBeGreaterThan(
+			MARKER_HIT.fine.radiusPixels
+		);
+		pointerAt(markers, refreshed, pointer);
+
+		expect(() => viewChanged()).not.toThrow();
+		await attached();
+
+		expect(markers.read()!.hovered).toBe(MONT_BLANC.slug);
+		expect(markers.read()!.preview?.slug).toBe(MONT_BLANC.slug);
+		expect(refreshed.mock.calls.length).toBeLessThanOrEqual(3);
+		const calls = refreshed.mock.calls.length;
+		viewChanged();
+		expect(markers.read()!.hovered).toBe(MONT_BLANC.slug);
+		expect(refreshed.mock.calls.length - calls).toBeLessThanOrEqual(3);
+	});
+
+	it('keeps the emphasized marker hittable where its label was, with no label drawn twice', async () => {
+		const { markers, refreshed, viewChanged } = await labelled();
+		const pointer = labelCentre(markers, MONT_BLANC.slug);
+		pointerAt(markers, refreshed, pointer);
+
+		viewChanged();
+
+		const reading = markers.read()!;
+		expect(reading.markers[0]!.labelShown).toBe(false);
+		expect(markers.targets[0]!.label).toBeDefined();
+		expect(resolveMarkerHit(markers.targets, pointer, 'fine').kind).toBe('mountain');
+	});
+
+	it('ends the emphasis once the mouse leaves, and names the marker again', async () => {
+		const { markers, refreshed, viewChanged } = await labelled();
+		pointerAt(markers, refreshed, labelCentre(markers, MONT_BLANC.slug));
+		viewChanged();
+
+		pointerAt(markers, refreshed, { x: 1, y: 1 });
+		viewChanged();
+
+		expect(markers.read()!.hovered).toBeUndefined();
+		expect(markers.read()!.preview).toBeUndefined();
+		expect(markers.read()!.markers[0]!.labelShown).toBe(true);
+	});
+
+	it('stays bounded even when the listener flips the emphasis on every pass', async () => {
+		const { markers, refreshed, viewChanged } = await labelled();
+		let flip = false;
+		refreshed.mockImplementation(() => {
+			flip = !flip;
+			markers.emphasize(flip ? MONT_BLANC.slug : undefined);
+		});
+
+		expect(() => viewChanged()).not.toThrow();
+		expect(refreshed.mock.calls.length).toBeLessThanOrEqual(3);
+
+		refreshed.mockReset();
+		viewChanged();
+		expect(refreshed).toHaveBeenCalled();
+	});
+
+	it('keeps refreshing after a listener that throws, and still releases cleanly', async () => {
+		const { markers, refreshed, viewChanged, listeners } = await labelled();
+		refreshed.mockImplementationOnce(() => {
+			throw new Error('listener failed');
+		});
+		expect(() => viewChanged()).toThrow('listener failed');
+
+		refreshed.mockClear();
+		viewChanged();
+		expect(refreshed).toHaveBeenCalledOnce();
+
+		markers.release();
+		expect(listeners.size).toBe(0);
+	});
+});

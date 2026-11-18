@@ -550,6 +550,23 @@ export class AtlasMarkers {
 			return;
 		}
 		this.refreshing = true;
+		try {
+			// The listener may move the emphasis, which changes what the pass draws, so it gets a bounded
+			// number of settling passes instead of a re-entrant refresh.
+			for (let pass = 0; pass < MAX_SETTLING_PASSES; pass += 1) {
+				this.drawPass();
+				const emphasized = this.emphasized;
+				this.options.refreshed?.();
+				if (this.emphasized === emphasized || !this.shown || this.viewer.isDestroyed()) {
+					break;
+				}
+			}
+		} finally {
+			this.refreshing = false;
+		}
+	}
+
+	private drawPass(): void {
 		const { Cartesian3 } = this.cesium;
 		const { camera, scene } = this.viewer;
 		const viewport = { width: scene.canvas.clientWidth, height: scene.canvas.clientHeight };
@@ -581,16 +598,19 @@ export class AtlasMarkers {
 				Cartesian3.magnitude(toMarker)
 			);
 			// The preview names the emphasized marker, so its ordinary label would only repeat it.
-			if (!inRange || entry.marker.slug === this.emphasized) {
+			if (!inRange) {
 				continue;
 			}
-			entry.labelInRange = true;
 			entry.labelBox = labelBox({
 				x: window.x,
 				y: window.y,
 				text: this.textOf(entry),
 				offsetPixels: ATLAS_MARKER_STYLE.labelOffsetPixels
 			});
+			if (entry.marker.slug === this.emphasized) {
+				continue;
+			}
+			entry.labelInRange = true;
 			labels.push({
 				slug: entry.marker.slug,
 				elevationMeters: entry.marker.elevationMeters,
@@ -606,8 +626,6 @@ export class AtlasMarkers {
 				? declutterLabels(labels, LABEL_DECLUTTER, preview ? [preview] : NO_BOXES)
 				: NO_LABELS
 		);
-		this.refreshing = false;
-		this.options.refreshed?.();
 	}
 
 	// Where the emphasized marker's pill stands this pass, if it is drawn: beside the dot, clear of
@@ -656,7 +674,10 @@ export class AtlasMarkers {
 
 		for (const entry of this.entries.values()) {
 			const next = shown.has(entry.marker.slug);
-			entry.target.label = next ? entry.labelBox : undefined;
+			// The emphasized marker keeps the plate its label had, as a hit area only: pointing at the label
+			// emphasized it, and losing that area would end the emphasis and bring the label back, forever.
+			entry.target.label =
+				next || entry.marker.slug === this.emphasized ? entry.labelBox : undefined;
 			if (entry.labelShown !== next && entry.entity.label) {
 				entry.labelShown = next;
 				entry.entity.label.show = new ConstantProperty(next);
@@ -665,6 +686,7 @@ export class AtlasMarkers {
 	}
 }
 
+const MAX_SETTLING_PASSES = 3;
 const NO_LABELS: ReadonlySet<string> = new Set();
 const NO_BOXES: readonly ScreenBox[] = [];
 
