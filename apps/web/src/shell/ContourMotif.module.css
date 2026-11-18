@@ -1,0 +1,17 @@
+.motif {
+	display: block;
+	pointer-events: none;
+	fill: none;
+	stroke: var(--sp-contour);
+	stroke-width: 1px;
+}
+
+.motif path {
+	/* A cropped, rescaled box must not thicken or thin the hairlines. */
+	vector-effect: non-scaling-stroke;
+}
+
+.motif .index {
+	stroke: var(--sp-contour-index);
+	stroke-width: 1.5px;
+}

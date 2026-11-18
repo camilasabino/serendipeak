@@ -71,13 +71,10 @@ describe('About page content', () => {
 		expect(textsOf(vision, 'li')).toEqual(VISION_IDEAS);
 	});
 
-	it('offers a way back to the daily mountain at the top and the bottom', () => {
+	it('offers a way back to the daily mountain in the introduction only', () => {
 		const links = anchorsOf(html).filter(({ href }) => href === '/');
 
-		expect(links.map(({ text }) => text)).toEqual([
-			"See today's mountain",
-			"Back to today's mountain"
-		]);
+		expect(links.map(({ text }) => text)).toEqual(["See today's mountain"]);
 	});
 
 	it('offers the atlas as a second call to action next to the daily mountain', () => {

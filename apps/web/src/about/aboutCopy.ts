@@ -73,4 +73,3 @@ export const VISION_IDEAS: readonly string[] = [
 ];
 
 export const CLOSING_CUE = 'Tomorrow, another mountain.';
-export const CLOSING_LINK_LABEL = "Back to today's mountain";

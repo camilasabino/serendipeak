@@ -1,7 +1,8 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { ATLAS_PATH } from '../atlas/atlasQuery';
-import { TopographicMotif } from '../mountain-page/TopographicMotif';
+import { ContourMotif } from '../shell/ContourMotif';
+import { ABOUT_CONTOURS } from '../shell/contourPatterns';
 import styles from './AboutPage.module.css';
 import {
 	ABOUT_DESCRIPTION,
@@ -11,7 +12,6 @@ import {
 	ABOUT_LEDE,
 	ABOUT_TITLE,
 	CLOSING_CUE,
-	CLOSING_LINK_LABEL,
 	TODAY_ACTION_LABEL,
 	TODAY_FEATURES,
 	TODAY_HEADING,
@@ -32,7 +32,7 @@ export function AboutPage() {
 				<meta name="description" content={ABOUT_DESCRIPTION} />
 			</Head>
 			<main className={styles.page}>
-				<TopographicMotif className={styles.motif} />
+				<ContourMotif pattern={ABOUT_CONTOURS} className={styles.motif} />
 				<div className={styles.column}>
 					<div className={styles.intro}>
 						<p className={styles.eyebrow}>{ABOUT_EYEBROW}</p>
@@ -91,10 +91,7 @@ export function AboutPage() {
 						</div>
 					</section>
 
-					<p className={styles.closing}>
-						<span className={styles.cue}>{CLOSING_CUE}</span>
-						<Link href="/">{CLOSING_LINK_LABEL}</Link>
-					</p>
+					<p className={styles.closing}>{CLOSING_CUE}</p>
 				</div>
 			</main>
 		</>
