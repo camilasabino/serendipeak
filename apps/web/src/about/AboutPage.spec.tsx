@@ -2,16 +2,15 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { anchorsOf, countOf, hasEmptyElement, textsOf } from '../mountain-page/test-support/markup';
+import { SITE_TAGLINE } from '../mountain-page/pageCopy';
 import { AboutPage } from './AboutPage';
 import {
 	ABOUT_DESCRIPTION,
 	ABOUT_HEADING,
-	ABOUT_LEDE,
+	ABOUT_LEDE_PARAGRAPHS,
 	ABOUT_TITLE,
-	TODAY_FEATURES,
-	VISION_IDEAS,
-	VISION_INTRO,
-	VISION_NOTE_TITLE
+	EXPERIENCE_BLOCKS,
+	LOVE_PARAGRAPHS
 } from './aboutCopy';
 
 const html = renderToStaticMarkup(<AboutPage />);
@@ -22,18 +21,17 @@ describe('About page structure', () => {
 		expect(textsOf(html, 'h1')).toEqual([ABOUT_HEADING]);
 	});
 
-	it('orders the sections from what exists to what could exist, each named by an h2', () => {
+	it('names each section with an h2', () => {
 		expect(textsOf(html, 'h2')).toEqual([
-			'What you can do today',
-			'Why it matters',
-			'Where it could go'
+			'Discover. Explore. Wander.',
+			'For the love of mountains'
 		]);
 	});
 
 	it('labels every section by its heading', () => {
 		const sections = [...html.matchAll(/<section[^>]*aria-labelledby="([^"]+)"/g)];
 
-		expect(sections).toHaveLength(3);
+		expect(sections).toHaveLength(2);
 		for (const [, id] of sections) {
 			expect(html).toMatch(new RegExp(`<h2 id="${id}"`));
 		}
@@ -54,21 +52,26 @@ describe('About page structure', () => {
 });
 
 describe('About page content', () => {
-	it('lists every current capability as a term with a description', () => {
-		expect(textsOf(html, 'dt')).toEqual(TODAY_FEATURES.map(({ name }) => name));
-		expect(textsOf(html, 'dd')).toEqual(TODAY_FEATURES.map(({ description }) => description));
+	it('presents three experience blocks as terms with descriptions', () => {
+		expect(EXPERIENCE_BLOCKS).toHaveLength(3);
+		expect(textsOf(html, 'dt')).toEqual(EXPERIENCE_BLOCKS.map(({ name }) => name));
+		expect(textsOf(html, 'dd')).toEqual(EXPERIENCE_BLOCKS.map(({ description }) => description));
 	});
 
-	it('keeps the future ideas apart from the current capabilities', () => {
-		const today = html.slice(html.indexOf('<dl'), html.indexOf('</dl>'));
-		const vision = html.slice(html.indexOf('about-vision'));
+	it('renders the hero and love-of-mountains paragraphs', () => {
+		expect(textsOf(html, 'p')).toEqual(
+			expect.arrayContaining([...ABOUT_LEDE_PARAGRAPHS, ...LOVE_PARAGRAPHS])
+		);
+	});
 
-		for (const idea of VISION_IDEAS) {
-			expect(vision).toContain(idea);
-			expect(today).not.toContain(idea);
-		}
-		expect(vision).toContain(VISION_NOTE_TITLE);
-		expect(textsOf(vision, 'li')).toEqual(VISION_IDEAS);
+	it('uses the site tagline as its heading and ends after the last section', () => {
+		expect(ABOUT_HEADING).toBe(SITE_TAGLINE);
+		expect(SITE_TAGLINE).toBe('A world of mountains to explore.');
+		expect(html).not.toMatch(
+			/Where it could go|Possibilities|Tomorrow, another|Somewhere on Earth/
+		);
+		expect(html.trimEnd().endsWith('</main>')).toBe(true);
+		expect(html.slice(html.lastIndexOf('</section>'))).toBe('</section></div></main>');
 	});
 
 	it('offers a way back to the daily mountain in the introduction only', () => {
@@ -78,7 +81,7 @@ describe('About page content', () => {
 	});
 
 	it('offers the atlas as a second call to action next to the daily mountain', () => {
-		const intro = html.slice(0, html.indexOf('about-today'));
+		const intro = html.slice(0, html.indexOf('about-experience'));
 
 		expect(anchorsOf(intro).map(({ href, text }) => ({ href, text }))).toEqual([
 			{ href: '/', text: "See today's mountain" },
@@ -86,28 +89,11 @@ describe('About page content', () => {
 		]);
 	});
 
-	it('presents Today and the atlas as available features', () => {
-		const names = TODAY_FEATURES.map(({ name }) => name);
-		const atlas = TODAY_FEATURES.find(({ name }) => name === 'Atlas');
+	it('does not claim unimplemented features or a hardcoded mountain count', () => {
+		const copy = [...ABOUT_LEDE_PARAGRAPHS, ...LOVE_PARAGRAPHS, ABOUT_DESCRIPTION].join(' ');
 
-		expect(names).toEqual(expect.arrayContaining(['Today', 'Atlas']));
-		expect(atlas?.description).toMatch(/continent/);
-		expect(atlas?.description).toMatch(/full profile/);
-	});
-
-	it('no longer lists the atlas or continent browsing as a future possibility', () => {
-		const vision = html.slice(html.indexOf('about-vision'));
-
-		expect(VISION_INTRO).not.toMatch(/to become an evolving global mountain atlas/);
-		expect(vision).not.toMatch(/by continent/i);
-		expect(VISION_IDEAS.join(' ')).not.toMatch(/continent/i);
-	});
-
-	it('does not claim markers, on-globe selection, country browsing or a hardcoded mountain count', () => {
-		const available = TODAY_FEATURES.map(({ description }) => description).join(' ');
-
-		expect(available).not.toMatch(/marker|on the globe|country|range|nearby/i);
-		expect(`${ABOUT_LEDE} ${ABOUT_DESCRIPTION} ${available}`).not.toMatch(/\d[\d,]*\s+mountains/);
+		expect(copy).not.toMatch(/\d[\d,]*\s+mountains/);
+		expect(copy).not.toMatch(/route|track|planning/i);
 	});
 
 	it('links nowhere outside the site', () => {

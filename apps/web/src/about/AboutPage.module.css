@@ -66,6 +66,10 @@
 	text-wrap: pretty;
 }
 
+.lede + .lede {
+	margin-top: var(--sp-space-3);
+}
+
 .actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -227,18 +231,6 @@
 	border-radius: 50%;
 }
 
-.closing {
-	margin: 0;
-	padding-top: var(--sp-space-6);
-	border-top: 2px solid var(--sp-divider-accent);
-	color: var(--sp-text);
-	font-family: var(--sp-face-display);
-	font-size: 1.5rem;
-	letter-spacing: 0;
-	line-height: 1.15;
-	text-wrap: balance;
-}
-
 @media (min-width: 64rem) {
 	.page {
 		--page-pad-top: clamp(2rem, 8vh, 5rem);
@@ -259,10 +251,6 @@
 	}
 
 	.heading {
-		font-size: 1.75rem;
-	}
-
-	.closing {
 		font-size: 1.75rem;
 	}
 

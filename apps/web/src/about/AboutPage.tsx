@@ -6,22 +6,16 @@ import { ABOUT_CONTOURS } from '../shell/contourPatterns';
 import styles from './AboutPage.module.css';
 import {
 	ABOUT_DESCRIPTION,
-	ATLAS_ACTION_LABEL,
 	ABOUT_EYEBROW,
 	ABOUT_HEADING,
-	ABOUT_LEDE,
+	ABOUT_LEDE_PARAGRAPHS,
 	ABOUT_TITLE,
-	CLOSING_CUE,
-	TODAY_ACTION_LABEL,
-	TODAY_FEATURES,
-	TODAY_HEADING,
-	VISION_HEADING,
-	VISION_IDEAS,
-	VISION_INTRO,
-	VISION_NOTE,
-	VISION_NOTE_TITLE,
-	WHY_HEADING,
-	WHY_PARAGRAPHS
+	ATLAS_ACTION_LABEL,
+	EXPERIENCE_BLOCKS,
+	EXPERIENCE_HEADING,
+	LOVE_HEADING,
+	LOVE_PARAGRAPHS,
+	TODAY_ACTION_LABEL
 } from './aboutCopy';
 
 export function AboutPage() {
@@ -37,7 +31,11 @@ export function AboutPage() {
 					<div className={styles.intro}>
 						<p className={styles.eyebrow}>{ABOUT_EYEBROW}</p>
 						<h1 className={styles.title}>{ABOUT_HEADING}</h1>
-						<p className={styles.lede}>{ABOUT_LEDE}</p>
+						{ABOUT_LEDE_PARAGRAPHS.map((paragraph) => (
+							<p key={paragraph} className={styles.lede}>
+								{paragraph}
+							</p>
+						))}
 						<div className={styles.actions}>
 							<Link className={styles.action} href="/">
 								{TODAY_ACTION_LABEL}
@@ -48,12 +46,12 @@ export function AboutPage() {
 						</div>
 					</div>
 
-					<section className={styles.section} aria-labelledby="about-today">
-						<h2 id="about-today" className={styles.heading}>
-							{TODAY_HEADING}
+					<section className={styles.section} aria-labelledby="about-experience">
+						<h2 id="about-experience" className={styles.heading}>
+							{EXPERIENCE_HEADING}
 						</h2>
 						<dl className={styles.features}>
-							{TODAY_FEATURES.map(({ name, description }) => (
+							{EXPERIENCE_BLOCKS.map(({ name, description }) => (
 								<div key={name} className={styles.feature}>
 									<dt>{name}</dt>
 									<dd>{description}</dd>
@@ -62,36 +60,16 @@ export function AboutPage() {
 						</dl>
 					</section>
 
-					<section className={styles.section} aria-labelledby="about-why">
-						<h2 id="about-why" className={styles.heading}>
-							{WHY_HEADING}
+					<section className={styles.section} aria-labelledby="about-love">
+						<h2 id="about-love" className={styles.heading}>
+							{LOVE_HEADING}
 						</h2>
 						<div className={styles.prose}>
-							{WHY_PARAGRAPHS.map((paragraph) => (
+							{LOVE_PARAGRAPHS.map((paragraph) => (
 								<p key={paragraph}>{paragraph}</p>
 							))}
 						</div>
 					</section>
-
-					<section className={styles.section} aria-labelledby="about-vision">
-						<h2 id="about-vision" className={styles.heading}>
-							{VISION_HEADING}
-						</h2>
-						<div className={styles.prose}>
-							<p>{VISION_INTRO}</p>
-							<div className={styles.ideas}>
-								<p className={styles.ideasTitle}>{VISION_NOTE_TITLE}</p>
-								<p className={styles.ideasNote}>{VISION_NOTE}</p>
-								<ul>
-									{VISION_IDEAS.map((idea) => (
-										<li key={idea}>{idea}</li>
-									))}
-								</ul>
-							</div>
-						</div>
-					</section>
-
-					<p className={styles.closing}>{CLOSING_CUE}</p>
 				</div>
 			</main>
 		</>

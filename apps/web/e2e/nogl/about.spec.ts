@@ -47,7 +47,7 @@ test.describe('@nogl About page', () => {
 
 		await expect(page).toHaveURL(/\/about$/);
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-			'Discover one mountain every day.'
+			'A world of mountains to explore.'
 		);
 		await expect(page).toHaveTitle('About · SerendiPeak');
 		await expect(aboutLink(page)).toHaveAttribute('aria-current', 'page');
@@ -95,7 +95,7 @@ test.describe('@nogl About page', () => {
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 	});
 
-	test('exposes landmarks, ordered headings and a labelled vision section', async ({ page }) => {
+	test('exposes landmarks, ordered headings and labelled sections', async ({ page }) => {
 		await watch(page);
 		await page.goto('/about');
 
@@ -103,13 +103,10 @@ test.describe('@nogl About page', () => {
 		await expect(page.getByRole('main')).toHaveCount(1);
 		await expect(page.getByRole('contentinfo')).toHaveCount(1);
 		await expect(page.getByRole('heading', { level: 2 })).toHaveText([
-			'What you can do today',
-			'Why it matters',
-			'Where it could go'
+			'Discover. Explore. Wander.',
+			'For the love of mountains'
 		]);
-		await expect(page.getByRole('region', { name: 'Where it could go' })).toContainText(
-			'Possibilities, not available today'
-		);
+		await expect(page.getByRole('region', { name: 'Discover. Explore. Wander.' })).toBeVisible();
 	});
 
 	test('never loads or initializes the 3D stage', async ({ page }) => {

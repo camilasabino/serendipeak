@@ -5,7 +5,7 @@
 <h1 align="center">SerendiPeak</h1>
 
 <p align="center">
-  <strong>One mountain. Somewhere on Earth. Every day.</strong><br />
+  <strong>A world of mountains to explore.</strong><br />
   Explore the world's mountains through an interactive 3D globe, curated geography, and real photography.
 </p>
 

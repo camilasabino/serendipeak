@@ -1,10 +1,11 @@
 import { ExternalLink } from '../links/ExternalLink';
+import { SITE_TAGLINE } from '../mountain-page/pageCopy';
 import styles from './SiteFooter.module.css';
 
 export function SiteFooter({ year }: { year: number }) {
 	return (
 		<footer className={styles.footer}>
-			<p className={styles.tagline}>One mountain. Somewhere on Earth. Every day.</p>
+			<p className={styles.tagline}>{SITE_TAGLINE}</p>
 			<p className={styles.meta}>
 				<span>© {year}</span>
 				<span className={styles.separator} aria-hidden="true">

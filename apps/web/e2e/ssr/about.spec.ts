@@ -21,7 +21,7 @@ test.describe('about page', () => {
 		expect(titleOf(html)).toBe('About · SerendiPeak');
 		expect(descriptionOf(html)).toMatch(/one mountain every day/);
 		expect(descriptionOf(html)).toMatch(/atlas/);
-		expect(headingsOf(html)).toEqual(['Discover one mountain every day.']);
+		expect(headingsOf(html)).toEqual(['A world of mountains to explore.']);
 		expect(html).toContain('<html lang="en"');
 	});
 

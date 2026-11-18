@@ -1,4 +1,4 @@
-import { SITE_DESCRIPTION, documentTitle } from '../mountain-page/pageCopy';
+import { SITE_DESCRIPTION, SITE_TAGLINE, documentTitle } from '../mountain-page/pageCopy';
 
 export const ABOUT_PATH = '/about';
 export const ABOUT_LINK_LABEL = 'About';
@@ -7,9 +7,11 @@ export const ABOUT_TITLE = documentTitle('About');
 export const ABOUT_DESCRIPTION = SITE_DESCRIPTION;
 
 export const ABOUT_EYEBROW = 'About SerendiPeak';
-export const ABOUT_HEADING = 'Discover one mountain every day.';
-export const ABOUT_LEDE =
-	'SerendiPeak features a different mountain each day, with its terrain in 3D, its geography and real photography. Between days, the atlas opens up the rest of the collection. The aim is simple: curiosity about places, geography and landscapes around the world.';
+export const ABOUT_HEADING = SITE_TAGLINE;
+export const ABOUT_LEDE_PARAGRAPHS: readonly string[] = [
+	"From familiar summits to places you've never heard of, there's a whole world of mountains to discover.",
+	'SerendiPeak brings a different mountain into focus every day. Explore its landscape in 3D, see real photographs, and discover where it rises. Then follow your curiosity to mountains across the globe.'
+];
 export const TODAY_ACTION_LABEL = "See today's mountain";
 export const ATLAS_ACTION_LABEL = 'Explore the atlas';
 
@@ -18,58 +20,27 @@ export interface Feature {
 	description: string;
 }
 
-export const TODAY_HEADING = 'What you can do today';
-export const TODAY_FEATURES: readonly Feature[] = [
+export const EXPERIENCE_HEADING = 'Discover. Explore. Wander.';
+export const EXPERIENCE_BLOCKS: readonly Feature[] = [
 	{
-		name: 'Today',
+		name: 'One mountain each day',
 		description:
-			'A curated mountain each day, the same one for every visitor. Not ready to wait for tomorrow? Explore another.'
+			'Every day, SerendiPeak features a different mountain, shared by everyone. Discover somewhere new, take a closer look, or explore another whenever you feel like it.'
 	},
 	{
-		name: 'Atlas',
+		name: 'See the landscape differently',
 		description:
-			'The current mountain collection, browsed by continent. Choose a mountain to open its full profile and 3D terrain, then return to the atlas to keep browsing.'
+			'Move around the mountain in 3D to explore its shape and surroundings. Discover its elevation, location, and the landscapes that make it distinctive.'
 	},
 	{
-		name: 'Interactive 3D terrain',
-		description: "Look at the mountain's terrain in an interactive 3D scene framed on the mountain."
-	},
-	{
-		name: 'Real photography',
+		name: "A world beyond today's mountain",
 		description:
-			'A real photograph for each mountain that has one, credited to its author with its license and source.'
-	},
-	{
-		name: 'Curated descriptions and geography',
-		description:
-			'A short description and geographic context, such as continent, countries and region.'
-	},
-	{
-		name: 'Locations, elevations and sources',
-		description:
-			'Every mountain shows its coordinates and elevation, with links to its OpenStreetMap and Wikidata records where available.'
+			"The Atlas opens up mountains across the continents. Wander through the collection, discover unfamiliar names, and find places you'd like to know more about."
 	}
 ];
 
-export const WHY_HEADING = 'Why it matters';
-export const WHY_PARAGRAPHS: readonly string[] = [
-	'Behind every unfamiliar name there is a real place. SerendiPeak helps you discover mountains you might not have heard of, see where they are and learn something about the geography around them.',
-	'It is meant as a small daily pause for curiosity, exploration and appreciation of mountain landscapes.'
+export const LOVE_HEADING = 'For the love of mountains';
+export const LOVE_PARAGRAPHS: readonly string[] = [
+	'Some mountains are famous. Others are rarely heard of. Each has its own landscape, geography, and place in the world.',
+	"SerendiPeak is for mountaineers, explorers, travelers, and anyone drawn to mountains. Whether you've stood on a summit or simply wondered about a distant peak, there's always somewhere new to discover."
 ];
-
-export const VISION_HEADING = 'Where it could go';
-export const VISION_INTRO =
-	'The atlas is a starting point. SerendiPeak aims to keep growing into a place to discover, locate, explore and learn about mountains around the world.';
-export const VISION_NOTE_TITLE = 'Possibilities, not available today';
-export const VISION_NOTE =
-	'The ideas below describe a direction. None of them is a feature you can use now.';
-export const VISION_IDEAS: readonly string[] = [
-	'A broader and richer mountain catalog',
-	'Browsing by country and mountain range',
-	'Nearby mountains and geographic relationships between them',
-	'More detailed mountain profiles and photographs',
-	'Additional geographic, historical and environmental context',
-	'Routes and tracks, as a potential later extension'
-];
-
-export const CLOSING_CUE = 'Tomorrow, another mountain.';

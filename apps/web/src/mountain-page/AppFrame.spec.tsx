@@ -204,7 +204,7 @@ describe('AppFrame footer', () => {
 	const html = render({});
 
 	it('shows the tagline, the given year and the external credits', () => {
-		expect(textsOf(html, 'footer')[0]).toContain('One mountain. Somewhere on Earth. Every day.');
+		expect(textsOf(html, 'footer')[0]).toContain('A world of mountains to explore.');
 		expect(html).toContain('© 2031');
 		const external = anchorsOf(html).filter(({ href }) => href.startsWith('https://'));
 		expect(external.map(({ href }) => href)).toEqual([

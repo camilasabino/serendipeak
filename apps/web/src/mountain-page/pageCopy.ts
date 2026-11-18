@@ -31,6 +31,8 @@ export function describeFailure(reason: FailureReason): ErrorContent {
 }
 
 export const SITE_NAME = 'SerendiPeak';
+export const SITE_TAGLINE = 'A world of mountains to explore.';
+
 export const SITE_DESCRIPTION =
 	'Discover one mountain every day, with real photography, interactive 3D terrain and curated geography, then explore the collection in the atlas.';
 
