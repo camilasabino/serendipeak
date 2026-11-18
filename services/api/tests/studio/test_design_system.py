@@ -26,6 +26,10 @@ LIGHT_TOKENS = {**STUDIO_TOKENS, **tokens_of(LIGHT_BLOCK)}
 THEMES = {"dark": STUDIO_TOKENS, "light": LIGHT_TOKENS}
 WEB_TOKEN_VALUES = tokens_of(WEB_CSS)
 
+SHARED_START = "/* shared with the web app */"
+SHARED_END = "/* Studio roles, dark by default */"
+SHARED_TOKENS = tokens_of(DARK_BLOCK.split(SHARED_START, 1)[1].split(SHARED_END, 1)[0])
+
 
 def resolve(name, tokens=STUDIO_TOKENS):
     value = tokens[name]
@@ -54,15 +58,16 @@ def contrast(foreground, background, tokens=STUDIO_TOKENS):
     return (lighter + 0.05) / (darker + 0.05)
 
 
-def test_the_web_tokens_were_found_and_are_not_empty():
+def test_the_shared_and_web_tokens_were_found_and_are_not_empty():
     assert WEB_TOKEN_VALUES
-    assert "--sp-paper" in WEB_TOKEN_VALUES
+    assert SHARED_TOKENS
+    assert "--sp-font-display" in SHARED_TOKENS
 
 
-@pytest.mark.parametrize("name", sorted(WEB_TOKEN_VALUES))
-def test_every_web_token_is_defined_in_the_studio_with_the_same_value(name):
-    assert name in STUDIO_TOKENS, f"{name} exists in the web tokens but not in the Studio"
-    assert STUDIO_TOKENS[name] == WEB_TOKEN_VALUES[name], f"{name} has drifted from the web"
+@pytest.mark.parametrize("name", sorted(SHARED_TOKENS))
+def test_every_shared_studio_token_exists_in_the_web_with_the_same_value(name):
+    assert name in WEB_TOKEN_VALUES, f"{name} is marked shared but missing from the web tokens"
+    assert SHARED_TOKENS[name] == WEB_TOKEN_VALUES[name], f"{name} has drifted from the web"
 
 
 def test_the_brand_hex_values_appear_nowhere_but_the_token_block():
