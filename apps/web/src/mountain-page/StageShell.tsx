@@ -1,9 +1,10 @@
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { BrandMark } from '../shell/BrandMark';
+import { ContourMotif } from '../shell/ContourMotif';
+import { LOADING_CONTOURS } from '../shell/contourPatterns';
 import { sceneBlocksExperience } from '../stage/experience';
 import type { SceneStore } from '../stage/SceneStore';
 import styles from './StageShell.module.css';
-import { TopographicMotif } from './TopographicMotif';
 
 interface StageShellProps {
 	store: SceneStore;
@@ -25,7 +26,13 @@ export function StageShell({ store, label, className, children }: StageShellProp
 			{children}
 			{sceneBlocksExperience(state) && (
 				<div className={styles.loader} role="status">
-					<TopographicMotif className={styles.motif} />
+					<ContourMotif
+						pattern={LOADING_CONTOURS}
+						level="index"
+						align="center"
+						draw
+						className={styles.motif}
+					/>
 					<div className={styles.lockup}>
 						<BrandMark size={64} />
 						<p className={styles.name}>SerendiPeak</p>

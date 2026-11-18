@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ContourMotif } from './ContourMotif';
-import { ABOUT_CONTOURS } from './contourPatterns';
+import {
+	ABOUT_CONTOURS,
+	CLOSING_CONTOURS,
+	ERROR_CONTOURS,
+	LOADING_CONTOURS
+} from './contourPatterns';
 
 const pathsOf = (html: string) => html.match(/<path\s/g)?.length ?? 0;
 
@@ -25,6 +30,37 @@ describe('ContourMotif', () => {
 
 	it('anchors to the upper right and crops, so the summit rings survive a narrow box', () => {
 		expect(html).toContain('preserveAspectRatio="xMaxYMin slice"');
+	});
+
+	it('centres a pattern drawn around its middle when asked to', () => {
+		const centred = renderToStaticMarkup(
+			<ContourMotif pattern={LOADING_CONTOURS} align="center" />
+		);
+
+		expect(centred).toContain('preserveAspectRatio="xMidYMid slice"');
+	});
+
+	it('animates only when asked: draw switches every ring to a unit path length', () => {
+		const still = renderToStaticMarkup(<ContourMotif pattern={LOADING_CONTOURS} />);
+		const drawn = renderToStaticMarkup(<ContourMotif pattern={LOADING_CONTOURS} draw />);
+
+		expect(still).not.toContain('pathLength');
+		expect(drawn.match(/pathLength="1"/g)).toHaveLength(LOADING_CONTOURS.rings.length);
+		expect(drawn).not.toMatch(/<(animate|set|style)\b/);
+	});
+
+	it.each([
+		['loading', LOADING_CONTOURS, 552, 230, 8],
+		['error', ERROR_CONTOURS, 552, 190, 7],
+		['closing', CLOSING_CONTOURS, 552, 150, 7]
+	])('ships the %s pattern as fixed, well-formed rings', (_name, pattern, width, height, rings) => {
+		expect(pattern.width).toBe(width);
+		expect(pattern.height).toBe(height);
+		expect(pattern.rings).toHaveLength(rings);
+		for (const { d } of pattern.rings) {
+			expect(d).toMatch(/^M[\d. -]+(C[\d. -]+)+Z$/);
+		}
+		expect(new Set(pattern.rings.map(({ d }) => d)).size).toBe(rings);
 	});
 
 	it('marks index contours only at the index level', () => {

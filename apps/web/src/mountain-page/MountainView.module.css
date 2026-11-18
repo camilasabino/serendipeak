@@ -66,13 +66,28 @@
 
 /* The band bleeds to the sheet's edges and floor, like the running head does at the top. */
 .closing {
+	position: relative;
 	margin: var(--sp-space-6) calc(-1 * var(--sheet-gutter)) calc(-1 * var(--sp-space-6));
-	padding: 1.75rem var(--sheet-gutter) 2rem;
+	padding: 4.25rem var(--sheet-gutter) 2rem;
+	overflow: hidden;
 	border-top: 2px solid var(--sp-divider-accent);
 	background: var(--sp-surface-raised);
 }
 
+/* The rings get a strip of their own above the text and fade out before it, so no line is ever drawn
+   under a letter, however narrow the sheet is. */
+.closingMotif {
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: 100%;
+	height: 3.5rem;
+	-webkit-mask-image: linear-gradient(to bottom, black 35%, transparent);
+	mask-image: linear-gradient(to bottom, black 35%, transparent);
+}
+
 .cue {
+	position: relative;
 	margin: 0;
 	font: 400 1.75rem / 1.1 var(--sp-face-display);
 	color: var(--sp-text);
@@ -80,6 +95,7 @@
 }
 
 .closingNote {
+	position: relative;
 	margin: 0.6rem 0 0;
 	font: 400 0.875rem / 1.45 var(--sp-face-ui);
 	color: var(--sp-text-muted);

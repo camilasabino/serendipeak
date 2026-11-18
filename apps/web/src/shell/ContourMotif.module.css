@@ -15,3 +15,21 @@
 	stroke: var(--sp-contour-index);
 	stroke-width: 1.5px;
 }
+
+/* The dash unit is the whole ring (pathLength), so every ring finishes together at any scale. */
+@media (prefers-reduced-motion: no-preference) {
+	.draw path {
+		stroke-dasharray: 1;
+		animation: draw 4.2s var(--sp-ease-out) infinite alternate;
+	}
+}
+
+@keyframes draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+
+	to {
+		stroke-dashoffset: 0;
+	}
+}

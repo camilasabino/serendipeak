@@ -1,6 +1,8 @@
 import type { Mountain } from '../api/contract';
 import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
 import { ExploreControl } from '../explore/ExploreControl';
+import { ContourMotif } from '../shell/ContourMotif';
+import { CLOSING_CONTOURS } from '../shell/contourPatterns';
 import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
@@ -52,6 +54,7 @@ export function MountainView({
 			<DataSources sources={sources} />
 			{daily && (
 				<div className={styles.closing}>
+					<ContourMotif pattern={CLOSING_CONTOURS} level="index" className={styles.closingMotif} />
 					<p className={styles.cue}>{DAILY_CUE}</p>
 					<p className={styles.closingNote}>{DAILY_CLOSING_NOTE}</p>
 				</div>

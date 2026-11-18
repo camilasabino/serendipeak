@@ -16,27 +16,43 @@ interface ContourMotifProps {
 	pattern: ContourPattern;
 	/** `quiet` draws every ring alike; `index` also draws the heavier index contours. */
 	level?: 'quiet' | 'index';
+	/** `summit` anchors the upper right; `center` keeps a pattern drawn around its middle centred. */
+	align?: 'summit' | 'center';
+	/** Draws the rings in and back out on a loop, only while the user allows motion. */
+	draw?: boolean;
 	className?: string;
 }
 
 /**
- * Decorative brand graphic, never terrain data. It anchors to the upper right and crops from the
- * left and bottom, so the summit rings stay in view when the box is narrow. Whoever places it sizes
- * and masks it so it stays clear of text.
+ * Decorative brand graphic, never terrain data. By default it anchors to the upper right and crops
+ * from the left and bottom, so the summit rings stay in view when the box is narrow. Whoever places
+ * it sizes and masks it so it stays clear of text.
  */
-export function ContourMotif({ pattern, level = 'quiet', className }: ContourMotifProps) {
-	const classes = className ? `${styles.motif} ${className}` : styles.motif;
+export function ContourMotif({
+	pattern,
+	level = 'quiet',
+	align = 'summit',
+	draw = false,
+	className
+}: ContourMotifProps) {
+	const base = draw ? `${styles.motif} ${styles.draw}` : styles.motif;
+	const classes = className ? `${base} ${className}` : base;
 
 	return (
 		<svg
 			className={classes}
 			viewBox={`0 0 ${pattern.width} ${pattern.height}`}
-			preserveAspectRatio="xMaxYMin slice"
+			preserveAspectRatio={align === 'center' ? 'xMidYMid slice' : 'xMaxYMin slice'}
 			aria-hidden="true"
 			focusable="false"
 		>
 			{pattern.rings.map(({ d, index }) => (
-				<path key={d} d={d} className={level === 'index' && index ? styles.index : undefined} />
+				<path
+					key={d}
+					d={d}
+					pathLength={draw ? 1 : undefined}
+					className={level === 'index' && index ? styles.index : undefined}
+				/>
 			))}
 		</svg>
 	);

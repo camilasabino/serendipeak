@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
+import { ContourMotif } from '../shell/ContourMotif';
+import { ERROR_CONTOURS } from '../shell/contourPatterns';
 import styles from './ErrorView.module.css';
 import type { ErrorContent } from './pageCopy';
-import { TopographicMotif } from './TopographicMotif';
 
 export function ErrorView({ content }: { content: ErrorContent }) {
 	const router = useRouter();
@@ -24,7 +25,6 @@ export function ErrorView({ content }: { content: ErrorContent }) {
 
 	return (
 		<main className={styles.missing}>
-			<TopographicMotif className={styles.motif} />
 			<section aria-labelledby="error-title" className={styles.content}>
 				<h1 id="error-title" className={styles.title}>
 					{content.title}
@@ -51,6 +51,7 @@ export function ErrorView({ content }: { content: ErrorContent }) {
 					)}
 				</div>
 			</section>
+			<ContourMotif pattern={ERROR_CONTOURS} align="center" className={styles.motif} />
 		</main>
 	);
 }

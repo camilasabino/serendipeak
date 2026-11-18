@@ -1,8 +1,11 @@
+/* The text column and the rings never share a box: the rings sit beside it on wide screens and
+   below it on narrow ones, so no line is ever drawn under a letter. */
 .missing {
-	position: relative;
-	display: flex;
+	display: grid;
 	flex: 1 1 auto;
-	align-items: flex-start;
+	grid-template-columns: minmax(0, 1fr);
+	grid-auto-rows: min-content;
+	align-content: start;
 	box-sizing: border-box;
 	min-height: 0;
 	padding: clamp(2.5rem, 12vh, 6rem) clamp(1.5rem, 6vw, 4.5rem);
@@ -10,28 +13,24 @@
 }
 
 .motif {
-	position: absolute;
-	inset: 0;
 	width: 100%;
-	height: 100%;
-	pointer-events: none;
-	color: var(--sp-glacier-light);
-	opacity: 0.22;
+	height: 9rem;
+	margin-top: var(--sp-space-6);
+	-webkit-mask-image: radial-gradient(ellipse closest-side, black 40%, transparent 100%);
+	mask-image: radial-gradient(ellipse closest-side, black 40%, transparent 100%);
 }
 
 .content {
-	position: relative;
 	width: min(100%, 34rem);
 	overflow-wrap: anywhere;
 }
 
 .title {
 	margin: 0 0 var(--sp-space-3);
-	font-family: var(--sp-font-display);
+	font-family: var(--sp-face-display);
 	font-size: clamp(2.5rem, 7vw, 3.75rem);
 	font-weight: 400;
-	letter-spacing: -0.012em;
-	line-height: 1.15;
+	line-height: 1.1;
 	text-wrap: balance;
 }
 
@@ -40,7 +39,7 @@
 	margin: 0;
 	font-size: 1.125rem;
 	line-height: 1.5;
-	color: var(--sp-mist);
+	color: var(--sp-text-muted);
 }
 
 .actions {
@@ -57,22 +56,25 @@
 	justify-content: center;
 	box-sizing: border-box;
 	min-height: 2.75rem;
-	padding: 0.5rem 1rem;
-	border: 1px solid transparent;
-	border-radius: var(--sp-radius);
-	background: var(--sp-accent);
-	color: var(--sp-paper-bright);
-	font-family: var(--sp-font-ui);
-	font-size: var(--sp-text-ui);
-	font-weight: 500;
-	line-height: 1.2;
+	padding: 0 1.25rem;
+	border: 0;
+	border-radius: 999px;
+	background: var(--sp-action);
+	color: var(--sp-on-action);
+	font: 600 0.9375rem / 1 var(--sp-face-ui);
 	text-align: center;
 	text-decoration: none;
 	cursor: pointer;
+	transition: background-color var(--sp-duration-short);
 }
 
 .action:hover {
-	background: var(--sp-accent-hover);
+	background: var(--sp-action-hover);
+}
+
+.action:active {
+	background: var(--sp-action);
+	box-shadow: inset 0 0.125rem 0 color-mix(in srgb, var(--sp-basalt) 35%, transparent);
 }
 
 .action[aria-disabled='true'] {
@@ -80,16 +82,48 @@
 	cursor: progress;
 }
 
+.action:focus-visible,
+.quiet:focus-visible {
+	outline: 2px solid var(--sp-focus-ring);
+	outline-offset: 3px;
+}
+
 .quiet {
 	display: inline-flex;
 	align-items: center;
 	min-height: 2.75rem;
-	color: var(--sp-link-on-stage);
+	border-radius: 2px;
+	color: var(--sp-link);
 	font-size: var(--sp-text-ui);
 	text-decoration: underline;
-	text-underline-offset: 0.18em;
+	text-decoration-color: var(--sp-link-rule);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.2em;
+	transition: color var(--sp-duration-short) var(--sp-ease-out);
 }
 
 .quiet:hover {
-	color: var(--sp-link-on-stage-hover);
+	color: var(--sp-text);
+	text-decoration-color: currentColor;
+}
+
+@media (min-width: 56rem) {
+	.missing {
+		grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+		column-gap: var(--sp-space-5);
+	}
+
+	.motif {
+		grid-column: 2;
+		grid-row: 1;
+		height: 17rem;
+		margin-top: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.action,
+	.quiet {
+		transition: none;
+	}
 }

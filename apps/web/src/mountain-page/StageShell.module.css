@@ -19,19 +19,27 @@
 	padding: var(--sp-space-5);
 	overflow: hidden;
 	/* Opaque: the canvas renders beneath while the scene loads, and atlas markers must not show through. */
-	background: var(--sp-stage);
-	color: var(--sp-paper);
+	background: var(--sp-surface-base);
+	color: var(--sp-text);
 	text-align: center;
 }
 
+/* A box wider than a phone, so the rings keep their spacing and the stage crops the overflow. The
+   centre is masked clear of the lockup and the edges fade, so no line is drawn under the text. */
 .motif {
 	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-	color: var(--sp-glacier-light);
-	opacity: 0.22;
+	top: 50%;
+	left: 50%;
+	width: max(min(100%, 60rem), 36rem);
+	height: 22rem;
+	transform: translate(-50%, -50%);
+	-webkit-mask-image: radial-gradient(
+		ellipse closest-side,
+		transparent 55%,
+		black 85%,
+		transparent 100%
+	);
+	mask-image: radial-gradient(ellipse closest-side, transparent 55%, black 85%, transparent 100%);
 }
 
 .lockup {
@@ -45,15 +53,16 @@
 
 .name {
 	margin: 0;
-	font-family: var(--sp-font-display);
+	font-family: var(--sp-face-display);
 	font-size: clamp(1.75rem, 4vw, 2.25rem);
-	letter-spacing: -0.02em;
+	font-weight: 400;
 	line-height: 1;
 }
 
 .label {
 	margin: 0;
-	font-size: var(--sp-text-body);
+	font-family: var(--sp-face-ui);
+	font-size: var(--sp-text-ui);
 	line-height: 1.4;
-	color: var(--sp-mist);
+	color: var(--sp-text-muted);
 }
