@@ -145,9 +145,8 @@ describe('daily composition', () => {
 		);
 	});
 
-	it('shows only the Today eyebrow before the name, with no date', () => {
-		expect(textsOf(html, 'p')).toContain('Today');
-		expect(html.indexOf('>Today<')).toBeLessThan(html.indexOf('<h1'));
+	it('shows no Today label before the name and no date', () => {
+		expect(textsOf(html, 'p')).not.toContain('Today');
 		expect(html).not.toContain('<time');
 	});
 

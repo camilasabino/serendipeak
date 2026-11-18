@@ -100,11 +100,10 @@ test.describe('minimal permalink', () => {
 });
 
 test.describe('daily page', () => {
-	test('composes the eyebrow, the closing band and no link to itself', async ({ request }) => {
+	test('composes the closing band and no link to itself', async ({ request }) => {
 		const html = await (await request.get('/?utm=x')).text();
 		expect(headingsOf(html)).toEqual([daily.mountain.name]);
-		expect(html.indexOf('>Today</p>')).toBeGreaterThan(-1);
-		expect(html.indexOf('>Today</p>')).toBeLessThan(html.indexOf('<h1'));
+		expect(html).not.toContain('>Today</p>');
 		expect(html).not.toContain('<time');
 		expect(html).toContain('A new mountain is chosen every day at 00:00 UTC.');
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));

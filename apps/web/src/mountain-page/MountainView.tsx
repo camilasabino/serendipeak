@@ -9,7 +9,7 @@ import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
 import { ShareControl } from './ShareControl';
 import { mountainShare } from './socialMetadata';
-import { DAILY_CLOSING_NOTE, DAILY_CUE, DAILY_EYEBROW, PREVIEW_NOTICE } from './pageCopy';
+import { DAILY_CLOSING_NOTE, DAILY_CUE, PREVIEW_NOTICE } from './pageCopy';
 
 interface MountainViewProps {
 	mountain: Mountain;
@@ -27,11 +27,7 @@ export function MountainView({
 	const { primaryImage, sources } = mountain;
 
 	const share = preview ? undefined : mountainShare(mountain.slug, siteOrigin);
-	const runningHead = daily ? (
-		<p className={styles.eyebrow}>{DAILY_EYEBROW}</p>
-	) : (
-		!preview && <AtlasReturnLink />
-	);
+	const runningHead = !daily && !preview && <AtlasReturnLink />;
 
 	return (
 		<div className={`${styles.sheet} ${styles.page}`}>

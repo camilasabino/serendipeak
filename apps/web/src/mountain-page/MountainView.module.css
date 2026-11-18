@@ -26,8 +26,7 @@
 	background: var(--sp-surface-raised);
 }
 
-.runhead a,
-.eyebrow {
+.runhead a {
 	font: 500 0.8125rem / 1 var(--sp-face-ui);
 	font-stretch: var(--sp-stretch-nav);
 	letter-spacing: 0.11em;
@@ -45,13 +44,6 @@
 
 .runhead a:hover {
 	color: var(--sp-text);
-}
-
-.eyebrow {
-	margin: 0;
-	font-weight: 600;
-	letter-spacing: 0.12em;
-	color: var(--sp-text-accent);
 }
 
 .preview {
