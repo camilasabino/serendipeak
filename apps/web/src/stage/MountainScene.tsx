@@ -31,6 +31,8 @@ const SCENE_FACTORY = cesiumSceneFactory({
 export interface StageController {
 	readCamera(): CameraReading | undefined;
 	resetView(): ResetResult;
+	/** Emphasizes an atlas marker for as long as it is asked to, as a pointer on it would. */
+	highlightMarker(slug: string | undefined): void;
 }
 
 interface MountainSceneProps {
@@ -58,19 +60,31 @@ export default function MountainScene({
 	onStageResize,
 	children
 }: MountainSceneProps) {
-	const { viewportRef, snapshot, resetView, zoomView, toggleRotation, readCamera, retry } =
-		useStage({
-			store,
-			ionToken: ION_TOKEN,
-			sceneFactory: SCENE_FACTORY,
-			target,
-			atlas,
-			markers,
-			observer,
-			onMarkerActivate,
-			onStageResize
-		});
-	useImperativeHandle(controllerRef, () => ({ readCamera, resetView }), [readCamera, resetView]);
+	const {
+		viewportRef,
+		snapshot,
+		resetView,
+		zoomView,
+		toggleRotation,
+		readCamera,
+		highlightMarker,
+		retry
+	} = useStage({
+		store,
+		ionToken: ION_TOKEN,
+		sceneFactory: SCENE_FACTORY,
+		target,
+		atlas,
+		markers,
+		observer,
+		onMarkerActivate,
+		onStageResize
+	});
+	useImperativeHandle(controllerRef, () => ({ readCamera, resetView, highlightMarker }), [
+		readCamera,
+		resetView,
+		highlightMarker
+	]);
 	const stageRef = useRef<HTMLDivElement>(null);
 	const fullscreen = useStageFullscreen(stageRef);
 	const { state } = snapshot;

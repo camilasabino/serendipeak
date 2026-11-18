@@ -2,6 +2,7 @@ import * as cesium from 'cesium';
 import { describe, expect, it, vi } from 'vitest';
 import { ATLAS_MARKER_STYLE, type AtlasMarker, type ScreenBox } from '../atlasMarkers';
 import { LABEL_DECLUTTER } from '../labelDeclutter';
+import { CONTROL_GUTTER_REM, MARKER_LABEL_PLATE, SUMMIT_MARKER_STYLE } from '../marker';
 import { MARKER_HIT, resolveMarkerHit } from '../markerHits';
 import { ATLAS_LAYER_NAME, AtlasMarkers } from './AtlasMarkers';
 import type { CesiumModule } from './CesiumModule';
@@ -58,6 +59,43 @@ const CHARACTER_PIXELS = 7;
 const TEXT_HEIGHT_PIXELS = 13;
 function measureText(text: string) {
 	return { width: text.length * CHARACTER_PIXELS, height: TEXT_HEIGHT_PIXELS };
+}
+
+const PILL_WIDTH = 160;
+const PILL_HEIGHT = 62;
+const PILL_INSET = 14;
+
+function dotSprite(state: string, ratio: number) {
+	return { image: `dot:${state}@${ratio}`, width: 14, height: 14, bottomInset: 0 };
+}
+
+// The pill resolves on a later turn, as drawing waits for fonts; `hold` keeps it from resolving.
+function fakeSprites() {
+	const waiting: (() => void)[] = [];
+	let hold = false;
+	const pill = vi.fn(async (name: string) => {
+		if (hold) {
+			await new Promise<void>((resolve) => waiting.push(resolve));
+		}
+		return {
+			image: `pill:${name}`,
+			width: PILL_WIDTH,
+			height: PILL_HEIGHT,
+			bottomInset: PILL_INSET
+		};
+	});
+
+	return {
+		dot: vi.fn(dotSprite),
+		pill,
+		holdPills: () => {
+			hold = true;
+		},
+		releasePills: () => {
+			hold = false;
+			waiting.splice(0).forEach((resolve) => resolve());
+		}
+	};
 }
 
 function boxesOverlap(a: ScreenBox, b: ScreenBox): boolean {
@@ -143,10 +181,12 @@ function setup() {
 	});
 	const project = pinhole(camera, canvas);
 	const refreshed = vi.fn();
+	const sprites = fakeSprites();
 	const markers = new AtlasMarkers(cesium as unknown as CesiumModule, viewer as never, {
 		listen,
 		project,
 		measureText,
+		sprites,
 		refreshed
 	});
 
@@ -159,6 +199,7 @@ function setup() {
 		listeners,
 		project,
 		refreshed,
+		sprites,
 		/** What the scene's view-change listener does after the camera moved or the canvas resized. */
 		viewChanged: () => [...listeners].forEach((listener) => listener()),
 		destroyViewer: () => {
@@ -213,9 +254,9 @@ describe('AtlasMarkers layer', () => {
 		expect(marker.position!.getValue(NOW)).toEqual(
 			Cartesian3.fromDegrees(MONT_BLANC.longitude, MONT_BLANC.latitude, MONT_BLANC.elevationMeters)
 		);
-		expect(marker.point!.heightReference!.getValue(NOW)).toBe(cesium.HeightReference.NONE);
+		expect(marker.billboard!.heightReference!.getValue(NOW)).toBe(cesium.HeightReference.NONE);
 		expect(marker.label!.heightReference!.getValue(NOW)).toBe(cesium.HeightReference.NONE);
-		expect(marker.point!.disableDepthTestDistance).toBeUndefined();
+		expect(marker.billboard!.disableDepthTestDistance).toBeUndefined();
 		expect(marker.label!.disableDepthTestDistance).toBeUndefined();
 	});
 
@@ -232,22 +273,26 @@ describe('AtlasMarkers layer', () => {
 		);
 	});
 
-	it('draws every marker the same: a vermilion point with a dark outline', async () => {
-		const { markers, entity } = setup();
+	it('draws every marker the same: one shared resting dot sprite, no point', async () => {
+		const { markers, entity, sprites } = setup();
 
 		markers.set([OLYMPUS, ACONCAGUA]);
 		await attached();
 
 		for (const marker of [OLYMPUS, ACONCAGUA]) {
-			const { point } = entity(marker.slug)!;
-			expect(point!.color!.getValue(NOW)).toEqual(
-				cesium.Color.fromCssColorString(ATLAS_MARKER_STYLE.pointColor)
+			const { billboard, point } = entity(marker.slug)!;
+			expect(point).toBeUndefined();
+			expect(billboard!.image!.getValue(NOW)).toBe('dot:rest@1');
+			expect(billboard!.scaleByDistance!.getValue(NOW)).toEqual(
+				new cesium.NearFarScalar(
+					ATLAS_MARKER_STYLE.pointNearMeters,
+					1,
+					ATLAS_MARKER_STYLE.pointFarMeters,
+					ATLAS_MARKER_STYLE.pointFarScale
+				)
 			);
-			expect(point!.outlineWidth!.getValue(NOW)).toBe(ATLAS_MARKER_STYLE.pointOutlinePixels);
-			const outline = point!.outlineColor!.getValue(NOW) as cesium.Color;
-			expect(outline.alpha).toBeGreaterThanOrEqual(0.85);
-			expect(Math.max(outline.red, outline.green, outline.blue)).toBeLessThan(0.2);
 		}
+		expect(new Set(sprites.dot.mock.calls.map(([state]) => state))).toEqual(new Set(['rest']));
 	});
 
 	it('sets each label on a dark plate with light text, and fades it in with distance', async () => {
@@ -263,6 +308,9 @@ describe('AtlasMarkers layer', () => {
 		expect(plate.alpha).toBeLessThanOrEqual(0.8);
 		expect(Math.max(plate.red, plate.green, plate.blue)).toBeLessThan(0.1);
 		expect((label.fillColor!.getValue(NOW) as cesium.Color).red).toBeGreaterThan(0.9);
+		expect(plate).toEqual(
+			cesium.Color.fromCssColorString(MARKER_LABEL_PLATE.color).withAlpha(MARKER_LABEL_PLATE.alpha)
+		);
 		const fade = label.translucencyByDistance!.getValue(NOW) as cesium.NearFarScalar;
 		expect(fade).toEqual(
 			new cesium.NearFarScalar(
@@ -1012,43 +1060,65 @@ describe('AtlasMarkers label declutter', () => {
 	});
 });
 
-describe('AtlasMarkers hover emphasis', () => {
-	const outlineOf = (entity: cesium.Entity | undefined) =>
-		entity!.point!.outlineColor!.getValue(NOW) as cesium.Color;
-	const PAPER = cesium.Color.fromCssColorString(ATLAS_MARKER_STYLE.hoverOutlineColor);
+const MATTERHORN: AtlasMarker = {
+	slug: 'matterhorn',
+	name: 'Matterhorn',
+	latitude: 45.9763,
+	longitude: 7.6586,
+	elevationMeters: 4478
+};
 
-	it('rings one marker in paper and returns the previous one to ink', async () => {
+describe('AtlasMarkers emphasis', () => {
+	const imageOf = (entity: cesium.Entity | undefined) =>
+		entity!.billboard!.image!.getValue(NOW) as string;
+
+	it('swaps one marker to the emphasized dot and returns the previous one to rest', async () => {
 		const { markers, entity } = setup();
 		markers.set([OLYMPUS, MONT_BLANC]);
 		await attached();
-		const ink = outlineOf(entity(OLYMPUS.slug));
 
 		markers.emphasize(OLYMPUS.slug);
-		expect(outlineOf(entity(OLYMPUS.slug))).toEqual(PAPER);
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:emphasized@1');
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:rest@1');
 		expect(markers.read()!.hovered).toBe(OLYMPUS.slug);
 
 		markers.emphasize(MONT_BLANC.slug);
-		expect(outlineOf(entity(OLYMPUS.slug))).toEqual(ink);
-		expect(outlineOf(entity(MONT_BLANC.slug))).toEqual(PAPER);
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:rest@1');
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:emphasized@1');
 
 		markers.emphasize(undefined);
-		expect(outlineOf(entity(MONT_BLANC.slug))).toEqual(ink);
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:rest@1');
 		expect(markers.read()!.hovered).toBeUndefined();
 	});
 
-	it('keeps the size and the place of the emphasized marker', async () => {
-		const { markers, entity } = setup();
-		markers.set([OLYMPUS]);
+	it('reuses the two dot images however many markers are emphasized', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS, MONT_BLANC, MATTERHORN]);
 		await attached();
 
-		markers.emphasize(OLYMPUS.slug);
+		for (const marker of [OLYMPUS, MONT_BLANC, MATTERHORN, OLYMPUS]) {
+			markers.emphasize(marker.slug);
+		}
 
-		expect(entity(OLYMPUS.slug)!.point!.pixelSize!.getValue(NOW)).toBe(
-			ATLAS_MARKER_STYLE.pointPixelSize
+		const images = new Set(sprites.dot.mock.results.map((result) => result.value.image));
+		expect(images).toEqual(new Set(['dot:rest@1', 'dot:emphasized@1']));
+	});
+
+	it('keeps the place of the emphasized marker and creates no entity for it', async () => {
+		const { markers, entity, layer } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		const before = entity(OLYMPUS.slug)!.position!.getValue(NOW);
+
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		expect(entity(OLYMPUS.slug)!.position!.getValue(NOW)).toEqual(before);
+		expect(entity(OLYMPUS.slug)!.billboard!.heightReference!.getValue(NOW)).toBe(
+			cesium.HeightReference.NONE
 		);
-		expect(entity(OLYMPUS.slug)!.point!.outlineWidth!.getValue(NOW)).toBe(
-			ATLAS_MARKER_STYLE.pointOutlinePixels
-		);
+		expect(markers.read()).toMatchObject({ entities: 1 });
+		expect(layer()!.entities.values.filter((e) => e.id !== 'atlas-preview')).toHaveLength(1);
 	});
 
 	it('drops the emphasis when the layer is hidden', async () => {
@@ -1056,11 +1126,15 @@ describe('AtlasMarkers hover emphasis', () => {
 		markers.set([OLYMPUS]);
 		await attached();
 		markers.emphasize(OLYMPUS.slug);
+		markers.highlight(OLYMPUS.slug);
 
 		markers.set(undefined);
 
+		expect(markers.read()).toMatchObject({ shown: false });
 		expect(markers.read()!.hovered).toBeUndefined();
-		expect(outlineOf(entity(OLYMPUS.slug))).not.toEqual(PAPER);
+		expect(markers.read()!.highlighted).toBeUndefined();
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:rest@1');
+		expect(entity('atlas-preview')!.show).toBe(false);
 	});
 
 	it('ignores a slug it does not draw', async () => {
@@ -1069,7 +1143,243 @@ describe('AtlasMarkers hover emphasis', () => {
 		await attached();
 
 		markers.emphasize('unknown');
+		markers.highlight('unknown');
 
 		expect(markers.read()!.hovered).toBeUndefined();
+		expect(markers.read()!.highlighted).toBeUndefined();
+	});
+
+	it('forgets an emphasized marker that leaves the catalog', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.highlight(OLYMPUS.slug);
+		await attached();
+
+		markers.set([MONT_BLANC]);
+
+		expect(markers.read()!.highlighted).toBeUndefined();
+		expect(entity('atlas-preview')!.show).toBe(false);
+	});
+});
+
+describe('AtlasMarkers list highlight', () => {
+	const imageOf = (entity: cesium.Entity | undefined) =>
+		entity!.billboard!.image!.getValue(NOW) as string;
+
+	it('emphasizes a marker the way the pointer does, and clears it', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+
+		markers.highlight(MONT_BLANC.slug);
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:emphasized@1');
+		expect(markers.read()).toMatchObject({ highlighted: MONT_BLANC.slug });
+
+		markers.highlight(OLYMPUS.slug);
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:rest@1');
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:emphasized@1');
+
+		markers.highlight(undefined);
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:rest@1');
+	});
+
+	it('is not cleared by the picker, which clears its own pointer emphasis after every pass', async () => {
+		const { markers, entity, viewChanged } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.highlight(MONT_BLANC.slug);
+
+		markers.emphasize(undefined);
+		viewChanged();
+
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:emphasized@1');
+		expect(markers.read()).toMatchObject({ highlighted: MONT_BLANC.slug });
+	});
+
+	it('yields to the pointer while it rests on a marker, then returns to the row', async () => {
+		const { markers, entity } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.highlight(MONT_BLANC.slug);
+
+		markers.emphasize(OLYMPUS.slug);
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:emphasized@1');
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:rest@1');
+
+		markers.emphasize(undefined);
+		expect(imageOf(entity(MONT_BLANC.slug))).toBe('dot:emphasized@1');
+		expect(imageOf(entity(OLYMPUS.slug))).toBe('dot:rest@1');
+	});
+
+	it('never moves the camera, and shows nothing for a marker on the far side of the globe', async () => {
+		const { markers, camera, viewChanged, entity } = setup();
+		markers.set([OLYMPUS, ACONCAGUA]);
+		await attached();
+		const before = { ...camera.positionWC };
+
+		markers.highlight(ACONCAGUA.slug);
+		await attached();
+
+		expect({ ...camera.positionWC }).toEqual(before);
+		expect(markers.read()!.highlighted).toBe(ACONCAGUA.slug);
+		expect(markers.read()!.preview).toBeUndefined();
+		expect(entity(ACONCAGUA.slug)!.show).toBe(false);
+		expect(entity('atlas-preview')!.show).toBe(false);
+
+		lookDown(camera, ACONCAGUA.latitude, ACONCAGUA.longitude, 11_000_000);
+		viewChanged();
+
+		expect(markers.read()!.preview?.slug).toBe(ACONCAGUA.slug);
+	});
+});
+
+describe('AtlasMarkers preview', () => {
+	const previewEntity = (entity: (slug: string) => cesium.Entity | undefined) =>
+		entity('atlas-preview')!;
+
+	it('names the emphasized marker with the summit pill, above its dot and inside the canvas', async () => {
+		const { markers, entity, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		const reading = markers.read()!;
+		const at = reading.markers[0]!.window!;
+		const { box } = reading.preview!;
+		expect(sprites.pill).toHaveBeenCalledWith('Mount Olympus', '2,918 m', 1, expect.any(Number));
+		expect(box.right - box.left).toBeCloseTo(
+			PILL_WIDTH - 2 * SUMMIT_MARKER_STYLE.pill.shadow.blur,
+			5
+		);
+		expect(box.bottom - box.top).toBeCloseTo(SUMMIT_MARKER_STYLE.pill.height, 5);
+		expect(box.bottom).toBeLessThan(at.y);
+		expect((box.left + box.right) / 2).toBeCloseTo(at.x, 5);
+		expect(box.left).toBeGreaterThanOrEqual(0);
+		expect(box.top).toBeGreaterThanOrEqual(0);
+
+		const pill = previewEntity(entity);
+		expect(pill.show).toBe(true);
+		expect(pill.billboard!.image!.getValue(NOW)).toBe('pill:Mount Olympus');
+		expect(pill.billboard!.disableDepthTestDistance!.getValue(NOW)).toBe(Number.POSITIVE_INFINITY);
+		const offset = pill.billboard!.pixelOffset!.getValue(NOW) as cesium.Cartesian2;
+		expect(offset.y).toBeCloseTo(box.bottom - at.y + PILL_INSET, 5);
+	});
+
+	it('shows at any distance, though ordinary labels do not show from here', async () => {
+		const { markers } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		const [reading] = markers.read()!.markers;
+		expect(reading!.distanceMeters).toBeGreaterThan(ATLAS_MARKER_STYLE.labelMaxMeters);
+		expect(reading!.labelShown).toBe(false);
+		expect(markers.read()!.preview?.slug).toBe(OLYMPUS.slug);
+	});
+
+	it('goes with the emphasis, keeping one entity for every preview', async () => {
+		const { markers, layer, entity } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+
+		for (const slug of [OLYMPUS.slug, MONT_BLANC.slug, OLYMPUS.slug]) {
+			markers.emphasize(slug);
+			await attached();
+			expect(markers.read()!.preview?.slug).toBe(slug);
+		}
+		markers.emphasize(undefined);
+
+		expect(markers.read()!.preview).toBeUndefined();
+		expect(previewEntity(entity).show).toBe(false);
+		expect(layer()!.entities.values.filter((e) => e.id === 'atlas-preview')).toHaveLength(1);
+		expect(layer()!.entities.values).toHaveLength(3);
+	});
+
+	it('drops a pill that finishes drawing after another marker was asked for', async () => {
+		const { markers, entity, sprites } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		sprites.holdPills();
+
+		markers.emphasize(OLYMPUS.slug);
+		markers.emphasize(MONT_BLANC.slug);
+		sprites.releasePills();
+		await attached();
+
+		expect(markers.read()!.preview?.slug).toBe(MONT_BLANC.slug);
+		expect(previewEntity(entity).billboard!.image!.getValue(NOW)).toBe('pill:Mont Blanc');
+	});
+
+	it('shows nothing, and does not fail, when the pill cannot be drawn', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		sprites.pill.mockRejectedValueOnce(new Error('no 2d context'));
+
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		expect(markers.read()!.preview).toBeUndefined();
+		expect(markers.read()!.hovered).toBe(OLYMPUS.slug);
+	});
+
+	it('slides inside the canvas and clear of the control columns beside the edge', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set([MONT_BLANC]);
+		await attached();
+		lookDown(camera, MONT_BLANC.latitude, MONT_BLANC.longitude + 8.4, 900_000);
+		viewChanged();
+		const at = markers.read()!.markers[0]!.window!;
+		expect(at.x).toBeLessThan(40);
+
+		markers.emphasize(MONT_BLANC.slug);
+		await attached();
+
+		const { box } = markers.read()!.preview!;
+		expect(box.left).toBeGreaterThanOrEqual(CONTROL_GUTTER_REM * 16);
+		expect(box.right).toBeLessThanOrEqual(800);
+	});
+
+	it('names the marker once: its ordinary label gives way, and no other label overlaps the pill', async () => {
+		const { markers, camera, viewChanged } = setup();
+		markers.set([MONT_BLANC, MATTERHORN]);
+		await attached();
+		lookDown(camera, 46, 7.2, 900_000);
+		viewChanged();
+		const named = (slug: string) =>
+			markers.read()!.markers.find((reading) => reading.slug === slug)!;
+		expect(named(MONT_BLANC.slug).labelShown).toBe(true);
+
+		markers.emphasize(MONT_BLANC.slug);
+		await attached();
+
+		const { box } = markers.read()!.preview!;
+		expect(named(MONT_BLANC.slug).labelShown).toBe(false);
+		for (const reading of markers.read()!.markers) {
+			if (reading.label) {
+				expect(boxesOverlap(reading.label, box), `${reading.slug} label`).toBe(false);
+			}
+		}
+		expect(named(MATTERHORN.slug).visible).toBe(true);
+	});
+
+	it('leaves no listener, entity or timer behind after release', async () => {
+		const { markers, viewer, listeners } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		markers.release();
+		await attached();
+
+		expect(listeners.size).toBe(0);
+		expect(viewer.dataSources.length).toBe(0);
+		expect(() => markers.highlight(OLYMPUS.slug)).not.toThrow();
 	});
 });

@@ -56,7 +56,7 @@ describe('atlas page', () => {
 		expect(html.indexOf('<h1')).toBeLessThan(html.indexOf('Preparing the atlas...'));
 	});
 
-	it('groups the mountains by continent, every continent collapsed, with its count', () => {
+	it('groups the mountains by continent with its count, every continent collapsed', () => {
 		const groups = html.match(/<details[^>]*>/g) ?? [];
 
 		expect(groups).toHaveLength(2);
@@ -95,15 +95,22 @@ describe('atlas page', () => {
 });
 
 describe('atlas list memory', () => {
-	it('opens the continents the reader left open', () => {
-		const html = renderToStaticMarkup(
-			<OpenContinentsProvider value={new Set(['EU'])}>
-				<AtlasList groups={groupByContinent(MOUNTAINS)} />
-			</OpenContinentsProvider>
-		);
-		const groups = html.match(/<details[^>]*>/g) ?? [];
+	const opened = (memory: Set<string>) =>
+		(
+			renderToStaticMarkup(
+				<OpenContinentsProvider value={memory}>
+					<AtlasList groups={groupByContinent(MOUNTAINS)} />
+				</OpenContinentsProvider>
+			).match(/<details[^>]*>/g) ?? []
+		).map((tag) => /\sopen/.test(tag));
 
-		expect(groups.map((tag) => /\sopen/.test(tag))).toEqual([false, true]);
+	it('starts with every continent collapsed for a reader who has chosen nothing', () => {
+		expect(opened(new Set())).toEqual([false, false]);
+	});
+
+	it('opens the continents the reader left open, and only those', () => {
+		expect(opened(new Set(['EU']))).toEqual([false, true]);
+		expect(opened(new Set(['AS', 'EU']))).toEqual([true, true]);
 	});
 });
 

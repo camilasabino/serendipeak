@@ -1670,6 +1670,44 @@ describe('SceneSession atlas markers', () => {
 	});
 });
 
+describe('SceneSession marker emphasis', () => {
+	it('hands an emphasis to the live scene without moving the camera or the orbit', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.highlightMarker('aconcagua');
+		session.highlightMarker(undefined);
+
+		expect(scene.highlights).toEqual(['aconcagua', undefined]);
+		expect(scene.overviews).toHaveLength(1);
+		expect(scene.orbits).toHaveLength(1);
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('does not keep an emphasis for a scene that does not exist yet', async () => {
+		const { session, factory } = setup();
+
+		session.highlightMarker('aconcagua');
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.highlights).toEqual([]);
+	});
+
+	it('asks nothing of a scene once stopped', async () => {
+		const { session, factory } = setup();
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.stop();
+		session.highlightMarker('aconcagua');
+
+		expect(scene.highlights).toEqual([]);
+	});
+});
+
 describe('SceneSession marker activation', () => {
 	const MARKERS: AtlasMarker[] = [
 		{

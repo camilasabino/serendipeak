@@ -2,22 +2,24 @@
 	margin: var(--sp-space-6) 0 0;
 }
 
+/* The same caps label and copper rule that open the ledger on a mountain sheet. */
 .heading {
 	margin: 0;
-	font-family: var(--sp-font-display);
-	font-size: 1.375rem;
-	font-weight: 400;
-	letter-spacing: -0.01em;
+	padding-bottom: 0.6rem;
+	border-bottom: 2px solid var(--sp-divider-accent);
+	font-family: var(--sp-face-ui);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	font-stretch: var(--sp-stretch-caps);
+	letter-spacing: 0.13em;
+	line-height: 1.5;
+	text-transform: uppercase;
+	color: var(--sp-text-muted);
 }
 
 .group {
 	margin: 0;
-	border-bottom: 1px solid var(--sp-rule-quiet);
-}
-
-.group:first-of-type {
-	margin-top: var(--sp-space-3);
-	border-top: 1px solid var(--sp-rule-quiet);
+	border-bottom: 1px solid var(--sp-divider);
 }
 
 .continent {
@@ -25,13 +27,15 @@
 	align-items: center;
 	gap: var(--sp-space-3);
 	box-sizing: border-box;
-	min-height: 2.75rem;
-	padding: 0.5rem 0.625rem 0.5rem 0;
-	font-size: 0.8125rem;
+	min-height: 2.875rem;
+	margin: 0 -0.6rem;
+	padding: 0 0.6rem;
+	border-radius: 8px;
+	font-family: var(--sp-face-ui);
+	font-size: 0.9375rem;
 	font-weight: 500;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--sp-paper);
+	line-height: 1.2;
+	color: var(--sp-text);
 	list-style: none;
 	cursor: pointer;
 }
@@ -40,30 +44,8 @@
 	display: none;
 }
 
-/* A chevron that turns down when the continent opens. */
-.continent::before {
-	content: '';
-	flex: none;
-	width: 0.4rem;
-	height: 0.4rem;
-	margin: 0 0.3rem 0 0.2rem;
-	border-right: 1.5px solid currentColor;
-	border-bottom: 1.5px solid currentColor;
-	transform: rotate(-45deg);
-}
-
-.group[open] > .continent::before {
-	transform: rotate(45deg);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-	.continent::before {
-		transition: transform 150ms ease-out;
-	}
-}
-
 .continent:hover {
-	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+	background: var(--sp-state-hover);
 }
 
 .continent:focus-visible {
@@ -78,33 +60,55 @@
 
 .count {
 	flex: none;
-	font-weight: 400;
-	letter-spacing: 0;
-	text-transform: none;
-	color: var(--sp-mist);
+	font-size: 0.8125rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--sp-text-muted);
+}
+
+.chevron {
+	flex: none;
+	width: 0.9rem;
+	height: 0.9rem;
+	fill: none;
+	stroke: var(--sp-text-muted);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.group[open] > .continent .chevron {
+	transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.chevron {
+		transition: transform var(--sp-duration-short);
+	}
 }
 
 .items {
-	margin: 0 0 var(--sp-space-2);
+	margin: 0 0 var(--sp-space-3);
 	padding: 0;
 	list-style: none;
 }
 
+/* Names in Marcellus, as on the globe; places and elevations in the interface face. The row bleeds
+   into the sheet's gutter so its hover fills a hand's width, and its focus ring stays inside. */
 .item {
 	display: flex;
 	flex-direction: column;
-	gap: 0.1rem;
+	gap: 0.2rem;
 	box-sizing: border-box;
 	min-height: 2.75rem;
-	padding: 0.5rem 0.625rem;
-	border-top: 1px solid var(--sp-rule-quiet);
-	border-left: 2px solid transparent;
-	color: var(--sp-paper);
+	margin: 0 -0.6rem;
+	padding: 0.5rem 0.6rem;
+	border-radius: 8px;
+	color: var(--sp-text);
 	text-decoration: none;
 }
 
 .item:hover {
-	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+	background: var(--sp-state-hover);
 }
 
 .item:focus-visible {
@@ -112,15 +116,17 @@
 }
 
 .name {
-	font-size: 0.9375rem;
-	font-weight: 500;
-	line-height: 1.35;
-	overflow-wrap: break-word;
+	font-family: var(--sp-face-display);
+	font-size: 1.0625rem;
+	line-height: 1.2;
+	overflow-wrap: anywhere;
 }
 
 .detail {
+	font-family: var(--sp-face-ui);
 	font-size: 0.8125rem;
-	line-height: 1.35;
-	color: var(--sp-mist);
+	font-variant-numeric: tabular-nums;
+	line-height: 1.3;
+	color: var(--sp-text-muted);
 	overflow-wrap: break-word;
 }

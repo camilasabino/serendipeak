@@ -220,16 +220,19 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.terrainSession = createTerrainCameraSession();
 		this.orbit = new ViewerOrbit(cesium, viewer, () => this.canOrbit());
 		const measureText = createTextMeasure();
+		// One pill cache for the summit and the atlas: a mountain named in either is drawn once.
+		const sprites = new SummitSprites();
 		this.atlasMarkers = new AtlasMarkers(cesium, viewer, {
 			listen: (onChange) => this.listenForViewChanges(onChange),
 			project: (position, result) =>
 				cesium.SceneTransforms.worldToWindowCoordinates(viewer.scene, position, result),
 			measureText,
+			sprites,
 			refreshed: () => this.atlasPicker.refreshed()
 		});
 		this.atlasPicker = new AtlasPicker(cesium, viewer.scene.canvas, this.atlasMarkers);
 
-		const markers = new SummitMarkers(cesium, viewer, new SummitSprites());
+		const markers = new SummitMarkers(cesium, viewer, sprites);
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
 		this.director = new CameraDirector(this.flight, markers, {
 			cameraHeight: () => viewer.camera.positionCartographic.height,
@@ -346,6 +349,12 @@ export class CesiumGlobeScene implements GlobeScene {
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
 		if (!this.destroyed) {
 			this.atlasMarkers.set(markers);
+		}
+	}
+
+	highlightAtlasMarker(slug: string | undefined): void {
+		if (!this.destroyed) {
+			this.atlasMarkers.highlight(slug);
 		}
 	}
 

@@ -177,6 +177,13 @@ export class SceneSession {
 		this.scene?.setAtlasMarkers(next);
 	}
 
+	/** A transient emphasis for one atlas marker; not kept for a scene that does not exist yet. */
+	highlightMarker(slug: string | undefined): void {
+		if (!this.stopped) {
+			this.scene?.highlightAtlasMarker(slug);
+		}
+	}
+
 	/** Pauses the ambient orbit, or resumes it, flying back to the overview if the camera left it. */
 	toggleRotation(): void {
 		const state = this.rotationState();

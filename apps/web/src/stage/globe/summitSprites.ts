@@ -1,6 +1,9 @@
+import { ATLAS_MARKER_STYLE } from './atlasMarkers';
 import {
 	SUMMIT_MARKER_STYLE,
 	layoutSummitPill,
+	type AtlasDotState,
+	type AtlasSpriteSource,
 	type PillLayout,
 	type PillText,
 	type SummitSprite,
@@ -86,8 +89,9 @@ function roundedRectangle(
  * mountain again reuses the texture it already holds instead of adding another to the atlas, which
  * never gives textures back. The cache is small, since only the mountain on stage is ever drawn.
  */
-export class SummitSprites implements SummitSpriteSource {
+export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 	private readonly discs = new Map<number, SummitSprite>();
+	private readonly dots = new Map<string, SummitSprite>();
 	private readonly pills = new Map<string, Promise<SummitSprite>>();
 
 	constructor(private readonly host: SpriteHost = browserHost) {}
@@ -101,6 +105,21 @@ export class SummitSprites implements SummitSpriteSource {
 		const sprite = this.drawDisc(ratio);
 		this.discs.set(ratio, sprite);
 		evictOldest(this.discs);
+
+		return sprite;
+	}
+
+	/** The atlas dot: at most two images per pixel density, shared by every marker. */
+	dot(state: AtlasDotState, ratio: number): SummitSprite {
+		const key = `${state}@${ratio}`;
+		const cached = this.dots.get(key);
+		if (cached) {
+			return cached;
+		}
+
+		const sprite = this.drawDot(state, ratio);
+		this.dots.set(key, sprite);
+		evictOldest(this.dots);
 
 		return sprite;
 	}
@@ -149,6 +168,32 @@ export class SummitSprites implements SummitSpriteSource {
 			height: size,
 			bottomInset: 0
 		};
+	}
+
+	private drawDot(state: AtlasDotState, ratio: number): SummitSprite {
+		const dot = ATLAS_MARKER_STYLE.dot;
+		const emphasized = state === 'emphasized';
+		const radius = emphasized ? dot.radius * dot.emphasizedScale : dot.radius;
+		const halo = radius + dot.ringWidth + dot.haloWidth;
+		const reach = emphasized ? halo + dot.glowWidth : halo;
+		const size = Math.ceil(reach * 2 + 2);
+		const { canvas, context } = this.surface(size, size, ratio);
+		const center = size / 2;
+		const circle = (circleRadius: number, fill: string) => {
+			context.beginPath();
+			context.arc(center, center, circleRadius, 0, Math.PI * 2);
+			context.fillStyle = fill;
+			context.fill();
+		};
+
+		if (emphasized) {
+			circle(reach, withAlpha(colors.snow, dot.glowAlpha));
+		}
+		circle(halo, withAlpha(colors.basalt, disc.haloAlpha));
+		circle(radius + dot.ringWidth, colors.snow);
+		circle(radius, colors.copper);
+
+		return { image: canvas.toDataURL('image/png'), width: size, height: size, bottomInset: 0 };
 	}
 
 	private async drawPill(

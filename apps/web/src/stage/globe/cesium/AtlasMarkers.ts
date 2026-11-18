@@ -9,21 +9,39 @@ import type {
 	NearFarScalar,
 	Viewer
 } from 'cesium';
+import { formatElevation } from '../../../formatElevation';
 import {
 	ATLAS_MARKER_STYLE,
 	diffMarkers,
 	isMarkerVisible,
 	markerPresentation,
+	placePreview,
 	type AtlasLayerReading,
 	type AtlasMarker,
 	type ScreenBox
 } from '../atlasMarkers';
-import { declutterLabels, labelBox, type LabelCandidate, type LabelSize } from '../labelDeclutter';
-import { MARKER_LABEL_PLATE } from '../marker';
+import {
+	LABEL_DECLUTTER,
+	declutterLabels,
+	labelBox,
+	type LabelCandidate,
+	type LabelSize
+} from '../labelDeclutter';
+import {
+	CONTROL_GUTTER_REM,
+	MARKER_LABEL_PLATE,
+	pillFootprint,
+	renderRatio,
+	rootFontPixels,
+	summitPillMaxContentWidth,
+	type AtlasSpriteSource,
+	type SummitSprite
+} from '../marker';
 import type { HitTarget } from '../markerHits';
 import type { CesiumModule } from './CesiumModule';
 
 export const ATLAS_LAYER_NAME = 'atlas';
+const PREVIEW_ID = 'atlas-preview';
 
 export interface AtlasMarkersOptions {
 	/** Calls back whenever the view may have changed: the camera moved, turned or was resized. */
@@ -32,6 +50,8 @@ export interface AtlasMarkersOptions {
 	project(position: Cartesian3, result: Cartesian2): Cartesian2 | undefined;
 	/** The size of a label's text in CSS pixels, set in `font`, as Cesium will draw it. */
 	measureText(text: string, font: string): LabelSize;
+	/** The dot and the pill the atlas draws with. */
+	sprites: AtlasSpriteSource;
 	/** After every visibility pass, and when the layer is hidden: what can be hit has changed. */
 	refreshed?(): void;
 }
@@ -50,10 +70,19 @@ interface MarkerEntry {
 	target: HitTarget;
 }
 
+/** The one preview pill: its entity is made when first needed and kept, with the layer. */
+interface Preview {
+	entity: Entity;
+	/** Bumped whenever the pill wanted changes, so a pill drawn late for an old one is dropped. */
+	generation: number;
+	sprite: SummitSprite | undefined;
+	box: ScreenBox | undefined;
+	/** The offset last handed to Cesium, so a pill that has not moved costs nothing. */
+	offset: { x: number; y: number } | undefined;
+}
+
 interface SharedStyle {
-	point: Color;
 	outline: Color;
-	hoverOutline: Color;
 	text: Color;
 	plate: Color;
 	platePadding: Cartesian2;
@@ -84,7 +113,13 @@ export class AtlasMarkers {
 	private readonly toMarker: Cartesian3;
 	private readonly window: Cartesian2;
 	private stopListening: (() => void) | undefined;
+	/** The marker the mouse rests on, and the one a list row asks for; the mouse comes first. */
+	private hovered: string | undefined;
+	private highlighted: string | undefined;
+	/** The marker drawn emphasized now, with its preview. */
 	private emphasized: string | undefined;
+	private preview: Preview | undefined;
+	private refreshing = false;
 	private shown = false;
 	private released = false;
 
@@ -100,9 +135,7 @@ export class AtlasMarkers {
 		this.toMarker = new Cartesian3();
 		this.window = new Cartesian2();
 		this.style = {
-			point: Color.fromCssColorString(style.pointColor),
 			outline: Color.fromCssColorString(style.outlineColor).withAlpha(style.outlineAlpha),
-			hoverOutline: Color.fromCssColorString(style.hoverOutlineColor),
 			text: Color.fromCssColorString(style.labelColor),
 			plate: Color.fromCssColorString(MARKER_LABEL_PLATE.color).withAlpha(MARKER_LABEL_PLATE.alpha),
 			platePadding: new Cartesian2(
@@ -154,15 +187,23 @@ export class AtlasMarkers {
 		return this.visibleTargets;
 	}
 
-	/** Rings the marker under the mouse, or with `undefined` none. Restyles at most two entities. */
+	/**
+	 * Emphasizes the marker under the mouse, or with `undefined` none: its dot grows and a pill names
+	 * it. Restyles at most two entities and prepares one pill.
+	 */
 	emphasize(slug: string | undefined): void {
-		const next = slug !== undefined && this.entries.has(slug) ? slug : undefined;
-		if (next === this.emphasized) {
-			return;
-		}
-		this.setOutline(this.emphasized, this.style.outline);
-		this.setOutline(next, this.style.hoverOutline);
-		this.emphasized = next;
+		this.hovered = this.known(slug);
+		this.restyle();
+	}
+
+	/**
+	 * Emphasizes the marker of a list row the same way, for as long as the mouse is not on a marker
+	 * of its own. A marker out of sight is not drawn, so nothing shows for it, and the camera never
+	 * moves to find it.
+	 */
+	highlight(slug: string | undefined): void {
+		this.highlighted = this.known(slug);
+		this.restyle();
 	}
 
 	read(): AtlasLayerReading | undefined {
@@ -192,9 +233,13 @@ export class AtlasMarkers {
 
 		return {
 			shown: this.shown,
-			...(this.emphasized ? { hovered: this.emphasized } : {}),
+			...(this.hovered ? { hovered: this.hovered } : {}),
+			...(this.highlighted ? { highlighted: this.highlighted } : {}),
+			...(this.emphasized && this.preview?.box
+				? { preview: { slug: this.emphasized, box: { ...this.preview.box } } }
+				: {}),
 			layers: this.attachedLayers(),
-			entities: this.layer?.entities.values.length ?? 0,
+			entities: this.entries.size,
 			depthTestAgainstTerrain: this.viewer.scene.globe.depthTestAgainstTerrain,
 			markers
 		};
@@ -212,6 +257,7 @@ export class AtlasMarkers {
 		const attached = this.attached;
 		this.layer = undefined;
 		this.attached = undefined;
+		this.preview = undefined;
 		this.entries.clear();
 		if (!layer || this.viewer.isDestroyed()) {
 			return;
@@ -235,7 +281,9 @@ export class AtlasMarkers {
 		this.stopListening = undefined;
 		this.shown = false;
 		this.visibleTargets.length = 0;
-		this.emphasize(undefined);
+		this.hovered = undefined;
+		this.highlighted = undefined;
+		this.restyle();
 		if (this.layer) {
 			this.layer.show = false;
 		}
@@ -243,11 +291,113 @@ export class AtlasMarkers {
 		this.options.refreshed?.();
 	}
 
-	private setOutline(slug: string | undefined, color: Color): void {
-		const point = slug === undefined ? undefined : this.entries.get(slug)?.entity.point;
-		if (point) {
-			point.outlineColor = new this.cesium.ConstantProperty(color);
+	private known(slug: string | undefined): string | undefined {
+		return slug !== undefined && this.entries.has(slug) ? slug : undefined;
+	}
+
+	// Brings what is drawn emphasized in line with who is asking: the mouse, else a list row.
+	private restyle(): void {
+		const next = this.hovered ?? this.highlighted;
+		if (next === this.emphasized) {
+			return;
 		}
+		this.setDot(this.emphasized, 'rest');
+		this.setDot(next, 'emphasized');
+		this.emphasized = next;
+		this.prepare(next);
+		if (this.shown && !this.refreshing) {
+			this.refresh();
+		}
+	}
+
+	private setDot(slug: string | undefined, state: 'rest' | 'emphasized'): void {
+		const billboard = slug === undefined ? undefined : this.entries.get(slug)?.entity.billboard;
+		if (billboard) {
+			const sprite = this.options.sprites.dot(state, renderRatio(this.viewer.scene.canvas));
+			billboard.image = new this.cesium.ConstantProperty(sprite.image);
+			billboard.width = new this.cesium.ConstantProperty(sprite.width);
+			billboard.height = new this.cesium.ConstantProperty(sprite.height);
+		}
+	}
+
+	// The pill for `slug`, drawn once and cached by the sprites, so a pointer sweeping the globe
+	// costs a texture per distinct mountain at most. The pill appears on the next pass after its
+	// faces are ready, and only if the same marker is still the one asked for.
+	private prepare(slug: string | undefined): void {
+		const preview = slug === undefined ? this.preview : this.previewOf();
+		if (!preview) {
+			return;
+		}
+		preview.generation += 1;
+		preview.sprite = undefined;
+		preview.box = undefined;
+		preview.offset = undefined;
+		preview.entity.show = false;
+
+		const entry = slug === undefined ? undefined : this.entries.get(slug);
+		if (!entry) {
+			return;
+		}
+		const generation = preview.generation;
+		const { canvas } = this.viewer.scene;
+		const ratio = renderRatio(canvas);
+		const maxContentWidth = summitPillMaxContentWidth(canvas.clientWidth, rootFontPixels());
+		preview.entity.position = new this.cesium.ConstantPositionProperty(entry.position);
+
+		this.options.sprites
+			.pill(
+				entry.marker.name,
+				formatElevation(entry.marker.elevationMeters),
+				ratio,
+				maxContentWidth
+			)
+			.then(
+				(sprite) => {
+					if (generation !== preview.generation || this.released || this.viewer.isDestroyed()) {
+						return;
+					}
+					preview.sprite = sprite;
+					const { billboard } = preview.entity;
+					if (billboard) {
+						billboard.image = new this.cesium.ConstantProperty(sprite.image);
+						billboard.width = new this.cesium.ConstantProperty(sprite.width);
+						billboard.height = new this.cesium.ConstantProperty(sprite.height);
+					}
+					if (this.shown && !this.refreshing) {
+						this.refresh();
+					}
+				},
+				() => {
+					// The list names every mountain in text, so a pill that cannot be drawn leaves the
+					// emphasized dot alone rather than fail the layer.
+				}
+			);
+	}
+
+	private previewOf(): Preview | undefined {
+		if (this.preview) {
+			return this.preview;
+		}
+		const layer = this.layer;
+		if (!layer) {
+			return undefined;
+		}
+		const { Cartesian2, HeightReference, VerticalOrigin } = this.cesium;
+		const entity = layer.entities.add({
+			id: PREVIEW_ID,
+			show: false,
+			billboard: {
+				verticalOrigin: VerticalOrigin.BOTTOM,
+				pixelOffset: new Cartesian2(),
+				heightReference: HeightReference.NONE,
+				// A name the reader asked for is never cut by terrain in front of its marker, which the
+				// visibility pass has already shown to be above the horizon and in front of the camera.
+				disableDepthTestDistance: Number.POSITIVE_INFINITY
+			}
+		});
+		this.preview = { entity, generation: 0, sprite: undefined, box: undefined, offset: undefined };
+
+		return this.preview;
 	}
 
 	private attachLayer(): CustomDataSource {
@@ -288,11 +438,12 @@ export class AtlasMarkers {
 		entities.suspendEvents();
 		try {
 			for (const slug of removed) {
-				if (slug === this.emphasized) {
-					this.emphasized = undefined;
-				}
 				entities.removeById(slug);
 				this.entries.delete(slug);
+			}
+			if (removed.length > 0) {
+				this.hovered = this.known(this.hovered);
+				this.highlighted = this.known(this.highlighted);
 			}
 			for (const marker of changed) {
 				this.update(this.entries.get(marker.slug)!, marker);
@@ -303,12 +454,16 @@ export class AtlasMarkers {
 		} finally {
 			entities.resumeEvents();
 		}
+		if (removed.length > 0) {
+			this.restyle();
+		}
 	}
 
 	private create(layer: CustomDataSource, marker: AtlasMarker): MarkerEntry {
 		const { HeightReference, LabelStyle, VerticalOrigin } = this.cesium;
 		const style = ATLAS_MARKER_STYLE;
 		const position = this.positionOf(marker);
+		const dot = this.options.sprites.dot('rest', renderRatio(this.viewer.scene.canvas));
 
 		const entity = layer.entities.add({
 			id: marker.slug,
@@ -316,11 +471,10 @@ export class AtlasMarkers {
 			position,
 			// Hidden until the first visibility pass, which runs before the next frame is drawn.
 			show: false,
-			point: {
-				pixelSize: style.pointPixelSize,
-				color: this.style.point,
-				outlineColor: this.style.outline,
-				outlineWidth: style.pointOutlinePixels,
+			billboard: {
+				image: dot.image,
+				width: dot.width,
+				height: dot.height,
 				scaleByDistance: this.style.pointScale,
 				translucencyByDistance: this.style.pointFade,
 				heightReference: HeightReference.NONE
@@ -395,6 +549,7 @@ export class AtlasMarkers {
 		if (!this.shown || this.viewer.isDestroyed()) {
 			return;
 		}
+		this.refreshing = true;
 		const { Cartesian3 } = this.cesium;
 		const { camera, scene } = this.viewer;
 		const viewport = { width: scene.canvas.clientWidth, height: scene.canvas.clientHeight };
@@ -425,7 +580,8 @@ export class AtlasMarkers {
 			const { labelShown: inRange, labelFading } = markerPresentation(
 				Cartesian3.magnitude(toMarker)
 			);
-			if (!inRange) {
+			// The preview names the emphasized marker, so its ordinary label would only repeat it.
+			if (!inRange || entry.marker.slug === this.emphasized) {
 				continue;
 			}
 			entry.labelInRange = true;
@@ -444,8 +600,55 @@ export class AtlasMarkers {
 			});
 		}
 
-		this.applyLabels(labels.length > 0 ? declutterLabels(labels) : NO_LABELS);
+		const preview = this.placePreview();
+		this.applyLabels(
+			labels.length > 0
+				? declutterLabels(labels, LABEL_DECLUTTER, preview ? [preview] : NO_BOXES)
+				: NO_LABELS
+		);
+		this.refreshing = false;
 		this.options.refreshed?.();
+	}
+
+	// Where the emphasized marker's pill stands this pass, if it is drawn: beside the dot, clear of
+	// the controls and the stage's edges. It is the first thing the labels make room for.
+	private placePreview(): ScreenBox | undefined {
+		const preview = this.preview;
+		const entry = this.emphasized === undefined ? undefined : this.entries.get(this.emphasized);
+		const sprite = preview?.sprite;
+		const billboard = preview?.entity.billboard;
+		if (!preview || !sprite || !billboard || !entry?.visible) {
+			if (preview) {
+				preview.box = undefined;
+				preview.entity.show = false;
+			}
+			return undefined;
+		}
+
+		const { Cartesian3, Cartesian2, ConstantProperty } = this.cesium;
+		const { canvas } = this.viewer.scene;
+		const dot = ATLAS_MARKER_STYLE.dot;
+		const distance = Cartesian3.distance(this.viewer.camera.positionWC, entry.position);
+		const radius = (markerPresentation(distance).pointPixels / 2) * dot.emphasizedScale;
+		const { box, offset } = placePreview(
+			{ x: entry.target.x, y: entry.target.y },
+			pillFootprint(sprite),
+			radius,
+			{
+				bounds: { width: canvas.clientWidth, height: canvas.clientHeight },
+				sideInsetPixels: CONTROL_GUTTER_REM * rootFontPixels()
+			}
+		);
+
+		const y = offset.y + sprite.bottomInset;
+		if (preview.offset?.x !== offset.x || preview.offset.y !== y) {
+			preview.offset = { x: offset.x, y };
+			billboard.pixelOffset = new ConstantProperty(new Cartesian2(offset.x, y));
+		}
+		preview.box = box;
+		preview.entity.show = true;
+
+		return box;
 	}
 
 	private applyLabels(shown: ReadonlySet<string>): void {
@@ -463,6 +666,7 @@ export class AtlasMarkers {
 }
 
 const NO_LABELS: ReadonlySet<string> = new Set();
+const NO_BOXES: readonly ScreenBox[] = [];
 
 function targetOf({ slug, name, elevationMeters }: AtlasMarker): HitTarget {
 	return { slug, name, elevationMeters, x: 0, y: 0, label: undefined };

@@ -8,6 +8,7 @@ import type {
 import {
 	SUMMIT_MARKER_STYLE,
 	renderRatio,
+	rootFontPixels,
 	summitPillMaxContentWidth,
 	type SummitMarker,
 	type SummitMarkerDisplay,
@@ -17,14 +18,6 @@ import type { CesiumModule } from './CesiumModule';
 
 const SUMMIT_MARKER_ID = 'summit-marker';
 const SUMMIT_LABEL_ID = 'summit-label';
-
-function rootFontPixels(): number {
-	if (typeof document === 'undefined') {
-		return 16;
-	}
-
-	return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-}
 
 /**
  * The summit on stage: a disc at the summit and a pill naming it just above, both billboards

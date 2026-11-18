@@ -81,18 +81,23 @@ function compareLabels(a: LabelCandidate, b: LabelCandidate): number {
  * slug. Priority does not depend on what was shown before, so a pose always settles on the same
  * names; only the return margin remembers the previous pass.
  *
- * O(n log n) for the sort plus O(n·k) overlap checks, k ≤ `maxLabels` kept; O(n) space.
+ * `reserved` boxes, such as a marker's preview pill, are kept before any candidate is considered:
+ * they outrank every label, and take no share of `maxLabels`.
+ *
+ * O(n log n) for the sort plus O(n·(k + r)) overlap checks, k ≤ `maxLabels` kept and r reserved
+ * boxes (at most one); O(n) space.
  */
 export function declutterLabels(
 	candidates: readonly LabelCandidate[],
-	options: typeof LABEL_DECLUTTER = LABEL_DECLUTTER
+	options: Readonly<Record<keyof typeof LABEL_DECLUTTER, number>> = LABEL_DECLUTTER,
+	reserved: readonly ScreenBox[] = []
 ): Set<string> {
 	const { gapPixels, returnPixels, maxLabels } = options;
-	const kept: ScreenBox[] = [];
+	const kept: ScreenBox[] = [...reserved];
 	const shown = new Set<string>();
 
 	for (const candidate of [...candidates].sort(compareLabels)) {
-		if (kept.length >= maxLabels) {
+		if (shown.size >= maxLabels) {
 			break;
 		}
 		const margin = candidate.shown ? gapPixels : gapPixels + returnPixels;

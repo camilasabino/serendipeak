@@ -4,9 +4,11 @@ import {
 	diffMarkers,
 	isMarkerVisible,
 	markerPresentation,
+	placePreview,
 	sameAtlasMarkers,
 	type AtlasMarker
 } from './atlasMarkers';
+import { MARKER_HIT } from './markerHits';
 
 const VIEWPORT = { width: 800, height: 600 };
 
@@ -179,5 +181,85 @@ describe('sameAtlasMarkers', () => {
 	it('tells no markers from an empty set', () => {
 		expect(sameAtlasMarkers(undefined, undefined)).toBe(true);
 		expect(sameAtlasMarkers(undefined, [])).toBe(false);
+	});
+});
+
+describe('atlas dot', () => {
+	it('is the size the scene scales with distance: disc, ring and halo across', () => {
+		const { dot, pointPixelSize } = ATLAS_MARKER_STYLE;
+
+		expect(pointPixelSize).toBeCloseTo((dot.radius + dot.ringWidth + dot.haloWidth) * 2, 10);
+		expect(markerPresentation(0).pointPixels).toBe(pointPixelSize);
+	});
+
+	it('stays inside the reach of a press', () => {
+		const { dot } = ATLAS_MARKER_STYLE;
+		const glow = dot.radius * dot.emphasizedScale + dot.ringWidth + dot.haloWidth + dot.glowWidth;
+
+		expect(glow).toBeLessThan(MARKER_HIT.fine.radiusPixels);
+	});
+});
+
+describe('placePreview', () => {
+	const room = { bounds: { width: 800, height: 600 }, sideInsetPixels: 60 };
+	const pill = { width: 140, height: 42 };
+	const { gapPixels, edgeMarginPixels } = ATLAS_MARKER_STYLE.preview;
+	const radius = 8;
+
+	it('centres the pill over the dot, its bottom a gap above the dot', () => {
+		const { box, offset } = placePreview({ x: 400, y: 300 }, pill, radius, room);
+
+		expect(box).toEqual({
+			left: 330,
+			right: 470,
+			top: 300 - radius - gapPixels - 42,
+			bottom: 300 - radius - gapPixels
+		});
+		expect(offset).toEqual({ x: 0, y: box.bottom - 300 });
+	});
+
+	it('slides sideways to clear the control columns, and back from the far edge', () => {
+		const left = placePreview({ x: 10, y: 300 }, pill, radius, room);
+		const right = placePreview({ x: 795, y: 300 }, pill, radius, room);
+
+		expect(left.box.left).toBe(60);
+		expect(left.offset.x).toBe(60 + 70 - 10);
+		expect(right.box.right).toBe(740);
+		expect(right.offset.x).toBe(740 - 70 - 795);
+	});
+
+	it('goes below the dot where there is no room above it', () => {
+		const { box } = placePreview({ x: 400, y: 30 }, pill, radius, room);
+
+		expect(box.top).toBe(30 + radius + gapPixels);
+		expect(box.bottom).toBe(box.top + 42);
+	});
+
+	it('keeps the edge margin when it fits above, and moves below when it only just does not', () => {
+		const exactly = edgeMarginPixels + 42 + radius + gapPixels;
+
+		expect(placePreview({ x: 400, y: exactly }, pill, radius, room).box.top).toBe(edgeMarginPixels);
+		expect(placePreview({ x: 400, y: exactly - 1 }, pill, radius, room).box.top).toBeGreaterThan(
+			exactly - 1
+		);
+	});
+
+	it('falls back to the edge margin when the pill is wider than the room between the columns', () => {
+		const wide = { width: 300, height: 42 };
+		const narrow = { bounds: { width: 320, height: 400 }, sideInsetPixels: 60 };
+
+		const { box } = placePreview({ x: 10, y: 200 }, wide, radius, narrow);
+
+		expect(box.left).toBe(edgeMarginPixels);
+		expect(box.right).toBeLessThanOrEqual(320);
+	});
+
+	it('never puts the pill outside a stage it cannot fit in, but keeps its left edge inside', () => {
+		const { box } = placePreview({ x: 100, y: 100 }, { width: 500, height: 42 }, radius, {
+			bounds: { width: 300, height: 300 },
+			sideInsetPixels: 60
+		});
+
+		expect(box.left).toBe(edgeMarginPixels);
 	});
 });

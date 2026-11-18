@@ -475,12 +475,14 @@ test.describe('@webgl atlas close neighbours', () => {
 
 		// Coarse wheel steps while the pair is far, fine ones near the distance where the name appears:
 		// the dots only coincide within a narrow band of distances, which a coarse step would skip.
+		// Each step is read once the camera rests: a wheel zoom keeps gliding after its event, so a
+		// read a few frames later would stop at a distance that depends on how fast frames render.
 		let state = await pair();
 		for (let step = 0; step < 40 && !state.roy.labelShown; step += 1) {
 			const far = state.roy.distanceMeters > 2.5 * ATLAS_MARKER_STYLE.labelMaxMeters;
 			await page.mouse.move(box.x + state.roy.window.x, box.y + state.roy.window.y);
 			await page.mouse.wheel(0, far ? -900 : -250);
-			await framesPass(page, 4);
+			await cameraAtRest(page);
 			state = await pair();
 		}
 		await cameraAtRest(page);

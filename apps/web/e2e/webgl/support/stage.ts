@@ -409,6 +409,8 @@ export interface AtlasMarkerReading {
 export interface AtlasLayerReading {
 	shown: boolean;
 	hovered?: string;
+	highlighted?: string;
+	preview?: { slug: string; box: { left: number; top: number; right: number; bottom: number } };
 	layers: number;
 	entities: number;
 	depthTestAgainstTerrain: boolean;

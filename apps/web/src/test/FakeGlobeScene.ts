@@ -118,6 +118,8 @@ export class FakeGlobeScene implements GlobeScene {
 	reducedMotion: boolean;
 	/** Every marker set handed to the scene, in order; `undefined` took the markers away. */
 	readonly markerSets: (readonly AtlasMarker[] | undefined)[] = [];
+	/** Every marker emphasis the scene was asked for, in order; `undefined` ended one. */
+	readonly highlights: (string | undefined)[] = [];
 	/** Every orbit started, with whether it is still turning. */
 	readonly orbits: { periodSeconds: number; running: boolean; onHalted: () => void }[] = [];
 
@@ -272,6 +274,12 @@ export class FakeGlobeScene implements GlobeScene {
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
 		if (!this.destroyed) {
 			this.markerSets.push(markers);
+		}
+	}
+
+	highlightAtlasMarker(slug: string | undefined): void {
+		if (!this.destroyed) {
+			this.highlights.push(slug);
 		}
 	}
 

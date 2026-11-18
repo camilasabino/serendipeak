@@ -1,10 +1,12 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { ATLAS_STAGE_LABEL } from '../atlas/atlasCopy';
 import { MarkerChooser } from '../atlas/MarkerChooser';
+import { MarkerHighlightProvider, type MarkerHighlight } from '../atlas/MarkerHighlightContext';
 import { OpenContinentsProvider } from '../atlas/OpenContinentsContext';
 import { toAtlasMarkers } from '../atlas/toAtlasMarkers';
 import { useMarkerActivation } from '../atlas/useMarkerActivation';
 import { ATLAS_VIEW } from '../stage/globe/atlasView';
+import type { StageController } from '../stage/MountainScene';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
 import { useTransitionCoordinator } from '../stage/TransitionCoordinatorContext';
@@ -34,6 +36,12 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	const coordinator = useTransitionCoordinator();
 	const [store] = useState(() => new SceneStore());
 	const [openContinents] = useState(() => new Set<string>());
+	const controller = useRef<StageController>(null);
+	// Bound to whichever scene the stage hosts now; before the scene exists, or while it is being
+	// rebuilt, an emphasis is simply not drawn.
+	const [markerHighlight] = useState<MarkerHighlight>(() => ({
+		highlight: (slug) => controller.current?.highlightMarker(slug)
+	}));
 	const onAtlas = model.kind === 'atlas';
 	const target = onAtlas ? undefined : toSceneTarget(mountainOf(model));
 	const atlasMountains = onAtlas ? model.mountains : undefined;
@@ -45,28 +53,31 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 
 	return (
 		<OpenContinentsProvider value={openContinents}>
-			<main className={`${styles.layout} ${onAtlas ? styles.atlas : styles.mountain}`}>
-				{children}
-				<StageShell
-					store={store}
-					label={onAtlas ? ATLAS_STAGE_LABEL : revealLabel(model.kind === 'daily')}
-					className={styles.stage}
-				>
-					<StageBoundary store={store}>
-						<LazyMountainScene
-							store={store}
-							target={target}
-							atlas={onAtlas ? ATLAS_VIEW : undefined}
-							markers={markers}
-							observer={coordinator}
-							onMarkerActivate={onAtlas ? activate : undefined}
-							onStageResize={dismiss}
-						>
-							{choice && <MarkerChooser choice={choice} onClose={dismiss} />}
-						</LazyMountainScene>
-					</StageBoundary>
-				</StageShell>
-			</main>
+			<MarkerHighlightProvider value={markerHighlight}>
+				<main className={`${styles.layout} ${onAtlas ? styles.atlas : styles.mountain}`}>
+					{children}
+					<StageShell
+						store={store}
+						label={onAtlas ? ATLAS_STAGE_LABEL : revealLabel(model.kind === 'daily')}
+						className={styles.stage}
+					>
+						<StageBoundary store={store}>
+							<LazyMountainScene
+								store={store}
+								target={target}
+								atlas={onAtlas ? ATLAS_VIEW : undefined}
+								markers={markers}
+								observer={coordinator}
+								controllerRef={controller}
+								onMarkerActivate={onAtlas ? activate : undefined}
+								onStageResize={dismiss}
+							>
+								{choice && <MarkerChooser choice={choice} onClose={dismiss} />}
+							</LazyMountainScene>
+						</StageBoundary>
+					</StageShell>
+				</main>
+			</MarkerHighlightProvider>
 		</OpenContinentsProvider>
 	);
 }

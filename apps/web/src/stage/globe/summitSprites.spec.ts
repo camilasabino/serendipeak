@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ATLAS_MARKER_STYLE } from './atlasMarkers';
 import { SummitSprites, type SpriteCanvas, type SpriteHost } from './summitSprites';
 
 class FakeHost implements SpriteHost {
@@ -113,5 +114,23 @@ describe('SummitSprites', () => {
 		expect(disc.width).toBe(disc.height);
 		expect(disc.width).toBeGreaterThanOrEqual(2 * (7 + 2 + 1.5));
 		expect(disc.bottomInset).toBe(0);
+	});
+
+	it('draws the atlas dot in two states, each once per density, the emphasized one with its glow', () => {
+		const host = new FakeHost();
+		const sprites = new SummitSprites(host);
+		const { dot } = ATLAS_MARKER_STYLE;
+		const rest = sprites.dot('rest', 1);
+		const emphasized = sprites.dot('emphasized', 1);
+		const canvases = host.canvases;
+
+		expect(sprites.dot('rest', 1)).toBe(rest);
+		expect(sprites.dot('emphasized', 1)).toBe(emphasized);
+		expect(host.canvases).toBe(canvases);
+		expect(rest.image).not.toBe(emphasized.image);
+		expect(sprites.dot('rest', 2).image).not.toBe(rest.image);
+		expect(rest.width).toBe(Math.ceil((dot.radius + dot.ringWidth + dot.haloWidth) * 2 + 2));
+		expect(emphasized.width).toBeGreaterThan(rest.width);
+		expect(rest.bottomInset).toBe(0);
 	});
 });

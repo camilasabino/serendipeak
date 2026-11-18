@@ -790,3 +790,19 @@ describe('StageBinding atlas markers', () => {
 		expect(scene.markerSets).toEqual([]);
 	});
 });
+
+describe('StageBinding marker emphasis', () => {
+	it('passes an emphasis to the scene, and none after disposal', async () => {
+		const { factory, mount } = setup();
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.highlightMarker('a');
+		binding.highlightMarker(undefined);
+		binding.dispose();
+		binding.highlightMarker('b');
+
+		expect(scene.highlights).toEqual(['a', undefined]);
+	});
+});

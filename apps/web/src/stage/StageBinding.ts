@@ -81,6 +81,12 @@ export class StageBinding {
 		this.session.setAtlasMarkers(markers);
 	}
 
+	highlightMarker(slug: string | undefined): void {
+		if (!this.disposed) {
+			this.session.highlightMarker(slug);
+		}
+	}
+
 	resetView(): ResetResult {
 		return this.disposed ? 'unavailable' : this.session.resetView();
 	}

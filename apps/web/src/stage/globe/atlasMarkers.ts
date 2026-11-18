@@ -1,3 +1,4 @@
+import { SUMMIT_MARKER_STYLE } from './marker';
 import type { StageSize } from './stageFrame';
 
 /** A mountain as the atlas draws it: where its summit stands and the name its label shows. */
@@ -33,16 +34,30 @@ export interface ScreenBox {
  * Dablam) still overlap there until labels are decluttered on screen.
  */
 export const ATLAS_MARKER_STYLE = {
-	pointPixelSize: 7,
-	pointOutlinePixels: 2,
+	/**
+	 * The dot, in CSS pixels, drawn once as a sprite in each state: the summit marker's copper disc,
+	 * snow ring and basalt halo at the reference's atlas size (11.2 px across, as the point it
+	 * replaced). Emphasis grows the disc and lays a snow glow under it; the glow is the only part of
+	 * the dot that is not a press target, so a neighbour is no harder to hit.
+	 */
+	dot: {
+		radius: 3.2,
+		ringWidth: 1.4,
+		haloWidth: 1,
+		emphasizedScale: 1.25,
+		glowWidth: 2.6,
+		glowAlpha: 0.3
+	},
+	/** The dot's width at rest: the size the scene scales with distance. */
+	pointPixelSize: 11.2,
 	/** Full size up to this distance, shrinking linearly to `pointFarScale` at `pointFarMeters`. */
 	pointNearMeters: 250_000,
 	pointFarMeters: 8_000_000,
-	pointFarScale: 0.6,
+	pointFarScale: 0.85,
 	/** Opaque up to this distance, fading linearly to `pointFarAlpha` at `pointFadedMeters`. */
 	pointOpaqueMeters: 3_000_000,
 	pointFadedMeters: 15_000_000,
-	pointFarAlpha: 0.8,
+	pointFarAlpha: 0.9,
 	// Cesium rasterizes labels on a canvas before web fonts may have loaded, so a system face keeps
 	// glyphs from being cached in a fallback, as the summit marker's label does.
 	labelFont: '500 13px system-ui, sans-serif',
@@ -54,15 +69,22 @@ export const ATLAS_MARKER_STYLE = {
 	// Over the globe a label this faint cannot be read, so it is dropped: it takes no screen space
 	// from a legible neighbour and is not a place to press. Its marker still shows and still opens.
 	labelMinAlpha: 0.3,
-	// Vermilion with an ink outline reads over snow, desert, ocean and forest alike. Ink and paper are
-	// the stage's tokens; Cesium draws on its own canvas and cannot read CSS variables.
-	pointColor: '#f06445',
-	outlineColor: '#14202a',
+	// Snow text on a basalt plate and outline, as the summit pill: legible over snow, desert, ocean
+	// and forest alike. Colours are the summit marker's, which marker.spec compares with the tokens.
+	labelColor: SUMMIT_MARKER_STYLE.colors.snow,
+	outlineColor: SUMMIT_MARKER_STYLE.colors.basalt,
 	outlineAlpha: 0.9,
-	labelColor: '#f1f3ef',
-	// The marker under the mouse trades its ink ring for a paper one: same size and place, so it
-	// covers no more of a neighbour than before.
-	hoverOutlineColor: '#f1f3ef'
+	/**
+	 * The preview a pointer or a list row summons: the summit's pill over the one emphasized marker.
+	 * It is shown at any distance, since it is a single name the reader asked for, and it claims its
+	 * screen space ahead of every ordinary label.
+	 */
+	preview: {
+		/** From the emphasized dot's edge to the pill's. */
+		gapPixels: 6,
+		/** The least the pill keeps from the stage's edges. */
+		edgeMarginPixels: 8
+	}
 } as const;
 
 export interface MarkerPresentation {
@@ -221,9 +243,13 @@ export interface AtlasLayerReading {
 	shown: boolean;
 	/** The marker the mouse rests on, emphasized, if one would open on a click. */
 	hovered?: string;
+	/** The marker a list row asks to be emphasized, while the pointer is not on one. */
+	highlighted?: string;
+	/** The preview pill on screen, with the pill's box in CSS pixels, if one is shown. */
+	preview?: { slug: string; box: ScreenBox };
 	/** Atlas layers attached to the Viewer; never more than one. */
 	layers: number;
-	/** Entities in the atlas layer, shown or not. */
+	/** Marker entities in the atlas layer, shown or not; the one preview pill is not counted. */
 	entities: number;
 	/** The scene-wide terrain depth test, which the atlas must leave at Cesium's default. */
 	depthTestAgainstTerrain: boolean;
@@ -231,3 +257,45 @@ export interface AtlasLayerReading {
 }
 
 export type ExposeAtlasLayer = (read: () => AtlasLayerReading | undefined) => () => void;
+
+export interface PreviewPlacement {
+	/** Where the pill stands, in CSS pixels from the top left of the canvas. */
+	box: ScreenBox;
+	/** How far the pill's bottom centre is from the marker's centre, y down: add to a bottom-anchored billboard. */
+	offset: ScreenPoint;
+}
+
+export interface PreviewRoom {
+	/** The stage in CSS pixels. */
+	bounds: StageSize;
+	/** What the pill must keep clear on the left and right: the stage's control columns. */
+	sideInsetPixels: number;
+}
+
+/**
+ * Where the preview pill goes for a marker at `anchor`: centred above its dot, slid sideways to
+ * stay clear of the control columns and the stage's edges, and below the dot when there is no room
+ * above. A pill wider than the room between the columns falls back to the edge margin alone.
+ * Pure arithmetic on a handful of numbers, once per visibility pass for the one emphasized marker.
+ */
+export function placePreview(
+	anchor: ScreenPoint,
+	pill: { width: number; height: number },
+	dotRadiusPixels: number,
+	{ bounds, sideInsetPixels }: PreviewRoom
+): PreviewPlacement {
+	const { gapPixels, edgeMarginPixels } = ATLAS_MARKER_STYLE.preview;
+	const inset =
+		pill.width <= bounds.width - 2 * sideInsetPixels ? sideInsetPixels : edgeMarginPixels;
+	const lowest = Math.max(bounds.width - inset - pill.width, inset);
+	const left = Math.min(Math.max(anchor.x - pill.width / 2, inset), lowest);
+
+	const reach = dotRadiusPixels + gapPixels;
+	const above = anchor.y - reach - pill.height >= edgeMarginPixels;
+	const top = above ? anchor.y - reach - pill.height : anchor.y + reach;
+
+	return {
+		box: { left, right: left + pill.width, top, bottom: top + pill.height },
+		offset: { x: left + pill.width / 2 - anchor.x, y: top + pill.height - anchor.y }
+	};
+}

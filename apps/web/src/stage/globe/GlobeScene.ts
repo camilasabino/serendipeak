@@ -46,6 +46,12 @@ export interface GlobeScene extends Destroyable {
 	 */
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void;
 	/**
+	 * Emphasizes the atlas marker of this mountain, as a pointer resting on it does, until called
+	 * again with `undefined`. A marker that is not drawn shows nothing and the camera never moves
+	 * to find it.
+	 */
+	highlightAtlasMarker(slug: string | undefined): void;
+	/**
 	 * Clicks and taps on drawn atlas markers, resolved on screen; a drag is never one. Nothing is
 	 * heard while no markers are drawn. A new subscription replaces the previous one.
 	 */

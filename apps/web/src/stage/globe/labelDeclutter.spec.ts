@@ -140,3 +140,42 @@ describe('label declutter', () => {
 		expect(declutterLabels([]).size).toBe(0);
 	});
 });
+
+describe('label declutter around reserved boxes', () => {
+	it('keeps a reserved box clear of every label, whatever their priority', () => {
+		const shown = declutterLabels(
+			[label('everest', box(0, 0), 8849), label('far', box(300, 0), 1000)],
+			LABEL_DECLUTTER,
+			[box(20, 5)]
+		);
+
+		expect(sorted(shown)).toEqual(['far']);
+	});
+
+	it('changes nothing for labels that clear the reserved box', () => {
+		const candidates = [label('a', box(0, 0)), label('b', box(200, 0))];
+
+		expect(sorted(declutterLabels(candidates, LABEL_DECLUTTER, [box(0, 200)]))).toEqual(['a', 'b']);
+	});
+
+	it('does not count a reserved box against the cap on labels', () => {
+		const candidates = Array.from({ length: 4 }, (_, index) =>
+			label(`p${index}`, box(index * 100, 0))
+		);
+
+		const shown = declutterLabels(candidates, { ...LABEL_DECLUTTER, maxLabels: 3 }, [box(0, 300)]);
+
+		expect(shown.size).toBe(3);
+	});
+
+	it('holds the return margin against a reserved box for a label that was hidden', () => {
+		const reserved = [box(0, 0)];
+		const gap = LABEL_DECLUTTER.gapPixels + LABEL_DECLUTTER.returnPixels - 1;
+		const next = box(80 + gap, 0);
+
+		expect(declutterLabels([label('x', next, 3000, false)], LABEL_DECLUTTER, reserved).size).toBe(
+			0
+		);
+		expect(declutterLabels([label('x', next, 3000, true)], LABEL_DECLUTTER, reserved).size).toBe(1);
+	});
+});

@@ -23,6 +23,9 @@ export interface SummitSprite {
 	bottomInset: number;
 }
 
+/** The atlas dot at rest, or emphasized by a pointer or by its row in the list. */
+export type AtlasDotState = 'rest' | 'emphasized';
+
 export interface SummitSpriteSource {
 	disc(ratio: number): SummitSprite;
 	pill(
@@ -33,10 +36,16 @@ export interface SummitSpriteSource {
 	): Promise<SummitSprite>;
 }
 
+/** What the atlas draws with: its dot in two states, and the same pill as the summit. */
+export interface AtlasSpriteSource {
+	dot(state: AtlasDotState, ratio: number): SummitSprite;
+	pill: SummitSpriteSource['pill'];
+}
+
 /** The dark plate under every atlas label, so names read over snow as well as over rock. */
 export const MARKER_LABEL_PLATE = {
-	// The stage colour, near black; Cesium cannot read the CSS variable.
-	color: '#0b1219',
+	// Basalt; Cesium cannot read the CSS variable, and marker.spec compares the two.
+	color: '#110f0e',
 	alpha: 0.78,
 	paddingPixels: { x: 7, y: 4 }
 } as const;
@@ -87,8 +96,17 @@ export const SUMMIT_MARKER_STYLE = {
 	}
 } as const;
 
+/** The page's root font size, which the stage's control columns scale with. */
+export function rootFontPixels(): number {
+	if (typeof document === 'undefined') {
+		return 16;
+	}
+
+	return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+}
+
 /** The stage's control columns: a 0.6 rem inset, a 2.75 rem button and a 0.4 rem gap on each edge. */
-const CONTROL_GUTTER_REM = 3.75;
+export const CONTROL_GUTTER_REM = 3.75;
 
 /**
  * The widest name-and-elevation run a pill may hold on a stage `stageWidth` pixels wide. The pill is
@@ -103,6 +121,13 @@ export function summitPillMaxContentWidth(stageWidth: number, rootFontPixels = 1
 	const clear = stageWidth - 2 * CONTROL_GUTTER_REM * rootFontPixels - paddingLeft - paddingRight;
 
 	return Math.floor(Math.min(maxContentWidth, Math.max(minContentWidth, clear)));
+}
+
+/** The pill as drawn, without the room its image keeps around it for the shadow. */
+export function pillFootprint(sprite: SummitSprite): { width: number; height: number } {
+	const { height, shadow } = SUMMIT_MARKER_STYLE.pill;
+
+	return { width: Math.max(sprite.width - 2 * shadow.blur, 0), height };
 }
 
 export function planSummitMarker(target: SceneTarget): SummitMarker {

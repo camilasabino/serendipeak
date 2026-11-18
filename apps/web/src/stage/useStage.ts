@@ -38,6 +38,7 @@ export interface UseStageResult {
 	zoomView: (direction: ZoomDirection) => ZoomResult;
 	toggleRotation: () => void;
 	readCamera: () => CameraReading | undefined;
+	highlightMarker: (slug: string | undefined) => void;
 	retry: () => void;
 }
 
@@ -137,7 +138,21 @@ export function useStage({
 
 	const readCamera = useCallback(() => bindingRef.current?.readCamera(), []);
 
+	const highlightMarker = useCallback(
+		(slug: string | undefined) => bindingRef.current?.highlightMarker(slug),
+		[]
+	);
+
 	const retry = useCallback(() => bindingRef.current?.retry(), []);
 
-	return { viewportRef, snapshot, resetView, zoomView, toggleRotation, readCamera, retry };
+	return {
+		viewportRef,
+		snapshot,
+		resetView,
+		zoomView,
+		toggleRotation,
+		readCamera,
+		highlightMarker,
+		retry
+	};
 }

@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { ATLAS_MARKER_STYLE } from './atlasMarkers';
 import {
+	MARKER_LABEL_PLATE,
 	SUMMIT_MARKER_STYLE,
 	fitText,
 	layoutSummitPill,
@@ -54,6 +56,12 @@ describe('summit marker style', () => {
 		expect(pill.name.family).toBe(token('--sp-face-display'));
 		expect(pill.elevation.family).toBe(token('--sp-face-ui'));
 		expect(token('--sp-geo-plate-ring')).toContain(`snow) ${pill.ringAlpha * 100}%`);
+	});
+
+	it('draws the atlas plate, text and outline in the same tokens', () => {
+		expect(MARKER_LABEL_PLATE.color).toBe(token('--sp-basalt'));
+		expect(ATLAS_MARKER_STYLE.labelColor).toBe(token('--sp-snow'));
+		expect(ATLAS_MARKER_STYLE.outlineColor).toBe(token('--sp-basalt'));
 	});
 });
 
