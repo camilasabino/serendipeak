@@ -19,7 +19,6 @@
 	display: inline-flex;
 	flex: 0 1 auto;
 	align-items: center;
-	gap: 0.6rem;
 	min-width: 0;
 	min-height: 2.75rem;
 	border-radius: 4px;
@@ -27,42 +26,18 @@
 	text-decoration: none;
 }
 
-.wordmark {
-	font-family: var(--sp-face-ui);
-	font-size: 1.125rem;
-	font-stretch: var(--sp-stretch-label);
-	font-weight: 600;
-	letter-spacing: -0.015em;
-	line-height: 1;
-	white-space: nowrap;
+.wordmark,
+.symbol {
+	display: block;
+	flex: none;
+	width: auto;
+	height: 1.5rem;
 }
 
-/* The i's tittle is the summit marker. The real letter stays in the text so copying, search
-   engines and the document read "SerendiPeak"; only its rendering is swapped for a dotless i
-   under a copper disc. The link's aria-label keeps the generated glyph out of its name. */
-.tittle {
-	position: relative;
-	display: inline-block;
-	color: transparent;
-}
-
-.tittle::before {
-	content: 'ı';
-	position: absolute;
-	inset: 0;
-	color: var(--sp-text);
-}
-
-.tittle::after {
-	content: '';
-	position: absolute;
-	top: 0.02em;
-	left: 50%;
-	width: 0.24em;
-	height: 0.24em;
-	border-radius: 50%;
-	background: var(--sp-copper);
-	transform: translateX(-50%);
+/* The compact logo only replaces the wordmark where the wordmark no longer fits. */
+.symbol {
+	display: none;
+	height: 2rem;
 }
 
 .nav {
@@ -128,25 +103,20 @@
 		padding-inline: 0.5rem;
 	}
 
-	.brand {
-		gap: 0.5rem;
-	}
-
 	.nav {
 		gap: 0;
 	}
 }
 
-/* Below this width the wordmark no longer fits beside search, Today, Atlas and About. The mark
-   stays and the link keeps its accessible name. */
+/* Below this width the wordmark no longer fits beside search, Today, Atlas and About, so the
+   symbol stands in for it. The link keeps its accessible name. */
 @media (max-width: 24rem) {
 	.wordmark {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip-path: inset(50%);
-		white-space: nowrap;
+		display: none;
+	}
+
+	.symbol {
+		display: block;
 	}
 }
 
@@ -156,7 +126,7 @@
 	}
 
 	.wordmark {
-		font-size: 1.3125rem;
+		height: 1.75rem;
 	}
 
 	.nav {

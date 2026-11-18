@@ -4,7 +4,7 @@ import { ATLAS_LINK_LABEL } from '../atlas/atlasCopy';
 import { ATLAS_PATH } from '../atlas/atlasQuery';
 import { TODAY_LINK_LABEL, TODAY_PATH } from '../mountain-page/pageCopy';
 import { SearchControl } from '../search/SearchControl';
-import { BrandMark } from './BrandMark';
+import { BrandSymbol, BrandWordmark } from './BrandLogo';
 import styles from './SiteHeader.module.css';
 
 const BRAND_LINK_LABEL = 'SerendiPeak home';
@@ -17,10 +17,8 @@ export function SiteHeader({ pathname }: SiteHeaderProps) {
 	return (
 		<header className={styles.header}>
 			<Link className={styles.brand} href={TODAY_PATH} aria-label={BRAND_LINK_LABEL}>
-				<BrandMark size={32} />
-				<span className={styles.wordmark}>
-					Serend<span className={styles.tittle}>i</span>Peak
-				</span>
+				<BrandWordmark className={styles.wordmark} />
+				<BrandSymbol className={styles.symbol} />
 			</Link>
 			<nav className={styles.nav} aria-label="Primary">
 				<SearchControl />

@@ -165,10 +165,8 @@ test.describe('@nogl About page responsiveness', () => {
 
 			const [wordmarkRight, searchLeft] = await page.evaluate(() => {
 				const header = document.querySelector('header')!;
-				const text = document.createRange();
-				text.selectNodeContents(header.querySelector('a span')!);
 				return [
-					text.getBoundingClientRect().right,
+					header.querySelector('a img')!.getBoundingClientRect().right,
 					header.querySelector('nav button')!.getBoundingClientRect().left
 				];
 			});
@@ -178,7 +176,7 @@ test.describe('@nogl About page responsiveness', () => {
 		});
 	}
 
-	test('keeps the brand link named when the wordmark is hidden on a very narrow screen', async ({
+	test('keeps the brand link named when the symbol replaces the wordmark on a very narrow screen', async ({
 		page
 	}) => {
 		await watch(page);

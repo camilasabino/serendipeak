@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type ReactNode } from 'react';
-import { BrandMark } from '../shell/BrandMark';
+import { BrandSymbol } from '../shell/BrandLogo';
 import { ContourMotif } from '../shell/ContourMotif';
 import { LOADING_CONTOURS } from '../shell/contourPatterns';
 import { sceneBlocksExperience } from '../stage/experience';
@@ -34,7 +34,7 @@ export function StageShell({ store, label, className, children }: StageShellProp
 						className={styles.motif}
 					/>
 					<div className={styles.lockup}>
-						<BrandMark size={64} />
+						<BrandSymbol className={styles.symbol} />
 						<p className={styles.name}>SerendiPeak</p>
 						<p className={styles.label}>{label}</p>
 					</div>
