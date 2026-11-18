@@ -7,7 +7,6 @@
 :root {
 	/* shared with the web app */
 	--sp-stage: #0b1219;
-	--sp-ink: #14202a;
 	--sp-glacier: #2a78a8;
 	--sp-glacier-dark: #1d5f8a;
 	--sp-glacier-light: #8cb8d2;
@@ -15,9 +14,6 @@
 	--sp-paper-bright: #f7f8f5;
 	--sp-mist: #d7dee1;
 	--sp-rule: color-mix(in srgb, var(--sp-mist) 22%, transparent);
-	--sp-rule-quiet: color-mix(in srgb, var(--sp-mist) 12%, transparent);
-	--sp-surface-stage: var(--sp-stage);
-	--sp-text-on-stage: var(--sp-paper);
 	--sp-accent: var(--sp-glacier);
 	--sp-accent-hover: var(--sp-glacier-dark);
 	--sp-link-on-stage: var(--sp-glacier-light);
@@ -35,6 +31,10 @@
 	--sp-radius: 2px;
 
 	/* Studio roles, dark by default */
+	--sp-ink: #14202a;
+	--sp-rule-quiet: color-mix(in srgb, var(--sp-mist) 12%, transparent);
+	--sp-surface-stage: var(--sp-stage);
+	--sp-text-on-stage: var(--sp-paper);
 	--sp-surface-paper: #101a23;
 	--sp-surface-card: #17232e;
 	--sp-text: var(--sp-paper);
