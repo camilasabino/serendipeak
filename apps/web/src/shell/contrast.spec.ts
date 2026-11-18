@@ -302,6 +302,26 @@ describe('contrast', () => {
 			4.5
 		);
 	});
+
+	it('keeps the stage controls legible over a snowfield and over dark terrain', () => {
+		const discOnSnowfield = over(identity.basalt, 0.8, white);
+		const discOnDarkTerrain = over(identity.basalt, 0.8, '#1a2a1a');
+		const dimmedGlyph = over(identity.snow, 0.45, discOnSnowfield);
+
+		expect(contrast(identity.snow, discOnSnowfield), 'glyph on snowfield').toBeGreaterThanOrEqual(
+			7
+		);
+		expect(contrast(identity.snow, discOnDarkTerrain), 'glyph on dark terrain').toBeGreaterThan(7);
+		expect(contrast(identity.copper, discOnSnowfield), 'compass needle').toBeGreaterThanOrEqual(3);
+		expect(contrast(identity.copper, identity.basalt), 'hover and pressed glyph').toBeGreaterThan(
+			7
+		);
+		expect(contrast(identity.snow, identity.basalt), 'focus ring on its halo').toBeGreaterThan(7);
+		expect(
+			contrast(dimmedGlyph, discOnSnowfield),
+			'disabled glyph is still a mark'
+		).toBeGreaterThan(1.5);
+	});
 });
 
 describe('fonts', () => {

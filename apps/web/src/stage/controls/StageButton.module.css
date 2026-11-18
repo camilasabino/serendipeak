@@ -6,30 +6,53 @@
 	width: 2.75rem;
 	height: 2.75rem;
 	padding: 0;
-	border: 1px solid color-mix(in srgb, var(--sp-mist) 42%, transparent);
-	border-radius: var(--sp-radius);
-	background: color-mix(in srgb, var(--sp-stage) 82%, transparent);
-	color: var(--sp-paper);
+	border: 1px solid var(--sp-chip-rule);
+	border-radius: 50%;
+	background: var(--sp-chip);
+	color: var(--sp-chip-text);
+	box-shadow: 0 2px 8px -2px rgb(0 0 0 / 50%);
 	cursor: pointer;
+	transition:
+		border-color var(--sp-duration-short),
+		background-color var(--sp-duration-short),
+		color var(--sp-duration-short);
 }
 
+/* Hover and press settle on opaque basalt: copper only holds its contrast on a surface that does
+   not let the terrain through. */
 .button:hover:not(:disabled) {
-	border-color: var(--sp-glacier-light);
-	background: var(--sp-glacier-dark);
-	color: var(--sp-paper-bright);
+	border-color: var(--sp-state-accent);
+	background: var(--sp-surface-base);
 }
 
+.button:active:not(:disabled) {
+	border-color: var(--sp-state-accent);
+	background: var(--sp-surface-raised);
+	color: var(--sp-state-accent);
+}
+
+/* The ring is snow, set off from the button and from the terrain by basalt on both sides, so it
+   reads over a snowfield and over dark forest alike. */
+.button:focus-visible {
+	position: relative;
+	z-index: 1;
+	outline: 2px solid var(--sp-snow);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 5px var(--sp-surface-base);
+}
+
+/* The dimmed glyph keeps the disc: fading the whole button would let a snowfield wash it out. */
 .button:disabled {
-	opacity: 0.45;
+	color: color-mix(in srgb, var(--sp-snow) 45%, transparent);
 	cursor: default;
 }
 
 .button svg {
-	width: 1.5rem;
-	height: 1.5rem;
+	width: 1.25rem;
+	height: 1.25rem;
 	fill: none;
 	stroke: currentColor;
-	stroke-width: 2;
+	stroke-width: 1.75;
 	stroke-linecap: round;
 	stroke-linejoin: round;
 }
@@ -46,26 +69,16 @@
 	border: 0;
 }
 
-/* The two zoom buttons are one control: joined, they read as a pair apart from the buttons around
-   them, and the pair takes a gap less of a short stage. */
+/* The two zoom buttons are one control: set closer to each other than to the buttons around them,
+   and the pair takes a gap less of a short stage. */
 .group {
 	display: flex;
 	flex-direction: column;
+	gap: 0.375rem;
 }
 
-.group .button:first-child {
-	border-bottom-left-radius: 0;
-	border-bottom-right-radius: 0;
-}
-
-.group .button + .button {
-	margin-top: -1px;
-	border-top-left-radius: 0;
-	border-top-right-radius: 0;
-}
-
-.group .button:hover:not(:disabled),
-.group .button:focus-visible {
-	position: relative;
-	z-index: 1;
+@media (prefers-reduced-motion: reduce) {
+	.button {
+		transition: none;
+	}
 }

@@ -213,10 +213,12 @@ test.describe('@webgl stage on a phone', () => {
 			expect(overlaps(current, compass), `button ${index} and compass`).toBe(false);
 		}
 
-		// The zoom pair is one joined control: its buttons stack and share a single border line.
+		// The zoom pair is one control: round buttons that stack, a short gap apart and never touching.
 		const [zoomInBox, zoomOutBox] = boxes;
 		expect(zoomOutBox!.x).toBeCloseTo(zoomInBox!.x, 0);
-		expect(zoomInBox!.y + zoomInBox!.height - zoomOutBox!.y).toBeLessThanOrEqual(1);
+		const pairGap = zoomOutBox!.y - (zoomInBox!.y + zoomInBox!.height);
+		expect(pairGap).toBeGreaterThan(0);
+		expect(pairGap).toBeLessThanOrEqual(8);
 		const controls = [await box(page.getByRole('group', { name: 'Zoom' })), ...boxes.slice(2)];
 		for (const [index, current] of controls.entries()) {
 			for (const other of controls.slice(index + 1)) {

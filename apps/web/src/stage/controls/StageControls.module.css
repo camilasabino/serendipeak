@@ -5,7 +5,7 @@
 	right: 0.6rem;
 	display: flex;
 	flex-direction: column;
-	gap: 0.4rem;
+	gap: 0.5rem;
 }
 
 /* Navigation sits on the opposite edge: a short phone stage has no room for more buttons above the
@@ -19,7 +19,7 @@
 	left: 0.6rem;
 	display: flex;
 	flex-direction: column;
-	gap: 0.4rem;
+	gap: 0.5rem;
 	pointer-events: none;
 }
 
