@@ -26,6 +26,7 @@ import { isLookAtOffset } from '../resetPose';
 import type { ScaleReading } from '../scaleBar';
 import { ScaleTracker } from '../scaleTracker';
 import type { StageSize } from '../stageFrame';
+import { SummitSprites } from '../summitSprites';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
 import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from '../viewerOptions';
@@ -228,7 +229,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		});
 		this.atlasPicker = new AtlasPicker(cesium, viewer.scene.canvas, this.atlasMarkers);
 
-		const markers = new SummitMarkers(cesium, viewer);
+		const markers = new SummitMarkers(cesium, viewer, new SummitSprites());
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
 		this.director = new CameraDirector(this.flight, markers, {
 			cameraHeight: () => viewer.camera.positionCartographic.height,

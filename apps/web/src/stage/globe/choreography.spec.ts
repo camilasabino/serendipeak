@@ -184,7 +184,7 @@ function createMarkers() {
 	const shown: SummitMarker[] = [];
 	const display: SummitMarkerDisplay = {
 		show: vi.fn((marker) => {
-			events.push(`show:${marker.label.split('\n')[0]}`);
+			events.push(`show:${marker.name}`);
 			shown.push(marker);
 		}),
 		hide: vi.fn(() => {
@@ -424,10 +424,7 @@ describe('CameraDirector travel', () => {
 		fake.arrive();
 
 		expect(third).toHaveBeenCalledExactlyOnceWith({ status: 'arrived' });
-		expect(markers.shown.map((marker) => marker.label.split('\n')[0])).toEqual([
-			'Mount Fuji',
-			'Aconcagua'
-		]);
+		expect(markers.shown.map((marker) => marker.name)).toEqual(['Mount Fuji', 'Aconcagua']);
 		expect(camera.busy()).toBe(false);
 		expect(fake.jumps).toEqual([]);
 	});
