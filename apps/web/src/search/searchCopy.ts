@@ -8,6 +8,9 @@ export const SEARCH_INPUT_PLACEHOLDER = 'For example, Aconcagua';
 export const SEARCH_RESULTS_LABEL = 'Matching mountains';
 export const CLOSE_LABEL = 'Close';
 export const RETRY_LABEL = 'Try again';
+export const HINT_MOVE = 'Move';
+export const HINT_OPEN = 'Open';
+export const HINT_CLOSE = 'Close';
 export const LOADING_MESSAGE = 'Loading mountains…';
 
 const FAILURE_MESSAGES: Readonly<Record<IndexFailure, string>> = {

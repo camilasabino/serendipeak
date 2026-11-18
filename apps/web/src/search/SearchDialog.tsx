@@ -17,6 +17,9 @@ import type { MountainIndexState, MountainIndexStore } from '../mountain-index/M
 import {
 	CLOSE_LABEL,
 	failureMessage,
+	HINT_CLOSE,
+	HINT_MOVE,
+	HINT_OPEN,
 	LOADING_MESSAGE,
 	promptMessage,
 	resultsMessage,
@@ -76,8 +79,15 @@ export function SearchDialog({ store, onClose, onSelect }: SearchDialogProps) {
 						{SEARCH_DIALOG_TITLE}
 					</h2>
 					<button type="button" className={styles.close} onClick={close}>
-						<span aria-hidden="true">×</span>
-						<span className={styles.closeLabel}>{CLOSE_LABEL}</span>
+						<svg
+							className={styles.closeIcon}
+							viewBox="0 0 20 20"
+							aria-hidden="true"
+							focusable="false"
+						>
+							<path d="m5 5 10 10M15 5 5 15" />
+						</svg>
+						<span>{CLOSE_LABEL}</span>
 					</button>
 				</div>
 				<SearchCombobox state={state} inputRef={inputRef} onSelect={onSelect} onRetry={retry} />
@@ -135,37 +145,58 @@ export function SearchCombobox({
 	};
 
 	const expanded = results.length > 0;
+	const waiting = state.status === 'idle' || state.status === 'loading';
 
 	return (
 		<div className={styles.search}>
-			<label className={styles.label} htmlFor={`${id}-input`}>
-				{SEARCH_INPUT_LABEL}
-			</label>
-			<input
-				ref={inputRef}
-				id={`${id}-input`}
-				className={styles.input}
-				type="text"
-				role="combobox"
-				aria-autocomplete="list"
-				aria-expanded={expanded}
-				aria-controls={expanded ? listId : undefined}
-				aria-activedescendant={activeId}
-				autoComplete="off"
-				autoCapitalize="off"
-				spellCheck={false}
-				enterKeyHint="go"
-				placeholder={SEARCH_INPUT_PLACEHOLDER}
-				value={query}
-				onChange={(event) => {
-					setQuery(event.target.value);
-					setActive(-1);
-				}}
-				onKeyDown={onKeyDown}
-			/>
-			<p className={styles.status} role="status">
-				{statusMessage(state, query, results.length)}
-			</p>
+			<div className={styles.field}>
+				<label className={styles.label} htmlFor={`${id}-input`}>
+					{SEARCH_INPUT_LABEL}
+				</label>
+				<svg className={styles.fieldIcon} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+					<circle cx="8.5" cy="8.5" r="5.5" />
+					<path d="m12.6 12.6 4.6 4.6" />
+				</svg>
+				<input
+					ref={inputRef}
+					id={`${id}-input`}
+					className={styles.input}
+					type="text"
+					role="combobox"
+					aria-autocomplete="list"
+					aria-expanded={expanded}
+					aria-controls={expanded ? listId : undefined}
+					aria-activedescendant={activeId}
+					autoComplete="off"
+					autoCapitalize="off"
+					spellCheck={false}
+					enterKeyHint="go"
+					placeholder={SEARCH_INPUT_PLACEHOLDER}
+					value={query}
+					onChange={(event) => {
+						setQuery(event.target.value);
+						setActive(-1);
+					}}
+					onKeyDown={onKeyDown}
+				/>
+			</div>
+			<div className={styles.notice} data-waiting={waiting || undefined}>
+				{state.status === 'failed' && (
+					<svg
+						className={styles.noticeIcon}
+						viewBox="0 0 24 24"
+						aria-hidden="true"
+						focusable="false"
+					>
+						<circle cx="12" cy="12" r="8.5" />
+						<path d="M12 7.5v5.5" />
+						<circle cx="12" cy="16.3" r=".7" fill="currentColor" />
+					</svg>
+				)}
+				<p className={styles.status} role="status">
+					{statusMessage(state, query, results.length)}
+				</p>
+			</div>
 			{state.status === 'failed' && (
 				<button type="button" className={styles.retry} onClick={onRetry}>
 					{RETRY_LABEL}
@@ -187,6 +218,20 @@ export function SearchCombobox({
 						</li>
 					))}
 				</ul>
+			)}
+			{expanded && (
+				<p className={styles.hints} aria-hidden="true">
+					<span>
+						<kbd>↑</kbd>
+						<kbd>↓</kbd> {HINT_MOVE}
+					</span>
+					<span>
+						<kbd>Enter</kbd> {HINT_OPEN}
+					</span>
+					<span>
+						<kbd>Esc</kbd> {HINT_CLOSE}
+					</span>
+				</p>
 			)}
 		</div>
 	);

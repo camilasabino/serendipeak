@@ -115,6 +115,23 @@ describe('SearchCombobox', () => {
 		expect(html).not.toMatch(/50\d|error|stack/i);
 	});
 
+	it('hides the keyboard hints from assistive technology and shows them only with results', () => {
+		const withResults = render(READY, 'mon');
+		const hints = withResults.match(/<p[^>]*aria-hidden="true"[^>]*>.*?<\/p>/)?.[0] ?? '';
+
+		expect(hints).toContain('Move');
+		expect(hints).toContain('Esc');
+		expect(render(READY)).not.toContain('<kbd>');
+		expect(render(READY, 'kilimanjaro')).not.toContain('<kbd>');
+	});
+
+	it('keeps the failure icon decorative and outside the live region', () => {
+		const html = render({ status: 'failed', reason: 'unreachable' });
+
+		expect(html).toMatch(/<svg[^>]*aria-hidden="true"[^>]*>.*?<\/svg><p[^>]*role="status"/);
+		expect(render(READY)).not.toMatch(/<svg[^>]*><circle cx="12"/);
+	});
+
 	it('explains an empty catalog', () => {
 		expect(statusOf(render({ status: 'ready', mountains: [] }))).toBe(
 			'No mountains are available to search yet.'

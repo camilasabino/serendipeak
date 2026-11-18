@@ -4,6 +4,10 @@
 }
 
 .dialog {
+	/* The copper ring of the sheet, here too: the dialog sits over any page. */
+	--sp-focus: var(--sp-focus-ring);
+	--gutter: var(--sp-space-5);
+
 	box-sizing: border-box;
 	width: min(36rem, calc(100% - 2rem));
 	max-width: none;
@@ -11,19 +15,21 @@
 	margin: clamp(1rem, 10vh, 6rem) auto auto;
 	padding: 0;
 	overflow: hidden;
-	border: 1px solid var(--sp-rule);
-	border-radius: var(--sp-radius);
-	background: var(--sp-ink);
-	color: var(--sp-text-on-stage);
-	box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 45%);
+	border: 1px solid var(--sp-divider-strong);
+	border-radius: 10px;
+	background: var(--sp-surface-sheet);
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
+	box-shadow: 0 1.5rem 3rem rgb(0 0 0 / 55%);
 }
 
 .dialog[open] {
 	display: flex;
 }
 
+/* ::backdrop does not reliably inherit custom properties, so the basalt is spelled out. */
 .dialog::backdrop {
-	background: rgb(5 9 13 / 72%);
+	background: rgb(17 15 14 / 72%);
 }
 
 .panel {
@@ -36,45 +42,66 @@
 
 .top {
 	display: flex;
+	flex: none;
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--sp-space-3);
-	padding: var(--sp-space-2) var(--sp-space-2) 0 var(--sp-space-5);
+	min-height: 3.25rem;
+	padding: 0 var(--sp-space-2) 0 var(--gutter);
+	background: var(--sp-surface-raised);
 }
 
 .title {
 	margin: 0;
-	color: var(--sp-mist);
-	font-family: var(--sp-font-ui);
-	font-size: 0.8125rem;
-	font-weight: 400;
-	letter-spacing: 0.01em;
+	color: var(--sp-text-accent);
+	font: 600 0.75rem / 1.5 var(--sp-face-ui);
+	font-stretch: var(--sp-stretch-caps);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
 
 .close {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 0.35rem;
+	gap: 0.4rem;
 	box-sizing: border-box;
 	min-width: 2.75rem;
 	min-height: 2.75rem;
-	padding: 0 0.5rem;
+	padding: 0 0.6rem;
 	border: 0;
+	border-radius: 4px;
 	background: transparent;
-	color: var(--sp-mist);
-	font-family: var(--sp-font-ui);
-	font-size: var(--sp-text-ui);
+	color: var(--sp-text);
+	font: 500 0.8125rem / 1 var(--sp-face-ui);
+	font-stretch: var(--sp-stretch-nav);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
 	cursor: pointer;
-}
-
-.close span[aria-hidden] {
-	font-size: 1.25rem;
-	line-height: 1;
+	transition: color var(--sp-duration-short) var(--sp-ease-out);
 }
 
 .close:hover {
-	color: var(--sp-paper-bright);
+	color: var(--sp-state-accent);
+}
+
+.close:active {
+	background: var(--sp-state-hover);
+}
+
+/* Inset, because the dialog clips anything drawn outside its box. */
+.close:focus-visible {
+	outline-offset: -2px;
+}
+
+.closeIcon {
+	flex: none;
+	width: 1rem;
+	height: 1rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.75;
+	stroke-linecap: round;
 }
 
 .search {
@@ -82,6 +109,12 @@
 	flex: 1 1 auto;
 	flex-direction: column;
 	min-height: 0;
+}
+
+.field {
+	position: relative;
+	flex: none;
+	margin: var(--sp-space-3) var(--gutter) 0;
 }
 
 .label {
@@ -93,68 +126,141 @@
 	white-space: nowrap;
 }
 
+.fieldIcon {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 0;
+	width: 1.25rem;
+	height: 1.25rem;
+	fill: none;
+	stroke: var(--sp-text-muted);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	transform: translateY(-50%);
+	pointer-events: none;
+	transition: stroke var(--sp-duration-short) var(--sp-ease-out);
+}
+
+.field:focus-within .fieldIcon {
+	stroke: var(--sp-text-accent);
+}
+
 .input {
 	box-sizing: border-box;
-	width: calc(100% - 2 * var(--sp-space-5));
-	min-height: 3rem;
-	margin: 0 var(--sp-space-5);
-	padding: 0.25rem 0;
+	width: 100%;
+	min-height: 3.25rem;
+	padding: 0.25rem 0 0.25rem 2rem;
 	border: 0;
-	border-bottom: 1px solid color-mix(in srgb, var(--sp-mist) 45%, transparent);
+	border-bottom: 1px solid var(--sp-divider-strong);
 	border-radius: 0;
 	background: transparent;
-	color: var(--sp-paper-bright);
-	font-family: var(--sp-font-display);
-	font-size: 1.5rem;
-	line-height: 1.2;
+	color: var(--sp-text);
+	font: 400 1.5rem / 1.2 var(--sp-face-display);
 }
 
 .input::placeholder {
-	color: color-mix(in srgb, var(--sp-mist) 55%, transparent);
+	color: var(--sp-text-muted);
+	opacity: 1;
 }
 
-/* The rule thickens into the focus indicator, so the field keeps its editorial underline. */
+/* The rule thickens into the focus indicator, so the field keeps its underline. */
 .input:focus-visible {
-	border-bottom-color: var(--sp-glacier-light);
+	border-bottom-color: var(--sp-focus-ring);
 	outline: none;
-	box-shadow: 0 1px 0 var(--sp-glacier-light);
+	box-shadow: 0 1px 0 var(--sp-focus-ring);
+}
+
+.notice {
+	position: relative;
+	display: flex;
+	flex: none;
+	align-items: flex-start;
+	gap: 0.45rem;
+	padding: var(--sp-space-3) var(--gutter);
+	overflow: hidden;
+	color: var(--sp-text-muted);
+}
+
+.noticeIcon {
+	flex: none;
+	width: 1.05rem;
+	height: 1.05rem;
+	margin-top: 0.1rem;
+	fill: none;
+	stroke: var(--sp-text-accent);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	color: var(--sp-text-accent);
+}
+
+.notice:has(.noticeIcon) {
+	color: var(--sp-text);
 }
 
 .status {
 	margin: 0;
-	padding: var(--sp-space-3) var(--sp-space-5);
-	color: var(--sp-mist);
 	font-size: var(--sp-text-ui);
+	line-height: 1.4;
+}
+
+/* Loading keeps the field usable; only a moving line says the list is on its way. */
+.notice[data-waiting]::after {
+	content: '';
+	position: absolute;
+	inset-block-end: 0;
+	inset-inline-start: 0;
+	width: 30%;
+	height: 0.125rem;
+	background: var(--sp-copper);
+	animation: sweep 1.1s var(--sp-ease-out) infinite alternate;
+}
+
+@keyframes sweep {
+	from {
+		transform: translateX(-100%);
+	}
+
+	to {
+		transform: translateX(333%);
+	}
 }
 
 .retry {
+	flex: none;
 	align-self: flex-start;
 	box-sizing: border-box;
 	min-height: 2.75rem;
-	margin: 0 var(--sp-space-5) var(--sp-space-5);
-	padding: 0.5rem 1rem;
+	margin: 0 var(--gutter) var(--sp-space-5);
+	padding: 0 1.25rem;
 	border: 0;
-	border-radius: var(--sp-radius);
-	background: var(--sp-accent);
-	color: var(--sp-paper-bright);
-	font-family: var(--sp-font-ui);
-	font-size: var(--sp-text-ui);
-	font-weight: 500;
+	border-radius: 999px;
+	background: var(--sp-action);
+	color: var(--sp-on-action);
+	font: 600 0.9375rem / 1 var(--sp-face-ui);
 	cursor: pointer;
+	transition: background-color var(--sp-duration-short);
 }
 
 .retry:hover {
-	background: var(--sp-accent-hover);
+	background: var(--sp-action-hover);
+}
+
+.retry:active {
+	background: var(--sp-action);
+	box-shadow: inset 0 0.125rem 0 color-mix(in srgb, var(--sp-basalt) 35%, transparent);
 }
 
 .results {
 	flex: 1 1 auto;
 	min-height: 0;
 	margin: 0;
-	padding: 0 0 var(--sp-space-2);
+	padding: 0;
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	border-top: 1px solid var(--sp-rule-quiet);
+	scrollbar-width: thin;
+	scrollbar-color: var(--sp-divider-strong) transparent;
+	border-top: 1px solid var(--sp-divider);
 	list-style: none;
 }
 
@@ -164,61 +270,101 @@
 	justify-content: center;
 	gap: 0.15rem;
 	box-sizing: border-box;
-	min-height: 3.25rem;
-	padding: 0.5rem calc(var(--sp-space-5) - 3px);
-	border-bottom: 1px solid var(--sp-rule-quiet);
+	min-height: 3.5rem;
+	padding: 0.6rem calc(var(--gutter) - 3px);
+	border-bottom: 1px solid var(--sp-divider);
 	border-left: 3px solid transparent;
 	cursor: pointer;
+	transition: background-color var(--sp-duration-short) var(--sp-ease-out);
 }
 
-.option:hover {
-	background: color-mix(in srgb, var(--sp-glacier) 10%, transparent);
+.option:last-child {
+	border-bottom: 0;
+}
+
+/* Hover applies only where a pointer really hovers, so a tap leaves no stuck highlight. */
+@media (hover: hover) {
+	.option:hover {
+		background: var(--sp-state-hover);
+	}
 }
 
 .option[aria-selected='true'] {
-	border-left-color: var(--sp-glacier-light);
-	background: color-mix(in srgb, var(--sp-glacier) 22%, transparent);
+	border-left-color: var(--sp-focus-ring);
+	background: color-mix(in srgb, var(--sp-copper) 12%, transparent);
 }
 
 .name {
-	font-family: var(--sp-font-display);
-	font-size: 1.125rem;
-	line-height: 1.25;
+	color: var(--sp-text);
+	font: 400 1.25rem / 1.2 var(--sp-face-display);
 	overflow-wrap: anywhere;
 }
 
 .detail {
-	color: var(--sp-mist);
-	font-size: var(--sp-text-ui);
-	line-height: 1.3;
+	color: var(--sp-text-muted);
+	font: 400 0.8125rem / 1.35 var(--sp-face-ui);
+	font-stretch: var(--sp-stretch-label);
+	font-variant-numeric: lining-nums tabular-nums;
+	letter-spacing: 0.02em;
+}
+
+.hints {
+	display: flex;
+	flex: none;
+	flex-wrap: wrap;
+	gap: 0.25rem var(--sp-space-4);
+	margin: 0;
+	padding: 0.6rem var(--gutter);
+	border-top: 1px solid var(--sp-divider);
+	background: var(--sp-surface-raised);
+	color: var(--sp-text-muted);
+	font: 400 0.75rem / 1.4 var(--sp-face-ui);
+}
+
+.hints kbd {
+	display: inline-block;
+	min-width: 1.35rem;
+	margin-inline-end: 0.2rem;
+	padding: 0.05rem 0.3rem;
+	border: 1px solid var(--sp-divider-control);
+	border-radius: 4px;
+	color: var(--sp-text);
+	font: 500 0.6875rem / 1.4 var(--sp-face-ui);
+	text-align: center;
+}
+
+/* Keys are no use without a keyboard, and a touch screen needs the room. */
+@media (hover: none), (pointer: coarse) {
+	.hints {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.close,
+	.fieldIcon,
+	.option,
+	.retry {
+		transition: none;
+	}
+
+	.notice[data-waiting]::after {
+		width: 100%;
+		background: color-mix(in srgb, var(--sp-copper) 35%, transparent);
+		animation: none;
+	}
 }
 
 @media (max-width: 30rem) {
 	.dialog {
+		--gutter: var(--sp-space-4);
+
 		width: calc(100% - 1rem);
 		max-height: calc(100dvh - 1rem);
 		margin-top: 0.5rem;
 	}
 
-	.top {
-		padding-left: var(--sp-space-4);
-	}
-
 	.input {
-		width: calc(100% - 2 * var(--sp-space-4));
-		margin-inline: var(--sp-space-4);
 		font-size: 1.25rem;
-	}
-
-	.status {
-		padding-inline: var(--sp-space-4);
-	}
-
-	.retry {
-		margin-inline: var(--sp-space-4);
-	}
-
-	.option {
-		padding-inline: calc(var(--sp-space-4) - 3px);
 	}
 }
