@@ -1779,3 +1779,70 @@ describe('SceneSession marker activation', () => {
 		expect(scene.orbiting).toBe(true);
 	});
 });
+
+describe('SceneSession atlas presentation', () => {
+	it('tells a new scene that it presents the atlas, before anything is revealed, even with no markers', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.presentations).toEqual([true]);
+		expect(scene.markerSets).toEqual([]);
+	});
+
+	it('tells a new scene for a mountain that it does not, so the globe look of the reveal stays', async () => {
+		const { session, factory } = setup();
+		session.setTarget(ACONCAGUA);
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.presentations).toEqual([false]);
+	});
+
+	it('follows the atlas in and out on the one scene, once per change', async () => {
+		const { session, scene } = await readySession();
+		expect(scene.presentations).toEqual([false]);
+
+		session.setAtlas(ATLAS);
+		session.setAtlas({ center: { ...ATLAS.center } });
+		session.setAtlas(undefined);
+		session.setAtlas(undefined);
+		session.setAtlas(ATLAS);
+
+		expect(scene.presentations).toEqual([false, true, false, true]);
+	});
+
+	it('ends the presentation in the same step that presents the next mountain', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.setAtlas(undefined);
+		session.setTarget(ACONCAGUA);
+
+		expect(scene.presentations).toEqual([true, false]);
+		expect(scene.shown).toEqual([{ target: ACONCAGUA, placement: 'next' }]);
+	});
+
+	it('is not driven by the markers', async () => {
+		const { session, scene } = await readySession();
+
+		session.setAtlasMarkers([]);
+		session.setAtlasMarkers(undefined);
+
+		expect(scene.presentations).toEqual([false]);
+	});
+
+	it('says nothing once stopped', async () => {
+		const { session, scene } = await readySession();
+
+		session.stop();
+		session.setAtlas(ATLAS);
+
+		expect(scene.presentations).toEqual([false]);
+	});
+});

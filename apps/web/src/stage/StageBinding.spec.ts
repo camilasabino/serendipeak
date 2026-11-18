@@ -293,6 +293,18 @@ describe('StageBinding retry', () => {
 		]);
 	});
 
+	it('presents the atlas on the new attempt, with or without markers', async () => {
+		const first: AtlasView = { center: { latitude: 0, longitude: 0 } };
+		const { factory, binding } = await failedBinding({ atlas: first });
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.presentations).toEqual([true]);
+		expect(scene.markerSets).toEqual([]);
+	});
+
 	it('hands marker activations from the new attempt to the same listener, once', async () => {
 		const markers: AtlasMarker[] = [
 			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }

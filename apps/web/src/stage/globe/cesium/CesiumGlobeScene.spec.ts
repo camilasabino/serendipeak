@@ -6,6 +6,8 @@ const cesium = vi.hoisted(() => ({
 	releaseFlight: vi.fn(),
 	releaseAtlas: vi.fn(),
 	releasePicker: vi.fn(),
+	releaseLook: vi.fn(),
+	lookStates: [] as boolean[],
 	pickerListeners: [] as unknown[],
 	atlasSets: [] as unknown[],
 	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
@@ -96,6 +98,19 @@ vi.mock('./AtlasMarkers', () => ({
 		}
 		release() {
 			cesium.releaseAtlas();
+		}
+	}
+}));
+vi.mock('./AtlasLook', () => ({
+	AtlasLook: class {
+		setActive(active: boolean) {
+			cesium.lookStates.push(active);
+		}
+		read() {
+			return { intensity: 0 };
+		}
+		release() {
+			cesium.releaseLook();
 		}
 	}
 }));
@@ -755,6 +770,42 @@ describe('CesiumGlobeScene ambient orbit', () => {
 		scene.setAtlasMarkers(markers);
 
 		expect(cesium.atlasSets).toEqual([markers, undefined]);
+	});
+
+	it('hands the atlas presentation to its look, and nothing once destroyed', async () => {
+		cesium.lookStates.length = 0;
+		const scene = await create();
+
+		scene.setAtlasPresentation(true);
+		scene.setAtlasPresentation(false);
+		scene.destroy();
+		scene.setAtlasPresentation(true);
+
+		expect(cesium.lookStates).toEqual([true, false]);
+	});
+
+	it('releases the atlas look and its reading before the viewer, once', async () => {
+		const order: string[] = [];
+		cesium.viewer = fakeViewer(
+			() => {},
+			() => {},
+			() => order.push('viewer')
+		);
+		cesium.releaseLook.mockImplementation(() => order.push('atlas look'));
+		const scene = await CesiumGlobeScene.create(
+			{} as HTMLElement,
+			{
+				ionToken: 'token',
+				imageryMode: 'world',
+				exposeAtlasLook: () => () => order.push('look reading')
+			},
+			new AbortController().signal
+		);
+
+		scene.destroy();
+		scene.destroy();
+
+		expect(order).toEqual(['look reading', 'atlas look', 'viewer']);
 	});
 
 	it('hands marker activation to the picker, one listener at a time, and none once destroyed', async () => {

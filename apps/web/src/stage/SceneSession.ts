@@ -154,6 +154,9 @@ export class SceneSession {
 		}
 		const previous = this.atlas;
 		this.atlas = next;
+		if ((previous === undefined) !== (next === undefined)) {
+			this.scene?.setAtlasPresentation(next !== undefined);
+		}
 		if (!next) {
 			this.leaveOverview();
 			return;
@@ -345,6 +348,7 @@ export class SceneSession {
 		if (this.stage) {
 			ready.updateStage(this.stage);
 		}
+		ready.setAtlasPresentation(this.atlas !== undefined);
 		if (this.markers) {
 			ready.setAtlasMarkers(this.markers);
 		}

@@ -46,6 +46,12 @@ export interface GlobeScene extends Destroyable {
 	 */
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void;
 	/**
+	 * Whether the scene is presenting the atlas. The atlas wears a darker look that fades with the
+	 * camera's height and never applies to a mountain; the first call places it at once, later ones
+	 * fade, and reduced motion always places it at once. Independent of the markers drawn.
+	 */
+	setAtlasPresentation(active: boolean): void;
+	/**
 	 * Emphasizes the atlas marker of this mountain, as a pointer resting on it does, until called
 	 * again with `undefined`. A marker that is not drawn shows nothing and the camera never moves
 	 * to find it.

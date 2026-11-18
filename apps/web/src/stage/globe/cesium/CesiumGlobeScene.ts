@@ -1,4 +1,5 @@
 import type { TerrainProvider, Viewer } from 'cesium';
+import type { AtlasLookReading, ExposeAtlasLook } from '../atlasLook';
 import type { AtlasLayerReading, AtlasMarker, ExposeAtlasLayer } from '../atlasMarkers';
 import type { SceneTarget } from '../camera';
 import type {
@@ -32,6 +33,7 @@ import { globeLook, motionPreference, type MotionPreference } from '../transitio
 import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from '../viewerOptions';
 import { ZOOM_FLIGHT_SECONDS, type ZoomDirection, type ZoomResult } from '../zoomStep';
 import { releaseBestEffort } from '../../releaseBestEffort';
+import { AtlasLook } from './AtlasLook';
 import { AtlasMarkers } from './AtlasMarkers';
 import { AtlasPicker } from './AtlasPicker';
 import type { CesiumModule } from './CesiumModule';
@@ -55,6 +57,7 @@ export interface CesiumSceneConfig {
 	exposeCameraReading?: ExposeCameraReading;
 	exposeGlobePosition?: ExposeGlobePosition;
 	exposeAtlasLayer?: ExposeAtlasLayer;
+	exposeAtlasLook?: ExposeAtlasLook;
 }
 
 interface ViewReadyWaiter {
@@ -84,6 +87,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly orbit: ViewerOrbit;
 	private readonly atlasMarkers: AtlasMarkers;
 	private readonly atlasPicker: AtlasPicker;
+	private readonly atlasLook: AtlasLook;
 	private readonly camera: MountainCamera;
 	private readonly terrainSession: TerrainCameraSession;
 	private readonly reducedMotion: MediaQueryList;
@@ -94,6 +98,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseCameraReading: () => void = noop;
 	private releaseGlobePosition: () => void = noop;
 	private releaseAtlasLayer: () => void = noop;
+	private releaseAtlasLook: () => void = noop;
 	private releaseInteraction: () => void = noop;
 	private releaseFailure: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
@@ -106,7 +111,8 @@ export class CesiumGlobeScene implements GlobeScene {
 			imageryMode,
 			exposeCameraReading,
 			exposeGlobePosition,
-			exposeAtlasLayer
+			exposeAtlasLayer,
+			exposeAtlasLook
 		}: CesiumSceneConfig,
 		signal: AbortSignal
 	): Promise<CesiumGlobeScene> {
@@ -184,6 +190,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			built.releaseCameraReading = exposeCameraReading?.(() => built.sampleCamera()) ?? noop;
 			built.releaseGlobePosition = exposeGlobePosition?.(() => built.globePosition()) ?? noop;
 			built.releaseAtlasLayer = exposeAtlasLayer?.(() => built.readAtlasLayer()) ?? noop;
+			built.releaseAtlasLook = exposeAtlasLook?.(() => built.readAtlasLook()) ?? noop;
 		} catch (error) {
 			if (scene) {
 				scene.destroy();
@@ -231,6 +238,9 @@ export class CesiumGlobeScene implements GlobeScene {
 			refreshed: () => this.atlasPicker.refreshed()
 		});
 		this.atlasPicker = new AtlasPicker(cesium, viewer.scene.canvas, this.atlasMarkers);
+		this.atlasLook = new AtlasLook(viewer.scene, {
+			reducedMotion: () => this.reducedMotion.matches
+		});
 
 		const markers = new SummitMarkers(cesium, viewer, sprites);
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
@@ -349,6 +359,12 @@ export class CesiumGlobeScene implements GlobeScene {
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
 		if (!this.destroyed) {
 			this.atlasMarkers.set(markers);
+		}
+	}
+
+	setAtlasPresentation(active: boolean): void {
+		if (!this.destroyed) {
+			this.atlasLook.setActive(active);
 		}
 	}
 
@@ -569,6 +585,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		const releaseCameraReading = this.releaseCameraReading;
 		const releaseGlobePosition = this.releaseGlobePosition;
 		const releaseAtlasLayer = this.releaseAtlasLayer;
+		const releaseAtlasLook = this.releaseAtlasLook;
 		const releaseInteraction = this.releaseInteraction;
 		const releaseFailure = this.releaseFailure;
 		const releaseOrientation = this.releaseOrientation;
@@ -576,6 +593,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.releaseCameraReading = noop;
 		this.releaseGlobePosition = noop;
 		this.releaseAtlasLayer = noop;
+		this.releaseAtlasLook = noop;
 		this.releaseInteraction = noop;
 		this.releaseFailure = noop;
 		this.releaseOrientation = noop;
@@ -586,6 +604,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['camera reading', releaseCameraReading],
 			['globe position', releaseGlobePosition],
 			['atlas layer reading', releaseAtlasLayer],
+			['atlas look reading', releaseAtlasLook],
 			['interaction listeners', releaseInteraction],
 			['render failure listener', releaseFailure],
 			['orbit', () => this.orbit.stop()],
@@ -594,6 +613,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['failed layer removal', () => this.failedBaseLayer?.release()],
 			['orientation tracker', releaseOrientation],
 			['scale tracker', releaseScale],
+			['atlas look', () => this.atlasLook.release()],
 			['atlas picker', () => this.atlasPicker.release()],
 			['atlas markers', () => this.atlasMarkers.release()],
 			['camera', () => this.camera.stop()],
@@ -615,6 +635,10 @@ export class CesiumGlobeScene implements GlobeScene {
 
 	private readAtlasLayer(): AtlasLayerReading | undefined {
 		return this.destroyed ? undefined : this.atlasMarkers.read();
+	}
+
+	private readAtlasLook(): AtlasLookReading | undefined {
+		return this.destroyed ? undefined : this.atlasLook.read();
 	}
 
 	private globePosition(): GlobePosition | undefined {

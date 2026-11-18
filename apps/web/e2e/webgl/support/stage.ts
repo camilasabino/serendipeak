@@ -427,6 +427,24 @@ export async function atlasLayer(page: Page): Promise<AtlasLayerReading | undefi
 	);
 }
 
+export interface AtlasLookReading {
+	intensity: number;
+	listening: boolean;
+	skyBoxShown: boolean | undefined;
+	layerSaturation: number | undefined;
+	background: { red: number; green: number; blue: number };
+}
+
+/** The atlas look as the live Cesium scene holds it; undefined without a scene. */
+export async function atlasLook(page: Page): Promise<AtlasLookReading | undefined> {
+	return page.evaluate(
+		() =>
+			(
+				window as Window & { __serendipeakLook?: () => AtlasLookReading | undefined }
+			).__serendipeakLook?.() ?? undefined
+	);
+}
+
 /** Resolves once the camera has stopped, including any inertia a gesture left behind. */
 export async function cameraAtRest(page: Page) {
 	const read = async () => {

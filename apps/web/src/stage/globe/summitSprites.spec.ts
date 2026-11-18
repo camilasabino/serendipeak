@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ATLAS_MARKER_STYLE } from './atlasMarkers';
+import { SUMMIT_MARKER_STYLE } from './marker';
 import { SummitSprites, type SpriteCanvas, type SpriteHost } from './summitSprites';
 
 class FakeHost implements SpriteHost {
 	readonly events: string[] = [];
+	readonly fills: unknown[] = [];
 	canvases = 0;
 	fontsReady: Promise<void> = Promise.resolve();
 	failContext = false;
@@ -11,12 +13,18 @@ class FakeHost implements SpriteHost {
 	createCanvas(): SpriteCanvas {
 		const id = ++this.canvases;
 		const events = this.events;
+		const fills = this.fills;
 		const context = new Proxy(
 			{ measureText: (text: string) => ({ width: text.length * 8 }) },
 			{
 				get: (target, key) =>
 					key in target ? target[key as keyof typeof target] : () => undefined,
-				set: () => true
+				set: (_target, key, value) => {
+					if (key === 'fillStyle') {
+						fills.push(value);
+					}
+					return true;
+				}
 			}
 		) as unknown as CanvasRenderingContext2D;
 		const canvas = {
@@ -132,5 +140,19 @@ describe('SummitSprites', () => {
 		expect(rest.width).toBe(Math.ceil((dot.radius + dot.ringWidth + dot.haloWidth) * 2 + 2));
 		expect(emphasized.width).toBeGreaterThan(rest.width);
 		expect(rest.bottomInset).toBe(0);
+	});
+
+	it('fills the atlas dot with its own red, while the summit disc keeps copper', () => {
+		const host = new FakeHost();
+		const sprites = new SummitSprites(host);
+
+		sprites.dot('rest', 1);
+		expect(host.fills).toContain(ATLAS_MARKER_STYLE.dot.fill);
+		expect(host.fills).not.toContain(SUMMIT_MARKER_STYLE.colors.copper);
+
+		host.fills.length = 0;
+		sprites.disc(1);
+		expect(host.fills).toContain(SUMMIT_MARKER_STYLE.colors.copper);
+		expect(host.fills).not.toContain(ATLAS_MARKER_STYLE.dot.fill);
 	});
 });

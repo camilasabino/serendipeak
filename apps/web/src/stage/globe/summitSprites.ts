@@ -191,7 +191,7 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 		}
 		circle(halo, withAlpha(colors.basalt, disc.haloAlpha));
 		circle(radius + dot.ringWidth, colors.snow);
-		circle(radius, colors.copper);
+		circle(radius, dot.fill);
 
 		return { image: canvas.toDataURL('image/png'), width: size, height: size, bottomInset: 0 };
 	}

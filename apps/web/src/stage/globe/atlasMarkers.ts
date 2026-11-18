@@ -35,12 +35,15 @@ export interface ScreenBox {
  */
 export const ATLAS_MARKER_STYLE = {
 	/**
-	 * The dot, in CSS pixels, drawn once as a sprite in each state: the summit marker's copper disc,
+	 * The dot, in CSS pixels, drawn once as a sprite in each state: a red disc,
 	 * snow ring and basalt halo at the reference's atlas size (11.2 px across, as the point it
 	 * replaced). Emphasis grows the disc and lays a snow glow under it; the glow is the only part of
 	 * the dot that is not a press target, so a neighbour is no harder to hit.
 	 */
 	dot: {
+		// A dedicated map colour, not the brand copper: copper sits too close to desert and rock imagery
+		// to find on the globe, and red is rare in satellite imagery.
+		fill: '#dc3d44',
 		radius: 3.2,
 		ringWidth: 1.4,
 		haloWidth: 1,

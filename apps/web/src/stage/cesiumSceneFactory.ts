@@ -26,7 +26,8 @@ export function cesiumSceneFactory({
 					imageryMode: mode,
 					exposeCameraReading: diagnostics?.exposeCameraReading,
 					exposeGlobePosition: diagnostics?.exposeGlobePosition,
-					exposeAtlasLayer: diagnostics?.exposeAtlasLayer
+					exposeAtlasLayer: diagnostics?.exposeAtlasLayer,
+					exposeAtlasLook: diagnostics?.exposeAtlasLook
 				},
 				signal
 			);
