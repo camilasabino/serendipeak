@@ -12,7 +12,7 @@ import { SITE_DESCRIPTION, SITE_NAME } from './pageCopy';
 export const HOME_PATH = '/';
 export const BRAND_IMAGE_PATH = '/brand/serendipeak-mark.png';
 const BRAND_IMAGE_SIZE = 1254;
-const BRAND_IMAGE_ALT = 'The SerendiPeak mark: a mountain peak above a wave line';
+const BRAND_IMAGE_ALT = 'The SerendiPeak symbol: concentric contour lines around a summit';
 const MAX_DESCRIPTION_LENGTH = 200;
 
 export interface SocialImage {
