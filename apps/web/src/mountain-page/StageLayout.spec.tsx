@@ -43,7 +43,7 @@ describe.each([
 
 		expect(stage).toBeGreaterThan(-1);
 		expect(html.lastIndexOf('</section>')).toBeLessThan(stage);
-		for (const label of ['Elevation', 'Coordinates', 'Data sources', 'About this photo']) {
+		for (const label of ['Elevation', 'Coordinates', 'About this photo']) {
 			expect(html.indexOf(label)).toBeLessThan(stage);
 		}
 	});

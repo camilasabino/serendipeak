@@ -77,8 +77,7 @@ describe('complete fixture', () => {
 			complete.summary,
 			'Region',
 			'Coordinates',
-			'Explore another',
-			'Data sources'
+			'Explore another'
 		].map((fragment) => html.indexOf(fragment ?? ''));
 		expect(order.every((position) => position > -1)).toBe(true);
 		expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -93,21 +92,20 @@ describe('complete fixture', () => {
 		expect(anchors.some(({ text }) => text.includes('Wikipedia'))).toBe(false);
 	});
 
-	it('renders both data sources inside the disclosure', () => {
-		expect(html).toContain('Data sources');
-		expect(anchorsOf(html).map(({ href }) => href)).toEqual(
-			expect.arrayContaining([complete.sources?.osm, complete.sources?.wikidata])
-		);
+	it('renders no data sources disclosure and no OpenStreetMap or Wikidata link', () => {
+		expect(html).not.toContain('Data sources');
+		expect(
+			anchorsOf(html).filter(({ href }) => /openstreetmap\.org|wikidata\.org/.test(href))
+		).toEqual([]);
 	});
 });
 
 describe('sparse fixture', () => {
 	const html = render(sparse);
 
-	it('keeps the region, the photograph and the data sources', () => {
+	it('keeps the region and the photograph', () => {
 		expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
 		expect(html).toContain('<figure');
-		expect(html).toContain('Data sources');
 	});
 });
 
@@ -120,12 +118,9 @@ describe('minimal fixture', () => {
 		expect(textsOf(html, 'p')).toEqual(['Elevation 2,000 m', 'Europe']);
 	});
 
-	it.each(['Countr', 'Region', 'Data sources', '<figure', 'About this photo'])(
-		'renders no %s',
-		(fragment) => {
-			expect(html).not.toContain(fragment);
-		}
-	);
+	it.each(['Countr', 'Region', '<figure', 'About this photo'])('renders no %s', (fragment) => {
+		expect(html).not.toContain(fragment);
+	});
 });
 
 describe('permalink composition', () => {
@@ -149,7 +144,7 @@ describe('daily composition', () => {
 			])
 		);
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeGreaterThan(
-			html.indexOf('Data sources')
+			html.indexOf('Explore another')
 		);
 	});
 

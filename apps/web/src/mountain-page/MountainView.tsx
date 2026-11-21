@@ -3,7 +3,6 @@ import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
 import { ExploreControl } from '../explore/ExploreControl';
 import { ContourMotif } from '../shell/ContourMotif';
 import { CLOSING_CONTOURS } from '../shell/contourPatterns';
-import { DataSources } from './DataSources';
 import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
@@ -24,7 +23,7 @@ export function MountainView({
 	preview = false,
 	siteOrigin = null
 }: MountainViewProps) {
-	const { primaryImage, sources } = mountain;
+	const { primaryImage } = mountain;
 
 	const share = preview ? undefined : mountainShare(mountain.slug, siteOrigin);
 	const runningHead = !daily && !preview && <AtlasReturnLink />;
@@ -47,7 +46,6 @@ export function MountainView({
 				plate={primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
 				action={<ExploreControl slug={mountain.slug} />}
 			/>
-			<DataSources sources={sources} />
 			{daily && (
 				<div className={styles.closing}>
 					<ContourMotif pattern={CLOSING_CONTOURS} level="index" className={styles.closingMotif} />

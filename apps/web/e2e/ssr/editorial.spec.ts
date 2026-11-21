@@ -66,7 +66,7 @@ for (const mountain of [complete, sparse, minimal]) {
 			const labels = anchorsOf(html).map(({ text }) => text);
 
 			expect(labels.some((text) => text.includes('Wikipedia'))).toBe(false);
-			expect(html.includes('Data sources')).toBe(mountain.sources !== undefined);
+			expect(html).not.toContain('Data sources');
 			expect(html.includes('<figure')).toBe(mountain.primaryImage !== undefined);
 			expect(labels).not.toContain("Today's mountain");
 			expect(labels.filter((text) => text === 'Today')).toHaveLength(1);

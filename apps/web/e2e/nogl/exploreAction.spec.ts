@@ -35,21 +35,18 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.describe('@nogl Explore another in the sheet', () => {
-	test('is the full-width primary action after the facts and before Data sources', async ({
-		page
-	}) => {
+	test('is the full-width primary action after the facts', async ({ page }) => {
 		await page.setViewportSize({ width: 1280, height: 800 });
 		await page.goto(PERMALINK);
 
 		const button = await box(explore(page));
 		const sheetSection = await box(page.locator('main section').first());
 		const facts = await box(page.locator('main section dl'));
-		const sources = await box(page.getByText('Data sources', { exact: true }));
 
 		expect(button.width).toBeCloseTo(sheetSection.width, 0);
 		expect(button.height).toBeGreaterThanOrEqual(56);
 		expect(button.y).toBeGreaterThanOrEqual(facts.y + facts.height);
-		expect(button.y + button.height).toBeLessThanOrEqual(sources.y);
+		await expect(page.getByText('Data sources')).toHaveCount(0);
 		await expect(explore(page)).toHaveCSS('border-radius', '999px');
 	});
 
@@ -71,9 +68,7 @@ test.describe('@nogl Explore another in the sheet', () => {
 		expect(button.width).toBeCloseTo(facts.width, 0);
 	});
 
-	test('keeps the action after the facts in keyboard order, before Data sources', async ({
-		page
-	}) => {
+	test('keeps the action after the facts in keyboard order', async ({ page }) => {
 		await page.goto(PERMALINK);
 
 		const order = await page.evaluate(() => {
@@ -85,14 +80,12 @@ test.describe('@nogl Explore another in the sheet', () => {
 				coordinates: index((element) =>
 					/Google Maps/.test(element.getAttribute('aria-label') ?? '')
 				),
-				explore: index((element) => /^Explore another/.test(element.textContent ?? '')),
-				sources: index((element) => element.textContent === 'Data sources')
+				explore: index((element) => /^Explore another/.test(element.textContent ?? ''))
 			};
 		});
 
 		expect(order.coordinates).toBeGreaterThan(-1);
 		expect(order.explore).toBeGreaterThan(order.coordinates);
-		expect(order.sources).toBeGreaterThan(order.explore);
 	});
 
 	test('uses the copper action colours, with a dark disc around the arrow', async ({ page }) => {
