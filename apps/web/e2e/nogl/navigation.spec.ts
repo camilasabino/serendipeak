@@ -77,13 +77,13 @@ test.describe('@nogl global navigation', () => {
 		await expect(page).toHaveURL(/\/$/);
 	});
 
-	test('keeps the contextual actions on a mountain page', async ({ page }) => {
+	test('keeps share and Explore on a mountain page that offers no way back to the atlas', async ({
+		page
+	}) => {
 		await page.goto(`/mountains/${ACONCAGUA.slug}`);
 
-		await expect(page.getByRole('link', { name: 'Back to atlas' })).toHaveAttribute(
-			'href',
-			'/atlas'
-		);
+		await expect(page.getByRole('link', { name: 'Back to atlas' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
 		await expect(exploreButtons(page)).toHaveCount(1);
 	});
 

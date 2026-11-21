@@ -28,39 +28,87 @@ function pathOf(url: string): string {
 }
 
 /**
- * Remembers which history entries a reader opened from the atlas, so "Back to atlas" can step back
- * to it instead of stacking a second atlas entry above the mountain they came from.
+ * Remembers which history entries a reader opened from the atlas, so a mountain page can offer
+ * "Back to atlas" only to a reader who came from there, and so that link can step back to the
+ * atlas instead of stacking a second atlas entry above the mountain.
  *
- * Only a push from the atlas counts. A Back, a Forward or a replace never creates an entry above
- * the atlas, so they are never recorded. Whatever is unknown, after a reload or when Next stops
- * stamping its entries, answers "no" and the link navigates normally: the cost of an unknown is
- * one extra history entry, never a trip to the wrong page.
+ * Only a push from the atlas counts, and only one made by an atlas control: its list, a marker or
+ * the chooser. A search made while the atlas is open pushes from the atlas too, but the reader did
+ * not pick that mountain from the atlas, so it declares itself through `navigateApart`. A Back, a
+ * Forward or a replace never creates an entry above the atlas, so they are never recorded. Whatever is unknown, after a reload, in a new tab or when
+ * Next stops stamping its entries, answers "no": the link is not offered, and one that is reached
+ * anyway navigates normally, at the cost of one extra history entry, never a trip to the wrong
+ * page.
  */
 export class AtlasReturn {
 	private readonly openedFromAtlas = new Set<string>();
+	private readonly listeners = new Set<() => void>();
 	private leaving: { entryKey: string | undefined } | undefined;
+	// The push from the atlas is under way: its entry is stamped and rendered before Next announces
+	// completion, so the page it shows must already be answered as opened from the atlas.
+	private opening = false;
+	private apart = false;
 	private popped = false;
 
 	constructor(private readonly currentEntryKey: () => string | undefined = historyEntryKey) {}
 
 	/** Whether the entry the reader is on was opened from the atlas, which then sits right below it. */
 	get entryBelowIsAtlas(): boolean {
+		if (this.opening) {
+			return true;
+		}
 		const key = this.currentEntryKey();
 
 		return key !== undefined && this.openedFromAtlas.has(key);
 	}
 
+	/**
+	 * Runs a navigation that does not come from an atlas control, though the atlas may be on screen.
+	 * The declaration covers the next route change only and ends when the navigation settles, so a
+	 * navigation that never starts cannot taint a later one from the atlas.
+	 */
+	async navigateApart<T>(navigation: () => Promise<T>): Promise<T> {
+		this.apart = true;
+		try {
+			return await navigation();
+		} finally {
+			this.apart = false;
+		}
+	}
+
+	/** Calls the listener whenever the answer may have changed; the returned function stops it. */
+	subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	private changed(): void {
+		for (const listener of [...this.listeners]) {
+			listener();
+		}
+	}
+
 	/** Starts listening; the returned function stops it. */
 	bind(router: AtlasReturnRouter): () => void {
 		const started = (url: string) => {
+			const apart = this.apart;
+			this.apart = false;
 			this.leaving =
-				router.pathname === ATLAS_PATH && pathOf(url) !== ATLAS_PATH
+				router.pathname === ATLAS_PATH && pathOf(url) !== ATLAS_PATH && !apart
 					? { entryKey: this.currentEntryKey() }
 					: undefined;
+			// Without a key on the atlas entry the push could never be recorded, so it is not announced.
+			this.opening =
+				!this.popped && this.leaving !== undefined && this.leaving.entryKey !== undefined;
+			this.changed();
 		};
 		const completed = () => {
 			const { leaving, popped } = this;
 			this.leaving = undefined;
+			this.opening = false;
 			this.popped = false;
 
 			const key = this.currentEntryKey();
@@ -68,10 +116,13 @@ export class AtlasReturn {
 			if (leaving && !popped && key !== undefined && key !== leaving.entryKey) {
 				this.openedFromAtlas.add(key);
 			}
+			this.changed();
 		};
 		const failed = () => {
 			this.leaving = undefined;
+			this.opening = false;
 			this.popped = false;
+			this.changed();
 		};
 
 		router.beforePopState(() => {
@@ -88,6 +139,8 @@ export class AtlasReturn {
 			router.events.off('routeChangeError', failed);
 			router.beforePopState(() => true);
 			this.leaving = undefined;
+			this.opening = false;
+			this.apart = false;
 			this.popped = false;
 		};
 	}

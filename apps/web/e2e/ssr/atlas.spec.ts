@@ -144,6 +144,6 @@ test.describe('atlas page', () => {
 		const html = await (await request.get(`/mountains/${ACONCAGUA.slug}`)).text();
 
 		expect(canonicalsOf(html)).toEqual([`${SITE_ORIGIN}/mountains/${ACONCAGUA.slug}`]);
-		expect(html).toMatch(/<a [^>]*href="\/atlas"[^>]*>[\s\S]*?Back to atlas/);
+		expect(html).not.toContain('Back to atlas');
 	});
 });

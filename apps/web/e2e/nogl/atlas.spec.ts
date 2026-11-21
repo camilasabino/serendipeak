@@ -154,19 +154,20 @@ test.describe('@nogl Atlas navigation', () => {
 		expect(watched.pageErrors).toEqual([]);
 	});
 
-	test('returns through the Back to atlas link, also from a page opened directly', async ({
+	test('returns through the Back to atlas link when the mountain was opened from the list', async ({
 		page
 	}) => {
 		const watched = await watch(page);
-		await page.goto(`/mountains/${ACONCAGUA.slug}`);
-		await page.waitForFunction(() => 'next' in window);
+		await openAtlas(page);
+		await continent(page, 'South America').click();
+		await item(page, ACONCAGUA.name).click();
+		await expect(page.getByRole('heading', { level: 1 })).toHaveText(ACONCAGUA.name);
 		const documentsBefore = watched.documents.length;
 
 		await backToAtlas(page).click();
 
 		await expect(page).toHaveURL(/\/atlas$/);
 		await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible();
-		expect((await openGroups(page)).every((open) => !open)).toBe(true);
 		expect(watched.documents.length).toBe(documentsBefore);
 		expect(watched.pageErrors).toEqual([]);
 	});
@@ -204,7 +205,9 @@ test.describe('@nogl Atlas navigation', () => {
 		await continent(page, 'Europe').click();
 		await item(page, OLYMPUS.name).click();
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-		await backToAtlas(page).click();
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await headerAtlas(page).click();
 		await expect(page).toHaveURL(/\/atlas$/);
 		await context.close();
 	});
@@ -337,7 +340,7 @@ test.describe('@nogl Atlas history', () => {
 		await expect(page).toHaveURL(/\/$/);
 	});
 
-	test('a mountain opened directly pushes the atlas, so Back returns to the mountain', async ({
+	test('a mountain opened directly pushes the atlas from the header, so Back returns to the mountain', async ({
 		page
 	}) => {
 		const watched = await watch(page);
@@ -345,7 +348,7 @@ test.describe('@nogl Atlas history', () => {
 		await page.waitForFunction(() => 'next' in window);
 		const documentsBefore = watched.documents.length;
 
-		await backToAtlas(page).click();
+		await headerAtlas(page).click();
 		await expect(atlasHeading(page)).toBeVisible();
 		expect(watched.documents.length).toBe(documentsBefore);
 
@@ -392,7 +395,7 @@ test.describe('@nogl Atlas history', () => {
 		await expect(page).toHaveURL(/\/$/);
 	});
 
-	test('a mountain reached through another mountain pushes the atlas, as any link would', async ({
+	test('a mountain reached through another mountain offers no way back, and Back restores it', async ({
 		page
 	}) => {
 		await watch(page);
@@ -404,12 +407,15 @@ test.describe('@nogl Atlas history', () => {
 			).next!.router.push(target);
 		}, `/mountains/${ACONCAGUA.slug}`);
 		await expect(mountainHeading(page, ACONCAGUA.name)).toBeVisible();
-
-		await backToAtlas(page).click();
-		await expect(atlasHeading(page)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
 
 		await page.goBack();
-		await expect(page).toHaveURL(new RegExp(`/mountains/${ACONCAGUA.slug}$`));
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toBeVisible();
+
+		await page.goForward();
+		await expect(mountainHeading(page, ACONCAGUA.name)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
 	});
 
 	test('a modified click is left to the browser: it opens a new tab and keeps this entry', async ({
@@ -431,20 +437,167 @@ test.describe('@nogl Atlas history', () => {
 		await opened.close();
 	});
 
-	test('a reloaded mountain page pushes the atlas rather than guess what is below', async ({
+	test('a reloaded mountain page offers no way back rather than guess what is below', async ({
 		page
 	}) => {
 		await watch(page);
 		await openAtlasFromHome(page);
 		await openMountainFromAtlas(page, 'Europe', OLYMPUS.name);
+		await expect(backToAtlas(page)).toBeVisible();
 		await page.reload();
 		await page.waitForFunction(() => 'next' in window);
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await expect(copyLink(page)).toBeVisible();
 
-		await backToAtlas(page).click();
+		await headerAtlas(page).click();
 		await expect(atlasHeading(page)).toBeVisible();
-
 		await page.goBack();
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
+	});
+});
+
+const copyLink = (page: Page) => page.getByRole('button', { name: 'Copy link' });
+const exploreAnother = (page: Page) => page.getByRole('button', { name: /^Explore another/ });
+const searchButton = (page: Page) =>
+	page
+		.getByRole('navigation', { name: 'Primary' })
+		.getByRole('button', { name: 'Search mountains' });
+
+async function openMountainFromSearch(page: Page, query: string, name: string) {
+	await searchButton(page).click();
+	const box = page.getByRole('dialog', { name: 'Search mountains' }).getByRole('combobox');
+	await expect(box).toBeFocused();
+	await box.fill(query);
+	await page.getByRole('option', { name: new RegExp(name) }).click();
+	await expect(mountainHeading(page, name)).toBeVisible();
+}
+
+test.describe('@nogl Back to atlas link origin', () => {
+	test('is offered on a mountain opened from the atlas list, in the first render of the page', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		await openAtlasFromHome(page);
+		await continent(page, 'Europe').click();
+
+		await item(page, OLYMPUS.name).click();
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+
+		expect(await backToAtlas(page).count()).toBe(1);
+		await expect(copyLink(page)).toBeVisible();
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('is not offered on a permalink opened directly, which keeps its share control and header', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+
+		await page.goto(`/mountains/${OLYMPUS.slug}`);
+		await page.waitForFunction(() => 'next' in window);
+
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await expect(copyLink(page)).toBeVisible();
+		await expect(headerAtlas(page)).toBeVisible();
+		await expect(searchButton(page)).toBeVisible();
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('is not offered on a mountain reached from Today through search', async ({ page }) => {
+		const watched = await watch(page);
+		await page.goto('/');
+		await page.waitForFunction(() => '__NEXT_DATA__' in window && 'next' in window);
+
+		await openMountainFromSearch(page, 'olymp', OLYMPUS.name);
+
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await expect(copyLink(page)).toBeVisible();
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('is not offered on a mountain reached from Today through Explore another', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		await page.goto('/');
+		await page.waitForFunction(() => '__NEXT_DATA__' in window && 'next' in window);
+		const daily = await page.getByRole('heading', { level: 1 }).innerText();
+
+		await exploreAnother(page).click();
+
+		await expect(page).toHaveURL(/\/mountains\//);
+		await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(daily);
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await expect(copyLink(page)).toBeVisible();
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('leaves an atlas mountain through search or Explore without the link, and Back brings it again', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		await openAtlasFromHome(page);
+		await openMountainFromAtlas(page, 'Europe', OLYMPUS.name);
+		await expect(backToAtlas(page)).toBeVisible();
+
+		await openMountainFromSearch(page, 'aconc', ACONCAGUA.name);
+		await expect(backToAtlas(page)).toHaveCount(0);
+
+		await page.goBack();
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toBeVisible();
+
+		await exploreAnother(page).click();
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeHidden();
+		await expect(backToAtlas(page)).toHaveCount(0);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('keeps the link through Back and Forward between the atlas and the mountain', async ({
+		page
+	}) => {
+		await watch(page);
+		await openAtlasFromHome(page);
+		await openMountainFromAtlas(page, 'Europe', OLYMPUS.name);
+
+		await page.goBack();
+		await expect(atlasHeading(page)).toBeVisible();
+		await page.goForward();
+
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toBeVisible();
+	});
+
+	test('is not offered on a mountain searched for while the atlas is open', async ({ page }) => {
+		const watched = await watch(page);
+		await openAtlasFromHome(page);
+
+		await openMountainFromSearch(page, 'olymp', OLYMPUS.name);
+
+		await expect(backToAtlas(page)).toHaveCount(0);
+		await expect(copyLink(page)).toBeVisible();
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('keeps Back and Forward of a searched mountain, and offers the link again from the list', async ({
+		page
+	}) => {
+		await watch(page);
+		await openAtlasFromHome(page);
+		await openMountainFromSearch(page, 'olymp', OLYMPUS.name);
+
+		await page.goBack();
+		await expect(atlasHeading(page)).toBeVisible();
+		await page.goForward();
+		await expect(mountainHeading(page, OLYMPUS.name)).toBeVisible();
+		await expect(backToAtlas(page)).toHaveCount(0);
+
+		await headerAtlas(page).click();
+		await expect(atlasHeading(page)).toBeVisible();
+		await openMountainFromAtlas(page, 'South America', ACONCAGUA.name);
+		await expect(backToAtlas(page)).toBeVisible();
 	});
 });
 

@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { Mountain } from '../api/contract';
+import { AtlasReturn } from '../atlas/AtlasReturn';
+import { AtlasReturnProvider } from '../atlas/AtlasReturnContext';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { TestExperience } from '../test/TestExperience';
 import { MountainView } from './MountainView';
@@ -196,17 +198,31 @@ describe('preview', () => {
 });
 
 describe('atlas link', () => {
-	it('leads from a permalink back to the atlas, wherever the page was opened from', () => {
-		expect(
-			anchorsOf(render(complete)).find(({ text }) => text.includes('Back to atlas'))
-		).toMatchObject({ href: '/atlas' });
-	});
-
 	it.each([
+		['a permalink', false, false],
 		['the daily page', true, false],
 		['a draft preview', false, true]
-	])('is absent from %s', (_name, daily, preview) => {
-		expect(render(complete, daily, preview)).not.toContain('Back to atlas');
+	])(
+		'is not in the markup of %s, which cannot know where the reader came from',
+		(_n, daily, preview) => {
+			expect(render(complete, daily, preview)).not.toContain('Back to atlas');
+		}
+	);
+
+	it('is not in the server markup even when the client already knows the atlas opened the page', () => {
+		const atlasReturn = new AtlasReturn(() => 'key-1');
+		Object.defineProperty(atlasReturn, 'entryBelowIsAtlas', { value: true });
+
+		const html = renderToStaticMarkup(
+			<TestExperience>
+				<AtlasReturnProvider value={atlasReturn}>
+					<MountainView mountain={complete} daily={false} />
+				</AtlasReturnProvider>
+			</TestExperience>
+		);
+
+		expect(html).not.toContain('Back to atlas');
+		expect(html).not.toContain('href="/atlas"');
 	});
 });
 
@@ -216,6 +232,13 @@ describe('share control', () => {
 		['the daily page', true]
 	])('is offered on %s', (_name, daily) => {
 		expect(textsOf(render(complete, daily), 'button')).toContain('Copy link');
+	});
+
+	it('stays on a permalink that offers no way back to the atlas', () => {
+		const html = render(complete);
+
+		expect(html).not.toContain('Back to atlas');
+		expect(textsOf(html, 'button')).toContain('Copy link');
 	});
 
 	it('is never offered on a draft preview', () => {

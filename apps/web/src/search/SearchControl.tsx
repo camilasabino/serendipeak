@@ -1,5 +1,6 @@
 import Router from 'next/router';
 import { useEffect, useRef, useState, type Ref } from 'react';
+import { useAtlasReturn } from '../atlas/AtlasReturnContext';
 import { bindRouteChanges, createNavigate } from '../explore/navigate';
 import { focusMountainHeading } from '../mountain-page/focusMountainHeading';
 import { useMountainIndex } from '../mountain-index/MountainIndexContext';
@@ -40,6 +41,7 @@ export function SearchButton({
 // search.
 export function SearchControl() {
 	const store = useMountainIndex();
+	const atlasReturn = useAtlasReturn();
 	const [navigate] = useState(() => createNavigate(() => Router));
 	const [open, setOpen] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -58,10 +60,12 @@ export function SearchControl() {
 	};
 
 	// Focus returns to the button first, so the heading of the destination can claim it once shown
-	// unless the user moved on meanwhile. A navigation that a newer one replaced moves nothing.
+	// unless the user moved on meanwhile. A navigation that a newer one replaced moves nothing. A
+	// result is not an atlas visit even when the atlas is open behind the dialog.
 	const select = (slug: string) => {
 		dismiss();
-		navigate(slug)
+		const navigation = () => navigate(slug);
+		(atlasReturn ? atlasReturn.navigateApart(navigation) : navigation())
 			.then((navigated) => {
 				if (navigated) {
 					focusMountainHeading(buttonRef.current);

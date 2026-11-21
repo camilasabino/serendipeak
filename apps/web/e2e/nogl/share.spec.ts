@@ -101,7 +101,7 @@ test.describe('@nogl Share and Copy link', () => {
 		expect(glyphs[0]).toBeTruthy();
 		expect(glyphs[0]).not.toBe(glyphs[1]);
 
-		const head = await box(page.getByRole('link', { name: 'Back to atlas' }).locator('..'));
+		const head = await box(group.locator('..'));
 		const share = await box(group);
 		expect(share.y).toBeGreaterThanOrEqual(head.y);
 		expect(share.y + share.height).toBeLessThanOrEqual(head.y + head.height);
@@ -237,7 +237,7 @@ test.describe('@nogl Share and Copy link', () => {
 		await copyButton(page).click();
 		await expect(fallback(page)).toBeVisible();
 
-		await page.getByRole('link', { name: 'Back to atlas' }).focus();
+		await page.getByRole('button', { name: /^Explore another/ }).focus();
 		await expect(fallback(page)).toHaveCount(0);
 
 		await copyButton(page).click();
@@ -400,7 +400,6 @@ test.describe('@nogl Share and Copy link', () => {
 		const targets = [
 			shareButton(page),
 			copyButton(page),
-			page.getByRole('link', { name: 'Back to atlas' }),
 			page.getByRole('button', { name: /^Explore another/ })
 		];
 		const before = await Promise.all(targets.map(box));
