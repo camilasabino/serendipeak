@@ -381,7 +381,9 @@ test.describe('@nogl Share and Copy link', () => {
 			const popover = await box(fallback(page));
 			expect(popover.x).toBeGreaterThanOrEqual(sheet.x);
 			expect(popover.x + popover.width).toBeLessThanOrEqual(sheet.x + sheet.width + 0.5);
-			expect(popover.y).toBeGreaterThanOrEqual(placed.y + placed.height);
+			// Focusing the field can scroll the page, so the row is measured again in the same frame.
+			const placedNow = await box(group);
+			expect(popover.y).toBeGreaterThanOrEqual(placedNow.y + placedNow.height);
 			expect(popover.x + popover.width).toBeLessThanOrEqual(width);
 			expect((await box(fallbackField(page))).height).toBeGreaterThanOrEqual(44);
 
