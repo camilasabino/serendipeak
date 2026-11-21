@@ -2,6 +2,7 @@ import { ATLAS_MARKER_STYLE } from './atlasMarkers';
 import {
 	SUMMIT_MARKER_STYLE,
 	layoutSummitPill,
+	pillGeometry,
 	type AtlasDotState,
 	type AtlasSpriteSource,
 	type PillLayout,
@@ -90,20 +91,21 @@ function roundedRectangle(
  * never gives textures back. The cache is small, since only the mountain on stage is ever drawn.
  */
 export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
-	private readonly discs = new Map<number, SummitSprite>();
+	private readonly discs = new Map<string, SummitSprite>();
 	private readonly dots = new Map<string, SummitSprite>();
 	private readonly pills = new Map<string, Promise<SummitSprite>>();
 
 	constructor(private readonly host: SpriteHost = browserHost) {}
 
-	disc(ratio: number): SummitSprite {
-		const cached = this.discs.get(ratio);
+	disc(ratio: number, scale: number = disc.scale): SummitSprite {
+		const key = `${ratio}@${scale}`;
+		const cached = this.discs.get(key);
 		if (cached) {
 			return cached;
 		}
 
-		const sprite = this.drawDisc(ratio);
-		this.discs.set(ratio, sprite);
+		const sprite = this.drawDisc(ratio, scale);
+		this.discs.set(key, sprite);
 		evictOldest(this.discs);
 
 		return sprite;
@@ -128,9 +130,10 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 		name: string,
 		elevation: string,
 		ratio: number,
-		maxContentWidth: number
+		maxContentWidth: number,
+		scale = 1
 	): Promise<SummitSprite> {
-		const key = `${ratio}\u0000${maxContentWidth}\u0000${elevation}\u0000${name}`;
+		const key = `${ratio}\u0000${scale}\u0000${maxContentWidth}\u0000${elevation}\u0000${name}`;
 		const cached = this.pills.get(key);
 		if (cached) {
 			this.pills.delete(key);
@@ -138,7 +141,7 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 			return cached;
 		}
 
-		const drawn = this.drawPill(name, elevation, ratio, maxContentWidth);
+		const drawn = this.drawPill(name, elevation, ratio, maxContentWidth, scale);
 		this.pills.set(key, drawn);
 		evictOldest(this.pills);
 		drawn.catch(() => this.pills.delete(key));
@@ -146,8 +149,10 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 		return drawn;
 	}
 
-	private drawDisc(ratio: number): SummitSprite {
-		const reach = disc.radius + disc.ringWidth + disc.haloWidth;
+	private drawDisc(ratio: number, scale: number): SummitSprite {
+		const radius = disc.radius * scale;
+		const ringWidth = disc.ringWidth * scale;
+		const reach = radius + ringWidth + disc.haloWidth * scale;
 		const size = Math.ceil(reach * 2 + 2);
 		const { canvas, context } = this.surface(size, size, ratio);
 		const center = size / 2;
@@ -159,8 +164,8 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 		};
 
 		circle(reach, withAlpha(colors.basalt, disc.haloAlpha));
-		circle(disc.radius + disc.ringWidth, colors.snow);
-		circle(disc.radius, colors.copper);
+		circle(radius + ringWidth, colors.snow);
+		circle(radius, colors.copper);
 
 		return {
 			image: canvas.toDataURL('image/png'),
@@ -200,7 +205,8 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 		name: string,
 		elevation: string,
 		ratio: number,
-		maxContentWidth: number
+		maxContentWidth: number,
+		scale: number
 	): Promise<SummitSprite> {
 		await this.host.loadFaces(
 			[
@@ -218,10 +224,11 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 			},
 			name,
 			elevation,
-			maxContentWidth
+			maxContentWidth,
+			scale
 		);
 		const { canvas, context } = this.surface(layout.imageWidth, layout.imageHeight, ratio);
-		paintPill(context, layout, elevation);
+		paintPill(context, layout, elevation, scale);
 
 		return {
 			image: canvas.toDataURL('image/png'),
@@ -246,9 +253,15 @@ export class SummitSprites implements SummitSpriteSource, AtlasSpriteSource {
 	}
 }
 
-function paintPill(context: CanvasRenderingContext2D, layout: PillLayout, elevation: string): void {
+function paintPill(
+	context: CanvasRenderingContext2D,
+	layout: PillLayout,
+	elevation: string,
+	scale: number
+): void {
 	const { padding, pillWidth } = layout;
-	const { height, ringAlpha, shadow } = pill;
+	const { ringAlpha, shadow } = pill;
+	const { height } = pillGeometry(scale);
 	const middle = padding.top + height / 2;
 
 	context.save();

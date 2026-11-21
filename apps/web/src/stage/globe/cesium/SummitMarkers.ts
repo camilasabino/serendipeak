@@ -47,7 +47,11 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		const generation = this.generation;
 		const { canvas } = this.viewer.scene;
 		const ratio = renderRatio(canvas);
-		const maxContentWidth = summitPillMaxContentWidth(canvas.clientWidth, rootFontPixels());
+		const maxContentWidth = summitPillMaxContentWidth(
+			canvas.clientWidth,
+			rootFontPixels(),
+			SUMMIT_MARKER_STYLE.pill.summitScale
+		);
 		const position = this.cesium.Cartesian3.fromDegrees(
 			marker.longitude,
 			marker.latitude,
@@ -85,7 +89,13 @@ export class SummitMarkers implements SummitMarkerDisplay {
 	): Promise<void> {
 		let sprite;
 		try {
-			sprite = await this.sprites.pill(name, elevation, ratio, maxContentWidth);
+			sprite = await this.sprites.pill(
+				name,
+				elevation,
+				ratio,
+				maxContentWidth,
+				SUMMIT_MARKER_STYLE.pill.summitScale
+			);
 		} catch {
 			// The page names the mountain in text, so the stage keeps the disc alone rather than fail.
 			return;

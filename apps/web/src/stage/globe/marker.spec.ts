@@ -9,7 +9,8 @@ import {
 	layoutSummitPill,
 	planSummitMarker,
 	renderRatio,
-	summitPillMaxContentWidth
+	summitPillMaxContentWidth,
+	pillGeometry
 } from './marker';
 
 describe('planSummitMarker', () => {
@@ -98,6 +99,23 @@ describe('layoutSummitPill', () => {
 		expect(layout.name.endsWith('…')).toBe(true);
 		expect(layout.pillWidth).toBeLessThanOrEqual(Math.ceil(170 + paddingLeft + paddingRight));
 		expect(layout.elevationX).toBeGreaterThan(layout.nameX);
+	});
+});
+
+describe('compact summit pill', () => {
+	const measure = (text: string, part: 'name' | 'elevation') =>
+		text.length * (part === 'name' ? 10 : 7);
+
+	it('shrinks the box around the text and leaves the full-size pill alone', () => {
+		const { summitScale, height, paddingLeft, gap } = SUMMIT_MARKER_STYLE.pill;
+		const full = layoutSummitPill(measure, 'Toubkal', '4,167 m');
+		const compact = layoutSummitPill(measure, 'Toubkal', '4,167 m', undefined, summitScale);
+
+		expect(pillGeometry().height).toBe(height);
+		expect(compact.pillWidth).toBeLessThan(full.pillWidth);
+		expect(compact.imageHeight).toBeLessThan(full.imageHeight);
+		expect(compact.nameX).toBeCloseTo(compact.padding.left + paddingLeft * summitScale, 5);
+		expect(compact.elevationX - compact.nameX).toBeCloseTo(70 + gap * summitScale, 5);
 	});
 });
 

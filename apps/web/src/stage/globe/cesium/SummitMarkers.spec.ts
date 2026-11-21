@@ -140,7 +140,9 @@ describe('SummitMarkers', () => {
 
 		markers.show(SUMMIT);
 
-		expect(sprites.pillRequests[0]!.maxContentWidth).toBe(summitPillMaxContentWidth(320));
+		expect(sprites.pillRequests[0]!.maxContentWidth).toBe(
+			summitPillMaxContentWidth(320, 16, SUMMIT_MARKER_STYLE.pill.summitScale)
+		);
 		expect(sprites.pillRequests[0]!.maxContentWidth).toBeLessThan(
 			SUMMIT_MARKER_STYLE.pill.maxContentWidth
 		);

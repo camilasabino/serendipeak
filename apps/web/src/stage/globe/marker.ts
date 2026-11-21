@@ -27,12 +27,13 @@ export interface SummitSprite {
 export type AtlasDotState = 'rest' | 'emphasized';
 
 export interface SummitSpriteSource {
-	disc(ratio: number): SummitSprite;
+	disc(ratio: number, scale?: number): SummitSprite;
 	pill(
 		name: string,
 		elevation: string,
 		ratio: number,
-		maxContentWidth: number
+		maxContentWidth: number,
+		scale?: number
 	): Promise<SummitSprite>;
 }
 
@@ -64,12 +65,16 @@ export const SUMMIT_MARKER_STYLE = {
 		copper: '#df9a66'
 	},
 	disc: {
+		/** The summit disc is drawn at this fraction of the reference size; the atlas dot is not scaled. */
+		scale: 0.75,
 		radius: 7,
 		ringWidth: 2,
 		haloWidth: 1.5,
 		haloAlpha: 0.85
 	},
 	pill: {
+		/** The summit pill's height, padding and gap relative to the atlas pill; its type is not scaled. */
+		summitScale: 0.88,
 		height: 42,
 		paddingLeft: 12.8,
 		paddingRight: 14.4,
@@ -96,6 +101,18 @@ export const SUMMIT_MARKER_STYLE = {
 	}
 } as const;
 
+/** The pill's box at `scale`; the type inside it keeps its size. */
+export function pillGeometry(scale = 1) {
+	const { height, paddingLeft, paddingRight, gap } = SUMMIT_MARKER_STYLE.pill;
+
+	return {
+		height: height * scale,
+		paddingLeft: paddingLeft * scale,
+		paddingRight: paddingRight * scale,
+		gap: gap * scale
+	};
+}
+
 /** The page's root font size, which the stage's control columns scale with. */
 export function rootFontPixels(): number {
 	if (typeof document === 'undefined') {
@@ -112,8 +129,13 @@ export const CONTROL_GUTTER_REM = 3.75;
  * The widest name-and-elevation run a pill may hold on a stage `stageWidth` pixels wide. The pill is
  * centred on the summit, so it stays between the control columns instead of running under them.
  */
-export function summitPillMaxContentWidth(stageWidth: number, rootFontPixels = 16): number {
-	const { maxContentWidth, minContentWidth, paddingLeft, paddingRight } = SUMMIT_MARKER_STYLE.pill;
+export function summitPillMaxContentWidth(
+	stageWidth: number,
+	rootFontPixels = 16,
+	scale = 1
+): number {
+	const { maxContentWidth, minContentWidth } = SUMMIT_MARKER_STYLE.pill;
+	const { paddingLeft, paddingRight } = pillGeometry(scale);
 	if (!(stageWidth > 0)) {
 		return maxContentWidth;
 	}
@@ -176,9 +198,11 @@ export function layoutSummitPill(
 	measure: MeasurePillText,
 	name: string,
 	elevation: string,
-	maxContentWidth: number = SUMMIT_MARKER_STYLE.pill.maxContentWidth
+	maxContentWidth: number = SUMMIT_MARKER_STYLE.pill.maxContentWidth,
+	scale = 1
 ): PillLayout {
-	const { height, paddingLeft, paddingRight, gap, shadow } = SUMMIT_MARKER_STYLE.pill;
+	const { shadow } = SUMMIT_MARKER_STYLE.pill;
+	const { height, paddingLeft, paddingRight, gap } = pillGeometry(scale);
 	const elevationWidth = measure(elevation, 'elevation');
 	const nameBudget = maxContentWidth - elevationWidth - gap;
 	const shown = fitText(name, nameBudget, (text) => measure(text, 'name'));

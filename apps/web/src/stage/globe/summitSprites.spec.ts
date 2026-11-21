@@ -115,12 +115,24 @@ describe('SummitSprites', () => {
 		});
 	});
 
+	it('draws a compact summit pill apart from the atlas pill', async () => {
+		const sprites = new SummitSprites(new FakeHost());
+
+		const full = await sprites.pill('Toubkal', '4,167 m', 1, 300);
+		const compact = await sprites.pill('Toubkal', '4,167 m', 1, 300, 0.88);
+
+		expect(compact.width).toBeLessThan(full.width);
+		expect(compact.height).toBeLessThan(full.height);
+		expect(await sprites.pill('Toubkal', '4,167 m', 1, 300)).toBe(full);
+	});
+
 	it('draws the disc at once with room for its halo', () => {
 		const sprites = new SummitSprites(new FakeHost());
 		const disc = sprites.disc(1);
 
 		expect(disc.width).toBe(disc.height);
-		expect(disc.width).toBeGreaterThanOrEqual(2 * (7 + 2 + 1.5));
+		expect(disc.width).toBeGreaterThanOrEqual(2 * (7 + 2 + 1.5) * SUMMIT_MARKER_STYLE.disc.scale);
+		expect(disc.width).toBeLessThan(sprites.disc(1, 1).width);
 		expect(disc.bottomInset).toBe(0);
 	});
 
