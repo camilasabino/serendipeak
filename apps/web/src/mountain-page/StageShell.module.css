@@ -18,28 +18,27 @@
 	box-sizing: border-box;
 	padding: var(--sp-space-5);
 	overflow: hidden;
+	container-type: size;
 	/* Opaque: the canvas renders beneath while the scene loads, and atlas markers must not show through. */
 	background: var(--sp-surface-base);
 	color: var(--sp-text);
 	text-align: center;
 }
 
-/* A box wider than a phone, so the rings keep their spacing and the stage crops the overflow. The
-   centre is masked clear of the lockup and the edges fade, so no line is drawn under the text. */
+/* The rings are whole, nested loops, so none is masked or cropped by the box. The box keeps the
+   pattern's aspect, overflows its viewBox, and is placed so the centre of the innermost ring (the
+   point 295.5, 101 of the 552 x 230 viewBox) sits on the lockup. Every ring then encloses the
+   lockup and no line can cross it; on a narrow stage the unit shrinks until the innermost ring
+   still fits, and the outer rings run off the edge like terrain. */
 .motif {
+	--unit: min(1.6px, calc((100cqw - 2rem) / 235));
 	position: absolute;
 	top: 50%;
 	left: 50%;
-	width: max(min(100%, 60rem), 36rem);
-	height: 22rem;
-	transform: translate(-50%, -50%);
-	-webkit-mask-image: radial-gradient(
-		ellipse closest-side,
-		transparent 55%,
-		black 85%,
-		transparent 100%
-	);
-	mask-image: radial-gradient(ellipse closest-side, transparent 55%, black 85%, transparent 100%);
+	width: calc(552 * var(--unit));
+	height: calc(230 * var(--unit));
+	overflow: visible;
+	transform: translate(-53.53%, -43.91%);
 }
 
 .lockup {

@@ -40,17 +40,21 @@ describe('ContourMotif', () => {
 		expect(centred).toContain('preserveAspectRatio="xMidYMid slice"');
 	});
 
-	it('animates only when asked: draw switches every ring to a unit path length', () => {
+	it('animates only when asked: reveal adds a trace per ring, ordered from the innermost outward', () => {
 		const still = renderToStaticMarkup(<ContourMotif pattern={LOADING_CONTOURS} />);
-		const drawn = renderToStaticMarkup(<ContourMotif pattern={LOADING_CONTOURS} draw />);
+		const revealed = renderToStaticMarkup(<ContourMotif pattern={LOADING_CONTOURS} reveal />);
+		const rings = LOADING_CONTOURS.rings.length;
+		const order = Array.from({ length: rings }, (_, position) => `--ring:${rings - 1 - position}`);
 
-		expect(still).not.toContain('pathLength');
-		expect(drawn.match(/pathLength="1"/g)).toHaveLength(LOADING_CONTOURS.rings.length);
-		expect(drawn).not.toMatch(/<(animate|set|style)\b/);
+		expect(still).not.toMatch(/--ring|pathLength/);
+		expect(pathsOf(revealed)).toBe(rings * 2);
+		expect(revealed.match(/pathLength="1"/g)).toHaveLength(rings);
+		expect(revealed.match(/--ring:\d+/g)).toEqual(order.flatMap((ring) => [ring, ring]));
+		expect(revealed).not.toMatch(/<(animate|set|style)\b/);
 	});
 
 	it.each([
-		['loading', LOADING_CONTOURS, 552, 230, 8],
+		['loading', LOADING_CONTOURS, 552, 230, 4],
 		['error', ERROR_CONTOURS, 552, 190, 7],
 		['closing', CLOSING_CONTOURS, 552, 150, 7]
 	])('ships the %s pattern as fixed, well-formed rings', (_name, pattern, width, height, rings) => {

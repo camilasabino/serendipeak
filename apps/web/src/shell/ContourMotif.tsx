@@ -1,3 +1,4 @@
+import { Fragment, type CSSProperties } from 'react';
 import styles from './ContourMotif.module.css';
 
 export interface ContourRing {
@@ -18,8 +19,8 @@ interface ContourMotifProps {
 	level?: 'quiet' | 'index';
 	/** `summit` anchors the upper right; `center` keeps a pattern drawn around its middle centred. */
 	align?: 'summit' | 'center';
-	/** Draws the rings in and back out on a loop, only while the user allows motion. */
-	draw?: boolean;
+	/** Fades the rings in, then runs a bright trace around each one, only while the user allows motion. */
+	reveal?: boolean;
 	className?: string;
 }
 
@@ -32,10 +33,10 @@ export function ContourMotif({
 	pattern,
 	level = 'quiet',
 	align = 'summit',
-	draw = false,
+	reveal = false,
 	className
 }: ContourMotifProps) {
-	const base = draw ? `${styles.motif} ${styles.draw}` : styles.motif;
+	const base = reveal ? `${styles.motif} ${styles.reveal}` : styles.motif;
 	const classes = className ? `${base} ${className}` : base;
 
 	return (
@@ -46,14 +47,20 @@ export function ContourMotif({
 			aria-hidden="true"
 			focusable="false"
 		>
-			{pattern.rings.map(({ d, index }) => (
-				<path
-					key={d}
-					d={d}
-					pathLength={draw ? 1 : undefined}
-					className={level === 'index' && index ? styles.index : undefined}
-				/>
-			))}
+			{pattern.rings.map(({ d, index }, position) => {
+				const ring = { '--ring': pattern.rings.length - 1 - position } as CSSProperties;
+
+				return (
+					<Fragment key={d}>
+						<path
+							d={d}
+							className={level === 'index' && index ? styles.index : undefined}
+							style={reveal ? ring : undefined}
+						/>
+						{reveal && <path d={d} pathLength={1} className={styles.trace} style={ring} />}
+					</Fragment>
+				);
+			})}
 		</svg>
 	);
 }

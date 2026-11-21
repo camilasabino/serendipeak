@@ -30,7 +30,7 @@ export function StageShell({ store, label, className, children }: StageShellProp
 						pattern={LOADING_CONTOURS}
 						level="index"
 						align="center"
-						draw
+						reveal
 						className={styles.motif}
 					/>
 					<div className={styles.lockup}>
