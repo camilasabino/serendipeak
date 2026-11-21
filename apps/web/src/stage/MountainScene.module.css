@@ -16,6 +16,20 @@
 	height: 100%;
 }
 
+/* Only devices with a hovering fine pointer get the grab affordance; touch keeps the default. The
+   atlas picker's inline `pointer` over a marker outranks both rules, and it clears that inline
+   cursor on press, so a drag starting on a marker still shows `grabbing`. `:active` stays on the
+   canvas until the button is released, even outside it, so the cursor cannot stick. */
+@media (hover: hover) and (pointer: fine) {
+	.viewport :global(canvas) {
+		cursor: grab;
+	}
+
+	.viewport :global(canvas:active) {
+		cursor: grabbing;
+	}
+}
+
 /* A chip behind Cesium's attribution so it stays legible over snow. Only colour and padding change:
    the credit keeps Cesium's position and every link, so nothing is hidden. The extra specificity
    beats the widget stylesheet, which loads after this one. */
