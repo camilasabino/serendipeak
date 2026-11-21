@@ -115,7 +115,7 @@ describe('MountainInfoPanel', () => {
 		expect(textsOf(render({ region }), 'dd')[0]).toBe('Gamma Ridge, Beta Range');
 	});
 
-	it('places the plate between the place line and the lede, and the action before the facts', () => {
+	it('places the plate between the place line and the lede, and the action after the facts', () => {
 		const html = renderToStaticMarkup(
 			<MountainInfoPanel
 				mountain={complete}
@@ -127,8 +127,8 @@ describe('MountainInfoPanel', () => {
 			complete.region?.name ?? '',
 			'<figure>',
 			complete.summary ?? '',
-			'<button',
-			'<dl'
+			'<dl',
+			'<button'
 		].map((fragment) => html.indexOf(fragment));
 
 		expect(order.every((position) => position > -1)).toBe(true);

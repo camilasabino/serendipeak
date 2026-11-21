@@ -17,7 +17,7 @@ interface MountainInfoPanelProps {
 	mountain: Mountain;
 	/** The photograph, placed between the place line and the lede. */
 	plate?: ReactNode;
-	/** The page's primary action, placed between the lede and the facts. */
+	/** The page's primary action, placed after the facts so it closes the reading. */
 	action?: ReactNode;
 }
 
@@ -38,7 +38,6 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 			<section aria-labelledby={MOUNTAIN_HEADING_ID} className={styles.body}>
 				{plate}
 				{summary && <p className={styles.lede}>{summary}</p>}
-				{action && <div className={styles.action}>{action}</div>}
 				<Facts>
 					{region && <Fact term="Region">{formatRegion(region)}</Fact>}
 					{countryNames.length > 0 && (
@@ -56,6 +55,7 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 						</ExternalLink>
 					</Fact>
 				</Facts>
+				{action && <div className={styles.action}>{action}</div>}
 			</section>
 		</>
 	);

@@ -71,9 +71,15 @@ describe('complete fixture', () => {
 			'South America',
 			'32.6531° S, 70.0120° W'
 		]);
-		const order = ['Elevation', '<figure', complete.summary, 'Region', 'Data sources'].map(
-			(fragment) => html.indexOf(fragment ?? '')
-		);
+		const order = [
+			'Elevation',
+			'<figure',
+			complete.summary,
+			'Region',
+			'Coordinates',
+			'Explore another',
+			'Data sources'
+		].map((fragment) => html.indexOf(fragment ?? ''));
 		expect(order.every((position) => position > -1)).toBe(true);
 		expect(order).toEqual([...order].sort((a, b) => a - b));
 	});

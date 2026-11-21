@@ -4,6 +4,7 @@ import { fixture, resetStub, useScenario } from '../ssr/support';
 interface Named {
 	slug: string;
 	name: string;
+	summary: string;
 }
 
 const ACONCAGUA = fixture<Named>('mountain-complete.json');
@@ -34,20 +35,64 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.describe('@nogl Explore another in the sheet', () => {
-	test('is the full-width primary action between the lede and the facts', async ({ page }) => {
+	test('is the full-width primary action after the facts and before Data sources', async ({
+		page
+	}) => {
 		await page.setViewportSize({ width: 1280, height: 800 });
 		await page.goto(PERMALINK);
 
 		const button = await box(explore(page));
 		const sheetSection = await box(page.locator('main section').first());
-		const lede = await box(page.locator('main section p').last());
 		const facts = await box(page.locator('main section dl'));
+		const sources = await box(page.getByText('Data sources', { exact: true }));
 
 		expect(button.width).toBeCloseTo(sheetSection.width, 0);
 		expect(button.height).toBeGreaterThanOrEqual(56);
-		expect(button.y).toBeGreaterThanOrEqual(lede.y + lede.height);
-		expect(button.y + button.height).toBeLessThanOrEqual(facts.y);
+		expect(button.y).toBeGreaterThanOrEqual(facts.y + facts.height);
+		expect(button.y + button.height).toBeLessThanOrEqual(sources.y);
 		await expect(explore(page)).toHaveCSS('border-radius', '999px');
+	});
+
+	test('reads lede, photograph, facts, then the action on a phone, at the sheet gutters', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto(PERMALINK);
+
+		const lede = await box(page.getByText(ACONCAGUA.summary, { exact: true }));
+		const photo = await box(page.locator('main section figure'));
+		const facts = await box(page.locator('main section dl'));
+		const button = await box(explore(page));
+
+		expect(photo.y).toBeGreaterThanOrEqual(lede.y + lede.height);
+		expect(facts.y).toBeGreaterThanOrEqual(photo.y + photo.height);
+		expect(button.y).toBeGreaterThanOrEqual(facts.y + facts.height);
+		expect(button.x).toBe(facts.x);
+		expect(button.width).toBeCloseTo(facts.width, 0);
+	});
+
+	test('keeps the action after the facts in keyboard order, before Data sources', async ({
+		page
+	}) => {
+		await page.goto(PERMALINK);
+
+		const order = await page.evaluate(() => {
+			const focusable = [
+				...document.querySelectorAll<HTMLElement>('main a[href], main button, main summary')
+			];
+			const index = (match: (element: HTMLElement) => boolean) => focusable.findIndex(match);
+			return {
+				coordinates: index((element) =>
+					/Google Maps/.test(element.getAttribute('aria-label') ?? '')
+				),
+				explore: index((element) => /^Explore another/.test(element.textContent ?? '')),
+				sources: index((element) => element.textContent === 'Data sources')
+			};
+		});
+
+		expect(order.coordinates).toBeGreaterThan(-1);
+		expect(order.explore).toBeGreaterThan(order.coordinates);
+		expect(order.sources).toBeGreaterThan(order.explore);
 	});
 
 	test('uses the copper action colours, with a dark disc around the arrow', async ({ page }) => {
@@ -119,6 +164,7 @@ test.describe('@nogl Explore another in the sheet', () => {
 	}) => {
 		const release = await holdRandom(page);
 		await page.goto(PERMALINK);
+		await explore(page).scrollIntoViewIfNeeded();
 		const before = await box(explore(page));
 
 		await explore(page).click();
@@ -159,6 +205,7 @@ test.describe('@nogl Explore another in the sheet', () => {
 		request
 	}) => {
 		await page.goto(PERMALINK);
+		await explore(page).scrollIntoViewIfNeeded();
 		const before = await box(explore(page));
 		await useScenario(request, 'server-error');
 
@@ -176,23 +223,7 @@ test.describe('@nogl Explore another in the sheet', () => {
 	for (const [width, height] of [
 		[1440, 900],
 		[1280, 800],
-		[1280, 720]
-	] as const) {
-		test(`is fully visible above the fold for a one-line name at ${width}×${height}`, async ({
-			page
-		}) => {
-			await page.setViewportSize({ width, height });
-			await page.goto(PERMALINK);
-
-			const button = await box(explore(page));
-
-			expect(button.y).toBeGreaterThanOrEqual(0);
-			expect(button.y + button.height).toBeLessThanOrEqual(height);
-			await expect(explore(page)).toBeInViewport({ ratio: 1 });
-		});
-	}
-
-	for (const [width, height] of [
+		[1280, 720],
 		[960, 540],
 		[390, 844],
 		[375, 667],
@@ -204,7 +235,7 @@ test.describe('@nogl Explore another in the sheet', () => {
 			await page.setViewportSize({ width, height });
 			await page.goto(PERMALINK);
 
-			await explore(page).scrollIntoViewIfNeeded();
+			await explore(page).evaluate((element) => element.scrollIntoView({ block: 'center' }));
 
 			await expect(explore(page)).toBeInViewport({ ratio: 1 });
 			const button = await box(explore(page));
