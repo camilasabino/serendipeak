@@ -25,7 +25,10 @@ test.describe('@nogl mountain page layout', () => {
 		[390, 844],
 		[375, 667],
 		[320, 640],
-		[768, 1024]
+		[412, 915],
+		[320, 568],
+		[768, 1024],
+		[844, 390]
 	] as const) {
 		test(`reads name, stage, running head, Explore at ${width}×${height}`, async ({ page }) => {
 			await page.setViewportSize({ width, height });
@@ -38,7 +41,10 @@ test.describe('@nogl mountain page layout', () => {
 				box(explore(page))
 			]);
 			const header = await box(page.getByRole('banner'));
-			const expectedStage = Math.min(Math.max(height * 0.38, 14 * REM), 22 * REM);
+			const expectedStage =
+				height > width
+					? Math.min(Math.max(height - 17 * REM, 18 * REM), 46 * REM)
+					: Math.min(Math.max(height * 0.38, 14 * REM), 22 * REM);
 
 			expect(name.y).toBeGreaterThanOrEqual(header.y + header.height);
 			expect(name.y + name.height).toBeLessThanOrEqual(stageBox.y);

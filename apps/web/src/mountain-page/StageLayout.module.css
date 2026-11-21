@@ -32,6 +32,17 @@
 	}
 }
 
+/* A portrait phone gives the globe the screen left once the header, the masthead and a strip of the
+   sheet are accounted for. 17rem covers the header (3.5rem), a masthead of one or two place lines
+   and about 5.5rem of the sheet, so the share row stays in view as the cue to scroll: the canvas
+   owns every one-finger gesture, so that strip and the masthead are where the page can be scrolled
+   from. svh, not dvh, keeps the stage from growing when the browser toolbars retract. */
+@media (max-width: 55.99rem) and (orientation: portrait) {
+	.mountain .stage {
+		height: clamp(18rem, calc(100svh - 17rem), 46rem);
+	}
+}
+
 @media (min-width: 56rem) {
 	.layout {
 		grid-template-areas: none;
