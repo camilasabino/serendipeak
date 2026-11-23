@@ -74,7 +74,7 @@ export const SUMMIT_MARKER_STYLE = {
 	},
 	pill: {
 		/** The summit pill's height, padding and gap relative to the atlas pill; its type is not scaled. */
-		summitScale: 0.88,
+		summitScale: 0.81,
 		height: 42,
 		paddingLeft: 12.8,
 		paddingRight: 14.4,

@@ -43,7 +43,7 @@ import { AtlasMarkers } from './AtlasMarkers';
 import { AtlasPicker } from './AtlasPicker';
 import type { CesiumModule } from './CesiumModule';
 import { createCesiumTerrainSource } from './cesiumTerrain';
-import { SummitMarkers } from './SummitMarkers';
+import { COMPACT_STAGE_QUERY, SummitMarkers } from './SummitMarkers';
 import { ViewerCameraFlight } from './ViewerCameraFlight';
 import { ViewerOrbit } from './ViewerOrbit';
 import { ViewSampler } from './ViewSampler';
@@ -107,6 +107,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseInteraction: () => void = noop;
 	private releaseFailure: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
+	private readonly summitMarkers: SummitMarkers;
 	private destroyed = false;
 
 	static async create(
@@ -248,7 +249,13 @@ export class CesiumGlobeScene implements GlobeScene {
 			reducedMotion: () => this.reducedMotion.matches
 		});
 
-		const markers = new SummitMarkers(cesium, viewer, sprites);
+		const markers = new SummitMarkers(
+			cesium,
+			viewer,
+			sprites,
+			window.matchMedia(COMPACT_STAGE_QUERY)
+		);
+		this.summitMarkers = markers;
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
 		this.director = new CameraDirector(this.flight, markers, {
 			cameraHeight: () => viewer.camera.positionCartographic.height,
@@ -622,6 +629,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['atlas look', () => this.atlasLook.release()],
 			['atlas picker', () => this.atlasPicker.release()],
 			['atlas markers', () => this.atlasMarkers.release()],
+			['summit markers', () => this.summitMarkers.hide()],
 			['camera', () => this.camera.stop()],
 			['camera flight', () => this.flight.release()],
 			[

@@ -138,7 +138,25 @@ test.describe('@webgl summit marker', () => {
 		});
 	});
 
-	test('keeps a long name between the stage controls on a phone-wide stage', async ({
+	test('leaves the disc alone on the phone layout and brings the pill back on the desktop layout', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto(`/mountains/${ACONCAGUA.slug}`);
+		await expectReadyStage(page);
+
+		await expect.poll(async () => (await readSummit(page))?.disc !== undefined).toBe(true);
+		await expect.poll(async () => (await readSummit(page))?.pill).toBeUndefined();
+
+		await page.setViewportSize(DESKTOP);
+		await expectPillAboveDisc(page);
+
+		await page.setViewportSize({ width: 390, height: 844 });
+		await expect.poll(async () => (await readSummit(page))?.pill).toBeUndefined();
+		expect((await readSummit(page))?.disc).toBeDefined();
+	});
+
+	test('keeps a long name between the stage controls on the narrowest desktop layout', async ({
 		page,
 		request
 	}) => {
@@ -150,7 +168,7 @@ test.describe('@webgl summit marker', () => {
 			elevationMeters: 2632
 		};
 		await serveMountain(request, piton);
-		await page.setViewportSize({ width: 320, height: 640 });
+		await page.setViewportSize({ width: 900, height: 700 });
 		await page.goto('/mountains/piton-de-la-fournaise');
 		await expectReadyStage(page);
 		await expectPillAboveDisc(page);

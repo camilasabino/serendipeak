@@ -83,6 +83,7 @@ vi.mock('./ViewerCameraFlight', () => ({
 	}
 }));
 vi.mock('./SummitMarkers', () => ({
+	COMPACT_STAGE_QUERY: '(max-width: 55.99rem)',
 	SummitMarkers: class {
 		hide() {}
 		show() {}

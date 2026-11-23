@@ -57,7 +57,33 @@ class FakeSprites implements SummitSpriteSource {
 	}
 }
 
-function setup(canvas = { width: 1000, clientWidth: 1000 }) {
+class FakeLayout {
+	matches: boolean;
+	private readonly listeners = new Set<() => void>();
+
+	constructor(compact: boolean) {
+		this.matches = compact;
+	}
+
+	get listenerCount(): number {
+		return this.listeners.size;
+	}
+
+	addEventListener(_type: 'change', listener: () => void): void {
+		this.listeners.add(listener);
+	}
+
+	removeEventListener(_type: 'change', listener: () => void): void {
+		this.listeners.delete(listener);
+	}
+
+	switchTo(compact: boolean): void {
+		this.matches = compact;
+		[...this.listeners].forEach((listener) => listener());
+	}
+}
+
+function setup(canvas = { width: 1000, clientWidth: 1000 }, compact = false) {
 	const viewer = {
 		entities: new cesium.EntityCollection(),
 		scene: { canvas },
@@ -67,10 +93,16 @@ function setup(canvas = { width: 1000, clientWidth: 1000 }) {
 		}
 	};
 	const sprites = new FakeSprites();
-	const markers = new SummitMarkers(cesium as unknown as CesiumModule, viewer as never, sprites);
+	const layout = new FakeLayout(compact);
+	const markers = new SummitMarkers(
+		cesium as unknown as CesiumModule,
+		viewer as never,
+		sprites,
+		layout
+	);
 	const settle = () => new Promise((resolve) => setTimeout(resolve));
 
-	return { markers, viewer, sprites, settle };
+	return { markers, viewer, sprites, settle, layout };
 }
 
 describe('SummitMarkers', () => {
@@ -209,5 +241,75 @@ describe('SummitMarkers', () => {
 		markers.hide();
 
 		expect(viewer.entities.getById('summit-label')).toBeUndefined();
+	});
+
+	describe('on the phone layout', () => {
+		it('keeps the disc and never draws a pill', async () => {
+			const { markers, viewer, sprites, settle } = setup(undefined, true);
+
+			markers.show(SUMMIT);
+			await settle();
+
+			expect(viewer.entities.values.map((entity) => entity.id)).toEqual(['summit-marker']);
+			expect(sprites.pillRequests).toHaveLength(0);
+		});
+
+		it('drops a pill still being drawn when the layout turns compact, and restores it on return', async () => {
+			const { markers, viewer, sprites, settle, layout } = setup();
+
+			markers.show(SUMMIT);
+			layout.switchTo(true);
+			sprites.finish(0);
+			await settle();
+			expect(viewer.entities.values.map((entity) => entity.id)).toEqual(['summit-marker']);
+
+			layout.switchTo(false);
+			sprites.finish(1);
+			await settle();
+			expect(viewer.entities.values.map((entity) => entity.id).sort()).toEqual([
+				'summit-label',
+				'summit-marker'
+			]);
+		});
+
+		it('removes a shown pill when the layout turns compact, leaving the disc where it was', async () => {
+			const { markers, viewer, sprites, settle, layout } = setup();
+
+			markers.show(SUMMIT);
+			sprites.finish();
+			await settle();
+			const before = viewer.entities.getById('summit-marker')!.position!.getValue(NOW)!;
+
+			layout.switchTo(true);
+
+			expect(viewer.entities.values.map((entity) => entity.id)).toEqual(['summit-marker']);
+			expect(
+				cesium.Cartesian3.equals(
+					viewer.entities.getById('summit-marker')!.position!.getValue(NOW)!,
+					before
+				)
+			).toBe(true);
+		});
+
+		it('listens only while a summit is showing', () => {
+			const { markers, layout } = setup();
+
+			markers.show(SUMMIT);
+			markers.show({ ...SUMMIT, name: 'Weisshorn' });
+			expect(layout.listenerCount).toBe(1);
+
+			markers.hide();
+			expect(layout.listenerCount).toBe(0);
+		});
+
+		it('ignores a layout change once nothing is showing', async () => {
+			const { markers, viewer, layout } = setup();
+
+			markers.show(SUMMIT);
+			markers.hide();
+			layout.switchTo(false);
+
+			expect(viewer.entities.values).toHaveLength(0);
+		});
 	});
 });
