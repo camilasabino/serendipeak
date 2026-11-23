@@ -172,6 +172,12 @@ interface FakeViewer {
 	destroy: ReturnType<typeof vi.fn>;
 }
 
+interface AntialiasingProbe {
+	msaaSamples: number;
+	postProcessStages: { fxaa: { enabled: boolean } };
+	canvas: EventTarget;
+}
+
 class FakeLinkElement {
 	readonly sheet = {};
 }
@@ -369,6 +375,42 @@ describe('CesiumGlobeScene.create after the viewer exists', () => {
 			3,
 			{ eventType: 3, modifier: 1 }
 		]);
+	});
+
+	it('swaps MSAA for FXAA when the context reports an Adreno 830', async () => {
+		cesium.viewer = fakeViewer();
+		const scene = cesium.viewer.scene as unknown as AntialiasingProbe;
+		scene.msaaSamples = 4;
+		scene.postProcessStages = { fxaa: { enabled: false } };
+		scene.canvas = Object.assign(new EventTarget(), {
+			getContext: () => ({
+				getExtension: () => ({ UNMASKED_RENDERER_WEBGL: 1 }),
+				getParameter: () => 'ANGLE (Qualcomm, Adreno (TM) 830, OpenGL ES 3.2)'
+			})
+		});
+
+		await create();
+
+		expect(scene.msaaSamples).toBe(1);
+		expect(scene.postProcessStages.fxaa.enabled).toBe(true);
+	});
+
+	it('leaves MSAA and FXAA alone on any other renderer', async () => {
+		cesium.viewer = fakeViewer();
+		const scene = cesium.viewer.scene as unknown as AntialiasingProbe;
+		scene.msaaSamples = 4;
+		scene.postProcessStages = { fxaa: { enabled: false } };
+		scene.canvas = Object.assign(new EventTarget(), {
+			getContext: () => ({
+				getExtension: () => ({ UNMASKED_RENDERER_WEBGL: 1 }),
+				getParameter: () => 'ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)'
+			})
+		});
+
+		await create();
+
+		expect(scene.msaaSamples).toBe(4);
+		expect(scene.postProcessStages.fxaa.enabled).toBe(false);
 	});
 
 	it('keeps the viewer alive when initialization succeeds', async () => {

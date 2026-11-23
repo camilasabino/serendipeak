@@ -13,6 +13,55 @@ export const VIEWER_OPTIONS = {
 	showRenderLoopErrors: false
 } as const;
 
+// With 4x MSAA, Chrome on an Adreno 830 drops the summit billboards for single frames while the
+// camera moves away from them. One sample plus FXAA does not, and keeps the billboards' depth test
+// against the terrain. Only this GPU was measured, so nothing broader matches.
+const MSAA_FLICKER_RENDERER = /\bAdreno \(TM\) 830\b/;
+
+interface RendererContext {
+	getExtension(name: string): { UNMASKED_RENDERER_WEBGL: number } | null;
+	getParameter(parameter: number): unknown;
+}
+
+interface AntialiasingTarget {
+	msaaSamples: number;
+	canvas: { getContext?(contextId: string): unknown };
+	postProcessStages: { fxaa: { enabled: boolean } };
+}
+
+export function isMsaaFlickerRenderer(renderer: unknown): boolean {
+	return typeof renderer === 'string' && MSAA_FLICKER_RENDERER.test(renderer);
+}
+
+function unmaskedRenderer(canvas: AntialiasingTarget['canvas']): unknown {
+	// A canvas returns the context it already has for a type, so this creates none.
+	const context = (canvas.getContext?.('webgl2') ?? canvas.getContext?.('webgl')) as
+		RendererContext | null | undefined;
+	const info = context?.getExtension('WEBGL_debug_renderer_info');
+
+	return info ? context?.getParameter(info.UNMASKED_RENDERER_WEBGL) : undefined;
+}
+
+/**
+ * Swaps MSAA for FXAA on the GPU that flickers with it. A renderer that is masked, unreadable or
+ * anything else keeps Cesium's defaults. Run before the first frame; no Viewer rebuild is needed.
+ */
+export function avoidMsaaFlicker(scene: AntialiasingTarget): void {
+	let renderer: unknown;
+	try {
+		renderer = unmaskedRenderer(scene.canvas);
+	} catch {
+		// Reading the renderer is only a hint; a context that refuses to answer keeps the defaults.
+		return;
+	}
+	if (!isMsaaFlickerRenderer(renderer)) {
+		return;
+	}
+
+	scene.msaaSamples = 1;
+	scene.postProcessStages.fxaa.enabled = true;
+}
+
 interface CameraEventBinding {
 	eventType: number;
 	modifier?: number;

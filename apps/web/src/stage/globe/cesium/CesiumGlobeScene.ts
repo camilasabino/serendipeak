@@ -30,7 +30,12 @@ import type { StageSize } from '../stageFrame';
 import { SummitSprites } from '../summitSprites';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
-import { VIEWER_OPTIONS, disableEntityPicking, enableTrackpadPinchZoom } from '../viewerOptions';
+import {
+	VIEWER_OPTIONS,
+	avoidMsaaFlicker,
+	disableEntityPicking,
+	enableTrackpadPinchZoom
+} from '../viewerOptions';
 import { ZOOM_FLIGHT_SECONDS, type ZoomDirection, type ZoomResult } from '../zoomStep';
 import { releaseBestEffort } from '../../releaseBestEffort';
 import { AtlasLook } from './AtlasLook';
@@ -176,6 +181,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			failedBaseLayer?.attach(viewer.scene.imageryLayers);
 			disableEntityPicking(viewer, cesium.ScreenSpaceEventType);
 			enableTrackpadPinchZoom(viewer.scene.screenSpaceCameraController, cesium);
+			avoidMsaaFlicker(viewer.scene);
 
 			const built = new CesiumGlobeScene({
 				cesium,
