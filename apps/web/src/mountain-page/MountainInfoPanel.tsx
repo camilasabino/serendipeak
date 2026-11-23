@@ -7,7 +7,7 @@ import {
 	formatCoordinates,
 	formatCountries,
 	formatPlaceParts,
-	formatRegion
+	formatRegionPath
 } from './format';
 import { googleMapsUrl } from './googleMaps';
 import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
@@ -39,7 +39,7 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 				{plate}
 				{summary && <p className={styles.lede}>{summary}</p>}
 				<Facts>
-					{region && <Fact term="Region">{formatRegion(region)}</Fact>}
+					{region && <Fact term="Region">{formatRegionPath(region)}</Fact>}
 					{countryNames.length > 0 && (
 						<Fact term={countryNames.length === 1 ? 'Country' : 'Countries'}>
 							{formatCountries(countryNames)}

@@ -102,7 +102,7 @@ describe('MountainInfoPanel', () => {
 		expect(textsOf(render({ region }), 'dd')[0]).toBe('Alpha Chain');
 	});
 
-	it('shows the region followed by its nearest ancestor only', () => {
+	it('shows the whole hierarchy, root first', () => {
 		const region = {
 			slug: 'gamma-ridge',
 			name: 'Gamma Ridge',
@@ -112,7 +112,7 @@ describe('MountainInfoPanel', () => {
 			]
 		};
 
-		expect(textsOf(render({ region }), 'dd')[0]).toBe('Gamma Ridge, Beta Range');
+		expect(textsOf(render({ region }), 'dd')[0]).toBe('Alpha Chain › Beta Range › Gamma Ridge');
 	});
 
 	it('places the plate between the place line and the lede, and the action after the facts', () => {
@@ -167,6 +167,23 @@ describe('MountainInfoPanel', () => {
 			});
 
 			expect(textsOf(html, 'p')[1]).toBe('Andes· Argentina and Chile');
+		});
+
+		it('keeps the place line concise while the Region fact shows the whole hierarchy', () => {
+			const html = render({
+				region: {
+					slug: 'principal-cordillera',
+					name: 'Principal Cordillera',
+					ancestors: [
+						{ slug: 'andes', name: 'Andes' },
+						{ slug: 'southern-andes', name: 'Southern Andes' }
+					]
+				},
+				countries: [{ code: 'AR', name: 'Argentina' }]
+			});
+
+			expect(textsOf(html, 'p')[1]).toBe('Principal Cordillera· Argentina');
+			expect(textsOf(html, 'dd')[0]).toBe('Andes › Southern Andes › Principal Cordillera');
 		});
 
 		it('keeps a place line without a region or a summary', () => {

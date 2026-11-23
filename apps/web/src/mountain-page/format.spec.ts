@@ -3,7 +3,8 @@ import {
 	distinctCountryNames,
 	formatCoordinates,
 	formatCountries,
-	formatPlaceParts
+	formatPlaceParts,
+	formatRegionPath
 } from './format';
 
 describe('formatCoordinates', () => {
@@ -99,6 +100,45 @@ describe('formatPlaceParts', () => {
 			'Sentinel Range',
 			'Antarctica'
 		]);
+	});
+});
+
+describe('formatRegionPath', () => {
+	const node = (name: string) => ({ slug: name.toLowerCase().replace(/ /g, '-'), name });
+
+	it('names a root region alone', () => {
+		expect(formatRegionPath({ ...node('Andes'), ancestors: [] })).toBe('Andes');
+	});
+
+	it('puts one ancestor before the region', () => {
+		expect(formatRegionPath({ ...node('Cordillera Blanca'), ancestors: [node('Andes')] })).toBe(
+			'Andes › Cordillera Blanca'
+		);
+	});
+
+	it('keeps the root-first order of every ancestor, as for Aconcagua', () => {
+		const region = {
+			...node('Principal Cordillera'),
+			ancestors: [node('Andes'), node('Southern Andes')]
+		};
+
+		expect(formatRegionPath(region)).toBe('Andes › Southern Andes › Principal Cordillera');
+	});
+
+	it('supports any depth', () => {
+		const names = ['A', 'B', 'C', 'D', 'E', 'F'];
+		const region = { ...node('G'), ancestors: names.map(node) };
+
+		expect(formatRegionPath(region)).toBe('A › B › C › D › E › F › G');
+	});
+
+	it('does not repeat a name that follows itself', () => {
+		const region = {
+			...node('Southern Andes'),
+			ancestors: [node('Andes'), node('Andes'), node('Southern Andes')]
+		};
+
+		expect(formatRegionPath(region)).toBe('Andes › Southern Andes');
 	});
 });
 

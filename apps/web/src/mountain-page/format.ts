@@ -38,6 +38,15 @@ export function formatRegion({ name, ancestors }: Region): string {
 	return parent === undefined ? name : `${name}, ${parent.name}`;
 }
 
+const REGION_PATH_SEPARATOR = ' › ';
+
+/** The whole hierarchy, root first, ending with the region itself: "Andes › Southern Andes". */
+export function formatRegionPath({ name, ancestors }: Region): string {
+	const names = [...ancestors.map((ancestor) => ancestor.name), name];
+
+	return names.filter((part, index) => part !== names[index - 1]).join(REGION_PATH_SEPARATOR);
+}
+
 /** The country names that say more than the continent does; Antarctica is both. */
 export function distinctCountryNames(continent: Continent, countries: Country[]): string[] {
 	return countries.map(({ name }) => name).filter((name) => name !== continent.name);
