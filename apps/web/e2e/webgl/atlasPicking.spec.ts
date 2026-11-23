@@ -260,7 +260,7 @@ test.describe('@webgl atlas marker gestures', () => {
 
 			const away = await onPage(page, bare);
 			await page.mouse.move(away.x, away.y);
-			await expect.poll(cursor).toBe('auto');
+			await expect.poll(cursor).toBe('grab');
 			expect((await layer(page)).hovered).toBeUndefined();
 		});
 
