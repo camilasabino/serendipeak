@@ -17,8 +17,11 @@ from serendipeak.catalog.publication import PublicationViolation, publication_vi
 class MountainUpdate:
     """The editable content and geography of a mountain, as the whole state an editor saves.
 
-    Every field is written, so an optional one left as None is cleared. The name and summary are
-    English only (translations are not written before the localization milestone). The status,
+    Every field is written, so an optional one left as None is cleared. The name, summary and
+    description are English only (translations are not written before the localization
+    milestone). `stored_summary` is the summary the mountain has when the editor read it: a
+    summary that is still that text is not judged against the length limit, so a summary saved
+    under a former limit does not keep the rest of the mountain from being edited. The status,
     the coordinates and the camera are not part of an update. A photograph replaces the stored
     one with its credit. A credit alone changes the credit of the stored photograph and keeps
     its file. Removing the photograph deletes the record with its credit. These three are
@@ -33,6 +36,8 @@ class MountainUpdate:
     country_codes: tuple[str, ...] = ()
     region_id: UUID | None = None
     summary: str | None = None
+    description: str | None = None
+    stored_summary: str | None = None
     osm_node_id: int | None = None
     wikidata_id: str | None = None
     photograph: NewPhotograph | None = None
@@ -57,6 +62,8 @@ def mountain_update_violations(update: MountainUpdate) -> tuple[NewMountainViola
         name=update.name,
         elevation_meters=update.elevation_meters,
         summary=update.summary,
+        description=update.description,
+        stored_summary=update.stored_summary,
         osm_node_id=update.osm_node_id,
         wikidata_id=update.wikidata_id,
     )

@@ -62,6 +62,7 @@
 		<fieldset class="form-section">
 			<legend class="form-section__title">Content</legend>
 			{% include "studio/components/field.html" with field=mountain_form.summary %}
+			{% include "studio/components/field.html" with field=mountain_form.description %}
 			{% include "studio/components/field.html" with field=mountain_form.wikidata_id %}
 			{% include "studio/components/field.html" with field=mountain_form.osm_node_id %}
 		</fieldset>
@@ -109,4 +110,5 @@
 	<script src="{% static 'studio/unsaved-changes.js' %}" defer></script>
 	<script src="{% static 'studio/photograph-upload.js' %}" defer></script>
 	<script src="{% static 'studio/country-filter.js' %}" defer></script>
+	<script src="{% static 'studio/word-counter.js' %}" defer></script>
 {% endblock %}

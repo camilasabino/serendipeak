@@ -36,7 +36,10 @@ from serendipeak.catalog.regions import (
 from serendipeak.catalog.slug import is_valid_slug
 
 SNAPSHOT_FORMAT = "serendipeak.catalog-snapshot"
-SNAPSHOT_FORMAT_VERSION = 1
+SNAPSHOT_FORMAT_VERSION = 2
+# Version 1 predates the mountain description. It stays readable, because backups made under it
+# must remain restorable: its mountains are read as having no description.
+_LEGACY_SNAPSHOT_FORMAT_VERSIONS = (1,)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
@@ -44,7 +47,7 @@ _WIKIDATA_ID = re.compile(WIKIDATA_ID_PATTERN)
 _DOCUMENT_KEYS = {"format", "version", "content_sha256", "content"}
 _CONTENT_KEYS = {"regions", "mountains", "daily_discoveries"}
 _REGION_KEYS = {"id", "slug", "parent", "name", "wikidata_id"}
-_MOUNTAIN_KEYS = {
+_LEGACY_MOUNTAIN_KEYS = {
     "id",
     "slug",
     "name",
@@ -63,6 +66,7 @@ _MOUNTAIN_KEYS = {
     "created_at",
     "updated_at",
 }
+_MOUNTAIN_KEYS = _LEGACY_MOUNTAIN_KEYS | {"description"}
 _TEXT_KEYS = {"en", "es", "pt"}
 _CAMERA_KEYS = {"heading_degrees", "pitch_degrees", "range_meters", "framing"}
 _FRAMING_KEYS = {"x", "y"}
@@ -153,14 +157,22 @@ def snapshot_document(catalog: CatalogSnapshot) -> dict:
 def verified_snapshot_content(document: object, expected_sha256: str) -> Mapping:
     """The content of a document whose checksum is the one expected, and nothing else is read:
     a document that was altered, truncated or is not the one the caller means is refused before
-    anything is judged or stored."""
+    anything is judged or stored.
+
+    The content of a legacy version is returned in the current shape, so everything that reads it
+    knows one format; the checksum is judged on the content as the document carries it."""
     if not isinstance(expected_sha256, str) or not _SHA256.fullmatch(expected_sha256):
         raise InvalidCatalogSnapshot("the expected checksum is not a lowercase SHA-256 digest")
 
     fields = _object(document, _DOCUMENT_KEYS, "snapshot")
-    if fields["format"] != SNAPSHOT_FORMAT or fields["version"] != SNAPSHOT_FORMAT_VERSION:
+    version = fields["version"]
+    if fields["format"] != SNAPSHOT_FORMAT or version not in (
+        SNAPSHOT_FORMAT_VERSION,
+        *_LEGACY_SNAPSHOT_FORMAT_VERSIONS,
+    ):
         raise InvalidCatalogSnapshot(
             f"snapshot is not {SNAPSHOT_FORMAT} version {SNAPSHOT_FORMAT_VERSION}"
+            f" or one of the legacy versions {list(_LEGACY_SNAPSHOT_FORMAT_VERSIONS)}"
         )
 
     content = _object(fields["content"], _CONTENT_KEYS, "content")
@@ -175,7 +187,16 @@ def verified_snapshot_content(document: object, expected_sha256: str) -> Mapping
             f"the snapshot has checksum {digest}, not the expected {expected_sha256}"
         )
 
-    return content
+    return content if version == SNAPSHOT_FORMAT_VERSION else _from_legacy_version(content)
+
+
+def _from_legacy_version(content: Mapping) -> Mapping:
+    mountains = [
+        {**_object(raw, _LEGACY_MOUNTAIN_KEYS, f"content.mountains[{index}]"), "description": None}
+        for index, raw in enumerate(_list(content["mountains"], "content.mountains"))
+    ]
+
+    return {**content, "mountains": mountains}
 
 
 def catalog_from_snapshot_content(
@@ -229,6 +250,9 @@ def _mountain_content(entry: CatalogMountain) -> dict:
         "countries": sorted(country.code for country in mountain.countries),
         "region": None if mountain.region is None else mountain.region.region.slug,
         "summary": None if mountain.summary is None else _text_content(mountain.summary),
+        "description": None
+        if mountain.description is None
+        else _text_content(mountain.description),
         "camera": None if mountain.camera is None else _camera_content(mountain.camera),
         "osm_node_id": mountain.osm_node_id,
         "wikidata_id": mountain.wikidata_id,
@@ -380,6 +404,7 @@ def _mountain(raw, label, reference, regions, region_ids):
         ),
         region=region,
         summary=_optional(_localized, fields["summary"], f"{label} summary"),
+        description=_optional(_localized, fields["description"], f"{label} description"),
         camera=_optional(_camera, fields["camera"], f"{label} camera"),
         primary_image=_optional(_image, fields["image"], f"{label} image"),
         osm_node_id=_optional(_integer, fields["osm_node_id"], f"{label} osm_node_id"),

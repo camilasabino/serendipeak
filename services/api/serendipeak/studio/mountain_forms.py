@@ -5,6 +5,13 @@ from uuid import UUID
 from django import forms
 
 from serendipeak.catalog import coordinates as coordinate_bounds
+from serendipeak.catalog.description import (
+    DESCRIPTION_MAX_WORDS,
+    DescriptionViolation,
+    description_violations,
+    normalize_description,
+    word_count,
+)
 from serendipeak.catalog.entities import (
     WIKIDATA_ID_PATTERN,
     Coordinates,
@@ -60,6 +67,7 @@ def initial_of(mountain: Mountain, options: MountainFormOptions) -> dict:
         ),
         "countries": [country.code for country in mountain.countries],
         "summary": "" if mountain.summary is None else mountain.summary.en,
+        "description": "" if mountain.description is None else mountain.description.en,
         "osm_node_id": mountain.osm_node_id,
         "wikidata_id": mountain.wikidata_id or "",
     }
@@ -131,10 +139,28 @@ class MountainForm(forms.Form):
         label="Summary",
         required=False,
         empty_value=None,
-        widget=forms.Textarea(attrs={"rows": 3, "maxlength": SUMMARY_MAX_LENGTH}),
+        widget=forms.Textarea(attrs={"rows": 4, "maxlength": SUMMARY_MAX_LENGTH}),
         help_text=(
             f"One sentence of at most {SUMMARY_MAX_LENGTH} characters, with a capitalized first "
-            "word and a final period."
+            "word and a final period. It opens the page, so it has to stand on its own."
+        ),
+    )
+    description = forms.CharField(
+        label="Description",
+        required=False,
+        empty_value=None,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 14,
+                "spellcheck": "true",
+                "data-word-counter": "",
+                "data-word-limit": DESCRIPTION_MAX_WORDS,
+            }
+        ),
+        help_text=(
+            f"Plain text of at most {DESCRIPTION_MAX_WORDS} words, in English: the geography, "
+            "geology, history and mountaineering of the peak. Separate paragraphs with an empty "
+            "line. No markup."
         ),
     )
     osm_node_id = forms.IntegerField(label="OpenStreetMap node id", required=False)
@@ -153,6 +179,7 @@ class MountainForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.stored = stored
         self._options = options
+        self._warn_of_long_stored_summary()
         self.fields["continent"].choices = [
             ("", "Select a continent"),
             *((continent.code, continent.name.en) for continent in options.continents),
@@ -177,6 +204,18 @@ class MountainForm(forms.Form):
             del self.fields["confirm_camera_reset"]
         if stored.status is not MountainStatus.DRAFT:
             self.fields["slug"].help_text = messages.SLUG_CHANGES_PUBLIC_ADDRESS
+
+    def _warn_of_long_stored_summary(self):
+        length = len(self._stored_summary or "")
+        if length > SUMMARY_MAX_LENGTH:
+            self.fields["summary"].help_text = messages.summary_over_limit(length)
+
+    @property
+    def _stored_summary(self) -> str | None:
+        if self.stored is None or self.stored.summary is None:
+            return None
+
+        return self.stored.summary.en
 
     def clean_slug(self):
         slug = self.cleaned_data["slug"]
@@ -218,13 +257,35 @@ class MountainForm(forms.Form):
         summary = self.cleaned_data["summary"]
         if summary is None:
             return None
-        violations = summary_violations(summary)
+        violations = summary_violations(summary, stored=self._stored_summary)
         if violations:
             raise forms.ValidationError(
                 [messages.SUMMARY_MESSAGES[violation] for violation in violations]
             )
 
         return summary
+
+    def clean_description(self):
+        description = self.cleaned_data["description"]
+        if description is None:
+            return None
+        # A browser posts line breaks as carriage returns and line feeds; the text is stored and
+        # judged in its normalized form.
+        normalized = normalize_description(description)
+        violations = description_violations(normalized)
+        if violations:
+            raise forms.ValidationError(
+                [self._description_message(violation, normalized) for violation in violations]
+            )
+
+        return normalized
+
+    @staticmethod
+    def _description_message(violation: DescriptionViolation, text: str) -> str:
+        if violation is DescriptionViolation.TOO_MANY_WORDS:
+            return messages.description_too_long(word_count(text))
+
+        return messages.DESCRIPTION_MESSAGES[violation]
 
     def clean_osm_node_id(self):
         osm_node_id = self.cleaned_data["osm_node_id"]
@@ -290,6 +351,7 @@ class MountainForm(forms.Form):
             country_codes=tuple(cleaned["countries"]),
             region_id=self._region_id(),
             summary=cleaned["summary"],
+            description=cleaned["description"],
             osm_node_id=cleaned["osm_node_id"],
             wikidata_id=cleaned["wikidata_id"],
             photograph=change.photograph,
@@ -306,6 +368,8 @@ class MountainForm(forms.Form):
             country_codes=tuple(cleaned["countries"]),
             region_id=self._region_id(),
             summary=cleaned["summary"],
+            description=cleaned["description"],
+            stored_summary=self._stored_summary,
             osm_node_id=cleaned["osm_node_id"],
             wikidata_id=cleaned["wikidata_id"],
             photograph=change.photograph,

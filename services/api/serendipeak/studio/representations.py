@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
+from serendipeak.catalog.description import DESCRIPTION_MAX_WORDS, word_count
 from serendipeak.catalog.entities import (
     PUBLIC_STATUSES,
     CanonicalCamera,
@@ -60,6 +61,7 @@ VIOLATION_REASONS = {
     ),
     PublicationViolation.IMAGE_DIMENSIONS_MISSING: "The photograph dimensions are missing.",
     PublicationViolation.SUMMARY_INVALID: "The summary breaks the summary rules.",
+    PublicationViolation.DESCRIPTION_INVALID: "The description breaks the description rules.",
     PublicationViolation.LINK_NOT_HTTPS: "A public link does not use https://.",
 }
 UNSAFE_LINK_REASONS = {
@@ -114,6 +116,11 @@ def translations(text: LocalizedText | None) -> list[dict]:
         for code, language in LANGUAGES
         if (value := getattr(text, code))
     ]
+
+
+def paragraphs(text: LocalizedText | None) -> list[str]:
+    """The English paragraphs of a text, which a stored description separates by an empty line."""
+    return [] if text is None else text.en.split("\n\n")
 
 
 def photograph_url(media_base_url: str, image: PrimaryImage | None) -> str | None:
@@ -234,6 +241,14 @@ def detail_context(
         "status": status_presentation(mountain.status),
         "name_translations": translations(mountain.name),
         "summary_translations": translations(mountain.summary),
+        "summary_length": None if mountain.summary is None else len(mountain.summary.en),
+        "max_summary_length": SUMMARY_MAX_LENGTH,
+        "description_paragraphs": paragraphs(mountain.description),
+        "description_words": None
+        if mountain.description is None
+        else word_count(mountain.description.en),
+        "max_description_words": DESCRIPTION_MAX_WORDS,
+        "description_translations": translations(mountain.description),
         "continent_translations": translations(mountain.continent.name),
         "region_refs": refs,
         "region_translations": [
@@ -284,6 +299,7 @@ def form_context(
         # A page that comes back refused already holds edits the server does not have.
         "unsaved_on_load": any(form.is_bound and form.errors for form in forms),
         "max_summary_length": SUMMARY_MAX_LENGTH,
+        "max_description_words": DESCRIPTION_MAX_WORDS,
         "camera_editor_url": None if is_new else camera_editor_url(web_origin, mountain),
     }
 

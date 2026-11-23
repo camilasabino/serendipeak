@@ -83,9 +83,23 @@
 			{% if mountain.summary %}
 				<p class="summary">{{ mountain.summary.en }}</p>
 				{% include "studio/components/localized.html" with items=summary_translations %}
+				{% if summary_length > max_summary_length %}
+					<p class="panel__note">This summary has {{ summary_length }} characters, more than the {{ max_summary_length }} allowed now. It stays as it is until you shorten it in the editor.</p>
+				{% endif %}
 			{% else %}
 				<p class="empty-value">No summary yet.</p>
 			{% endif %}
+			<div class="description">
+				<h3 class="panel__subtitle" id="description-title">Description{% if description_words %} <span class="description__count">({{ description_words }} of {{ max_description_words }} words)</span>{% endif %}</h3>
+				{% if description_paragraphs %}
+					<div class="description__text">
+						{% for paragraph in description_paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+					</div>
+					{% include "studio/components/localized.html" with items=description_translations %}
+				{% else %}
+					<p class="empty-value">No description yet.</p>
+				{% endif %}
+			</div>
 			<dl class="ledger">
 				<div class="ledger__row"><dt>Elevation</dt><dd class="numeric">{{ mountain.elevation_meters }} m</dd></div>
 				<div class="ledger__row"><dt>Coordinates</dt><dd class="numeric">{{ latitude }}, {{ longitude }}</dd></div>

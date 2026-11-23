@@ -120,6 +120,26 @@ def test_the_photograph_objects_are_stored_before_the_row_is_written(create_moun
     assert public == {created.primary_image.media.page_key, created.primary_image.media.viewer_key}
 
 
+def test_a_draft_keeps_the_paragraphs_of_its_description(create_mountain, store):
+    text = "First paragraph.\n\nSecond paragraph."
+
+    created = create_mountain.execute(new_mountain(description=text))
+
+    assert created.description.en == text
+    assert store.mountain("new-peak").description.en == text
+
+
+def test_a_draft_may_have_a_summary_at_the_limit_and_a_description_at_the_limit(
+    create_mountain,
+):
+    created = create_mountain.execute(
+        new_mountain(summary="A" * 129 + ".", description=" ".join(["word"] * 350))
+    )
+
+    assert len(created.summary.en) == 130
+    assert len(created.description.en.split()) == 350
+
+
 def test_a_new_draft_is_found_in_the_store(create_mountain, store):
     created = create_mountain.execute(new_mountain())
 
@@ -146,6 +166,11 @@ def test_a_new_draft_is_found_in_the_store(create_mountain, store):
         ({"summary": ""}, NewMountainViolation.SUMMARY_INVALID),
         ({"summary": "x" * 201}, NewMountainViolation.SUMMARY_INVALID),
         ({"summary": " padded."}, NewMountainViolation.SUMMARY_INVALID),
+        ({"summary": "A" * 130 + "."}, NewMountainViolation.SUMMARY_INVALID),
+        ({"description": ""}, NewMountainViolation.DESCRIPTION_INVALID),
+        ({"description": "word " * 351}, NewMountainViolation.DESCRIPTION_INVALID),
+        ({"description": "One.\r\n\r\nTwo."}, NewMountainViolation.DESCRIPTION_INVALID),
+        ({"description": "A <b>claim</b>."}, NewMountainViolation.DESCRIPTION_INVALID),
         ({"osm_node_id": 0}, NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE),
         ({"wikidata_id": "39739"}, NewMountainViolation.WIKIDATA_ID_INVALID),
         ({"wikidata_id": "Q0"}, NewMountainViolation.WIKIDATA_ID_INVALID),

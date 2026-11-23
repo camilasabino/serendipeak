@@ -6,10 +6,16 @@ from django.core.management.base import CommandError
 from django.db import OperationalError
 
 from serendipeak.catalog.errors import CatalogAlreadyPopulated
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.cli.errors import command_error
 from serendipeak.errors import InfrastructureError
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
-from tests.support.catalog import fixture_catalog, fixture_catalog_with_media
+from tests.support.catalog import (
+    catalog_mountain,
+    catalog_of,
+    fixture_catalog,
+    fixture_catalog_with_media,
+)
 from tests.support.records import mountain_record
 
 pytestmark = pytest.mark.django_db
@@ -34,6 +40,22 @@ def test_check_catalog_passes_on_a_catalog_whose_photographs_all_have_media():
     stdout, _ = run("check_catalog")
 
     assert stdout == "73 active mountains satisfy the publication invariants.\n"
+
+
+def test_check_catalog_lists_the_summaries_to_shorten_without_failing():
+    DjangoCatalogStore().load(
+        catalog_of(
+            catalog_mountain("long-peak", summary=LocalizedText(en="A" * 150 + ".")),
+            catalog_mountain("short-peak"),
+        )
+    )
+
+    stdout, _ = run("check_catalog")
+
+    assert stdout == (
+        "1 summaries exceed the length limit and are kept until they are shortened: long-peak.\n"
+        "2 active mountains satisfy the publication invariants.\n"
+    )
 
 
 def test_check_catalog_reports_every_photograph_still_awaiting_media():

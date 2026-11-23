@@ -216,6 +216,9 @@ class MountainRecord(models.Model):
     summary_en = models.TextField(null=True)
     summary_es = models.TextField(null=True)
     summary_pt = models.TextField(null=True)
+    description_en = models.TextField(null=True)
+    description_es = models.TextField(null=True)
+    description_pt = models.TextField(null=True)
     camera_heading_degrees = models.FloatField(null=True)
     camera_pitch_degrees = models.FloatField(null=True)
     camera_range_meters = models.FloatField(null=True)
@@ -274,6 +277,23 @@ class MountainRecord(models.Model):
                 condition=Q(summary_en__isnull=False)
                 | Q(summary_es__isnull=True, summary_pt__isnull=True),
                 name="mountain_summary_translation_requires_english",
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("description_en"),
+                name="mountain_description_en_not_blank",
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("description_es"),
+                name="mountain_description_es_not_blank",
+            ),
+            CheckConstraint(
+                condition=_absent_or_has_text("description_pt"),
+                name="mountain_description_pt_not_blank",
+            ),
+            CheckConstraint(
+                condition=Q(description_en__isnull=False)
+                | Q(description_es__isnull=True, description_pt__isnull=True),
+                name="mountain_description_translation_requires_english",
             ),
             CheckConstraint(
                 condition=Q(status__in=MOUNTAIN_STATUSES), name="mountain_status_valid"

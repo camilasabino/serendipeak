@@ -1,13 +1,14 @@
-import re
 import unicodedata
 from enum import StrEnum
 
-SUMMARY_MAX_LENGTH = 200
+from serendipeak.catalog.plain_text import (
+    has_hidden_character,
+    has_markup,
+    is_line_break_or_control,
+    trim,
+)
 
-_HIDDEN_CHARACTERS = frozenset({"​", "﻿"})
-_LINE_SEPARATORS = frozenset({" ", " "})
-_MARKUP_CHARACTERS = ("<", ">", "`", "](")
-_CHARACTER_REFERENCE = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);")
+SUMMARY_MAX_LENGTH = 130
 
 _LOWERCASE_WORD_EXCEPTIONS = frozenset(
     {
@@ -39,13 +40,17 @@ class SummaryViolation(StrEnum):
     NOT_SENTENCE_FORM = "not_sentence_form"
 
 
-def summary_violations(text: str) -> tuple[SummaryViolation, ...]:
-    """Return why a curated summary breaks the v1 rules; empty means it is acceptable.
+def summary_violations(text: str, *, stored: str | None = None) -> tuple[SummaryViolation, ...]:
+    """Return why a curated summary breaks the rules; empty means it is acceptable.
 
-    The first six rules are the v1 loader's; the last is the v1 importer's requirement that an
-    approved text already equals its formatted form.
+    The first six rules are the v1 loader's, with a shorter length; the last is the v1
+    importer's requirement that an approved text already equals its formatted form.
+
+    The length limit applies to text being written. A text equal to the one already stored is
+    not judged by it, because summaries saved under the former limit stay valid until an editor
+    changes them.
     """
-    trimmed = _trim(text)
+    trimmed = trim(text)
     if not trimmed:
         return (SummaryViolation.BLANK,)
 
@@ -53,13 +58,13 @@ def summary_violations(text: str) -> tuple[SummaryViolation, ...]:
 
     if trimmed != text:
         violations.append(SummaryViolation.NOT_TRIMMED)
-    if any(_is_line_break_or_control(character) for character in text):
+    if any(is_line_break_or_control(character) for character in text):
         violations.append(SummaryViolation.CONTROL_CHARACTER)
-    if any(character in _HIDDEN_CHARACTERS for character in trimmed):
+    if has_hidden_character(trimmed):
         violations.append(SummaryViolation.HIDDEN_CHARACTER)
-    if len(text) > SUMMARY_MAX_LENGTH:
+    if len(text) > SUMMARY_MAX_LENGTH and text != stored:
         violations.append(SummaryViolation.TOO_LONG)
-    if _has_markup(text):
+    if has_markup(text):
         violations.append(SummaryViolation.MARKUP)
     if trimmed == text and normalize_summary(text) != text:
         violations.append(SummaryViolation.NOT_SENTENCE_FORM)
@@ -67,41 +72,21 @@ def summary_violations(text: str) -> tuple[SummaryViolation, ...]:
     return tuple(violations)
 
 
+def stored_summary_violations(text: str) -> tuple[SummaryViolation, ...]:
+    """Why a summary that is already stored breaks the rules, apart from its length."""
+    return summary_violations(text, stored=text)
+
+
 def normalize_summary(description: str) -> str:
     """Format a description the way the v1 importer does: spacing, first letter and final period.
 
     It changes formatting only, never words, and it is idempotent.
     """
-    text = _trim(description)
+    text = trim(description)
     if not text:
         return ""
 
     return _terminate(_capitalize_first_word(text))
-
-
-def _is_incidental_space(character: str) -> bool:
-    return character.isspace() or character in _HIDDEN_CHARACTERS
-
-
-def _trim(text: str) -> str:
-    start = 0
-    end = len(text)
-    while start < end and _is_incidental_space(text[start]):
-        start += 1
-    while end > start and _is_incidental_space(text[end - 1]):
-        end -= 1
-
-    return text[start:end]
-
-
-def _is_line_break_or_control(character: str) -> bool:
-    return unicodedata.category(character) == "Cc" or character in _LINE_SEPARATORS
-
-
-def _has_markup(text: str) -> bool:
-    return any(marker in text for marker in _MARKUP_CHARACTERS) or bool(
-        _CHARACTER_REFERENCE.search(text)
-    )
 
 
 def _is_letter(character: str) -> bool:
@@ -191,7 +176,7 @@ def _is_single_sentence_descriptor(text: str) -> bool:
     for character in text:
         if character == "\t":
             pass
-        elif _is_line_break_or_control(character):
+        elif is_line_break_or_control(character):
             return False
         elif character == "(":
             parentheses += 1

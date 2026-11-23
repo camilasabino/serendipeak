@@ -90,6 +90,7 @@ class Mountain:
     primary_image: PrimaryImage | None
     osm_node_id: int | None
     wikidata_id: str | None
+    description: LocalizedText | None = None
 
 
 @dataclass(frozen=True, slots=True)

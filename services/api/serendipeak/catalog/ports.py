@@ -235,7 +235,11 @@ class MountainUpdateStore(Protocol):
         slugs, for good, in the same write; a draft's old slug is released. A mountain may take
         back one of its own former slugs.
 
-        Raises UnknownMountain, SlugTaken (the current or former slug of another mountain),
+        The summary length limit is judged here, under the lock, against the summary the mountain
+        has: update.stored_summary is only what spares the earlier check, and never decides.
+
+        Raises UnknownMountain, InvalidMountain (SUMMARY_INVALID) for a changed summary over the
+        length limit, SlugTaken (the current or former slug of another mountain),
         UnknownContinent, UnknownRegion and UnknownCountries for references that reference data
         does not hold, MountainHasNoPhotograph for a credit given to a mountain without a
         photograph row, and PublicationRejected with the gate's answer, and writes nothing. When

@@ -1,4 +1,5 @@
 from serendipeak.catalog import coordinates
+from serendipeak.catalog.description import DESCRIPTION_MAX_WORDS, DescriptionViolation
 from serendipeak.catalog.errors import PhotographRejection
 from serendipeak.catalog.new_mountain import NewMountainViolation
 from serendipeak.catalog.slug import RESERVED_SLUGS
@@ -19,6 +20,7 @@ LONGITUDE_MESSAGE = (
 )
 ELEVATION_MESSAGE = "Enter a whole number of meters above zero."
 SUMMARY_MESSAGE = "The summary breaks the summary rules."
+DESCRIPTION_MESSAGE = "The description breaks the description rules."
 OSM_NODE_ID_MESSAGE = "Enter a positive OpenStreetMap node id."
 WIKIDATA_MESSAGE = "Use the Wikidata item id, such as Q39739."
 PUBLIC_LINK_MESSAGE = "Use an https:// link."
@@ -64,6 +66,32 @@ SUMMARY_MESSAGES = {
     ),
 }
 
+DESCRIPTION_MESSAGES = {
+    DescriptionViolation.BLANK: "Leave the description empty instead of blank.",
+    DescriptionViolation.NOT_NORMALIZED: (
+        "Separate paragraphs with one empty line and leave no spaces at the end of a line."
+    ),
+    DescriptionViolation.CONTROL_CHARACTER: (
+        "The description is plain text: remove tabs and other control characters."
+    ),
+    DescriptionViolation.HIDDEN_CHARACTER: "Remove the zero-width space or byte order mark.",
+    DescriptionViolation.MARKUP: (
+        "The description has no markup: no <, >, backtick, ]( or &entity;."
+    ),
+}
+
+
+def description_too_long(words: int) -> str:
+    return f"The description has at most {DESCRIPTION_MAX_WORDS} words; this one has {words}."
+
+
+def summary_over_limit(length: int) -> str:
+    return (
+        f"This summary has {length} characters, more than the {SUMMARY_MAX_LENGTH} allowed now. "
+        "It can stay as it is while you edit anything else; shorten it when you review it."
+    )
+
+
 PHOTOGRAPH_REJECTION_MESSAGES = {
     PhotographRejection.TOO_MANY_PIXELS: "The photograph has too many pixels to be processed.",
     PhotographRejection.UNSUPPORTED_FORMAT: "Use a JPEG, PNG or WebP file.",
@@ -84,6 +112,7 @@ MOUNTAIN_VIOLATION_FIELDS = {
     NewMountainViolation.COORDINATES_OUT_OF_RANGE: ("latitude", LATITUDE_MESSAGE),
     NewMountainViolation.ELEVATION_NOT_POSITIVE: ("elevation_meters", ELEVATION_MESSAGE),
     NewMountainViolation.SUMMARY_INVALID: ("summary", SUMMARY_MESSAGE),
+    NewMountainViolation.DESCRIPTION_INVALID: ("description", DESCRIPTION_MESSAGE),
     NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE: ("osm_node_id", OSM_NODE_ID_MESSAGE),
     NewMountainViolation.WIKIDATA_ID_INVALID: ("wikidata_id", WIKIDATA_MESSAGE),
 }

@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from config import composition
+from serendipeak.catalog.canonical_json import content_sha256
 from serendipeak.persistence.catalog_store import DjangoCatalogStore
 from serendipeak.persistence.models import (
     MountainCountryRecord,
@@ -232,3 +233,75 @@ def test_verify_says_when_it_did_not_compare_discoveries(exported):
 
     assert "Daily discoveries: not compared (the snapshot carries none)." in stdout
     assert "The catalog matches the snapshot." in stdout
+
+
+def test_the_exported_file_is_version_two_and_keeps_the_paragraph_breaks_of_a_description(exported):
+    path, _ = exported
+
+    document = json.loads(path.read_text(encoding="utf-8"))
+
+    assert document["version"] == 2
+    tall = next(raw for raw in document["content"]["mountains"] if raw["slug"] == "tall-peak")
+    assert tall["description"]["en"] == "The first paragraph.\n\nThe second, with a soft\nbreak."
+    assert "\\n\\nThe second" in path.read_text(encoding="utf-8")
+
+
+def test_a_snapshot_restores_the_descriptions_and_their_paragraphs(exported):
+    path, checksum = exported
+    empty_catalog()
+
+    run("load_catalog_snapshot", "--input", str(path), "--sha256", checksum)
+
+    assert MountainRecord.objects.get(slug="tall-peak").description_en == (
+        "The first paragraph.\n\nThe second, with a soft\nbreak."
+    )
+    assert MountainRecord.objects.get(slug="tall-peak").description_es == (
+        "El primer p\u00e1rrafo.\n\nEl segundo."
+    )
+    assert MountainRecord.objects.get(slug="draft-peak").description_en is None
+
+
+def legacy_file(exported, tmp_path):
+    """The snapshot as the exporter wrote it before the description existed."""
+    path, _ = exported
+    document = json.loads(path.read_text(encoding="utf-8"))
+    for raw in document["content"]["mountains"]:
+        del raw["description"]
+    document["version"] = 1
+    document["content_sha256"] = content_sha256(document["content"])
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text(json.dumps(document), encoding="utf-8")
+
+    return legacy, document["content_sha256"]
+
+
+def test_a_version_one_snapshot_still_loads_and_leaves_every_description_absent(exported, tmp_path):
+    legacy, checksum = legacy_file(exported, tmp_path)
+    empty_catalog()
+
+    stdout, _ = run("load_catalog_snapshot", "--input", str(legacy), "--sha256", checksum)
+
+    assert "Loaded and verified: the catalog matches the snapshot." in stdout
+    assert MountainRecord.objects.count() == 4
+    assert not MountainRecord.objects.exclude(description_en=None).exists()
+
+
+def test_a_version_one_snapshot_is_verified_against_a_catalog_without_descriptions(
+    exported, tmp_path
+):
+    legacy, checksum = legacy_file(exported, tmp_path)
+    MountainRecord.objects.update(description_en=None, description_es=None, description_pt=None)
+
+    stdout, _ = run("verify_catalog_snapshot", "--input", str(legacy), "--sha256", checksum)
+
+    assert "The catalog matches the snapshot." in stdout
+
+
+def test_verify_reports_a_description_that_drifted_from_the_snapshot(exported):
+    path, checksum = exported
+    MountainRecord.objects.filter(slug="tall-peak").update(description_en="Edited.")
+
+    message, stderr = failure("verify_catalog_snapshot", "--input", str(path), "--sha256", checksum)
+
+    assert message == "the stored catalog does not match the snapshot"
+    assert "differs in description" in stderr

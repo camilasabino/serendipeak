@@ -16,7 +16,7 @@ pytestmark = pytest.mark.usefixtures("media_store")
 
 NEW_URL = reverse("studio:mountain_new")
 EDIT_URL = reverse("studio:mountain_edit", args=["draft-peak"])
-SCRIPTS = ("unsaved-changes.js", "photograph-upload.js", "country-filter.js")
+SCRIPTS = ("unsaved-changes.js", "photograph-upload.js", "country-filter.js", "word-counter.js")
 
 
 @pytest.fixture
@@ -104,7 +104,14 @@ def test_required_fields_are_marked_and_optional_ones_say_so(catalog, editor_cli
 
     for name in ("name", "slug", "elevation_meters", "latitude", "longitude", "continent"):
         assert re.search(rf'<(input|select)[^>]*name="{name}"[^>]*required', body), name
-    for label in ("Region", "Summary", "Wikidata id", "OpenStreetMap node id", "Countries"):
+    for label in (
+        "Region",
+        "Summary",
+        "Description",
+        "Wikidata id",
+        "OpenStreetMap node id",
+        "Countries",
+    ):
         assert f'{label} <span class="field__optional">(optional)</span>' in body
 
 
@@ -253,3 +260,71 @@ def test_the_edit_page_costs_the_session_the_mountain_and_the_reference_data(
     catalog, editor_client
 ):
     assert queries(editor_client, EDIT_URL) == 2 + 3 + 3
+
+
+@pytest.mark.parametrize("url", [NEW_URL, EDIT_URL], ids=["new", "edit"])
+def test_the_content_section_orders_summary_description_and_the_source_references(
+    catalog, editor_client, url
+):
+    body = text_of(editor_client.get(url))
+    content = body.split("Content</legend>")[1].split("</fieldset>")[0]
+
+    positions = [
+        content.index(f'name="{name}"')
+        for name in ("summary", "description", "wikidata_id", "osm_node_id")
+    ]
+    assert positions == sorted(positions)
+
+
+@pytest.mark.parametrize("url", [NEW_URL, EDIT_URL], ids=["new", "edit"])
+def test_the_description_is_a_labelled_textarea_that_explains_its_limit(
+    catalog, editor_client, url
+):
+    body = text_of(editor_client.get(url))
+    textarea = re.search(r"<textarea[^>]*name=\"description\"[^>]*>", body).group(0)
+
+    assert 'data-word-counter=""' in textarea
+    assert 'data-word-limit="350"' in textarea
+    assert re.search(r'rows="(1[0-9]|[2-9][0-9])"', textarea)
+    assert 'aria-describedby="id_description_helptext"' in textarea
+    assert 'id="id_description_helptext"' in body
+    assert "at most 350 words" in body
+    assert "Separate paragraphs with an empty line" in body
+
+
+@pytest.mark.parametrize("url", [NEW_URL, EDIT_URL], ids=["new", "edit"])
+def test_the_summary_says_its_limit(catalog, editor_client, url):
+    body = text_of(editor_client.get(url))
+
+    assert "at most 130 characters" in body
+    assert 'maxlength="130"' in body
+
+
+def test_the_word_counter_is_loaded_deferred_from_the_studio_static_files(catalog, editor_client):
+    page = elements(editor_client.get(EDIT_URL))
+    counter = next(script for script in page.scripts if script["src"].endswith("word-counter.js"))
+
+    assert "defer" in counter
+
+
+def test_the_word_counter_counts_like_the_server_and_does_not_announce_every_keystroke():
+    source = open(finders.find("studio/word-counter.js"), encoding="utf-8").read()
+
+    assert "trimmed.split(/\\s+/)" in source
+    assert 'setAttribute("role", "status")' in source
+    assert "data-word-limit" not in source or "dataset.wordLimit" in source
+    assert "aria-live" not in source
+
+
+def test_the_scripts_of_the_form_page_share_a_global_scope_without_redeclaring_a_name(
+    catalog, editor_client
+):
+    page = elements(editor_client.get(EDIT_URL))
+    declared = {}
+    for script in page.scripts:
+        name = script["src"].removeprefix("/static/")
+        source = open(finders.find(name), encoding="utf-8").read()
+        for match in re.finditer(r"^(?:const|let|var|function)\s+(\w+)", source, re.MULTILINE):
+            declared.setdefault(match.group(1), []).append(name)
+
+    assert {name: files for name, files in declared.items() if len(files) > 1} == {}

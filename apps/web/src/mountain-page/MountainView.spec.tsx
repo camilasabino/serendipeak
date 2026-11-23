@@ -246,3 +246,41 @@ describe('share control', () => {
 		expect(textsOf(render(complete, false, true), 'button')).not.toContain('Copy link');
 	});
 });
+
+describe('description', () => {
+	const described = {
+		...complete,
+		description: 'Paragraph one, about the geology.\n\nParagraph two, about the first ascent.'
+	};
+
+	it.each([
+		['permalink', false, false],
+		['daily', true, false],
+		['draft preview', false, true]
+	])(
+		'is shown on the %s page without adding a heading or an empty element',
+		(_n, daily, preview) => {
+			const html = render(described, daily, preview);
+
+			expect(textsOf(html, 'p')).toEqual(
+				expect.arrayContaining([
+					'Paragraph one, about the geology.',
+					'Paragraph two, about the first ascent.'
+				])
+			);
+			expect(textsOf(html, 'h1')).toEqual([complete.name]);
+			expect(countOf(html, 'h[2-6]')).toBe(0);
+			expect(hasEmptyElement(html)).toBe(false);
+		}
+	);
+
+	it('keeps the photograph, the facts, the attribution and the action of the page', () => {
+		const html = render(described);
+
+		expect(html).toContain('<figure');
+		expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
+		expect(html).toContain('About this photo');
+		expect(html).toContain('Explore another');
+		expect(html.indexOf('Paragraph one')).toBeLessThan(html.indexOf('Explore another'));
+	});
+});

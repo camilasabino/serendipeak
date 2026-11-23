@@ -2,10 +2,11 @@ from enum import StrEnum
 
 from serendipeak.catalog.camera import CameraViolation, camera_violations
 from serendipeak.catalog.coordinates import coordinates_in_range
+from serendipeak.catalog.description import description_violations
 from serendipeak.catalog.entities import CanonicalCamera, Mountain, PrimaryImage
 from serendipeak.catalog.public_link import is_public_link
 from serendipeak.catalog.slug import is_valid_slug
-from serendipeak.catalog.summary import summary_violations
+from serendipeak.catalog.summary import stored_summary_violations
 
 
 class PublicationViolation(StrEnum):
@@ -22,6 +23,7 @@ class PublicationViolation(StrEnum):
     IMAGE_LICENSE_URL_WITHOUT_LICENSE = "image_license_url_without_license"
     IMAGE_DIMENSIONS_MISSING = "image_dimensions_missing"
     SUMMARY_INVALID = "summary_invalid"
+    DESCRIPTION_INVALID = "description_invalid"
     LINK_NOT_HTTPS = "link_not_https"
 
 
@@ -51,8 +53,13 @@ def publication_violations(mountain: Mountain) -> tuple[PublicationViolation, ..
 
     violations.extend(image_violations(mountain.primary_image))
 
-    if mountain.summary is not None and summary_violations(mountain.summary.en):
+    # The length of a stored summary is not a publication rule: a summary saved under a former
+    # limit stays publishable until an editor changes it, and only changing it is held to the limit.
+    if mountain.summary is not None and stored_summary_violations(mountain.summary.en):
         violations.append(PublicationViolation.SUMMARY_INVALID)
+
+    if mountain.description is not None and description_violations(mountain.description.en):
+        violations.append(PublicationViolation.DESCRIPTION_INVALID)
 
     if unsafe_public_links(mountain):
         violations.append(PublicationViolation.LINK_NOT_HTTPS)

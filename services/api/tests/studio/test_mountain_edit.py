@@ -334,3 +334,67 @@ def test_the_edit_needs_a_csrf_token(catalog, editor):
     payload["csrfmiddlewaretoken"] = csrf_token_of(page)
     assert client.post(edit_url("draft-peak"), payload).status_code == 302
     assert stored("draft-peak").name_en == "Renamed"
+
+
+LONG_SUMMARY = "A" * 150 + "."
+PARAGRAPHS = "The first paragraph.\n\nThe second paragraph."
+
+
+def test_a_description_is_saved_with_its_paragraphs_and_shown_again_in_the_form(
+    catalog, editor_client
+):
+    response = save(editor_client, "draft-peak", description=PARAGRAPHS.replace("\n", "\r\n"))
+
+    assert response.status_code == 302
+    assert stored("draft-peak").description_en == PARAGRAPHS
+    again = text_of(editor_client.get(edit_url("draft-peak")))
+    assert "The first paragraph.\n\nThe second paragraph.</textarea>" in again.replace("\r", "")
+
+
+def test_the_description_can_be_cleared(catalog, editor_client):
+    save(editor_client, "draft-peak", description=PARAGRAPHS)
+
+    save(editor_client, "draft-peak", description="")
+
+    assert stored("draft-peak").description_en is None
+
+
+def test_a_refused_description_keeps_the_typed_text_and_changes_nothing(catalog, editor_client):
+    typed = "Kept paragraph.\n\n" + " ".join(["word"] * 351)
+    before = stored("draft-peak").updated_at
+
+    response = save(editor_client, "draft-peak", description=typed, name="Not saved")
+    body = text_of(response)
+
+    assert response.status_code == 200
+    assert "this one has 353." in body
+    assert "Kept paragraph." in body
+    assert 'value="Not saved"' in body
+    assert stored("draft-peak").updated_at == before
+    assert stored("draft-peak").description_en is None
+
+
+def test_a_published_mountain_with_a_long_summary_can_be_edited_without_touching_it(
+    catalog, editor_client
+):
+    MountainRecord.objects.filter(slug="aconcagua").update(summary_en=LONG_SUMMARY)
+
+    page = editor_client.get(edit_url("aconcagua"))
+    assert "151 characters" in text_of(page)
+    response = save(editor_client, "aconcagua", elevation_meters="6962")
+
+    assert response.status_code == 302
+    record = stored("aconcagua")
+    assert (record.elevation_meters, record.summary_en) == (6962, LONG_SUMMARY)
+
+
+def test_a_long_summary_can_be_shortened_and_then_not_lengthened_again(catalog, editor_client):
+    MountainRecord.objects.filter(slug="aconcagua").update(summary_en=LONG_SUMMARY)
+
+    refused = save(editor_client, "aconcagua", summary=LONG_SUMMARY + "B")
+    assert refused.status_code == 200
+    assert stored("aconcagua").summary_en == LONG_SUMMARY
+
+    shortened = save(editor_client, "aconcagua", summary="Highest mountain outside Asia.")
+    assert shortened.status_code == 302
+    assert stored("aconcagua").summary_en == "Highest mountain outside Asia."

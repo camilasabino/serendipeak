@@ -89,11 +89,24 @@ def test_a_fixture_mountain_only_lacks_the_media_that_an_upload_adds():
         ),
         ({"summary": "highest mountain."}, PublicationViolation.SUMMARY_INVALID),
         ({"summary": "Highest\nmountain."}, PublicationViolation.SUMMARY_INVALID),
-        ({"summary": "A" * 201}, PublicationViolation.SUMMARY_INVALID),
+        ({"description": "Two\n\n\nbreaks."}, PublicationViolation.DESCRIPTION_INVALID),
+        ({"description": "word " * 351}, PublicationViolation.DESCRIPTION_INVALID),
+        ({"description": "<b>markup</b>"}, PublicationViolation.DESCRIPTION_INVALID),
     ],
 )
 def test_each_publication_invariant_is_reported(overrides, violation):
     assert publication_violations(mountain(**overrides)) == (violation,)
+
+
+def test_a_summary_longer_than_the_limit_stays_publishable():
+    legacy = "A" * 150 + "."
+
+    assert publication_violations(mountain(summary=legacy)) == ()
+
+
+def test_a_mountain_with_or_without_a_description_is_publishable():
+    assert publication_violations(mountain(description=None)) == ()
+    assert publication_violations(mountain(description="One.\n\nTwo.")) == ()
 
 
 def test_a_mountain_without_a_summary_is_publishable():

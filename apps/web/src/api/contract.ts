@@ -60,6 +60,8 @@ export interface Mountain {
 	countries: Country[];
 	region: Region | null;
 	summary?: string;
+	/** Plain text; paragraphs are separated by an empty line. */
+	description?: string;
 	camera?: MountainCamera;
 	primaryImage?: MountainImage;
 	sources?: MountainSources;

@@ -67,3 +67,13 @@ export function formatPlaceParts(
 
 	return region ? [region.name, where] : [where];
 }
+
+const PARAGRAPH_BREAK = /\r?\n[^\S\r\n]*\r?\n/;
+
+/** The paragraphs of a plain text, which separates them by an empty line. */
+export function splitParagraphs(text: string): string[] {
+	return text
+		.split(PARAGRAPH_BREAK)
+		.map((paragraph) => paragraph.trim())
+		.filter((paragraph) => paragraph !== '');
+}

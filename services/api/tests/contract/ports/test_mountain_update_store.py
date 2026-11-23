@@ -5,6 +5,7 @@ import pytest
 
 from serendipeak.catalog.entities import ImageDimensions, MountainStatus
 from serendipeak.catalog.errors import (
+    InvalidMountain,
     MountainHasNoPhotograph,
     PublicationRejected,
     SlugTaken,
@@ -139,6 +140,36 @@ def test_an_absent_optional_value_clears_the_stored_one_and_no_countries_clears_
     assert updated.summary is None
     assert (updated.osm_node_id, updated.wikidata_id) == (None, None)
     assert arranged.mountain_of(TARGET) == updated
+
+
+PARAGRAPHS = "The first paragraph.\n\nThe second, with a soft\nbreak and an \u00e9."
+
+
+def test_a_description_is_stored_changed_and_cleared_with_its_paragraphs(arranged):
+    described = arranged.update(description=PARAGRAPHS)
+
+    assert described.description == LocalizedText(en=PARAGRAPHS)
+    assert arranged.mountain_of(TARGET).description.en == PARAGRAPHS
+
+    changed = arranged.update(description="Another.")
+    assert changed.description == LocalizedText(en="Another.")
+
+    cleared = arranged.update(description=None)
+    assert cleared.description is None
+    assert arranged.mountain_of(TARGET).description is None
+
+
+def test_a_description_is_not_a_publication_requirement(arranged):
+    assert arranged.update(description=None).description is None
+    assert arranged.update().description is None
+
+
+def test_a_description_that_breaks_the_rules_is_refused_by_the_gate_of_a_public_mountain(arranged):
+    with pytest.raises(PublicationRejected) as rejected:
+        arranged.update(description="<b>markup</b>")
+
+    assert rejected.value.violations == (PublicationViolation.DESCRIPTION_INVALID,)
+    assert arranged.mountain_of(TARGET).description is None
 
 
 def test_a_repeated_country_code_is_one_link(arranged):
@@ -524,3 +555,34 @@ def test_an_update_that_keeps_the_slug_reserves_nothing(arranged):
 
     with pytest.raises(SlugTaken):
         arranged.update(OTHER, slug="target-peak")
+
+
+LONG = "A" * 150 + "."
+
+
+def test_a_forged_stored_summary_does_not_let_a_new_long_summary_through(arranged):
+    with pytest.raises(InvalidMountain) as refused:
+        arranged.update(summary=LONG, stored_summary=LONG)
+
+    assert [v.value for v in refused.value.violations] == ["summary_invalid"]
+    assert arranged.mountain_of(TARGET).summary == TARGET.summary
+
+
+def test_a_long_summary_is_kept_when_it_is_the_one_the_mountain_has(arranged):
+    arranged.store.update(TARGET.id, update_of(summary=None), public_edit_violations)
+    arranged.store.update(TARGET.id, update_of(summary="Short."), public_edit_violations)
+
+    kept = arranged.update(name="Renamed", summary="Short.", stored_summary="Short.")
+
+    assert (kept.name.en, kept.summary.en) == ("Renamed", "Short.")
+
+
+def test_an_outdated_stored_summary_cannot_restore_a_long_text_after_a_concurrent_change(
+    arranged,
+):
+    arranged.update(summary="Replaced meanwhile.")
+
+    with pytest.raises(InvalidMountain):
+        arranged.update(summary=LONG, stored_summary=LONG)
+
+    assert arranged.mountain_of(TARGET).summary.en == "Replaced meanwhile."

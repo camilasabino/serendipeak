@@ -122,6 +122,40 @@ def test_an_update_changes_only_the_content_columns_and_leaves_the_rest_of_the_r
     assert row(OTHER) == {**row(OTHER)}
 
 
+def test_a_description_is_written_alone_and_keeps_its_translations(store):
+    seeded = MountainRecord.objects.get(pk=TARGET.mountain.id)
+    seeded.description_en = "Old."
+    seeded.description_es = "Vieja."
+    seeded.save(update_fields=["description_en", "description_es"])
+    before = row(TARGET)
+
+    save(store, description="First.\n\nSecond.")
+
+    after = row(TARGET)
+    assert {column for column in after if after[column] != before[column]} == {
+        "description_en",
+        "updated_at",
+    }
+    assert (after["description_en"], after["description_es"]) == ("First.\n\nSecond.", "Vieja.")
+
+
+def test_clearing_the_description_stores_null_not_an_empty_text(store):
+    save(store, description="Something.")
+
+    save(store, description=None)
+
+    assert row(TARGET)["description_en"] is None
+
+
+def test_a_public_mountain_whose_summary_exceeds_the_limit_can_be_edited(store):
+    legacy = "A" * 150 + "."
+    MountainRecord.objects.filter(pk=TARGET.mountain.id).update(summary_en=legacy)
+
+    saved = save(store, name="Renamed", summary=legacy, stored_summary=legacy)
+
+    assert (saved.name.en, saved.summary.en) == ("Renamed", legacy)
+
+
 def test_the_photograph_row_and_the_other_mountain_are_untouched(store):
     image_before = MountainImageRecord.objects.filter(pk=TARGET.mountain.id).values().get()
     other_before = row(OTHER)

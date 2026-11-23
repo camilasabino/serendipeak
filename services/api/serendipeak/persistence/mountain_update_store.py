@@ -5,6 +5,7 @@ from django.db.models.functions import Now
 
 from serendipeak.catalog.entities import Mountain, PrimaryImage
 from serendipeak.catalog.errors import (
+    InvalidMountain,
     MountainHasNoPhotograph,
     PublicationRejected,
     SlugTaken,
@@ -13,9 +14,10 @@ from serendipeak.catalog.errors import (
     UnknownMountain,
 )
 from serendipeak.catalog.mountain_update import MountainUpdate
-from serendipeak.catalog.new_mountain import PhotographCredit
+from serendipeak.catalog.new_mountain import NewMountainViolation, PhotographCredit
 from serendipeak.catalog.regions import UnknownRegion
 from serendipeak.catalog.status_transitions import Gate
+from serendipeak.catalog.summary import SummaryViolation, summary_violations
 from serendipeak.errors import ApplicationError
 from serendipeak.persistence.errors import translate_database_errors
 from serendipeak.persistence.mapping import image_columns, to_mountain, with_geography
@@ -50,6 +52,7 @@ class DjangoMountainUpdateStore:
             )
             if record is None:
                 raise UnknownMountain(mountain_id)
+            _judge_summary_against(record, update)
 
             try:
                 # A savepoint, so the references can be read after a failure; the outer block
@@ -87,6 +90,15 @@ class DjangoMountainUpdateStore:
             return stored
 
 
+def _judge_summary_against(record: MountainRecord, update: MountainUpdate) -> None:
+    """The length exemption is the persisted summary's, not the caller's claim, so a forged or
+    outdated update.stored_summary cannot let a new long text through."""
+    if update.summary is not None and SummaryViolation.TOO_LONG in summary_violations(
+        update.summary, stored=record.summary_en
+    ):
+        raise InvalidMountain((NewMountainViolation.SUMMARY_INVALID,))
+
+
 def _column_values(update: MountainUpdate) -> dict[str, object]:
     return {
         "slug": update.slug,
@@ -95,6 +107,7 @@ def _column_values(update: MountainUpdate) -> dict[str, object]:
         "continent_id": update.continent_code,
         "region_id": update.region_id,
         "summary_en": update.summary,
+        "description_en": update.description,
         "osm_node_id": update.osm_node_id,
         "wikidata_id": update.wikidata_id,
     }

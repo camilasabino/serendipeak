@@ -7,7 +7,8 @@ import {
 	formatCoordinates,
 	formatCountries,
 	formatPlaceParts,
-	formatRegionPath
+	formatRegionPath,
+	splitParagraphs
 } from './format';
 import { googleMapsUrl } from './googleMaps';
 import { MOUNTAIN_HEADING_ID } from './focusMountainHeading';
@@ -22,7 +23,7 @@ interface MountainInfoPanelProps {
 }
 
 export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanelProps) {
-	const { continent, coordinates, countries, region, summary } = mountain;
+	const { continent, coordinates, countries, region, summary, description } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
 	const countryNames = distinctCountryNames(continent, countries);
 
@@ -55,9 +56,20 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 						</ExternalLink>
 					</Fact>
 				</Facts>
+				{description && <Description text={description} />}
 				{action && <div className={styles.action}>{action}</div>}
 			</section>
 		</>
+	);
+}
+
+function Description({ text }: { text: string }) {
+	return (
+		<div className={styles.description}>
+			{splitParagraphs(text).map((paragraph, index) => (
+				<p key={index}>{paragraph}</p>
+			))}
+		</div>
 	);
 }
 

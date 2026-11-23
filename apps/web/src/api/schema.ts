@@ -178,6 +178,7 @@ export function isMountain(value: unknown): value is Mountain {
 		value.region !== undefined &&
 		(value.region === null || isRegion(value.region)) &&
 		isOptional(value, 'summary', isNonEmptyString) &&
+		isOptional(value, 'description', isNonEmptyString) &&
 		isOptional(value, 'camera', isMountainCamera) &&
 		isOptional(value, 'primaryImage', isMountainImage) &&
 		isOptional(value, 'sources', isMountainSources)

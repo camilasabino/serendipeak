@@ -44,6 +44,7 @@ def test_the_violations_follow_a_fixed_order():
             coordinates=Coordinates(latitude=91.0, longitude=0.0),
             elevation_meters=0,
             summary="",
+            description="",
             osm_node_id=-1,
             wikidata_id="x",
             photograph=NewPhotograph(
@@ -62,6 +63,7 @@ def test_the_violations_follow_a_fixed_order():
         NewMountainViolation.COORDINATES_OUT_OF_RANGE,
         NewMountainViolation.ELEVATION_NOT_POSITIVE,
         NewMountainViolation.SUMMARY_INVALID,
+        NewMountainViolation.DESCRIPTION_INVALID,
         NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE,
         NewMountainViolation.WIKIDATA_ID_INVALID,
         NewMountainViolation.IMAGE_AUTHOR_MISSING,
@@ -69,6 +71,18 @@ def test_the_violations_follow_a_fixed_order():
         NewMountainViolation.IMAGE_LICENSE_NAME_BLANK,
         NewMountainViolation.IMAGE_LICENSE_URL_NOT_PUBLIC_LINK,
         NewMountainViolation.IMAGE_SOURCE_PAGE_URL_NOT_PUBLIC_LINK,
+    )
+
+
+def test_a_draft_may_have_a_description_and_a_summary_at_the_limit():
+    described = draft(summary="A" * 129 + ".", description="First.\n\nSecond.")
+
+    assert new_mountain_violations(described) == ()
+
+
+def test_a_draft_summary_over_the_limit_is_refused():
+    assert new_mountain_violations(draft(summary="A" * 130 + ".")) == (
+        NewMountainViolation.SUMMARY_INVALID,
     )
 
 

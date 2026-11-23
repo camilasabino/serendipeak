@@ -67,7 +67,7 @@ describe('isMountain', () => {
 		expect(isMountain(without(complete, key))).toBe(false);
 	});
 
-	it.each(['summary', 'camera', 'primaryImage', 'sources'])(
+	it.each(['summary', 'description', 'camera', 'primaryImage', 'sources'])(
 		'rejects %s when present as null',
 		(key) => {
 			expect(isMountain({ ...complete, [key]: null })).toBe(false);
@@ -79,6 +79,8 @@ describe('isMountain', () => {
 		['blank slug', { slug: '' }],
 		['blank name', { name: '' }],
 		['blank summary', { summary: '' }],
+		['blank description', { description: '' }],
+		['non-string description', { description: ['One.', 'Two.'] }],
 		['fractional elevation', { elevationMeters: 6961.5 }],
 		['zero elevation', { elevationMeters: 0 }],
 		['string elevation', { elevationMeters: '6961' }],

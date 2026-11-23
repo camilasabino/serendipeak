@@ -66,6 +66,7 @@ def _mountain_record(mountain: NewMountain) -> MountainRecord:
         continent_id=mountain.continent_code,
         region_id=mountain.region_id,
         summary_en=mountain.summary,
+        description_en=mountain.description,
         **camera_columns(None),
         osm_node_id=mountain.osm_node_id,
         wikidata_id=mountain.wikidata_id,

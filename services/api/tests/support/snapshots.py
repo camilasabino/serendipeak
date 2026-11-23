@@ -23,6 +23,11 @@ def varied_catalog(*, with_discoveries=True):
         catalog_mountain("tall-peak"),
         name=LocalizedText(en="Tall Peak", es="Pico Alto", pt="Pico Alto"),
         summary=LocalizedText(en="A tall peak.", es="Un pico alto.", pt=None),
+        description=LocalizedText(
+            en="The first paragraph.\n\nThe second, with a soft\nbreak.",
+            es="El primer p\u00e1rrafo.\n\nEl segundo.",
+            pt=None,
+        ),
         countries=countries("AR", "CL"),
     )
     unframed = with_mountain(

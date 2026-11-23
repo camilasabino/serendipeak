@@ -1,6 +1,7 @@
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from serendipeak.catalog.description import DescriptionViolation
 from serendipeak.catalog.entities import Coordinates, MountainStatus
 from serendipeak.catalog.get_mountain_form_options import GetMountainFormOptions
 from serendipeak.catalog.new_mountain import NewPhotograph, PhotographCredit
@@ -31,6 +32,7 @@ def valid(**overrides):
         "continent": "EU",
         "region": "",
         "summary": "",
+        "description": "",
         "osm_node_id": "",
         "wikidata_id": "",
         **overrides,
@@ -385,3 +387,130 @@ def test_removing_and_replacing_at_once_is_refused():
 
     assert not form.is_valid()
     assert form.errors["file"] == [messages.REMOVE_AND_REPLACE]
+
+
+def words(count):
+    return " ".join(["word"] * count)
+
+
+def test_a_description_becomes_part_of_the_new_mountain_and_of_the_update():
+    text = "First paragraph.\n\nSecond paragraph."
+    peak = stored()
+
+    new = mountain_form(valid(description=text))
+    assert new.is_valid(), new.errors
+    assert new.new_mountain(PhotographChange()).description == text
+
+    form = mountain_form(data_of(peak, description=text), stored=peak)
+    assert form.is_valid(), form.errors
+    assert form.mountain_update(PhotographChange()).description == text
+
+
+def test_the_form_starts_from_the_stored_description_and_from_an_empty_one():
+    assert initial_of(stored(description="One.\n\nTwo."), OPTIONS)["description"] == "One.\n\nTwo."
+    assert initial_of(stored(description=None), OPTIONS)["description"] == ""
+
+
+def test_the_line_breaks_a_browser_posts_are_stored_as_line_feeds():
+    form = mountain_form(valid(description="First.\r\n\r\nSecond,\r\nsoft break."))
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["description"] == "First.\n\nSecond,\nsoft break."
+
+
+def test_stray_spacing_is_normalized_and_the_words_are_untouched():
+    form = mountain_form(valid(description="  First.  \n\n\n\n  Second. \n\n"))
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["description"] == "First.\n\n  Second."
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\r\n \t\r\n"])
+def test_a_blank_description_is_absent_not_empty(blank):
+    form = mountain_form(valid(description=blank))
+
+    assert form.is_valid()
+    assert form.cleaned_data["description"] is None
+
+
+def test_a_description_of_exactly_the_limit_is_accepted_and_one_more_word_is_not():
+    assert mountain_form(valid(description=words(350))).is_valid()
+
+    form = mountain_form(valid(description=words(351)))
+
+    assert not form.is_valid()
+    assert form.errors["description"] == [
+        "The description has at most 350 words; this one has 351."
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("A <b>bold</b> claim.", messages.DESCRIPTION_MESSAGES[DescriptionViolation.MARKUP]),
+        ("A `code` claim.", messages.DESCRIPTION_MESSAGES[DescriptionViolation.MARKUP]),
+        ("Tab\there.", messages.DESCRIPTION_MESSAGES[DescriptionViolation.CONTROL_CHARACTER]),
+        (
+            "Hidden\u200bspace.",
+            messages.DESCRIPTION_MESSAGES[DescriptionViolation.HIDDEN_CHARACTER],
+        ),
+        ("\u200b", messages.DESCRIPTION_MESSAGES[DescriptionViolation.BLANK]),
+    ],
+)
+def test_an_unsafe_description_is_a_field_error_with_a_message_that_says_what_to_change(
+    text, message
+):
+    form = mountain_form(valid(description=text))
+
+    assert not form.is_valid()
+    assert list(form.errors) == ["description"]
+    assert form.errors["description"] == [message]
+
+
+def test_legitimate_punctuation_and_accents_are_kept():
+    text = (
+        "Rock & ice \u2014 \u201cthe wall\u201d (30\u00b0 slopes); \u00e1\u00e9\u00ed\u00f3\u00fa."
+    )
+    form = mountain_form(valid(description=text))
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["description"] == text
+
+
+LEGACY_SUMMARY = "A" * 150 + "."
+
+
+def test_a_summary_over_the_limit_is_refused_on_a_new_mountain():
+    form = mountain_form(valid(summary=LEGACY_SUMMARY))
+
+    assert not form.is_valid()
+    assert form.errors["summary"] == ["The summary has at most 130 characters."]
+
+
+def test_a_stored_summary_over_the_limit_does_not_keep_the_mountain_from_being_saved():
+    peak = stored(summary=LEGACY_SUMMARY)
+
+    form = mountain_form(data_of(peak, name="Renamed"), stored=peak)
+
+    assert form.is_valid(), form.errors
+    update = form.mountain_update(PhotographChange())
+    assert (update.summary, update.stored_summary) == (LEGACY_SUMMARY, LEGACY_SUMMARY)
+    assert "151 characters" in form.fields["summary"].help_text
+
+
+def test_a_changed_summary_is_held_to_the_limit_even_when_the_stored_one_was_longer():
+    peak = stored(summary=LEGACY_SUMMARY)
+
+    longer = mountain_form(data_of(peak, summary=LEGACY_SUMMARY + "B"), stored=peak)
+    shorter = mountain_form(data_of(peak, summary="Short and sweet."), stored=peak)
+
+    assert not longer.is_valid()
+    assert "summary" in longer.errors
+    assert shorter.is_valid(), shorter.errors
+
+
+def test_a_summary_within_the_limit_shows_the_ordinary_help_text():
+    form = mountain_form(stored=stored(summary="Short."))
+
+    assert "at most 130 characters" in form.fields["summary"].help_text
+    assert "allowed now" not in form.fields["summary"].help_text

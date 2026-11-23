@@ -41,12 +41,32 @@ def test_a_complete_update_has_no_violation():
         ({"elevation_meters": 0}, NewMountainViolation.ELEVATION_NOT_POSITIVE),
         ({"summary": "no capital or period"}, NewMountainViolation.SUMMARY_INVALID),
         ({"summary": ""}, NewMountainViolation.SUMMARY_INVALID),
+        ({"summary": "A" * 130 + "."}, NewMountainViolation.SUMMARY_INVALID),
+        ({"description": ""}, NewMountainViolation.DESCRIPTION_INVALID),
+        ({"description": "word " * 351}, NewMountainViolation.DESCRIPTION_INVALID),
         ({"osm_node_id": 0}, NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE),
         ({"wikidata_id": "39739"}, NewMountainViolation.WIKIDATA_ID_INVALID),
     ],
 )
 def test_each_rule_of_the_content_is_judged(overrides, violation):
     assert mountain_update_violations(replace(VALID, **overrides)) == (violation,)
+
+
+def test_a_summary_that_is_still_the_stored_one_is_not_judged_by_the_length():
+    legacy = "A" * 150 + "."
+
+    assert mountain_update_violations(replace(VALID, summary=legacy)) == (
+        NewMountainViolation.SUMMARY_INVALID,
+    )
+    assert mountain_update_violations(replace(VALID, summary=legacy, stored_summary=legacy)) == ()
+    assert mountain_update_violations(
+        replace(VALID, summary=legacy + "x", stored_summary=legacy)
+    ) == (NewMountainViolation.SUMMARY_INVALID,)
+
+
+def test_a_description_is_optional_and_judged_when_given():
+    assert mountain_update_violations(replace(VALID, description=None)) == ()
+    assert mountain_update_violations(replace(VALID, description="One.\n\nTwo.")) == ()
 
 
 def with_photograph(**credit):

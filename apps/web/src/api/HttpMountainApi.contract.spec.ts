@@ -4,7 +4,7 @@ import { HttpMountainApi } from './HttpMountainApi';
 import { contractFixture, MOUNTAIN_FIXTURES } from './test-support/contractFixtures';
 import { BASE_URL, serving } from './test-support/stubFetch';
 
-const OPTIONAL_FIELDS = ['summary', 'camera', 'primaryImage', 'sources'] as const;
+const OPTIONAL_FIELDS = ['summary', 'description', 'camera', 'primaryImage', 'sources'] as const;
 
 function apiServing(body: unknown, status = 200) {
 	return new HttpMountainApi({ baseUrl: BASE_URL, fetch: serving(body, status) });
@@ -151,5 +151,31 @@ describe('v1 catalog snapshot through HttpMountainApi', () => {
 
 			expect(result.kind, entry.slug).toBe('found');
 		}
+	});
+});
+
+describe('the optional description, which the frozen v1 fixtures predate', () => {
+	const DESCRIPTION = 'The first paragraph.\n\nThe second paragraph.';
+	const complete = contractFixture('mountain-complete.json') as Mountain;
+
+	it('is absent from every frozen fixture, so none of them needs to change', () => {
+		for (const name of MOUNTAIN_FIXTURES) {
+			expect('description' in (contractFixture(name) as object), name).toBe(false);
+		}
+	});
+
+	it('passes through the permalink, random, daily and preview endpoints with its paragraph breaks', async () => {
+		const described = { ...complete, description: DESCRIPTION };
+		const api = apiServing(described);
+
+		expect(await api.getMountain('aconcagua')).toEqual({ kind: 'found', mountain: described });
+		expect(await api.getRandomMountain()).toEqual({ kind: 'found', mountain: described });
+		expect(await api.getMountainPreview('token')).toEqual({
+			kind: 'found',
+			mountain: described
+		});
+		expect(
+			await apiServing({ date: '2026-10-05', mountain: described }).getDailyMountain()
+		).toEqual({ kind: 'found', daily: { date: '2026-10-05', mountain: described } });
 	});
 });

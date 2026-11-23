@@ -50,6 +50,7 @@ def update_of(source, **overrides):
         "country_codes": tuple(country.code for country in source.countries),
         "region_id": None if source.region is None else REGIONS[-1].id,
         "summary": None if source.summary is None else source.summary.en,
+        "description": None if source.description is None else source.description.en,
         "osm_node_id": source.osm_node_id,
         "wikidata_id": source.wikidata_id,
     }
@@ -98,6 +99,80 @@ def store(media):
 @pytest.fixture
 def update_mountain(store, ingestion):
     return UpdateMountain(store, ingestion)
+
+
+LEGACY_SUMMARY = "A" * 150 + "."
+LEGACY = replace(ACTIVE, summary=LocalizedText(en=LEGACY_SUMMARY))
+
+
+@pytest.fixture
+def legacy_store(media):
+    return OrderRecordingStore(media, [LEGACY], REGIONS)
+
+
+def test_a_mountain_whose_summary_exceeds_the_limit_can_be_edited_while_the_summary_is_kept(
+    legacy_store, ingestion
+):
+    updated = UpdateMountain(legacy_store, ingestion).execute(
+        ACTIVE.id,
+        update_of(
+            ACTIVE,
+            name="Renamed",
+            summary=LEGACY_SUMMARY,
+            stored_summary=LEGACY_SUMMARY,
+        ),
+    )
+
+    assert (updated.name.en, updated.summary.en) == ("Renamed", LEGACY_SUMMARY)
+
+
+def test_the_summary_limit_applies_as_soon_as_a_long_summary_is_changed(legacy_store, ingestion):
+    with pytest.raises(InvalidMountain) as refused:
+        UpdateMountain(legacy_store, ingestion).execute(
+            ACTIVE.id,
+            update_of(ACTIVE, summary=LEGACY_SUMMARY + "B", stored_summary=LEGACY_SUMMARY),
+        )
+
+    assert refused.value.violations == (NewMountainViolation.SUMMARY_INVALID,)
+    assert legacy_store.mountain(ACTIVE.id).summary.en == LEGACY_SUMMARY
+
+
+def test_a_long_summary_can_be_shortened_and_cleared(legacy_store, ingestion):
+    update_mountain = UpdateMountain(legacy_store, ingestion)
+
+    shortened = update_mountain.execute(
+        ACTIVE.id, update_of(ACTIVE, summary="Short.", stored_summary=LEGACY_SUMMARY)
+    )
+    cleared = update_mountain.execute(
+        ACTIVE.id, update_of(ACTIVE, summary=None, stored_summary="Short.")
+    )
+
+    assert shortened.summary.en == "Short."
+    assert cleared.summary is None
+
+
+def test_a_description_is_saved_with_its_paragraphs_changed_and_cleared(store, update_mountain):
+    text = "First.\n\nSecond."
+
+    saved = update_mountain.execute(ACTIVE.id, update_of(ACTIVE, description=text))
+    changed = update_mountain.execute(ACTIVE.id, update_of(ACTIVE, description="Changed."))
+    cleared = update_mountain.execute(ACTIVE.id, update_of(ACTIVE, description=None))
+
+    assert saved.description.en == text
+    assert changed.description.en == "Changed."
+    assert cleared.description is None
+    assert store.mountain(ACTIVE.id).description is None
+
+
+@pytest.mark.parametrize("description", ["", "word " * 351, "A <b>claim</b>."])
+def test_a_description_that_breaks_the_rules_is_refused_and_nothing_is_stored(
+    store, update_mountain, description
+):
+    with pytest.raises(InvalidMountain) as refused:
+        update_mountain.execute(ACTIVE.id, update_of(ACTIVE, description=description))
+
+    assert refused.value.violations == (NewMountainViolation.DESCRIPTION_INVALID,)
+    assert store.mountain(ACTIVE.id) == ACTIVE
 
 
 def with_photograph(source, data=PHOTOGRAPH, **credit):

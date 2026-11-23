@@ -230,6 +230,7 @@ describe('HttpMountainApi failures', () => {
 			'aconcagua',
 			{ ...(mountain as object), countries: undefined },
 			{ ...(mountain as object), summary: null },
+			{ ...(mountain as object), description: null },
 			{ ...(mountain as object), camera: { headingDegrees: 10 } }
 		];
 

@@ -1,5 +1,6 @@
 from serendipeak.catalog.bootstrap.check_catalog import CatalogViolation, CheckCatalog
 from serendipeak.catalog.entities import MountainStatus
+from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.publication import PublicationViolation
 from tests.support.catalog import (
     catalog_mountain,
@@ -63,3 +64,17 @@ def test_draft_and_inactive_mountains_are_not_checked():
 
 def test_an_empty_catalog_has_nothing_to_check():
     assert CheckCatalog(InMemoryCatalogStore()).execute().checked == 0
+
+
+def test_summaries_over_the_limit_are_listed_for_review_and_are_not_violations():
+    report = check(
+        catalog_of(
+            catalog_mountain("zugspitze", summary=LocalizedText(en="A" * 131)),
+            catalog_mountain("aconcagua", summary=LocalizedText(en="A" * 150 + ".")),
+            catalog_mountain("mont-blanc", summary=LocalizedText(en="A" * 130)),
+            catalog_mountain("old-peak", status=MountainStatus.INACTIVE, summary="A" * 200),
+        )
+    )
+
+    assert report.violations == ()
+    assert report.summaries_over_limit == ("aconcagua", "zugspitze")

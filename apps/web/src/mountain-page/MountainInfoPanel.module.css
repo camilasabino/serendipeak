@@ -78,6 +78,24 @@
 	color: var(--sp-text);
 }
 
+/* Prose after the facts: no rule, label or figure, so it reads as the text of the page and not
+   as one more fact, and quieter than the lede above them. */
+.description {
+	max-width: 36rem;
+	margin: 2rem 0 0;
+	font: 400 1rem / 1.62 var(--sp-face-ui);
+	color: var(--sp-text);
+	overflow-wrap: break-word;
+}
+
+.description p {
+	margin: 0;
+}
+
+.description p + p {
+	margin-top: 1em;
+}
+
 .action {
 	margin: 1.75rem 0 0;
 }

@@ -124,6 +124,7 @@ def to_mountain_with_image(
         primary_image=None if image is None else to_primary_image(image),
         osm_node_id=record.osm_node_id,
         wikidata_id=record.wikidata_id,
+        description=to_description(record),
     )
 
 
@@ -157,6 +158,15 @@ def to_summary(record: MountainRecord) -> LocalizedText | None:
         return None
 
     return LocalizedText(en=record.summary_en, es=record.summary_es, pt=record.summary_pt)
+
+
+def to_description(record: MountainRecord) -> LocalizedText | None:
+    if record.description_en is None:
+        return None
+
+    return LocalizedText(
+        en=record.description_en, es=record.description_es, pt=record.description_pt
+    )
 
 
 def to_region(record: MountainRegionRecord) -> MountainRegion:
@@ -254,6 +264,9 @@ def mountain_record(entry: CatalogMountain, region_ids: Mapping[str, UUID]) -> M
         summary_en=None if mountain.summary is None else mountain.summary.en,
         summary_es=None if mountain.summary is None else mountain.summary.es,
         summary_pt=None if mountain.summary is None else mountain.summary.pt,
+        description_en=None if mountain.description is None else mountain.description.en,
+        description_es=None if mountain.description is None else mountain.description.es,
+        description_pt=None if mountain.description is None else mountain.description.pt,
         **camera_columns(mountain.camera),
         osm_node_id=mountain.osm_node_id,
         wikidata_id=mountain.wikidata_id,

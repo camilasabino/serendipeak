@@ -97,12 +97,22 @@ def test_a_draft_is_stored_with_everything_given_and_returned_as_stored(arranged
     assert arranged.mountain_of("new-peak") == created
 
 
+def test_a_description_is_stored_with_its_paragraphs_and_returned_as_stored(arranged):
+    text = "The first paragraph.\n\nThe second, with a soft\nbreak and an \u00e9."
+
+    created = arranged.store.create_draft(new_mountain(description=text), IMAGE)
+
+    assert created.description == LocalizedText(en=text)
+    assert arranged.mountain_of("new-peak").description.en == text
+
+
 def test_a_draft_may_leave_every_optional_value_out(arranged):
     created = arranged.store.create_draft(new_mountain(), IMAGE)
 
     assert created.countries == ()
     assert created.region is None
     assert created.summary is None
+    assert created.description is None
     assert (created.osm_node_id, created.wikidata_id) == (None, None)
     assert arranged.mountain_of("new-peak") == created
 

@@ -6,6 +6,7 @@ import pytest
 
 from serendipeak.catalog.bootstrap.catalog_snapshot import (
     SNAPSHOT_FORMAT,
+    SNAPSHOT_FORMAT_VERSION,
     catalog_from_snapshot_content,
     in_document_order,
     snapshot_document,
@@ -19,10 +20,10 @@ from tests.support.geography import reference
 from tests.support.snapshots import varied_catalog
 
 
-def sealed(content):
+def sealed(content, version=SNAPSHOT_FORMAT_VERSION):
     return {
         "format": SNAPSHOT_FORMAT,
-        "version": 1,
+        "version": version,
         "content_sha256": content_sha256(content),
         "content": content,
     }
@@ -112,7 +113,9 @@ def test_the_expected_checksum_must_be_a_lowercase_digest(expected):
     "change",
     [
         {"format": "serendipeak.geography"},
-        {"version": 2},
+        {"version": 0},
+        {"version": 3},
+        {"version": "2"},
         {"extra": 1},
     ],
 )
@@ -226,6 +229,23 @@ def mutate(path_to, change):
             "missing keys",
         ),
         (
+            "missing description member",
+            lambda content: content["mountains"][0].pop("description"),
+            "missing keys",
+        ),
+        (
+            "description that is not a text object",
+            lambda content: content["mountains"][0].update(description="Plain."),
+            "must be an object",
+        ),
+        (
+            "description without English",
+            lambda content: content["mountains"][0].update(
+                description={"en": None, "es": "Hola.", "pt": None}
+            ),
+            "must be a string",
+        ),
+        (
             "duplicate mountain slug",
             lambda content: content["mountains"][1].update(slug=content["mountains"][0]["slug"]),
             "slugs are not unique",
@@ -323,3 +343,87 @@ def test_a_photograph_keeps_every_member_it_has():
     )
 
     assert parsed(snapshot_document(changed)["content"]) == in_document_order(changed)
+
+
+def test_the_document_is_the_current_version_and_carries_every_description():
+    document = snapshot_document(varied_catalog())
+    mountains = {raw["slug"]: raw for raw in document["content"]["mountains"]}
+
+    assert document["version"] == SNAPSHOT_FORMAT_VERSION == 2
+    assert mountains["tall-peak"]["description"] == {
+        "en": "The first paragraph.\n\nThe second, with a soft\nbreak.",
+        "es": "El primer p\u00e1rrafo.\n\nEl segundo.",
+        "pt": None,
+    }
+    assert mountains["draft-peak"]["description"] is None
+    assert set(raw["description"] is None for raw in mountains.values()) == {True, False}
+
+
+def test_the_paragraph_breaks_of_a_description_survive_a_trip_through_json_text():
+    catalog = varied_catalog()
+    document = snapshot_document(catalog)
+
+    reread = json.loads(json.dumps(document, ensure_ascii=False))
+    content = verified_snapshot_content(reread, document["content_sha256"])
+    tall = next(e for e in parsed(content).mountains if e.mountain.slug == "tall-peak")
+
+    assert tall.mountain.description.en == "The first paragraph.\n\nThe second, with a soft\nbreak."
+    assert parsed(content) == in_document_order(catalog)
+
+
+def legacy_document(catalog=None):
+    """A document as the exporter wrote it before the description existed."""
+    content = content_of(catalog)
+    for raw in content["mountains"]:
+        del raw["description"]
+
+    return sealed(content, version=1)
+
+
+def test_a_version_one_snapshot_is_still_readable_and_has_no_descriptions():
+    catalog = varied_catalog()
+    document = legacy_document(catalog)
+
+    content = verified_snapshot_content(document, document["content_sha256"])
+    catalog_read = parsed(content)
+
+    assert all(entry.mountain.description is None for entry in catalog_read.mountains)
+    assert catalog_read == in_document_order(
+        replace(
+            catalog,
+            mountains=tuple(
+                with_description(entry, None) for entry in in_document_order(catalog).mountains
+            ),
+        )
+    )
+
+
+def with_description(entry, description):
+    return replace(entry, mountain=replace(entry.mountain, description=description))
+
+
+def test_the_checksum_of_a_version_one_snapshot_is_judged_on_its_own_content():
+    document = legacy_document()
+
+    with pytest.raises(InvalidCatalogSnapshot, match="not the expected"):
+        verified_snapshot_content(document, "0" * 64)
+
+    document["content"]["mountains"][0]["elevation_meters"] += 1
+    with pytest.raises(InvalidCatalogSnapshot, match="does not match the content"):
+        verified_snapshot_content(document, document["content_sha256"])
+
+
+def test_a_version_one_snapshot_with_a_description_is_refused():
+    content = content_of()
+    document = sealed(content, version=1)
+
+    with pytest.raises(InvalidCatalogSnapshot, match="unexpected keys"):
+        verified_snapshot_content(document, document["content_sha256"])
+
+
+def test_a_version_two_snapshot_without_the_description_member_is_refused():
+    document = legacy_document()
+    document["version"] = 2
+
+    with pytest.raises(InvalidCatalogSnapshot, match="missing keys"):
+        parsed(verified_snapshot_content(document, document["content_sha256"]))

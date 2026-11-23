@@ -16,6 +16,7 @@ from serendipeak.catalog.entities import (
 )
 from serendipeak.catalog.errors import (
     CatalogAlreadyPopulated,
+    InvalidMountain,
     MountainHasNoPhotograph,
     MountainNotDraft,
     MountainReferenced,
@@ -31,6 +32,7 @@ from serendipeak.catalog.get_mountain_preview import GetMountainPreview
 from serendipeak.catalog.localization import LocalizedText
 from serendipeak.catalog.media.keys import require_media_key
 from serendipeak.catalog.media.ports import PhotographFormat, ProcessedPhotograph
+from serendipeak.catalog.new_mountain import NewMountainViolation
 from serendipeak.catalog.ports import (
     CameraChange,
     CountedRegion,
@@ -47,6 +49,7 @@ from serendipeak.catalog.region_changes import (
 )
 from serendipeak.catalog.regions import MountainRegion, UnknownRegion, build_region_path
 from serendipeak.catalog.relocation import RelocationOutcome
+from serendipeak.catalog.summary import SummaryViolation, summary_violations
 from serendipeak.discovery.entities import DailyMountain, DiscoveryHistoryEntry, RecentDiscovery
 from serendipeak.errors import InfrastructureError
 from tests.support.catalog import index_entry_of
@@ -462,6 +465,9 @@ class InMemoryMountainCreationStore:
             primary_image=image,
             osm_node_id=mountain.osm_node_id,
             wikidata_id=mountain.wikidata_id,
+            description=(
+                None if mountain.description is None else LocalizedText(en=mountain.description)
+            ),
         )
         self._mountains[created.slug] = created
 
@@ -505,6 +511,11 @@ class InMemoryMountainUpdateStore:
         if current is None:
             raise UnknownMountain(mountain_id)
 
+        if update.summary is not None and SummaryViolation.TOO_LONG in summary_violations(
+            update.summary, stored=None if current.summary is None else current.summary.en
+        ):
+            raise InvalidMountain((NewMountainViolation.SUMMARY_INVALID,))
+
         reference = geography_reference()
         wanted = set(update.country_codes)
         if any(m.slug == update.slug and m.id != mountain_id for m in self._mountains.values()):
@@ -519,6 +530,7 @@ class InMemoryMountainUpdateStore:
             raise UnknownCountries(tuple(sorted(wanted - reference.countries.keys())))
 
         stored_summary = current.summary or LocalizedText(en="")
+        stored_description = current.description or LocalizedText(en="")
         prospective = replace(
             current,
             slug=update.slug,
@@ -535,6 +547,11 @@ class InMemoryMountainUpdateStore:
             if update.region_id is None
             else build_region_path(update.region_id, self._regions),
             summary=None if update.summary is None else replace(stored_summary, en=update.summary),
+            description=(
+                None
+                if update.description is None
+                else replace(stored_description, en=update.description)
+            ),
             osm_node_id=update.osm_node_id,
             wikidata_id=update.wikidata_id,
             primary_image=_prospective_image(current, image, update),

@@ -59,6 +59,34 @@ def test_publishing_applies_the_summary_rule(store):
     assert raised.value.violations == (PublicationViolation.SUMMARY_INVALID,)
 
 
+LEGACY_SUMMARY = "A" * 150 + "."
+
+
+def test_a_summary_saved_under_the_former_limit_does_not_keep_a_draft_from_being_published(store):
+    store.replace(replace(DRAFT, summary=LocalizedText(en=LEGACY_SUMMARY)))
+
+    PublishMountain(store).execute(DRAFT.id)
+
+    assert store.status_of(DRAFT.id) is MountainStatus.ACTIVE
+
+
+def test_a_summary_saved_under_the_former_limit_does_not_keep_a_mountain_from_relisting(store):
+    store.replace(replace(INACTIVE, summary=LocalizedText(en=LEGACY_SUMMARY)))
+
+    ReactivateMountain(store).execute(INACTIVE.id)
+
+    assert store.status_of(INACTIVE.id) is MountainStatus.ACTIVE
+
+
+def test_a_mountain_with_a_broken_description_cannot_be_published(store):
+    store.replace(replace(DRAFT, description=LocalizedText(en="<b>markup</b>")))
+
+    with pytest.raises(PublicationRejected) as raised:
+        PublishMountain(store).execute(DRAFT.id)
+
+    assert raised.value.violations == (PublicationViolation.DESCRIPTION_INVALID,)
+
+
 @pytest.mark.parametrize("entity", [ACTIVE, INACTIVE])
 def test_only_a_draft_can_be_published(store, entity):
     with pytest.raises(InvalidStatusTransition) as raised:

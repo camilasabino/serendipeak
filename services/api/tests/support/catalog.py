@@ -86,8 +86,8 @@ def mountain(slug="aconcagua", **overrides):
         "wikidata_id": "Q39739",
     }
     fields.update(overrides)
-    for member in ("name", "summary"):
-        if isinstance(fields[member], str):
+    for member in ("name", "summary", "description"):
+        if isinstance(fields.get(member), str):
             fields[member] = LocalizedText(en=fields[member])
 
     return Mountain(**fields)

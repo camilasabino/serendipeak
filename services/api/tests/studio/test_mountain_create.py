@@ -240,3 +240,38 @@ def test_a_mountain_called_new_keeps_its_own_address(editor_client, db):
 
     assert editor_client.get(detail_url("new")).status_code == 200
     assert reverse("studio:mountain_new") == "/studio/new-mountain/"
+
+
+def test_a_description_is_stored_with_its_paragraphs(editor_client):
+    response = create(editor_client, description="First paragraph.\r\n\r\nSecond paragraph.")
+
+    assert response.status_code == 302
+    assert stored().description_en == "First paragraph.\n\nSecond paragraph."
+
+
+def test_a_draft_is_created_without_a_description_as_null(editor_client):
+    create(editor_client, description="  \r\n ")
+
+    assert stored().description_en is None
+
+
+def test_a_description_over_the_word_limit_is_refused_and_the_typed_text_stays(editor_client):
+    text = "Paragraph one.\n\n" + " ".join(["word"] * 351)
+
+    response = create(editor_client, description=text)
+    body = text_of(response)
+
+    assert response.status_code == 200
+    assert not MountainRecord.objects.exists()
+    assert "Description: The description has at most 350 words; this one has 353." in body
+    assert "Paragraph one." in body
+    assert body.count("word word word") >= 1
+    assert "data-unsaved-on-load" in body
+
+
+def test_a_summary_over_the_limit_is_refused_when_creating(editor_client):
+    response = create(editor_client, summary="A" * 130 + ".")
+
+    assert response.status_code == 200
+    assert "Summary: The summary has at most 130 characters." in text_of(response)
+    assert not MountainRecord.objects.exists()

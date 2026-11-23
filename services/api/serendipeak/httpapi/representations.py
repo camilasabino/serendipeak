@@ -28,6 +28,7 @@ def represent_mountain(mountain: Mountain, media_base_url: str) -> dict[str, obj
             "continent": _continent(mountain.continent),
             "countries": _countries(mountain.countries),
             "summary": None if mountain.summary is None else mountain.summary.en,
+            "description": None if mountain.description is None else mountain.description.en,
             "camera": _camera(mountain.camera),
             "primaryImage": _primary_image(mountain.primary_image, media_base_url),
             "sources": _sources(mountain),

@@ -498,3 +498,65 @@ def test_a_viewers_detail_has_no_forms_or_change_controls(catalog, viewer_client
 
     assert re.findall(r"<button[^>]*>([^<]+)</button>", without_theme_switch(body)) == ["Sign out"]
     assert len(re.findall(r"<form", body)) == 1
+
+
+def test_the_saved_description_is_shown_as_paragraphs_with_its_word_count(db, viewer_client):
+    load(
+        catalog_mountain(
+            "described-peak",
+            description=LocalizedText(en="First paragraph.\n\nSecond paragraph, here."),
+        )
+    )
+
+    body = text_of(viewer_client.get(detail_url("described-peak")))
+
+    assert "<p>First paragraph.</p><p>Second paragraph, here.</p>" in body
+    assert "(5 of 350 words)" in body
+    assert "No description yet." not in body
+
+
+def test_a_mountain_without_a_description_says_so(db, viewer_client):
+    load(catalog_mountain("plain-peak"))
+
+    body = text_of(viewer_client.get(detail_url("plain-peak")))
+
+    assert "No description yet." in body
+    assert "words)" not in body
+
+
+def test_a_description_is_escaped_not_rendered_as_markup(db, viewer_client):
+    load(
+        catalog_mountain(
+            "odd-peak", description=LocalizedText(en="A <script>alert(1)</script> & more.")
+        )
+    )
+
+    body = text_of(viewer_client.get(detail_url("odd-peak")))
+
+    assert "<script>alert(1)</script>" not in body
+    assert "A &lt;script&gt;alert(1)&lt;/script&gt; &amp; more." in body
+
+
+def test_a_translated_description_is_shown_in_its_language(db, viewer_client):
+    load(
+        catalog_mountain(
+            "described-peak", description=LocalizedText(en="In English.", es="En espa\u00f1ol.")
+        )
+    )
+
+    body = text_of(viewer_client.get(detail_url("described-peak")))
+
+    assert '<span lang="es">En espa\u00f1ol.</span>' in body
+
+
+def test_a_summary_over_the_limit_is_flagged_for_review_and_a_short_one_is_not(db, viewer_client):
+    load(
+        catalog_mountain("long-peak", summary=LocalizedText(en="A" * 150 + ".")),
+        catalog_mountain("short-peak"),
+    )
+
+    long_body = text_of(viewer_client.get(detail_url("long-peak")))
+    short_body = text_of(viewer_client.get(detail_url("short-peak")))
+
+    assert "This summary has 151 characters, more than the 130 allowed now." in long_body
+    assert "allowed now" not in short_body

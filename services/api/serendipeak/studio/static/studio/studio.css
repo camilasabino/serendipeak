@@ -701,6 +701,23 @@ form {
 	font: inherit;
 }
 
+.field textarea[data-word-counter] {
+	min-height: 18rem;
+	line-height: 1.6;
+}
+
+.field__counter {
+	margin-top: 0.25rem;
+	color: var(--sp-text-muted);
+	font-size: var(--sp-text-ui);
+	font-variant-numeric: tabular-nums;
+}
+
+.field__counter--over {
+	color: var(--sp-danger);
+	font-weight: 600;
+}
+
 .field--invalid input:not([type='checkbox']),
 .field--invalid select,
 .field--invalid textarea {
@@ -1129,6 +1146,23 @@ form {
 	font-family: var(--sp-font-display);
 	font-size: 1.125rem;
 	line-height: 1.5;
+}
+
+.description {
+	align-self: stretch;
+}
+
+.description__count {
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+}
+
+.description__text {
+	max-width: var(--sp-measure-narrow);
+}
+
+.description__text p + p {
+	margin-top: var(--sp-space-3);
 }
 
 .empty-value {

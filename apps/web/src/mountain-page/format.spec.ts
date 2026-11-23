@@ -4,7 +4,8 @@ import {
 	formatCoordinates,
 	formatCountries,
 	formatPlaceParts,
-	formatRegionPath
+	formatRegionPath,
+	splitParagraphs
 } from './format';
 
 describe('formatCoordinates', () => {
@@ -156,5 +157,30 @@ describe('distinctCountryNames', () => {
 			'Chile',
 			'Antarctica'
 		]);
+	});
+});
+
+describe('splitParagraphs', () => {
+	it('splits a text at each empty line', () => {
+		expect(splitParagraphs('First.\n\nSecond.\n\nThird.')).toEqual(['First.', 'Second.', 'Third.']);
+	});
+
+	it('keeps a single line break inside its paragraph', () => {
+		expect(splitParagraphs('One line\nand the next.\n\nSecond.')).toEqual([
+			'One line\nand the next.',
+			'Second.'
+		]);
+	});
+
+	it('reads carriage returns, extra empty lines and padding like the stored form', () => {
+		expect(splitParagraphs('  First.\r\n\r\n\r\n \t \nSecond.  \n\n')).toEqual([
+			'First.',
+			'Second.'
+		]);
+	});
+
+	it('gives one paragraph for a text without an empty line and none for a blank one', () => {
+		expect(splitParagraphs('Only one.')).toEqual(['Only one.']);
+		expect(splitParagraphs('  \n\n  ')).toEqual([]);
 	});
 });

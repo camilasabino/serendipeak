@@ -200,4 +200,98 @@ describe('MountainInfoPanel', () => {
 			expect(render({})).toContain('aria-hidden="true">·</span>');
 		});
 	});
+
+	describe('summary and description', () => {
+		const description = 'The first paragraph, with a \u201cquote\u201d.\n\nThe second paragraph.';
+		const summary = 'A short, self-contained summary.';
+		const withoutSummary: Mountain = { ...complete, summary: undefined };
+
+		function renderParts(parts: { summary?: string; description?: string }): string {
+			return renderToStaticMarkup(
+				<MountainInfoPanel
+					mountain={{ ...withoutSummary, ...parts } as Mountain}
+					plate={<figure>plate</figure>}
+					action={<button type="button">act</button>}
+				/>
+			);
+		}
+
+		it('shows the summary and the description, each in its own place', () => {
+			const html = renderParts({ summary, description });
+
+			expect(html).toContain(`<p class="`);
+			expect(textsOf(html, 'p')).toEqual(
+				expect.arrayContaining([
+					summary,
+					'The first paragraph, with a \u201cquote\u201d.',
+					'The second paragraph.'
+				])
+			);
+		});
+
+		it('renders each paragraph of the description as a paragraph, in order', () => {
+			const html = renderParts({ description });
+			const body = html.slice(html.indexOf('</dl>'));
+
+			expect(textsOf(body, 'p')).toEqual([
+				'The first paragraph, with a \u201cquote\u201d.',
+				'The second paragraph.'
+			]);
+		});
+
+		it('never turns the description into markup', () => {
+			const html = renderParts({ description: 'A <script>alert(1)</script> & <b>bold</b> claim.' });
+
+			expect(html).not.toContain('<script>');
+			expect(html).not.toContain('<b>bold</b>');
+			expect(textsOf(html, 'p')).toContain('A <script>alert(1)</script> & <b>bold</b> claim.');
+		});
+
+		it('reads the plate, the summary, the facts, the description and the action in that order', () => {
+			const html = renderParts({ summary, description });
+			const order = ['<figure>', summary, '<dl', 'The first paragraph', '<button'].map((fragment) =>
+				html.indexOf(fragment)
+			);
+
+			expect(order.every((position) => position > -1)).toBe(true);
+			expect(order).toEqual([...order].sort((a, b) => a - b));
+		});
+
+		it('shows the summary alone as before, with no description block', () => {
+			const html = renderParts({ summary });
+
+			expect(textsOf(html, 'p')).toContain(summary);
+			expect(html).not.toMatch(/_description_/);
+		});
+
+		it('shows the description alone, with no empty summary', () => {
+			const html = renderParts({ description });
+
+			expect(textsOf(html, 'p')).toHaveLength(4);
+			expect(html).toMatch(/_description_/);
+			expect(html).not.toMatch(/_lede_/);
+		});
+
+		it('shows neither when both are absent and leaves the facts and the action adjacent', () => {
+			const html = renderParts({});
+
+			expect(textsOf(html, 'p')).toHaveLength(2);
+			expect(html.indexOf('</dl>')).toBeGreaterThan(-1);
+			expect(html.slice(html.indexOf('</dl>'), html.indexOf('<button'))).toMatch(
+				/^<\/dl><div class="[^"]*">$/
+			);
+		});
+
+		it('keeps the geographic facts, the coordinates link and the action around a long description', () => {
+			const long = Array.from({ length: 7 }, (_, index) =>
+				Array.from({ length: 50 }, (_, word) => `word${index}${word}`).join(' ')
+			).join('\n\n');
+			const html = renderParts({ summary, description: long });
+
+			expect(textsOf(html, 'dt')).toEqual(['Region', 'Country', 'Continent', 'Coordinates']);
+			expect(html).toContain('on Google Maps');
+			expect(html).toContain('<button');
+			expect(textsOf(html, 'p').filter((text) => text.startsWith('word'))).toHaveLength(7);
+		});
+	});
 });

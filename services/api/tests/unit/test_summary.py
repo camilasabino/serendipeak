@@ -4,6 +4,7 @@ from serendipeak.catalog.summary import (
     SUMMARY_MAX_LENGTH,
     SummaryViolation,
     normalize_summary,
+    stored_summary_violations,
     summary_violations,
 )
 from tests.support.catalog import fixture_catalog
@@ -227,5 +228,42 @@ def test_every_violation_of_a_summary_is_reported_once_in_a_stable_order():
     assert violations == (
         SummaryViolation.NOT_TRIMMED,
         SummaryViolation.CONTROL_CHARACTER,
+        SummaryViolation.MARKUP,
+    )
+
+
+def test_the_limit_is_130_characters():
+    assert SUMMARY_MAX_LENGTH == 130
+    assert summary_violations("A" * (SUMMARY_MAX_LENGTH - 1) + ".") == ()
+    assert SummaryViolation.TOO_LONG in summary_violations("A" * SUMMARY_MAX_LENGTH + ".")
+
+
+LEGACY_SUMMARY = "A" * 150 + "."
+
+
+def test_a_summary_equal_to_the_stored_one_is_not_judged_by_the_length():
+    assert SummaryViolation.TOO_LONG in summary_violations(LEGACY_SUMMARY)
+    assert summary_violations(LEGACY_SUMMARY, stored=LEGACY_SUMMARY) == ()
+
+
+def test_a_changed_summary_is_judged_by_the_length_even_when_a_long_one_is_stored():
+    changed = LEGACY_SUMMARY + "B"
+
+    assert SummaryViolation.TOO_LONG in summary_violations(changed, stored=LEGACY_SUMMARY)
+
+
+def test_the_other_rules_still_apply_to_the_stored_summary():
+    long_and_broken = "a" * 150
+
+    assert summary_violations(long_and_broken, stored=long_and_broken) == (
+        SummaryViolation.NOT_SENTENCE_FORM,
+    )
+    assert stored_summary_violations(long_and_broken) == (SummaryViolation.NOT_SENTENCE_FORM,)
+
+
+def test_a_stored_summary_is_not_judged_by_the_length():
+    assert stored_summary_violations(LEGACY_SUMMARY) == ()
+    assert stored_summary_violations(" <b>x</b>") == (
+        SummaryViolation.NOT_TRIMMED,
         SummaryViolation.MARKUP,
     )

@@ -57,7 +57,7 @@ class DjangoMountainRepository:
         with translate_database_errors():
             records = list(
                 with_geography(MountainRecord.objects.filter(status=MountainStatus.ACTIVE.value))
-                # Only the columns an entry maps: the summary and camera are never read here.
+                # Only the columns an entry maps: editorial texts and camera are never read here.
                 .only(
                     "slug",
                     "name_en",

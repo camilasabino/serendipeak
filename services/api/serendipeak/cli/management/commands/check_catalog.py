@@ -20,6 +20,11 @@ class Command(BaseCommand):
 
         for violation in report.violations:
             self.stderr.write(f"{violation.slug}: {violation.violation}")
+        if report.summaries_over_limit:
+            self.stdout.write(
+                f"{len(report.summaries_over_limit)} summaries exceed the length limit and are"
+                f" kept until they are shortened: {', '.join(report.summaries_over_limit)}."
+            )
 
         if report.violations:
             raise CommandError(

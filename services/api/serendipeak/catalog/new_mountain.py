@@ -4,6 +4,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from serendipeak.catalog.coordinates import coordinates_in_range
+from serendipeak.catalog.description import description_violations
 from serendipeak.catalog.entities import (
     WIKIDATA_ID_PATTERN,
     Coordinates,
@@ -25,6 +26,7 @@ class NewMountainViolation(StrEnum):
     COORDINATES_OUT_OF_RANGE = "coordinates_out_of_range"
     ELEVATION_NOT_POSITIVE = "elevation_not_positive"
     SUMMARY_INVALID = "summary_invalid"
+    DESCRIPTION_INVALID = "description_invalid"
     OSM_NODE_ID_NOT_POSITIVE = "osm_node_id_not_positive"
     WIKIDATA_ID_INVALID = "wikidata_id_invalid"
     IMAGE_AUTHOR_MISSING = "image_author_missing"
@@ -67,8 +69,8 @@ class NewPhotograph:
 
 @dataclass(frozen=True, slots=True)
 class NewMountain:
-    """What an editor supplies to create a draft. The name and summary are English only
-    (translations are not written before the localization milestone); the status, the camera
+    """What an editor supplies to create a draft. The name, summary and description are English
+    only (translations are not written before the localization milestone); the status, the camera
     and the timestamps are never supplied. A draft may have no photograph yet; publishing it
     requires one."""
 
@@ -80,6 +82,7 @@ class NewMountain:
     country_codes: tuple[str, ...] = ()
     region_id: UUID | None = None
     summary: str | None = None
+    description: str | None = None
     osm_node_id: int | None = None
     wikidata_id: str | None = None
     photograph: NewPhotograph | None = None
@@ -102,11 +105,14 @@ def content_violations(
     osm_node_id: int | None,
     wikidata_id: str | None,
     coordinates: Coordinates | None = None,
+    description: str | None = None,
+    stored_summary: str | None = None,
 ) -> tuple[NewMountainViolation, ...]:
     """The rules the database enforces on the editable content of a mountain, draft or public.
 
     Shared by the creation and the update of a mountain, which judge the same columns. The
-    coordinates are judged only when given: an update never moves the mountain.
+    coordinates are judged only when given: an update never moves the mountain. The summary is
+    judged against the length limit unless it is the one already stored.
     """
     violations = []
 
@@ -120,8 +126,10 @@ def content_violations(
         violations.append(NewMountainViolation.COORDINATES_OUT_OF_RANGE)
     if elevation_meters <= 0:
         violations.append(NewMountainViolation.ELEVATION_NOT_POSITIVE)
-    if summary is not None and summary_violations(summary):
+    if summary is not None and summary_violations(summary, stored=stored_summary):
         violations.append(NewMountainViolation.SUMMARY_INVALID)
+    if description is not None and description_violations(description):
+        violations.append(NewMountainViolation.DESCRIPTION_INVALID)
     if osm_node_id is not None and osm_node_id <= 0:
         violations.append(NewMountainViolation.OSM_NODE_ID_NOT_POSITIVE)
     if wikidata_id is not None and not _WIKIDATA_ID.fullmatch(wikidata_id):
@@ -144,6 +152,7 @@ def new_mountain_violations(mountain: NewMountain) -> tuple[NewMountainViolation
             name=mountain.name,
             elevation_meters=mountain.elevation_meters,
             summary=mountain.summary,
+            description=mountain.description,
             osm_node_id=mountain.osm_node_id,
             wikidata_id=mountain.wikidata_id,
             coordinates=mountain.coordinates,

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from serendipeak.catalog.bootstrap.ports import CatalogStore
 from serendipeak.catalog.entities import MountainStatus
 from serendipeak.catalog.publication import PublicationViolation, publication_violations
+from serendipeak.catalog.summary import SUMMARY_MAX_LENGTH
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,8 +14,13 @@ class CatalogViolation:
 
 @dataclass(frozen=True, slots=True)
 class CatalogCheckReport:
+    """The violations of the publication invariants, and, apart from them, the slugs of the
+    active mountains whose summary exceeds the length limit: a summary saved under a former limit
+    stays valid until an editor shortens it, so it is a review list and never a violation."""
+
     checked: int
     violations: tuple[CatalogViolation, ...]
+    summaries_over_limit: tuple[str, ...] = ()
 
 
 class CheckCatalog:
@@ -37,5 +43,10 @@ class CheckCatalog:
                 CatalogViolation(slug=mountain.slug, violation=violation)
                 for mountain in active
                 for violation in publication_violations(mountain)
+            ),
+            summaries_over_limit=tuple(
+                mountain.slug
+                for mountain in active
+                if mountain.summary is not None and len(mountain.summary.en) > SUMMARY_MAX_LENGTH
             ),
         )
