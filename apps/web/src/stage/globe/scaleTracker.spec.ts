@@ -105,6 +105,36 @@ describe('scale tracker', () => {
 		expect(scene.published).toEqual([KM, next]);
 	});
 
+	it('republishes a reading whose only change is its wording, as a change of unit makes', () => {
+		const scene = harness(KM);
+		scene.runNext();
+		scene.advance(500);
+		const reworded: ScaleReading = { ...KM, label: '3,281 ft' };
+		scene.set(reworded);
+
+		scene.tracker.refresh();
+		scene.runNext();
+
+		expect(scene.published).toEqual([KM, reworded]);
+	});
+
+	it('words the last change once when refreshed in a burst', () => {
+		const scene = harness(KM);
+		scene.runNext();
+		scene.advance(500);
+
+		scene.set({ ...KM, label: '3,281 ft' });
+		scene.tracker.refresh();
+		scene.set(KM);
+		scene.tracker.refresh();
+		scene.set({ ...KM, label: '3,281 ft' });
+		scene.tracker.refresh();
+
+		expect(scene.queue).toHaveLength(1);
+		scene.runNext();
+		expect(scene.published.map((reading) => reading?.label)).toEqual(['1 km', '3,281 ft']);
+	});
+
 	it('hides the scale as soon as a measurement is invalid', () => {
 		const scene = harness(KM);
 		scene.runNext();

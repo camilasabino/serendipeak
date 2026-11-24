@@ -2154,3 +2154,154 @@ describe('SceneSession framing the places the atlas filters leave', () => {
 		expect(scene.overviews).toHaveLength(1);
 	});
 });
+
+describe('SceneSession unit system', () => {
+	const MARKERS: AtlasMarker[] = [
+		{
+			slug: 'aconcagua',
+			name: 'Aconcagua',
+			latitude: -32.653,
+			longitude: -70.011,
+			elevationMeters: 6961
+		}
+	];
+
+	// Everything a unit change must leave exactly as it was.
+	function presentation(scene: Awaited<ReturnType<typeof onAtlas>>['scene']) {
+		return {
+			shown: scene.shown.length,
+			pendingShows: scene.pendingShows.length,
+			overviews: scene.overviews.length,
+			pendingOverviews: scene.pendingOverviews.length,
+			refits: scene.refits.length,
+			resets: scene.resets,
+			clears: scene.clears,
+			orbits: scene.orbits.length,
+			orbiting: scene.orbiting,
+			markerSets: scene.markerSets.length,
+			presentations: scene.presentations.length,
+			highlights: scene.highlights.length,
+			destroys: scene.destroyCount
+		};
+	}
+
+	it('gives the scene metric at wiring when none was chosen', async () => {
+		const { scene } = await readySession();
+
+		expect(scene.unitSystems).toEqual(['metric']);
+	});
+
+	it('keeps a choice made before the scene exists and applies it before anything is drawn', async () => {
+		const { session, factory } = setup();
+		session.setUnitSystem('imperial');
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(MARKERS);
+		session.setTarget(ACONCAGUA);
+		const scene = factory.resolve(0);
+		const units = vi.spyOn(scene, 'setUnitSystem');
+		const drawn = vi.spyOn(scene, 'setAtlasMarkers');
+		const shown = vi.spyOn(scene, 'showMountain');
+		await flush();
+
+		expect(units).toHaveBeenCalledWith('imperial');
+		expect(units.mock.invocationCallOrder[0]!).toBeLessThan(drawn.mock.invocationCallOrder[0]!);
+		expect(units.mock.invocationCallOrder[0]!).toBeLessThan(shown.mock.invocationCallOrder[0]!);
+	});
+
+	it('applies the last choice made before the scene exists, not every one', async () => {
+		const { session, factory } = setup();
+		session.setUnitSystem('imperial');
+		session.setUnitSystem('metric');
+		session.setUnitSystem('imperial');
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.unitSystems).toEqual(['imperial']);
+	});
+
+	it('hands a change to a ready scene at once, in order, without presenting anything again', async () => {
+		const { session, scene } = await onAtlas();
+		session.setAtlasMarkers(MARKERS);
+		const before = presentation(scene);
+
+		session.setUnitSystem('imperial');
+		session.setUnitSystem('metric');
+		session.setUnitSystem('imperial');
+
+		expect(scene.unitSystems).toEqual(['metric', 'imperial', 'metric', 'imperial']);
+		expect(presentation(scene)).toEqual(before);
+	});
+
+	it('leaves a mountain flight in the air alone', async () => {
+		const { session, scene } = await presenting({ holdShow: true });
+		const before = presentation(scene);
+
+		session.setUnitSystem('imperial');
+
+		expect(presentation(scene)).toEqual(before);
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(scene.shown).toHaveLength(1);
+	});
+
+	it('leaves a flight to the places the atlas filters leave alone', async () => {
+		const { session, scene, store } = await onAtlas();
+		scene.holdShow = true;
+		session.setAtlas({ ...ATLAS_VIEW, focus: [ACONCAGUA, FITZ_ROY] });
+		const before = presentation(scene);
+
+		session.setUnitSystem('imperial');
+
+		expect(presentation(scene)).toEqual(before);
+		expect(store.getSnapshot()).toMatchObject({ free: false, rotation: 'off' });
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+		expect(scene.overviews).toHaveLength(2);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+	});
+
+	it('keeps an ambient orbit turning', async () => {
+		const { session, scene } = await onAtlas();
+		expect(scene.orbiting).toBe(true);
+
+		session.setUnitSystem('imperial');
+
+		expect(scene.orbiting).toBe(true);
+		expect(scene.orbits).toHaveLength(1);
+	});
+
+	it('hands the choice to the scene a retry builds', async () => {
+		const first = setup();
+		first.session.setUnitSystem('imperial');
+		first.factory.resolve(0);
+		await flush();
+		first.session.stop();
+
+		const second = first.open();
+		second.setUnitSystem('imperial');
+		const scene = first.factory.resolve(1);
+		await flush();
+
+		expect(scene.unitSystems).toEqual(['imperial']);
+	});
+
+	it('does nothing once stopped, and never reaches the scene it released', async () => {
+		const { session, scene } = await onAtlas();
+		session.stop();
+
+		session.setUnitSystem('imperial');
+
+		expect(scene.unitSystems).toEqual(['metric']);
+	});
+
+	it('ignores a choice for a scene that failed to build', async () => {
+		const { session, factory, store } = setup();
+
+		factory.reject(0, new Error('no webgl'));
+		await flush();
+
+		expect(() => session.setUnitSystem('imperial')).not.toThrow();
+		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
+	});
+});

@@ -1,3 +1,4 @@
+import type { UnitSystem } from '../units/unitSystem';
 import type { AtlasMarker } from './globe/atlasMarkers';
 import type { AtlasView } from './globe/atlasView';
 import type { MarkerActivation } from './globe/markerActivation';
@@ -26,6 +27,7 @@ export interface StageBindingOptions {
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
 	markers?: readonly AtlasMarker[];
+	unitSystem?: UnitSystem;
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
 	onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -43,6 +45,7 @@ export class StageBinding {
 	private target: SceneTarget | undefined;
 	private atlas: AtlasView | undefined;
 	private markers: readonly AtlasMarker[] | undefined;
+	private unitSystem: UnitSystem | undefined;
 	private published: StageSize | undefined;
 	private disposed = false;
 
@@ -50,6 +53,7 @@ export class StageBinding {
 		this.target = options.target;
 		this.atlas = options.atlas;
 		this.markers = options.markers;
+		this.unitSystem = options.unitSystem;
 		this.session = this.openSession();
 		this.present();
 
@@ -79,6 +83,14 @@ export class StageBinding {
 		}
 		this.markers = markers;
 		this.session.setAtlasMarkers(markers);
+	}
+
+	setUnitSystem(system: UnitSystem): void {
+		if (this.disposed) {
+			return;
+		}
+		this.unitSystem = system;
+		this.session.setUnitSystem(system);
 	}
 
 	highlightMarker(slug: string | undefined): void {
@@ -145,6 +157,9 @@ export class StageBinding {
 	private present(): void {
 		this.published = undefined;
 		this.publishSize();
+		if (this.unitSystem) {
+			this.session.setUnitSystem(this.unitSystem);
+		}
 		this.session.setAtlas(this.atlas);
 		this.session.setAtlasMarkers(this.markers);
 		this.session.setTarget(this.target);

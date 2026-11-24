@@ -1,4 +1,5 @@
 import type { TerrainProvider, Viewer } from 'cesium';
+import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../../../units/unitSystem';
 import type { AtlasLookReading, ExposeAtlasLook } from '../atlasLook';
 import type { AtlasLayerReading, AtlasMarker, ExposeAtlasLayer } from '../atlasMarkers';
 import type { SceneTarget } from '../camera';
@@ -97,6 +98,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly terrainSession: TerrainCameraSession;
 	private readonly reducedMotion: MediaQueryList;
 	private stage: StageSize = { width: 0, height: 0 };
+	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
 	private scaleTracker: ScaleTracker | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
@@ -488,6 +490,18 @@ export class CesiumGlobeScene implements GlobeScene {
 		return this.flight.zoom(direction, this.motion() === 'direct' ? 0 : ZOOM_FLIGHT_SECONDS);
 	}
 
+	setUnitSystem(system: UnitSystem): void {
+		if (this.destroyed || system === this.units) {
+			return;
+		}
+
+		this.units = system;
+		this.summitMarkers.setUnitSystem(system);
+		this.atlasMarkers.setUnitSystem(system);
+		// Sampled when its turn comes, so a burst of changes is worded once, in the last unit.
+		this.scaleTracker?.refresh();
+	}
+
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void {
 		this.releaseOrientation();
 		this.releaseOrientation = noop;
@@ -532,7 +546,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		const tracker = new ScaleTracker({
-			sample: () => this.sampler.groundScale(),
+			sample: () => this.sampler.groundScale(this.units),
 			publish: listener,
 			listen: (onChange) => this.listenForViewChanges(onChange)
 		});

@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { resetStub, useScenario } from '../ssr/support';
+import { chooseCountry, list, openFilters, popup } from './support/atlasList';
 import {
 	DESKTOP,
 	cameraAtRest,
@@ -10,28 +11,6 @@ import {
 	liveViewers,
 	test
 } from './support/stage';
-
-const list = (page: Page) => page.getByRole('region', { name: 'All mountains' });
-const popup = (page: Page) => page.locator('[popover]');
-
-async function openFilters(page: Page) {
-	const country = list(page).getByRole('button', { name: /^Country/ });
-	if (!(await country.isVisible())) {
-		await list(page)
-			.getByRole('button', { name: /^Filter/ })
-			.click();
-	}
-}
-
-async function chooseCountry(page: Page, name: string) {
-	await openFilters(page);
-	await list(page)
-		.getByRole('button', { name: /^Country/ })
-		.click();
-	await popup(page)
-		.getByRole('option', { name: new RegExp(`^${name}\\s+\\d`) })
-		.click();
-}
 
 async function chooseBand(page: Page, floor: number) {
 	await openFilters(page);

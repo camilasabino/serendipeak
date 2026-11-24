@@ -14,7 +14,7 @@ import {
 } from './marker';
 
 describe('planSummitMarker', () => {
-	it('keeps the canonical summit position and carries the name and the formatted elevation', () => {
+	it('keeps the canonical summit position and carries the name and the elevation in meters', () => {
 		const marker = planSummitMarker({
 			slug: 'aconcagua',
 			name: 'Aconcagua',
@@ -27,19 +27,8 @@ describe('planSummitMarker', () => {
 			latitude: -32.65,
 			longitude: -70.01,
 			elevationMeters: 6961,
-			name: 'Aconcagua',
-			elevation: '6,961 m'
+			name: 'Aconcagua'
 		});
-	});
-
-	it('uses the shared elevation format for every elevation', () => {
-		const elevation = (elevationMeters: number) =>
-			planSummitMarker({ slug: 'peak', name: 'Peak', latitude: 0, longitude: 0, elevationMeters })
-				.elevation;
-
-		expect(elevation(8849)).toBe('8,849 m');
-		expect(elevation(1345)).toBe('1,345 m');
-		expect(elevation(999)).toBe('999 m');
 	});
 });
 

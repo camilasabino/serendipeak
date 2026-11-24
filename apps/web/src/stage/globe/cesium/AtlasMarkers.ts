@@ -10,6 +10,7 @@ import type {
 	Viewer
 } from 'cesium';
 import { formatElevation } from '../../../formatElevation';
+import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../../../units/unitSystem';
 import {
 	ATLAS_MARKER_STYLE,
 	diffMarkers,
@@ -119,6 +120,7 @@ export class AtlasMarkers {
 	/** The marker drawn emphasized now, with its preview. */
 	private emphasized: string | undefined;
 	private preview: Preview | undefined;
+	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
 	private refreshing = false;
 	private shown = false;
 	private released = false;
@@ -204,6 +206,25 @@ export class AtlasMarkers {
 	highlight(slug: string | undefined): void {
 		this.highlighted = this.known(slug);
 		this.restyle();
+	}
+
+	/**
+	 * The unit the preview pill words its elevation in. A pill already on screen is redrawn in
+	 * place: it stays until the new one is ready, and no entity, marker or hit target changes.
+	 */
+	setUnitSystem(system: UnitSystem): void {
+		if (this.released || system === this.units) {
+			return;
+		}
+		this.units = system;
+
+		const preview = this.preview;
+		const entry = this.emphasized === undefined ? undefined : this.entries.get(this.emphasized);
+		if (!preview || !entry || this.viewer.isDestroyed()) {
+			return;
+		}
+		preview.generation += 1;
+		this.requestPill(preview, entry);
 	}
 
 	read(): AtlasLayerReading | undefined {
@@ -338,16 +359,22 @@ export class AtlasMarkers {
 		if (!entry) {
 			return;
 		}
+		preview.entity.position = new this.cesium.ConstantPositionProperty(entry.position);
+		this.requestPill(preview, entry);
+	}
+
+	// Asks for the pill of `entry` in the current unit and lands it only while `preview.generation`
+	// is still the one asked under.
+	private requestPill(preview: Preview, entry: MarkerEntry): void {
 		const generation = preview.generation;
 		const { canvas } = this.viewer.scene;
 		const ratio = renderRatio(canvas);
 		const maxContentWidth = summitPillMaxContentWidth(canvas.clientWidth, rootFontPixels());
-		preview.entity.position = new this.cesium.ConstantPositionProperty(entry.position);
 
 		this.options.sprites
 			.pill(
 				entry.marker.name,
-				formatElevation(entry.marker.elevationMeters),
+				formatElevation(entry.marker.elevationMeters, this.units),
 				ratio,
 				maxContentWidth
 			)

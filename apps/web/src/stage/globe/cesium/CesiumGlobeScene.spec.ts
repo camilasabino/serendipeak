@@ -10,6 +10,10 @@ const cesium = vi.hoisted(() => ({
 	lookStates: [] as boolean[],
 	pickerListeners: [] as unknown[],
 	atlasSets: [] as unknown[],
+	unitCalls: [] as string[],
+	summitCalls: [] as string[],
+	groundScaleUnits: [] as unknown[],
+	scaleTrackers: [] as { sample(): unknown; refreshes: number; released: boolean }[],
 	flightCallbacks: [] as { kind: 'glide' | 'fly' | 'view'; complete(): void }[],
 	flightCancels: 0,
 	placedLooks: [] as unknown[],
@@ -48,6 +52,28 @@ vi.mock('./ViewSampler', () => ({
 	ViewSampler: class {
 		viewHeading() {
 			return Number.NaN;
+		}
+		groundScale(system?: unknown) {
+			cesium.groundScaleUnits.push(system);
+			return undefined;
+		}
+	}
+}));
+vi.mock('../scaleTracker', () => ({
+	ScaleTracker: class {
+		refreshes = 0;
+		released = false;
+		constructor(readonly options: { sample(): unknown }) {
+			cesium.scaleTrackers.push(this);
+		}
+		sample() {
+			return this.options.sample();
+		}
+		refresh() {
+			this.refreshes += 1;
+		}
+		release() {
+			this.released = true;
 		}
 	}
 }));
@@ -97,14 +123,24 @@ vi.mock('./ViewerCameraFlight', () => ({
 vi.mock('./SummitMarkers', () => ({
 	COMPACT_STAGE_QUERY: '(max-width: 55.99rem)',
 	SummitMarkers: class {
-		hide() {}
-		show() {}
+		hide() {
+			cesium.summitCalls.push('hide');
+		}
+		show() {
+			cesium.summitCalls.push('show');
+		}
+		setUnitSystem(system: string) {
+			cesium.unitCalls.push(`summit:${system}`);
+		}
 	}
 }));
 vi.mock('./AtlasMarkers', () => ({
 	AtlasMarkers: class {
 		set(markers: unknown) {
 			cesium.atlasSets.push(markers);
+		}
+		setUnitSystem(system: string) {
+			cesium.unitCalls.push(`atlas:${system}`);
 		}
 		read() {
 			return { shown: cesium.atlasSets.at(-1) !== undefined };
@@ -1097,5 +1133,160 @@ describe('CesiumGlobeScene overview flights', () => {
 		expect(cesium.flightCallbacks).toEqual([]);
 		expect(cesium.placedLooks).toEqual([LOOK]);
 		await expect(arrival).resolves.toEqual({ status: 'arrived' });
+	});
+});
+
+describe('CesiumGlobeScene unit system', () => {
+	const LOOK = {
+		latitude: -35,
+		longitude: -68,
+		altitudeMeters: 0,
+		headingDegrees: 0,
+		pitchDegrees: -89,
+		rangeMeters: 3_000_000,
+		framingX: 0,
+		framingY: 0
+	};
+	const TARGET = { slug: 'peak', name: 'Peak', latitude: 1, longitude: 2, elevationMeters: 3000 };
+	const STAGE = { clientWidth: 1280, clientHeight: 800 } as HTMLElement;
+
+	beforeEach(() => {
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.flightCallbacks.length = 0;
+		cesium.flightCancels = 0;
+		cesium.placedLooks.length = 0;
+		cesium.orbits.length = 0;
+		cesium.atlasSets.length = 0;
+		cesium.unitCalls.length = 0;
+		cesium.summitCalls.length = 0;
+		cesium.groundScaleUnits.length = 0;
+		cesium.scaleTrackers.length = 0;
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	it('hands the unit to the summit pill, the atlas preview and the scale bar', async () => {
+		const scene = await create();
+		scene.subscribeScale(() => {});
+
+		scene.setUnitSystem('imperial');
+
+		expect(cesium.unitCalls).toEqual(['summit:imperial', 'atlas:imperial']);
+		expect(cesium.scaleTrackers[0]!.refreshes).toBe(1);
+	});
+
+	it('words the next scale reading in the unit in force', async () => {
+		const scene = await create();
+		scene.subscribeScale(() => {});
+		const tracker = cesium.scaleTrackers[0]!;
+
+		tracker.sample();
+		scene.setUnitSystem('imperial');
+		tracker.sample();
+		scene.setUnitSystem('metric');
+		tracker.sample();
+
+		expect(cesium.groundScaleUnits).toEqual(['metric', 'imperial', 'metric']);
+	});
+
+	it('is idempotent and deterministic across repeated toggles', async () => {
+		const scene = await create();
+		scene.subscribeScale(() => {});
+
+		scene.setUnitSystem('metric');
+		expect(cesium.unitCalls).toEqual([]);
+		scene.setUnitSystem('imperial');
+		scene.setUnitSystem('imperial');
+		scene.setUnitSystem('metric');
+		scene.setUnitSystem('imperial');
+
+		expect(cesium.unitCalls).toEqual([
+			'summit:imperial',
+			'atlas:imperial',
+			'summit:metric',
+			'atlas:metric',
+			'summit:imperial',
+			'atlas:imperial'
+		]);
+		expect(cesium.scaleTrackers[0]!.refreshes).toBe(3);
+	});
+
+	it('is applied with no scale subscription and to one made afterwards', async () => {
+		const scene = await create();
+
+		expect(() => scene.setUnitSystem('imperial')).not.toThrow();
+		scene.subscribeScale(() => {});
+		cesium.scaleTrackers[0]!.sample();
+
+		expect(cesium.groundScaleUnits).toEqual(['imperial']);
+	});
+
+	it('leaves a flight to the overview in the air, flying on to arrive', async () => {
+		const scene = await create();
+		const arrival = scene.showOverview(LOOK, true);
+		expect(cesium.flightCallbacks).toHaveLength(1);
+
+		scene.setUnitSystem('imperial');
+		scene.setUnitSystem('metric');
+
+		expect(cesium.flightCallbacks).toHaveLength(1);
+		expect(cesium.flightCancels).toBe(0);
+		expect(cesium.placedLooks).toEqual([]);
+		cesium.flightCallbacks.shift()!.complete();
+		await expect(arrival).resolves.toEqual({ status: 'arrived' });
+	});
+
+	it('leaves a flight to a mountain alone, and does not present it again', async () => {
+		const scene = await create(undefined, STAGE);
+		void scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks.length).toBeGreaterThan(0));
+		const flights = cesium.flightCallbacks.length;
+		const summit = [...cesium.summitCalls];
+
+		scene.setUnitSystem('imperial');
+
+		expect(cesium.flightCallbacks).toHaveLength(flights);
+		expect(cesium.flightCancels).toBe(0);
+		expect(cesium.summitCalls).toEqual(summit);
+	});
+
+	it('does not recreate the viewer, move the camera or touch the atlas markers', async () => {
+		const scene = await create();
+		scene.setAtlasMarkers([]);
+		const sets = cesium.atlasSets.length;
+
+		scene.setUnitSystem('imperial');
+
+		expect(cesium.viewer.destroy).not.toHaveBeenCalled();
+		expect(cesium.atlasSets).toHaveLength(sets);
+		expect(cesium.flightCallbacks).toEqual([]);
+		expect(cesium.placedLooks).toEqual([]);
+	});
+
+	it('keeps an ambient orbit turning', async () => {
+		const scene = await create(undefined, STAGE);
+		expect(scene.startOrbit(300, () => {})).toBe(true);
+
+		scene.setUnitSystem('imperial');
+
+		expect(cesium.orbits.filter((orbit) => orbit.running)).toHaveLength(1);
+		expect(cesium.orbits).toHaveLength(1);
+	});
+
+	it('does nothing once destroyed, and a late call never reaches the released parts', async () => {
+		const scene = await create();
+		scene.subscribeScale(() => {});
+		scene.destroy();
+
+		expect(() => scene.setUnitSystem('imperial')).not.toThrow();
+
+		expect(cesium.unitCalls).toEqual([]);
+		expect(cesium.scaleTrackers[0]!.refreshes).toBe(0);
 	});
 });

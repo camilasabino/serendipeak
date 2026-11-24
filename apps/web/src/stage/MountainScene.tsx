@@ -1,5 +1,6 @@
 import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react';
 import { readCesiumConfig } from '../config/readPublicConfig';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import { cesiumSceneFactory } from './cesiumSceneFactory';
 import { sceneCanRetry } from './experience';
 import type { AtlasMarker } from './globe/atlasMarkers';
@@ -60,6 +61,7 @@ export default function MountainScene({
 	onStageResize,
 	children
 }: MountainSceneProps) {
+	const unitSystem = useUnitSystem();
 	const {
 		viewportRef,
 		snapshot,
@@ -76,6 +78,7 @@ export default function MountainScene({
 		target,
 		atlas,
 		markers,
+		unitSystem,
 		observer,
 		onMarkerActivate,
 		onStageResize

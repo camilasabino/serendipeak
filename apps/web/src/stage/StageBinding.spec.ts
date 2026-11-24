@@ -5,6 +5,7 @@ import type { AtlasMarker } from './globe/atlasMarkers';
 import { atlasOverviewLook, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { MarkerActivation } from './globe/markerActivation';
+import type { UnitSystem } from '../units/unitSystem';
 import { SceneStore } from './SceneStore';
 import { TransitionCoordinator } from './TransitionCoordinator';
 import { StageBinding } from './StageBinding';
@@ -42,6 +43,7 @@ function setup(
 		target?: SceneTarget;
 		atlas?: AtlasView;
 		markers?: readonly AtlasMarker[];
+		unitSystem?: UnitSystem;
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
 		onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -60,6 +62,7 @@ function setup(
 			target: options.target,
 			atlas: options.atlas,
 			markers: options.markers,
+			unitSystem: options.unitSystem,
 			observer: options.observer,
 			onMarkerActivate: options.onMarkerActivate,
 			onStageResize: options.onStageResize
@@ -866,5 +869,77 @@ describe('StageBinding framing the filtered atlas', () => {
 
 		expect(scene.overviews).toEqual([{ look: atlasOverviewLook(ANDES, STAGE), animate: false }]);
 		expect(scene.orbits).toEqual([]);
+	});
+});
+
+describe('StageBinding unit system', () => {
+	async function mounted(options: Parameters<typeof setup>[0] = {}) {
+		const context = setup(options);
+		const binding = context.mount();
+		const scene = context.factory.resolve(0);
+		await flush();
+
+		return { ...context, binding, scene };
+	}
+
+	it('gives the scene the unit the binding was mounted with', async () => {
+		const { scene } = await mounted({ unitSystem: 'imperial' });
+
+		expect(scene.unitSystems).toEqual(['imperial']);
+	});
+
+	it('gives the scene metric when no unit was chosen', async () => {
+		const { scene } = await mounted();
+
+		expect(scene.unitSystems).toEqual(['metric']);
+	});
+
+	it('hands a change to the live scene without creating another or presenting again', async () => {
+		const { factory, binding, scene } = await mounted({ target: ACONCAGUA });
+		const shown = scene.shown.length;
+
+		binding.setUnitSystem('imperial');
+		binding.setUnitSystem('metric');
+		binding.setUnitSystem('imperial');
+
+		expect(scene.unitSystems).toEqual(['metric', 'imperial', 'metric', 'imperial']);
+		expect(scene.shown).toHaveLength(shown);
+		expect(scene.destroyCount).toBe(0);
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('holds a change made while the scene is still loading and applies it once it exists', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+
+		binding.setUnitSystem('imperial');
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.unitSystems).toEqual(['imperial']);
+	});
+
+	it('applies the unit chosen since mounting to the scene a retry builds', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, mount } = setup({ unitSystem: 'metric' });
+		const binding = mount();
+		factory.reject(0, new Error('terrain unavailable'));
+		await flush();
+
+		binding.setUnitSystem('imperial');
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.unitSystems).toEqual(['imperial']);
+	});
+
+	it('does nothing once disposed', async () => {
+		const { binding, scene } = await mounted();
+		binding.dispose();
+
+		binding.setUnitSystem('imperial');
+
+		expect(scene.unitSystems).toEqual(['metric']);
 	});
 });

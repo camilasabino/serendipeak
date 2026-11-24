@@ -1,3 +1,4 @@
+import type { UnitSystem } from '../units/unitSystem';
 import type { AtlasMarker } from '../stage/globe/atlasMarkers';
 import type { SceneTarget } from '../stage/globe/camera';
 import type { CameraReading } from '../stage/globe/cameraReading';
@@ -118,6 +119,8 @@ export class FakeGlobeScene implements GlobeScene {
 	reducedMotion: boolean;
 	/** Every marker set handed to the scene, in order; `undefined` took the markers away. */
 	readonly markerSets: (readonly AtlasMarker[] | undefined)[] = [];
+	/** Every unit system the scene was told, in order. */
+	readonly unitSystems: UnitSystem[] = [];
 	/** Every atlas presentation state the scene was told, in order. */
 	readonly presentations: boolean[] = [];
 	/** Every marker emphasis the scene was asked for, in order; `undefined` ended one. */
@@ -276,6 +279,12 @@ export class FakeGlobeScene implements GlobeScene {
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
 		if (!this.destroyed) {
 			this.markerSets.push(markers);
+		}
+	}
+
+	setUnitSystem(system: UnitSystem): void {
+		if (!this.destroyed) {
+			this.unitSystems.push(system);
 		}
 	}
 

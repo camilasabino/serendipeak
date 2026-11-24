@@ -1,3 +1,4 @@
+import type { UnitSystem } from '../../units/unitSystem';
 import type { Destroyable } from '../lifecycle';
 import type { AtlasMarker } from './atlasMarkers';
 import type { SceneTarget } from './camera';
@@ -67,6 +68,13 @@ export interface GlobeScene extends Destroyable {
 	 * heard while no markers are drawn. A new subscription replaces the previous one.
 	 */
 	subscribeMarkerActivation(listener: (activation: MarkerActivation) => void): () => void;
+	/**
+	 * The unit system the scene words its measurements in: the summit pill, the atlas preview pill
+	 * and the scale bar, metric until told otherwise. It only redraws those labels, in place, and
+	 * is idempotent: the camera, the markers and the Viewer are never touched, and a flight in the
+	 * air flies on.
+	 */
+	setUnitSystem(system: UnitSystem): void;
 	/** Direct input on the globe, a press or a wheel. A new subscription replaces the previous one. */
 	subscribeInteraction(listener: () => void): () => void;
 	/** Resolves when the view is ready, superseded by a later call, or the scene is destroyed. */

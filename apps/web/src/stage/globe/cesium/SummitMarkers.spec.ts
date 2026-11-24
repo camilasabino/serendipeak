@@ -14,8 +14,7 @@ const SUMMIT = {
 	latitude: 46,
 	longitude: 7,
 	elevationMeters: 4478,
-	name: 'Matterhorn',
-	elevation: '4,478 m'
+	name: 'Matterhorn'
 };
 
 class FakeSprites implements SummitSpriteSource {
@@ -43,9 +42,9 @@ class FakeSprites implements SummitSpriteSource {
 		return new Promise((resolve, reject) => this.waiting.push({ resolve, reject }));
 	}
 
-	finish(index = 0): void {
+	finish(index = 0, image = `pill:${this.pillRequests[index]!.name}`): void {
 		this.waiting[index]!.resolve({
-			image: `pill:${this.pillRequests[index]!.name}`,
+			image,
 			width: 180,
 			height: 62,
 			bottomInset: 14
@@ -241,6 +240,188 @@ describe('SummitMarkers', () => {
 		markers.hide();
 
 		expect(viewer.entities.getById('summit-label')).toBeUndefined();
+	});
+
+	describe('unit system', () => {
+		const label = (viewer: ReturnType<typeof setup>['viewer']) =>
+			viewer.entities.getById('summit-label')!;
+		const image = (viewer: ReturnType<typeof setup>['viewer']) =>
+			label(viewer).billboard!.image!.getValue(NOW);
+
+		it('words the pill in meters until told otherwise', () => {
+			const { markers, sprites } = setup();
+
+			markers.show(SUMMIT);
+
+			expect(sprites.pillRequests.map((request) => request.elevation)).toEqual(['4,478 m']);
+		});
+
+		it('draws a first pill in the unit set before the summit showed', () => {
+			const { markers, sprites } = setup();
+
+			markers.setUnitSystem('imperial');
+			markers.show(SUMMIT);
+
+			expect(sprites.pillRequests.map((request) => request.elevation)).toEqual(['14,692 ft']);
+		});
+
+		it('redraws the shown pill in place, keeping the old one until the new one is ready', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0, 'pill:metres');
+			await settle();
+			const disc = viewer.entities.getById('summit-marker')!;
+			const pill = label(viewer);
+
+			markers.setUnitSystem('imperial');
+			expect(sprites.pillRequests[1]).toMatchObject({ name: 'Matterhorn', elevation: '14,692 ft' });
+			expect(image(viewer)).toBe('pill:metres');
+
+			sprites.finish(1, 'pill:feet');
+			await settle();
+
+			expect(label(viewer)).toBe(pill);
+			expect(image(viewer)).toBe('pill:feet');
+			expect(viewer.entities.getById('summit-marker')).toBe(disc);
+			expect(disc.billboard!.image!.getValue(NOW)).toBe('disc@1');
+			expect(viewer.entities.values).toHaveLength(2);
+		});
+
+		it('keeps the pill at the summit with the same fade and anchor after a redraw', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0);
+			await settle();
+			const position = label(viewer).position!.getValue(NOW)!.clone();
+
+			markers.setUnitSystem('imperial');
+			sprites.finish(1);
+			await settle();
+
+			const pill = label(viewer).billboard!;
+			expect(cesium.Cartesian3.equals(label(viewer).position!.getValue(NOW)!, position)).toBe(true);
+			expect(pill.verticalOrigin!.getValue(NOW)).toBe(cesium.VerticalOrigin.BOTTOM);
+			expect(pill.heightReference!.getValue(NOW)).toBe(cesium.HeightReference.CLAMP_TO_TERRAIN);
+			const offset = pill.pixelOffset!.getValue(NOW) as cesium.Cartesian2;
+			expect(offset.y).toBe(14 - SUMMIT_MARKER_STYLE.labelOffsetPixels);
+		});
+
+		it('is idempotent: the same unit asks for nothing', async () => {
+			const { markers, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0);
+			await settle();
+
+			markers.setUnitSystem('metric');
+			markers.setUnitSystem('imperial');
+			markers.setUnitSystem('imperial');
+
+			expect(sprites.pillRequests.map((request) => request.elevation)).toEqual([
+				'4,478 m',
+				'14,692 ft'
+			]);
+		});
+
+		it('discards a pill drawn for a previous unit, whatever order they finish in', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0, 'pill:metres');
+			await settle();
+
+			markers.setUnitSystem('imperial');
+			markers.setUnitSystem('metric');
+			sprites.finish(2, 'pill:metres-again');
+			await settle();
+			sprites.finish(1, 'pill:feet-late');
+			await settle();
+
+			expect(image(viewer)).toBe('pill:metres-again');
+		});
+
+		it('discards a pill that finishes late for the unit no longer wanted, leaving the current one', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0, 'pill:metres');
+			await settle();
+
+			markers.setUnitSystem('imperial');
+			markers.setUnitSystem('metric');
+			sprites.finish(1, 'pill:feet-late');
+			await settle();
+			expect(image(viewer)).toBe('pill:metres');
+
+			sprites.finish(2, 'pill:metres-again');
+			await settle();
+			expect(image(viewer)).toBe('pill:metres-again');
+		});
+
+		it('replaces a first pill still being drawn when the unit changes under it', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+
+			markers.setUnitSystem('imperial');
+			sprites.finish(0, 'pill:metres');
+			await settle();
+			expect(viewer.entities.getById('summit-label')).toBeUndefined();
+
+			sprites.finish(1, 'pill:feet');
+			await settle();
+			expect(image(viewer)).toBe('pill:feet');
+		});
+
+		it('draws nothing for a unit change while no summit is showing, and drops a pill pending at hide', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+
+			markers.setUnitSystem('imperial');
+			expect(sprites.pillRequests).toHaveLength(0);
+
+			markers.show(SUMMIT);
+			markers.hide();
+			markers.setUnitSystem('metric');
+			sprites.finish(0);
+			await settle();
+
+			expect(sprites.pillRequests).toHaveLength(1);
+			expect(viewer.entities.values).toHaveLength(0);
+		});
+
+		it('keeps the unit across summits', async () => {
+			const { markers, sprites } = setup();
+			markers.setUnitSystem('imperial');
+
+			markers.show(SUMMIT);
+			markers.show({ ...SUMMIT, name: 'Weisshorn', elevationMeters: 4506 });
+
+			expect(sprites.pillRequests.map((request) => request.elevation)).toEqual([
+				'14,692 ft',
+				'14,783 ft'
+			]);
+		});
+
+		it('draws no pill on the phone layout for a unit change, and uses the unit on return', async () => {
+			const { markers, viewer, sprites, settle, layout } = setup(undefined, true);
+			markers.show(SUMMIT);
+
+			markers.setUnitSystem('imperial');
+			await settle();
+			expect(sprites.pillRequests).toHaveLength(0);
+			expect(viewer.entities.values.map((entity) => entity.id)).toEqual(['summit-marker']);
+
+			layout.switchTo(false);
+			expect(sprites.pillRequests.map((request) => request.elevation)).toEqual(['14,692 ft']);
+		});
+
+		it('touches nothing once the viewer is destroyed', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0);
+			await settle();
+
+			viewer.destroyed = true;
+
+			expect(() => markers.setUnitSystem('imperial')).not.toThrow();
+			expect(sprites.pillRequests).toHaveLength(1);
+		});
 	});
 
 	describe('on the phone layout', () => {

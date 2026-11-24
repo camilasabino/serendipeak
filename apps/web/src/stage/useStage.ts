@@ -6,6 +6,7 @@ import {
 	useSyncExternalStore,
 	type RefObject
 } from 'react';
+import type { UnitSystem } from '../units/unitSystem';
 import { sameAtlasMarkers, type AtlasMarker } from './globe/atlasMarkers';
 import { sameAtlasView, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
@@ -25,6 +26,8 @@ export interface UseStageOptions {
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
 	markers?: readonly AtlasMarker[];
+	/** Applied to the scene without rebuilding it; the stage is metric until one is given. */
+	unitSystem?: UnitSystem;
 	observer?: PresentationObserver;
 	/** Read when an activation arrives, so a new function never rebuilds the stage. */
 	onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -49,6 +52,7 @@ export function useStage({
 	target,
 	atlas,
 	markers,
+	unitSystem,
 	observer,
 	onMarkerActivate,
 	onStageResize
@@ -58,6 +62,7 @@ export function useStage({
 	const targetRef = useRef(target);
 	const atlasRef = useRef(atlas);
 	const markersRef = useRef(markers);
+	const unitSystemRef = useRef(unitSystem);
 	const activateRef = useRef(onMarkerActivate);
 	const resizeRef = useRef(onStageResize);
 	const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -92,6 +97,13 @@ export function useStage({
 	}, [stableMarkers]);
 
 	useEffect(() => {
+		unitSystemRef.current = unitSystem;
+		if (unitSystem) {
+			bindingRef.current?.setUnitSystem(unitSystem);
+		}
+	}, [unitSystem]);
+
+	useEffect(() => {
 		activateRef.current = onMarkerActivate;
 		resizeRef.current = onStageResize;
 	}, [onMarkerActivate, onStageResize]);
@@ -115,6 +127,7 @@ export function useStage({
 			target: targetRef.current,
 			atlas: atlasRef.current,
 			markers: markersRef.current,
+			unitSystem: unitSystemRef.current,
 			observer,
 			onMarkerActivate: (activation) => activateRef.current?.(activation),
 			onStageResize: () => resizeRef.current?.()

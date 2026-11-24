@@ -1,4 +1,5 @@
 import type { Cartesian3, Viewer } from 'cesium';
+import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../../../units/unitSystem';
 import { greatCircleDistanceMeters } from '../geodesic';
 import { viewHeadingDegrees } from '../orientation';
 import { scaleBarFor, scaleSpecForStage, type ScaleReading } from '../scaleBar';
@@ -49,7 +50,7 @@ export class ViewSampler {
 		return viewHeadingDegrees(direction.x, direction.y, direction.z, up.x, up.y);
 	}
 
-	groundScale(): ScaleReading | undefined {
+	groundScale(system: UnitSystem = DEFAULT_UNIT_SYSTEM): ScaleReading | undefined {
 		if (this.viewer.isDestroyed()) {
 			return undefined;
 		}
@@ -73,7 +74,12 @@ export class ViewSampler {
 			return undefined;
 		}
 
-		return scaleBarFor(greatCircleDistanceMeters(from, to), spec.maxWidthPx, spec.maxWidthPx);
+		return scaleBarFor(
+			greatCircleDistanceMeters(from, to),
+			spec.maxWidthPx,
+			spec.maxWidthPx,
+			system
+		);
 	}
 
 	projectFraming(summit: Cartesian3): { x: number; y: number } | undefined {

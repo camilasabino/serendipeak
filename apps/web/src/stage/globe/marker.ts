@@ -1,12 +1,11 @@
-import { formatElevation } from '../../formatElevation';
 import type { SceneTarget } from './camera';
 
+/** Canonical data only: the display words the elevation in the unit the reader has chosen. */
 export interface SummitMarker {
 	latitude: number;
 	longitude: number;
 	elevationMeters: number;
 	name: string;
-	elevation: string;
 }
 
 export interface SummitMarkerDisplay {
@@ -155,13 +154,7 @@ export function pillFootprint(sprite: SummitSprite): { width: number; height: nu
 export function planSummitMarker(target: SceneTarget): SummitMarker {
 	const { name, latitude, longitude, elevationMeters } = target;
 
-	return {
-		latitude,
-		longitude,
-		elevationMeters,
-		name,
-		elevation: formatElevation(elevationMeters)
-	};
+	return { latitude, longitude, elevationMeters, name };
 }
 
 export interface PillLayout {

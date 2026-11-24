@@ -73,12 +73,12 @@ function dotSprite(state: string, ratio: number) {
 function fakeSprites() {
 	const waiting: (() => void)[] = [];
 	let hold = false;
-	const pill = vi.fn(async (name: string) => {
+	const pill = vi.fn(async (name: string, elevation: string) => {
 		if (hold) {
 			await new Promise<void>((resolve) => waiting.push(resolve));
 		}
 		return {
-			image: `pill:${name}`,
+			image: `pill:${name}:${elevation}`,
 			width: PILL_WIDTH,
 			height: PILL_HEIGHT,
 			bottomInset: PILL_INSET
@@ -1285,7 +1285,7 @@ describe('AtlasMarkers preview', () => {
 
 		const pill = previewEntity(entity);
 		expect(pill.show).toBe(true);
-		expect(pill.billboard!.image!.getValue(NOW)).toBe('pill:Mount Olympus');
+		expect(pill.billboard!.image!.getValue(NOW)).toBe('pill:Mount Olympus:2,918 m');
 		expect(pill.billboard!.disableDepthTestDistance!.getValue(NOW)).toBe(Number.POSITIVE_INFINITY);
 		const offset = pill.billboard!.pixelOffset!.getValue(NOW) as cesium.Cartesian2;
 		expect(offset.y).toBeCloseTo(box.bottom - at.y + PILL_INSET, 5);
@@ -1335,7 +1335,7 @@ describe('AtlasMarkers preview', () => {
 		await attached();
 
 		expect(markers.read()!.preview?.slug).toBe(MONT_BLANC.slug);
-		expect(previewEntity(entity).billboard!.image!.getValue(NOW)).toBe('pill:Mont Blanc');
+		expect(previewEntity(entity).billboard!.image!.getValue(NOW)).toBe('pill:Mont Blanc:4,806 m');
 	});
 
 	it('shows nothing, and does not fail, when the pill cannot be drawn', async () => {
@@ -1404,6 +1404,296 @@ describe('AtlasMarkers preview', () => {
 		expect(listeners.size).toBe(0);
 		expect(viewer.dataSources.length).toBe(0);
 		expect(() => markers.highlight(OLYMPUS.slug)).not.toThrow();
+	});
+});
+
+describe('AtlasMarkers unit system', () => {
+	const preview = (entity: (slug: string) => cesium.Entity | undefined) => entity('atlas-preview')!;
+	const previewImage = (entity: (slug: string) => cesium.Entity | undefined) =>
+		preview(entity).billboard!.image!.getValue(NOW);
+
+	// Every pill the sprites are asked for stays pending until the test settles it.
+	function manualPills(sprites: ReturnType<typeof fakeSprites>) {
+		const pending: { name: string; elevation: string; settle(width?: number): void }[] = [];
+		sprites.pill.mockImplementation(
+			(name: string, elevation: string) =>
+				new Promise((resolve) =>
+					pending.push({
+						name,
+						elevation,
+						settle: (width = PILL_WIDTH) =>
+							resolve({
+								image: `pill:${name}:${elevation}`,
+								width,
+								height: PILL_HEIGHT,
+								bottomInset: PILL_INSET
+							})
+					})
+				)
+		);
+
+		return pending;
+	}
+
+	it('words the pill in meters until told otherwise', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+
+		expect(sprites.pill).toHaveBeenCalledWith('Mount Olympus', '2,918 m', 1, expect.any(Number));
+	});
+
+	it('words the pill of a marker emphasized later in the unit already set', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.setUnitSystem('imperial');
+		expect(sprites.pill).not.toHaveBeenCalled();
+		markers.emphasize(OLYMPUS.slug);
+
+		expect(sprites.pill).toHaveBeenCalledWith('Mount Olympus', '9,573 ft', 1, expect.any(Number));
+	});
+
+	it('keeps the unit when the layer is hidden and shown again', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS]);
+		markers.setUnitSystem('imperial');
+		markers.set(undefined);
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+
+		expect(sprites.pill).toHaveBeenCalledWith('Mount Olympus', '9,573 ft', 1, expect.any(Number));
+	});
+
+	it('redraws a visible preview in place when the unit changes', async () => {
+		const { markers, entity, layer, sprites } = setup();
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+		const pill = preview(entity);
+		const dot = entity(OLYMPUS.slug)!;
+		const before = markers.read()!;
+		const targets = markers.targets.map((target) => ({ ...target }));
+		const dots = sprites.dot.mock.calls.length;
+
+		markers.setUnitSystem('imperial');
+		await attached();
+
+		expect(sprites.pill).toHaveBeenLastCalledWith(
+			'Mount Olympus',
+			'9,573 ft',
+			1,
+			expect.any(Number)
+		);
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:9,573 ft');
+		expect(preview(entity)).toBe(pill);
+		expect(pill.show).toBe(true);
+		expect(entity(OLYMPUS.slug)).toBe(dot);
+		expect(layer()!.entities.values).toHaveLength(3);
+		expect(sprites.dot.mock.calls).toHaveLength(dots);
+
+		const after = markers.read()!;
+		expect(after.preview?.slug).toBe(OLYMPUS.slug);
+		expect(after.entities).toBe(before.entities);
+		expect(after.layers).toBe(before.layers);
+		expect(after.markers.map(({ slug, visible, window }) => ({ slug, visible, window }))).toEqual(
+			before.markers.map(({ slug, visible, window }) => ({ slug, visible, window }))
+		);
+		expect(markers.targets.map((target) => ({ ...target }))).toEqual(targets);
+	});
+
+	it('keeps the old pill on stage until the new one is drawn', async () => {
+		const { markers, entity, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+		sprites.holdPills();
+
+		markers.setUnitSystem('imperial');
+		await attached();
+
+		expect(preview(entity).show).toBe(true);
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:2,918 m');
+		expect(markers.read()!.preview?.slug).toBe(OLYMPUS.slug);
+
+		sprites.releasePills();
+		await attached();
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:9,573 ft');
+	});
+
+	it('places the redrawn pill by its new width', async () => {
+		const { markers, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		pending[0]!.settle(160);
+		await attached();
+		const narrow = markers.read()!.preview!.box;
+
+		markers.setUnitSystem('imperial');
+		pending[1]!.settle(200);
+		await attached();
+
+		const wide = markers.read()!.preview!.box;
+		expect(wide.right - wide.left).toBeCloseTo(narrow.right - narrow.left + 40, 5);
+		expect((wide.left + wide.right) / 2).toBeCloseTo((narrow.left + narrow.right) / 2, 5);
+	});
+
+	it('discards a pill drawn for a previous unit, whatever order they finish in', async () => {
+		const { markers, entity, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		pending[0]!.settle();
+		await attached();
+
+		markers.setUnitSystem('imperial');
+		markers.setUnitSystem('metric');
+		expect(pending.map((request) => request.elevation)).toEqual(['2,918 m', '9,573 ft', '2,918 m']);
+
+		pending[2]!.settle();
+		await attached();
+		pending[1]!.settle();
+		await attached();
+
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:2,918 m');
+	});
+
+	it('drops a pill for a previous unit that finishes before the current one', async () => {
+		const { markers, entity, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		pending[0]!.settle();
+		await attached();
+
+		markers.setUnitSystem('imperial');
+		markers.setUnitSystem('metric');
+		pending[1]!.settle();
+		await attached();
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:2,918 m');
+
+		pending[2]!.settle();
+		await attached();
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:2,918 m');
+		expect(markers.read()!.preview?.slug).toBe(OLYMPUS.slug);
+	});
+
+	it('replaces a first pill still being drawn when the unit changes under it', async () => {
+		const { markers, entity, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.emphasize(OLYMPUS.slug);
+		markers.setUnitSystem('imperial');
+		pending[0]!.settle();
+		await attached();
+		expect(markers.read()!.preview).toBeUndefined();
+
+		pending[1]!.settle();
+		await attached();
+		expect(previewImage(entity)).toBe('pill:Mount Olympus:9,573 ft');
+		expect(markers.read()!.preview?.slug).toBe(OLYMPUS.slug);
+	});
+
+	it('words the pill of the next marker in the new unit, never one for the old', async () => {
+		const { markers, entity, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		pending[0]!.settle();
+		await attached();
+
+		markers.setUnitSystem('imperial');
+		markers.emphasize(MONT_BLANC.slug);
+		pending[1]!.settle();
+		await attached();
+		pending[2]!.settle();
+		await attached();
+
+		expect(pending[2]).toMatchObject({ name: 'Mont Blanc', elevation: '15,768 ft' });
+		expect(previewImage(entity)).toBe('pill:Mont Blanc:15,768 ft');
+	});
+
+	it('draws nothing for a unit change while no marker is emphasized', async () => {
+		const { markers, sprites, layer } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+
+		markers.setUnitSystem('imperial');
+		markers.setUnitSystem('metric');
+		await attached();
+
+		expect(sprites.pill).not.toHaveBeenCalled();
+		expect(layer()!.entities.getById('atlas-preview')).toBeUndefined();
+		expect(markers.read()!.preview).toBeUndefined();
+	});
+
+	it('is idempotent: the same unit asks for nothing', async () => {
+		const { markers, sprites } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		markers.setUnitSystem('metric');
+		markers.setUnitSystem('imperial');
+		markers.setUnitSystem('imperial');
+
+		expect(sprites.pill).toHaveBeenCalledTimes(2);
+	});
+
+	it('keeps hover, list highlight and hit testing through a unit change', async () => {
+		const { markers, sprites } = setup();
+		const pending = manualPills(sprites);
+		markers.set([OLYMPUS, MONT_BLANC]);
+		await attached();
+		markers.highlight(OLYMPUS.slug);
+		markers.emphasize(MONT_BLANC.slug);
+		pending.forEach((request) => request.settle());
+		await attached();
+		const targets = markers.targets.map(({ slug, x, y }) => ({ slug, x, y }));
+		expect(targets.length).toBeGreaterThan(0);
+
+		markers.setUnitSystem('imperial');
+		pending.slice(2).forEach((request) => request.settle());
+		await attached();
+
+		const reading = markers.read()!;
+		expect(reading.hovered).toBe(MONT_BLANC.slug);
+		expect(reading.highlighted).toBe(OLYMPUS.slug);
+		expect(reading.preview?.slug).toBe(MONT_BLANC.slug);
+		expect(markers.targets.map(({ slug, x, y }) => ({ slug, x, y }))).toEqual(targets);
+		const point = markers.targets.find((target) => target.slug === MONT_BLANC.slug)!;
+		const hit = resolveMarkerHit(markers.targets, { x: point.x, y: point.y }, 'fine');
+		expect(hit.kind === 'mountain' && hit.mountain.slug).toBe(MONT_BLANC.slug);
+	});
+
+	it('does nothing once released or when the viewer is gone', async () => {
+		const { markers, sprites, destroyViewer } = setup();
+		markers.set([OLYMPUS]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		await attached();
+
+		destroyViewer();
+		expect(() => markers.setUnitSystem('imperial')).not.toThrow();
+		markers.release();
+		expect(() => markers.setUnitSystem('metric')).not.toThrow();
+
+		expect(sprites.pill).toHaveBeenCalledTimes(1);
 	});
 });
 

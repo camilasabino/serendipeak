@@ -1,3 +1,4 @@
+import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../units/unitSystem';
 import {
 	ATLAS_ORBIT_PERIOD_SECONDS,
 	atlasOverviewLook,
@@ -76,6 +77,7 @@ export class SceneSession {
 	private atlas: AtlasView | undefined;
 	private markers: readonly AtlasMarker[] | undefined;
 	private stage: StageSize | undefined;
+	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
 	private stopped = false;
 	private revealed = false;
 	private presentation = 0;
@@ -188,6 +190,19 @@ export class SceneSession {
 		}
 		this.markers = next;
 		this.scene?.setAtlasMarkers(next);
+	}
+
+	/**
+	 * The unit the scene words its labels in. Kept for a scene that does not exist yet, such as one
+	 * a retry builds, and applied to a ready scene before it draws anything. Presentation is never
+	 * restarted by it.
+	 */
+	setUnitSystem(next: UnitSystem): void {
+		if (this.stopped) {
+			return;
+		}
+		this.units = next;
+		this.scene?.setUnitSystem(next);
 	}
 
 	/** A transient emphasis for one atlas marker; not kept for a scene that does not exist yet. */
@@ -325,6 +340,7 @@ export class SceneSession {
 
 	private wire(ready: GlobeScene): void {
 		this.scene = ready;
+		ready.setUnitSystem(this.units);
 		this.releaseOrientation = ready.subscribeOrientation((orientation) => {
 			if (!this.stopped) {
 				this.store.setOrientation(orientation);

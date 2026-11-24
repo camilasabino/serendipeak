@@ -5,6 +5,8 @@ import type {
 	HeightReference,
 	Viewer
 } from 'cesium';
+import { formatElevation } from '../../../formatElevation';
+import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../../../units/unitSystem';
 import {
 	SUMMIT_MARKER_STYLE,
 	renderRatio,
@@ -33,6 +35,9 @@ export interface CompactStageQuery {
  * clamped to the terrain and faded out by distance exactly as the point and label they replace.
  * The depth test is left as it was, so a ridge in front still hides them.
  *
+ * The pill words the elevation in the unit system set on this display; changing it redraws the
+ * pill in place, keeping the old one on stage until the new one is ready. The disc is untouched.
+ *
  * The disc appears at once. The pill appears when its faces are ready, and only if the same
  * summit is still showing by then. On the phone layout the pill is left out, and drawn only if the
  * stage grows past that breakpoint while the summit is showing.
@@ -42,6 +47,7 @@ export class SummitMarkers implements SummitMarkerDisplay {
 	private readonly distance: DistanceDisplayCondition;
 	private generation = 0;
 	private current: { marker: SummitMarker; position: Cartesian3 } | undefined;
+	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
 	private readonly onLayoutChange = () => this.syncPill();
 
 	constructor(
@@ -79,6 +85,17 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		this.syncPill();
 	}
 
+	setUnitSystem(system: UnitSystem): void {
+		if (system === this.units) {
+			return;
+		}
+		this.units = system;
+
+		if (this.current && !this.compactStage.matches && !this.viewer.isDestroyed()) {
+			this.drawPill(this.current);
+		}
+	}
+
 	hide(): void {
 		this.generation += 1;
 		this.current = undefined;
@@ -101,7 +118,12 @@ export class SummitMarkers implements SummitMarkerDisplay {
 			return;
 		}
 
-		const { marker, position } = this.current;
+		this.drawPill(this.current);
+	}
+
+	// Asks for the pill in the current unit; whichever request is newest is the only one that lands.
+	private drawPill({ marker, position }: { marker: SummitMarker; position: Cartesian3 }): void {
+		this.generation += 1;
 		const { canvas } = this.viewer.scene;
 		const maxContentWidth = summitPillMaxContentWidth(
 			canvas.clientWidth,
@@ -109,11 +131,19 @@ export class SummitMarkers implements SummitMarkerDisplay {
 			SUMMIT_MARKER_STYLE.pill.summitScale
 		);
 
-		void this.showPill(marker, position, renderRatio(canvas), maxContentWidth, this.generation);
+		void this.showPill(
+			marker.name,
+			formatElevation(marker.elevationMeters, this.units),
+			position,
+			renderRatio(canvas),
+			maxContentWidth,
+			this.generation
+		);
 	}
 
 	private async showPill(
-		{ name, elevation }: SummitMarker,
+		name: string,
+		elevation: string,
 		position: Cartesian3,
 		ratio: number,
 		maxContentWidth: number,
@@ -141,6 +171,13 @@ export class SummitMarkers implements SummitMarkerDisplay {
 			0,
 			sprite.bottomInset - SUMMIT_MARKER_STYLE.labelOffsetPixels
 		);
+
+		const shown = this.viewer.entities.getById(SUMMIT_LABEL_ID)?.billboard;
+		if (shown) {
+			shown.image = new this.cesium.ConstantProperty(sprite.image);
+			shown.pixelOffset = new this.cesium.ConstantProperty(offset);
+			return;
+		}
 
 		this.viewer.entities.add({
 			id: SUMMIT_LABEL_ID,
