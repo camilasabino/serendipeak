@@ -176,7 +176,7 @@ describe('atlas panel', () => {
 		const html = renderPanel(new AtlasViewStore());
 
 		expect(textsOf(html, 'summary')).toEqual(['Asia1 mountain', 'South America2 mountains']);
-		expect(html).not.toMatch(/<select|aria-live|Filter|Sort/);
+		expect(html).not.toMatch(/<select|<button|aria-live/);
 	});
 
 	it('lists the matches flat and in order for a filtered or sorted view', () => {
