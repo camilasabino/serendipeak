@@ -84,13 +84,6 @@
 	outline-offset: 1px;
 }
 
-/* Matches the header's tightest setting, reached only with enlarged text. */
-@media (max-width: 17.5rem) {
-	.option {
-		padding-inline: 0.25rem;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.option,
 	.option::before {

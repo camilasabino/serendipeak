@@ -4,8 +4,9 @@ import { ATLAS_LINK_LABEL } from '../atlas/atlasCopy';
 import { ATLAS_PATH } from '../atlas/atlasQuery';
 import { TODAY_LINK_LABEL, TODAY_PATH } from '../mountain-page/pageCopy';
 import { SearchControl } from '../search/SearchControl';
-import { UnitSelector } from '../units/UnitSelector';
+import { UNITS_GROUP_LABEL, UnitSelector } from '../units/UnitSelector';
 import { BrandSymbol, BrandWordmark } from './BrandLogo';
+import { HeaderMenu } from './HeaderMenu';
 import styles from './SiteHeader.module.css';
 
 const BRAND_LINK_LABEL = 'SerendiPeak home';
@@ -23,29 +24,38 @@ export function SiteHeader({ pathname }: SiteHeaderProps) {
 			</Link>
 			<nav className={styles.nav} aria-label="Primary">
 				<SearchControl />
-				<Link
-					className={styles.link}
-					href={TODAY_PATH}
-					aria-current={pathname === TODAY_PATH ? 'page' : undefined}
-				>
-					{TODAY_LINK_LABEL}
-				</Link>
-				<Link
-					className={styles.link}
-					href={ATLAS_PATH}
-					aria-current={pathname === ATLAS_PATH ? 'page' : undefined}
-				>
-					{ATLAS_LINK_LABEL}
-				</Link>
-				<Link
-					className={styles.link}
-					href={ABOUT_PATH}
-					aria-current={pathname === ABOUT_PATH ? 'page' : undefined}
-				>
-					{ABOUT_LINK_LABEL}
-				</Link>
+				<HeaderMenu>
+					<div className={styles.links}>
+						<Link
+							className={styles.link}
+							href={TODAY_PATH}
+							aria-current={pathname === TODAY_PATH ? 'page' : undefined}
+						>
+							{TODAY_LINK_LABEL}
+						</Link>
+						<Link
+							className={styles.link}
+							href={ATLAS_PATH}
+							aria-current={pathname === ATLAS_PATH ? 'page' : undefined}
+						>
+							{ATLAS_LINK_LABEL}
+						</Link>
+						<Link
+							className={styles.link}
+							href={ABOUT_PATH}
+							aria-current={pathname === ABOUT_PATH ? 'page' : undefined}
+						>
+							{ABOUT_LINK_LABEL}
+						</Link>
+					</div>
+					<div className={styles.units}>
+						<span className={styles.unitsLabel} aria-hidden="true">
+							{UNITS_GROUP_LABEL}
+						</span>
+						<UnitSelector />
+					</div>
+				</HeaderMenu>
 			</nav>
-			<UnitSelector />
 		</header>
 	);
 }

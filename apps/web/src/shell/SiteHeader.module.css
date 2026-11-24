@@ -1,4 +1,10 @@
+/* The header is a size container, so every layout decision below follows the width the header
+   actually has: the split layout narrows it to the stage column, and enlarged text spends rem. The
+   base styles are the compact layout (symbol, search, menu button); each container query adds what
+   the width has room for. */
 .header {
+	--header-gap: 0.375rem;
+
 	container: site-header / inline-size;
 	position: sticky;
 	top: 0;
@@ -6,21 +12,21 @@
 	display: flex;
 	flex: none;
 	align-items: center;
-	gap: 0.75rem;
+	gap: var(--header-gap);
 	box-sizing: border-box;
 	min-height: 3.5rem;
-	padding: 0 0.75rem;
+	padding: 0 0.5rem;
 	border-bottom: 1px solid var(--sp-divider-chrome);
 	background: var(--sp-surface-base);
 	color: var(--sp-text);
 }
 
+/* The brand never gives up its width: the symbol is the one thing that must stay in the row. */
 .brand {
 	display: inline-flex;
-	flex: 0 1 auto;
+	flex: none;
 	align-items: center;
 	gap: 0.625rem;
-	min-width: 0;
 	min-height: 2.75rem;
 	border-radius: 4px;
 	color: var(--sp-text);
@@ -34,8 +40,6 @@
 	width: auto;
 }
 
-/* Beside the symbol the wordmark needs about 540 px next to search, Today, Atlas, About and the
-   unit selector, so below 36 rem the symbol stands alone. The link keeps its accessible name. */
 .wordmark {
 	display: none;
 	height: 1.5rem;
@@ -45,10 +49,9 @@
 	height: 2rem;
 }
 
-/* The unit selector is a setting, not a destination: it follows the navigation, apart from it. */
 .nav {
 	display: flex;
-	flex: none;
+	flex: 0 1 auto;
 	align-items: center;
 	justify-content: flex-end;
 	gap: 0.25rem;
@@ -56,16 +59,20 @@
 	margin-inline-start: auto;
 }
 
-.link {
-	position: relative;
+/* Compact: the menu button opens the panel below the header. Closed, the panel leaves the tab
+   order and the accessibility tree. */
+.toggle {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	gap: 0.45rem;
 	box-sizing: border-box;
 	min-width: 2.75rem;
 	min-height: 2.75rem;
-	padding: 0 0.4rem;
+	padding: 0 0.6rem;
+	border: 0;
 	border-radius: 4px;
+	background: transparent;
 	color: var(--sp-text);
 	font-family: var(--sp-face-ui);
 	font-size: 0.8125rem;
@@ -73,10 +80,90 @@
 	font-weight: 500;
 	letter-spacing: 0.07em;
 	line-height: 1;
+	text-transform: uppercase;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: color var(--sp-duration-short) var(--sp-ease-out);
+}
+
+.toggle:hover,
+.toggle[aria-expanded='true'] {
+	color: var(--sp-state-accent);
+}
+
+.toggle:active {
+	background: var(--sp-state-hover);
+}
+
+.toggleIcon {
+	flex: none;
+	width: 1.125rem;
+	height: 1.125rem;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.75;
+	stroke-linecap: round;
+}
+
+/* Flush with the header's right edge and no wider than the room: on a phone it spans the screen,
+   on a wider one it hangs from the button's side. A tall panel (enlarged text, a short landscape
+   screen) scrolls instead of running off the bottom. */
+.panel {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	display: none;
+	flex-direction: column;
+	box-sizing: border-box;
+	width: min(20rem, 100%);
+	max-height: calc(100dvh - 3.5rem);
+	overflow-y: auto;
+	border-bottom: 1px solid var(--sp-divider-strong);
+	border-left: 1px solid var(--sp-divider-strong);
+	background: var(--sp-surface-raised);
+	box-shadow: 0 1rem 2rem rgb(0 0 0 / 45%);
+}
+
+.panel[data-open] {
+	display: flex;
+	animation: panel-in var(--sp-duration-short) var(--sp-ease-out);
+}
+
+@keyframes panel-in {
+	from {
+		opacity: 0;
+		transform: translateY(-0.25rem);
+	}
+}
+
+.links {
+	display: flex;
+	flex-direction: column;
+}
+
+.link {
+	position: relative;
+	display: flex;
+	align-items: center;
+	box-sizing: border-box;
+	min-height: 3rem;
+	padding: 0 var(--sp-space-4);
+	border-top: 1px solid var(--sp-divider);
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
+	font-size: 0.8125rem;
+	font-stretch: var(--sp-stretch-nav);
+	font-weight: 500;
+	letter-spacing: 0.12em;
+	line-height: 1;
 	text-decoration: none;
 	text-transform: uppercase;
 	white-space: nowrap;
 	transition: color var(--sp-duration-short) var(--sp-ease-out);
+}
+
+.link:first-child {
+	border-top: 0;
 }
 
 .link:hover,
@@ -88,68 +175,57 @@
 	background: var(--sp-state-hover);
 }
 
+/* In the panel the current page is marked on its leading edge. */
 .link[aria-current='page']::after {
 	content: '';
 	position: absolute;
-	right: 0.4rem;
-	bottom: 0.55rem;
-	left: 0.4rem;
-	border-bottom: 1px solid currentColor;
+	inset-block: 0.75rem;
+	inset-inline-start: 0;
+	border-inline-start: 2px solid currentColor;
+}
+
+/* The unit selector is a setting, not a destination: the panel sets it apart under the links. */
+.units {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-space-3);
+	min-height: 3rem;
+	padding: 0 var(--sp-space-3) 0 var(--sp-space-4);
+	border-top: 1px solid var(--sp-divider-strong);
+}
+
+.unitsLabel {
+	color: var(--sp-text-muted);
+	font-family: var(--sp-face-ui);
+	font-size: 0.75rem;
+	font-stretch: var(--sp-stretch-caps);
+	font-weight: 500;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
 
 /* Inset, because the header is flush with the viewport edge and the stage below it. */
 .brand:focus-visible,
+.toggle:focus-visible,
 .link:focus-visible {
 	outline: 2px solid var(--sp-focus-ring);
 	outline-offset: -2px;
 }
 
-@media (max-width: 30rem) {
+@media (min-width: 30rem) {
 	.header {
-		gap: 0.375rem;
-		padding-inline: 0.5rem;
-	}
+		--header-gap: 0.75rem;
 
-	.nav {
-		gap: 0;
-	}
-}
-
-/* The narrowest phones keep every item on one row by trimming the links' side padding. */
-@media (max-width: 22.5rem) {
-	.link {
-		padding-inline: 0.25rem;
-		letter-spacing: 0.05em;
-	}
-
-	.link[aria-current='page']::after {
-		right: 0.25rem;
-		left: 0.25rem;
-	}
-}
-
-/* Reached only with enlarged text (or below 280 px): the links set tight, at their minimum target. */
-@media (max-width: 17.5rem) {
-	.header {
-		gap: 0.25rem;
-	}
-
-	.link {
-		padding-inline: 0.125rem;
-		letter-spacing: 0;
-	}
-}
-
-@media (min-width: 36rem) {
-	.wordmark {
-		display: block;
+		padding-inline: 0.75rem;
 	}
 }
 
 @media (min-width: 56rem) {
 	/* The header can span only the stage column here, beside the wordmark at full size. */
 	.header {
-		gap: 0.5rem;
+		--header-gap: 0.5rem;
+
 		padding-inline: var(--sp-space-4);
 	}
 
@@ -164,31 +240,94 @@
 	.symbol {
 		height: 2.25rem;
 	}
+}
 
-	.nav {
-		flex: 0 1 auto;
-		flex-wrap: wrap;
+/* Search, the three links and the unit selector fit in one row from about 19 rem, beside the
+   symbol; below it they are the menu's. */
+@container site-header (min-width: 20rem) {
+	.toggle {
+		display: none;
+	}
+
+	.panel,
+	.panel[data-open] {
+		display: contents;
+		animation: none;
+	}
+
+	.links {
+		flex-direction: row;
 	}
 
 	.link {
-		padding-inline: 0.5rem;
-		letter-spacing: 0.12em;
+		justify-content: center;
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+		padding: 0 0.4rem;
+		border-top: 0;
+		letter-spacing: 0.07em;
 	}
 
 	.link[aria-current='page']::after {
-		right: 0.5rem;
-		left: 0.5rem;
+		inset: auto 0.4rem 0.55rem;
+		border-inline-start: 0;
+		border-bottom: 1px solid currentColor;
+	}
+
+	.units {
+		min-height: 0;
+		margin-inline-start: var(--header-gap);
+		padding: 0;
+		border-top: 0;
+	}
+
+	.unitsLabel {
+		display: none;
 	}
 }
 
-/* A split layout narrows the header to the stage column, so from 56 rem its width is not the
-   viewport's. With less than about 37 rem inside its padding, the full-size wordmark, search, three
-   links and the unit selector cannot share one row, and the symbol stands alone as it does on
-   narrow screens. */
+/* The search label, and with it a little more air between the links. */
+@container site-header (min-width: 30rem) {
+	.nav,
+	.links {
+		gap: 0.25rem;
+	}
+}
+
+/* Beside the search label, the symbol and the small wordmark need about 33 rem. */
+@container site-header (min-width: 34.5rem) {
+	.wordmark {
+		display: block;
+	}
+}
+
 @media (min-width: 56rem) {
+	@container site-header (min-width: 20rem) {
+		.link {
+			padding-inline: 0.5rem;
+			letter-spacing: 0.12em;
+		}
+
+		.link[aria-current='page']::after {
+			inset-inline: 0.5rem;
+		}
+	}
+
+	/* The full-size wordmark needs about 36 rem; narrower, the symbol stands alone. */
 	@container site-header (max-width: 36.95rem) {
 		.wordmark {
 			display: none;
 		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.toggle,
+	.link {
+		transition: none;
+	}
+
+	.panel[data-open] {
+		animation: none;
 	}
 }

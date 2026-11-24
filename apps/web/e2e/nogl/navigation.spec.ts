@@ -13,6 +13,12 @@ const WIDTHS = [320, 360, 375, 390, 414, 430, 768, 1024, 1440];
 const PAGES = ['/', `/mountains/${ACONCAGUA.slug}`, '/atlas', '/about'];
 
 const primary = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
+const menuButton = (page: Page) => primary(page).getByRole('button', { name: 'Menu' });
+const units = (page: Page) => primary(page).getByRole('group', { name: 'Units' });
+
+// Below about 344 px of viewport at the default text size, the links do not fit beside search and
+// the unit selector, and they move into the menu.
+const COMPACT_BELOW = 344;
 const brand = (page: Page) => page.getByRole('banner').getByRole('link', { name: 'SerendiPeak' });
 const exploreButtons = (page: Page) => page.getByRole('button', { name: /^Explore another/ });
 
@@ -126,12 +132,21 @@ test.describe('@nogl global navigation', () => {
 				await page.goto(path);
 				await expect(primary(page)).toBeVisible();
 
+				// Only a header too narrow for the row of links offers the menu button instead.
+				const compact = await menuButton(page).isVisible();
+				expect(compact, `${path} compact`).toBe(width < COMPACT_BELOW);
+
 				const controls = [
 					brand(page),
 					primary(page).getByRole('button', { name: 'Search mountains' }),
-					primary(page).getByRole('link', { name: 'Today' }),
-					primary(page).getByRole('link', { name: 'Atlas' }),
-					primary(page).getByRole('link', { name: 'About' })
+					...(compact
+						? [menuButton(page)]
+						: [
+								primary(page).getByRole('link', { name: 'Today' }),
+								primary(page).getByRole('link', { name: 'Atlas' }),
+								primary(page).getByRole('link', { name: 'About' }),
+								units(page)
+							])
 				];
 				const placed = await boxes(controls);
 
@@ -149,7 +164,7 @@ test.describe('@nogl global navigation', () => {
 					}
 				}
 				for (const box of placed.slice(2)) {
-					expect(box.width, `${path} link width`).toBeGreaterThanOrEqual(44);
+					expect(box.width, `${path} control width`).toBeGreaterThanOrEqual(44);
 				}
 
 				const shown = (src: string) =>

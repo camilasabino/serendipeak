@@ -2,7 +2,7 @@ import { useSetUnitSystem, useUnitSystem } from './UnitPreferenceContext';
 import styles from './UnitSelector.module.css';
 import { elevationUnit, UNIT_SYSTEMS, type UnitSystem } from './unitSystem';
 
-const GROUP_LABEL = 'Units';
+export const UNITS_GROUP_LABEL = 'Units';
 
 const SYSTEM_NAMES: Record<UnitSystem, string> = {
 	metric: 'Metric, meters',
@@ -14,7 +14,7 @@ export function UnitSelector() {
 	const select = useSetUnitSystem();
 
 	return (
-		<div className={styles.group} role="group" aria-label={GROUP_LABEL}>
+		<div className={styles.group} role="group" aria-label={UNITS_GROUP_LABEL}>
 			{UNIT_SYSTEMS.map((system) => (
 				<button
 					key={system}

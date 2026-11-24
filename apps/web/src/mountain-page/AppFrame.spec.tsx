@@ -29,6 +29,9 @@ function accessibleNameOf({ attributes, text }: Anchor): string {
 	return /aria-label="([^"]*)"/.exec(attributes)?.[1] ?? text;
 }
 
+// Search, the menu button the narrow header shows, and the two unit buttons.
+const HEADER_BUTTONS = ['Search mountains', 'Menu', 'm', 'ft'];
+
 const permalink: PageModel = { kind: 'mountain', mountain };
 const dailyModel: PageModel = { kind: 'daily', daily };
 
@@ -85,8 +88,8 @@ describe('AppFrame header', () => {
 		const html = render({ model: permalink });
 		const header = html.match(/<header[\s\S]*<\/header>/)?.[0] ?? '';
 
-		expect(textsOf(header, 'button')).toEqual(['Search mountains', 'm', 'ft']);
-		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
+		expect(textsOf(header, 'button')).toEqual(HEADER_BUTTONS);
+		expect(textsOf(html, 'button')).toEqual(HEADER_BUTTONS);
 		expect(html).not.toContain('Explore');
 	});
 
@@ -107,7 +110,7 @@ describe('AppFrame header', () => {
 	it('keeps Explore out of the header on the daily page', () => {
 		const html = render({ model: dailyModel });
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
+		expect(textsOf(html, 'button')).toEqual(HEADER_BUTTONS);
 		expect(html).not.toContain('Explore');
 	});
 
@@ -117,7 +120,7 @@ describe('AppFrame header', () => {
 	])('shows no mountain navigation on %s', (_name, props) => {
 		const html = render(props);
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
+		expect(textsOf(html, 'button')).toEqual(HEADER_BUTTONS);
 		expect(html).toContain('<header');
 		expect(html.match(/<header[\s\S]*<\/header>/)?.[0]).not.toContain('Explore');
 	});
@@ -144,19 +147,19 @@ describe('AppFrame About link', () => {
 		expect(html.indexOf('</nav>')).toBeLessThan(html.indexOf('</header>'));
 	});
 
-	it('keeps the primary navigation to search and the three destinations on a permalink', () => {
+	it('keeps the primary navigation to search, the menu, the three destinations and the units on a permalink', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
 		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Today', 'Atlas', 'About']);
-		expect(textsOf(nav, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(nav, 'button')).toEqual(HEADER_BUTTONS);
 	});
 
-	it('sets the unit selector apart from the navigation, after it in the header', () => {
+	it('sets the unit selector apart from the destinations, after them in the menu panel', () => {
 		const html = render({ model: permalink });
 		const units = html.indexOf('role="group" aria-label="Units"');
 
-		expect(units).toBeGreaterThan(html.indexOf('</nav>'));
-		expect(units).toBeLessThan(html.indexOf('</header>'));
+		expect(units).toBeGreaterThan(html.indexOf('>About</a>'));
+		expect(units).toBeLessThan(html.indexOf('</nav>'));
 	});
 
 	it.each([
