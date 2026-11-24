@@ -11,8 +11,13 @@ import { SITE_DESCRIPTION, SITE_NAME } from './pageCopy';
 
 export const HOME_PATH = '/';
 export const BRAND_IMAGE_PATH = '/brand/serendipeak-mark.png';
+export const MOUNTAIN_CARD_PATH = '/brand/serendipeak-mountain-social-v1.png';
 const BRAND_IMAGE_SIZE = 1254;
 const BRAND_IMAGE_ALT = 'The SerendiPeak symbol: concentric contour lines around a summit';
+const MOUNTAIN_CARD_ALT =
+	'SerendiPeak: white and copper contour lines rise to a summit on a dark background';
+const MOUNTAIN_CARD_WIDTH = 1200;
+const MOUNTAIN_CARD_HEIGHT = 630;
 const MAX_DESCRIPTION_LENGTH = 200;
 
 export interface SocialImage {
@@ -20,7 +25,7 @@ export interface SocialImage {
 	alt: string;
 	width?: number;
 	height?: number;
-	/** A wide photograph, as opposed to the square brand mark. */
+	/** A wide 1.91:1 image, as opposed to the square brand mark. */
 	wide: boolean;
 }
 
@@ -78,6 +83,20 @@ function brandImage(origin: string | null): SocialImage | null {
 		: { url, alt: BRAND_IMAGE_ALT, width: BRAND_IMAGE_SIZE, height: BRAND_IMAGE_SIZE, wide: false };
 }
 
+function mountainCard(origin: string | null): SocialImage | null {
+	const url = absolute(origin, MOUNTAIN_CARD_PATH);
+
+	return url === null
+		? null
+		: {
+				url,
+				alt: MOUNTAIN_CARD_ALT,
+				width: MOUNTAIN_CARD_WIDTH,
+				height: MOUNTAIN_CARD_HEIGHT,
+				wide: true
+			};
+}
+
 // The canonical is the permanent address from the API's current slug, so a historical alias and
 // any query string never leak into it.
 function mountainDescriptor(mountain: Mountain, origin: string | null): SocialDescriptor {
@@ -89,7 +108,7 @@ function mountainDescriptor(mountain: Mountain, origin: string | null): SocialDe
 		canonicalUrl: mountainCanonicalUrl(mountain.slug, origin),
 		image: photograph
 			? { url: photograph, alt: photoAlt(mountain.name), wide: true }
-			: brandImage(origin)
+			: mountainCard(origin)
 	};
 }
 

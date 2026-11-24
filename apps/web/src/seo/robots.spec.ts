@@ -39,7 +39,11 @@ describe('buildRobotsTxt', () => {
 	it('does not block the public pages or the assets that render them', () => {
 		const disallowed = directives(buildRobotsTxt(undefined), 'Disallow');
 		const publicPaths = ['/', '/atlas', '/about', '/mountains/aconcagua', '/_next/static/a.js'];
-		const assets = ['/brand/serendipeak-mark.png', '/cesium/Widgets/widgets.css'];
+		const assets = [
+			'/brand/serendipeak-mark.png',
+			'/brand/serendipeak-mountain-social-v1.png',
+			'/cesium/Widgets/widgets.css'
+		];
 
 		for (const path of [...publicPaths, ...assets]) {
 			expect(disallowed.some((rule) => path.startsWith(rule))).toBe(false);

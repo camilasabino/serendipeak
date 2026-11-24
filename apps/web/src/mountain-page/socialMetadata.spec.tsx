@@ -1,9 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import {
 	BRAND_IMAGE_PATH,
+	MOUNTAIN_CARD_PATH,
 	mountainDescription,
 	socialDescriptorFor,
 	socialTags
@@ -45,6 +48,9 @@ describe('canonical URL', () => {
 		expect(html).not.toContain('rel="canonical"');
 		expect(html).not.toContain('og:url');
 		expect(html).not.toContain(BRAND_IMAGE_PATH);
+		expect(html).not.toContain(MOUNTAIN_CARD_PATH);
+		expect(html).not.toContain('og:image');
+		expect(html).not.toContain('twitter:image');
 		expect(contentOf(html, 'property', 'og:title')).toBeDefined();
 	});
 
@@ -78,6 +84,9 @@ describe('daily page metadata', () => {
 		expect(contentOf(html, 'property', 'og:title')).toBe('SerendiPeak');
 		expect(contentOf(html, 'property', 'og:url')).toBe(`${ORIGIN}/`);
 		expect(contentOf(html, 'property', 'og:image')).toBe(`${ORIGIN}${BRAND_IMAGE_PATH}`);
+		expect(contentOf(html, 'property', 'og:image:width')).toBe('1254');
+		expect(contentOf(html, 'name', 'twitter:card')).toBe('summary');
+		expect(html).not.toContain(MOUNTAIN_CARD_PATH);
 		expect(html).not.toContain(daily.mountain.name);
 		expect(html).not.toContain(daily.mountain.slug);
 	});
@@ -120,13 +129,40 @@ describe('mountain description', () => {
 });
 
 describe('social image', () => {
-	it('falls back to the brand mark when the photograph needs attribution', () => {
+	it('falls back to the illustrated card when the photograph needs attribution', () => {
 		const html = tagsOf(complete);
 
-		expect(contentOf(html, 'property', 'og:image')).toBe(`${ORIGIN}${BRAND_IMAGE_PATH}`);
-		expect(contentOf(html, 'name', 'twitter:image')).toBe(`${ORIGIN}${BRAND_IMAGE_PATH}`);
-		expect(contentOf(html, 'name', 'twitter:card')).toBe('summary');
-		expect(contentOf(html, 'property', 'og:image:width')).toBe('1254');
+		expect(contentOf(html, 'property', 'og:image')).toBe(`${ORIGIN}${MOUNTAIN_CARD_PATH}`);
+		expect(contentOf(html, 'name', 'twitter:image')).toBe(`${ORIGIN}${MOUNTAIN_CARD_PATH}`);
+		expect(contentOf(html, 'name', 'twitter:card')).toBe('summary_large_image');
+		expect(contentOf(html, 'property', 'og:image:width')).toBe('1200');
+		expect(contentOf(html, 'property', 'og:image:height')).toBe('630');
+		expect(contentOf(html, 'property', 'og:image:alt')).toMatch(/^SerendiPeak: /);
+		expect(contentOf(html, 'name', 'twitter:image:alt')).toMatch(/^SerendiPeak: /);
+	});
+
+	it('falls back to the illustrated card for a mountain without any photograph', () => {
+		const html = tagsOf({ ...complete, primaryImage: undefined });
+
+		expect(contentOf(html, 'property', 'og:image')).toBe(`${ORIGIN}${MOUNTAIN_CARD_PATH}`);
+	});
+
+	it('keeps the mountain’s own title, description and canonical with the illustrated card', () => {
+		const html = tagsOf(complete);
+
+		expect(contentOf(html, 'property', 'og:title')).toBe(`${complete.name} (6,961 m)`);
+		expect(contentOf(html, 'property', 'og:url')).toBe(`${ORIGIN}/mountains/${complete.slug}`);
+	});
+
+	it('serves a 1200x630 PNG under the versioned path', () => {
+		const file = readFileSync(
+			fileURLToPath(new URL(`../../public${MOUNTAIN_CARD_PATH}`, import.meta.url))
+		);
+
+		expect(file.subarray(1, 4).toString('ascii')).toBe('PNG');
+		expect(file.readUInt32BE(16)).toBe(1200);
+		expect(file.readUInt32BE(20)).toBe(630);
+		expect(file.length).toBeLessThan(1_000_000);
 	});
 
 	it('uses a public-domain photograph as a wide card', () => {

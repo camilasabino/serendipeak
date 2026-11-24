@@ -47,6 +47,8 @@ To recreate the social preview, lay out a 1280x640 HTML page with those elements
 
 GitHub does not read the card from the repository: upload it under Settings → General → Social preview.
 
+The Open Graph card for mountain pages is a separate, static asset: `apps/web/public/brand/serendipeak-mountain-social-v1.png` (1200x630), original artwork of contour lines on `--sp-basalt` with no photograph, satellite imagery or Cesium capture, so it needs no credits. It is served as-is and never regenerated; to change it, add a new `-vN` file and point `MOUNTAIN_CARD_PATH` at it.
+
 ## Credits and rights
 
 The repository license ("All rights reserved") does not cover the third-party material shown in these images.
