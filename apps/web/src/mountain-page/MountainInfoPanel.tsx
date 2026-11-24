@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Mountain } from '../api/contract';
 import { ExternalLink } from '../links/ExternalLink';
 import { formatElevationValue } from '../formatElevation';
@@ -56,7 +56,7 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 						</ExternalLink>
 					</Fact>
 				</Facts>
-				{description && <Description text={description} />}
+				{description && <Description key={mountain.slug} text={description} />}
 				{action && <div className={styles.action}>{action}</div>}
 			</section>
 		</>
@@ -64,11 +64,46 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 }
 
 function Description({ text }: { text: string }) {
+	const [first, ...rest] = splitParagraphs(text);
+	const [expanded, setExpanded] = useState(false);
+	const moreId = useId();
+	const toggle = useRef<HTMLButtonElement>(null);
+	const collapsedByVisitor = useRef(false);
+
+	useEffect(() => {
+		if (!collapsedByVisitor.current) return;
+		collapsedByVisitor.current = false;
+		// The control moves up when the text folds; keep it on screen without scrolling when it already is.
+		toggle.current?.scrollIntoView({ block: 'nearest' });
+	}, [expanded]);
+
+	if (first === undefined) return null;
+
 	return (
 		<div className={styles.description}>
-			{splitParagraphs(text).map((paragraph, index) => (
-				<p key={index}>{paragraph}</p>
-			))}
+			<p>{first}</p>
+			{rest.length > 0 && (
+				<>
+					<div id={moreId} hidden={!expanded} className={styles.more}>
+						{rest.map((paragraph, index) => (
+							<p key={index}>{paragraph}</p>
+						))}
+					</div>
+					<button
+						ref={toggle}
+						type="button"
+						className={styles.toggle}
+						aria-expanded={expanded}
+						aria-controls={moreId}
+						onClick={() => {
+							collapsedByVisitor.current = expanded;
+							setExpanded(!expanded);
+						}}
+					>
+						{expanded ? 'Show less' : 'Read more'}
+					</button>
+				</>
+			)}
 		</div>
 	);
 }

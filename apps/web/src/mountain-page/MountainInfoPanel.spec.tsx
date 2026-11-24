@@ -257,6 +257,38 @@ describe('MountainInfoPanel', () => {
 			expect(order).toEqual([...order].sort((a, b) => a - b));
 		});
 
+		it('folds a multi-paragraph description behind a labelled, controlling button', () => {
+			const html = renderParts({ description });
+			const id = /aria-controls="([^"]+)"/.exec(html)?.[1];
+
+			expect(id).toBeDefined();
+			expect(html).toContain(`id="${id}" hidden=""`);
+			expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-expanded="false"/);
+			expect(textsOf(html, 'button')).toContain('Read more');
+			expect(html.indexOf('The first paragraph')).toBeLessThan(html.indexOf('Read more'));
+			expect(html.indexOf('Read more')).toBeLessThan(html.indexOf('<button type="button">act'));
+		});
+
+		it('offers no control for a single paragraph', () => {
+			const html = renderParts({ description: 'Only one paragraph.' });
+
+			expect(textsOf(html, 'button')).toEqual(['act']);
+			expect(html).not.toContain('aria-controls');
+			expect(html).not.toContain('hidden=""');
+		});
+
+		it('offers no control when blank lines leave one paragraph', () => {
+			const html = renderParts({ description: '\n\nOnly one.\n\n   \n' });
+
+			expect(textsOf(html, 'button')).toEqual(['act']);
+		});
+
+		it('renders neither text nor control without a description', () => {
+			const html = renderParts({ summary });
+
+			expect(textsOf(html, 'button')).toEqual(['act']);
+		});
+
 		it('shows the summary alone as before, with no description block', () => {
 			const html = renderParts({ summary });
 
