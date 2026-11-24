@@ -818,3 +818,53 @@ describe('StageBinding marker emphasis', () => {
 		expect(scene.highlights).toEqual(['a', undefined]);
 	});
 });
+
+describe('StageBinding framing the filtered atlas', () => {
+	const STAGE = { width: 800, height: 500 };
+	const OVERVIEW: AtlasView = { center: { latitude: 20, longitude: 10 } };
+	const ANDES: AtlasView = {
+		...OVERVIEW,
+		focus: [
+			{ latitude: -32.653, longitude: -70.011 },
+			{ latitude: -49.271, longitude: -73.043 }
+		]
+	};
+
+	async function boundAtlas(atlas: AtlasView) {
+		const context = setup({ atlas });
+		const binding = context.mount();
+		const scene = context.factory.resolve(0);
+		await flush();
+
+		return { ...context, binding, scene };
+	}
+
+	it('flies the one live scene to the filtered places and back, without a new scene', async () => {
+		const { factory, binding, scene } = await boundAtlas(OVERVIEW);
+
+		binding.setAtlas(ANDES);
+		binding.setAtlas(OVERVIEW);
+
+		expect(scene.overviews.slice(1)).toEqual([
+			{ look: atlasOverviewLook(ANDES, STAGE), animate: true },
+			{ look: atlasOverviewLook(OVERVIEW, STAGE), animate: true }
+		]);
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('keeps the framing for the scene a retry builds', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const context = setup({ atlas: OVERVIEW });
+		const binding = context.mount();
+		context.factory.reject(0, new Error('terrain unavailable'));
+		await flush();
+		binding.setAtlas(ANDES);
+
+		binding.retry();
+		const scene = context.factory.resolve(1);
+		await flush();
+
+		expect(scene.overviews).toEqual([{ look: atlasOverviewLook(ANDES, STAGE), animate: false }]);
+		expect(scene.orbits).toEqual([]);
+	});
+});

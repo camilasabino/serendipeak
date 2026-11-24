@@ -10,7 +10,9 @@ const cesium = vi.hoisted(() => ({
 	lookStates: [] as boolean[],
 	pickerListeners: [] as unknown[],
 	atlasSets: [] as unknown[],
-	flightCallbacks: [] as { kind: 'glide' | 'fly'; complete(): void }[],
+	flightCallbacks: [] as { kind: 'glide' | 'fly' | 'view'; complete(): void }[],
+	flightCancels: 0,
+	placedLooks: [] as unknown[],
 	holdInputs: vi.fn(),
 	orbits: [] as { periodSeconds: number; running: boolean }[],
 	adopts: 0,
@@ -61,8 +63,18 @@ vi.mock('./ViewerCameraFlight', () => ({
 		fly(_move: unknown, { onComplete }: { onComplete(): void }) {
 			cesium.flightCallbacks.push({ kind: 'fly', complete: onComplete });
 		}
+		flyToLook(_look: unknown, _durationSeconds: number, { onComplete }: { onComplete(): void }) {
+			cesium.flightCallbacks.push({ kind: 'view', complete: onComplete });
+			return true;
+		}
+		applyLook(look: unknown) {
+			cesium.placedLooks.push(look);
+			return true;
+		}
 		jump() {}
-		cancel() {}
+		cancel() {
+			cesium.flightCancels += 1;
+		}
 		setRange(rangeMeters: number) {
 			cesium.ranges.push(rangeMeters);
 			return cesium.rangeResult;
@@ -970,5 +982,120 @@ describe('CesiumGlobeScene render failures', () => {
 		cesium.viewer.raiseRenderError(new Error('after'));
 		await settle();
 		expect(failed).not.toHaveBeenCalled();
+	});
+});
+
+describe('CesiumGlobeScene overview flights', () => {
+	const LOOK = {
+		latitude: -35,
+		longitude: -68,
+		altitudeMeters: 0,
+		headingDegrees: 0,
+		pitchDegrees: -89,
+		rangeMeters: 3_000_000,
+		framingX: 0,
+		framingY: 0
+	};
+
+	beforeEach(() => {
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: false }) });
+		cesium.flightCallbacks.length = 0;
+		cesium.flightCancels = 0;
+		cesium.placedLooks.length = 0;
+		cesium.holdInputs.mockReset();
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	it('flies to a look and leaves direct input free, unlike a restore', async () => {
+		const scene = await create();
+
+		const arrival = scene.showOverview(LOOK, true);
+		expect(cesium.flightCallbacks).toEqual([expect.objectContaining({ kind: 'view' })]);
+		expect(cesium.holdInputs).not.toHaveBeenCalled();
+
+		cesium.flightCallbacks.shift()!.complete();
+		await expect(arrival).resolves.toEqual({ status: 'arrived' });
+	});
+
+	it('gives way to the first press on the globe, which ends the flight as interrupted', async () => {
+		const scene = await create();
+		const heard = vi.fn();
+		scene.subscribeInteraction(heard);
+		const arrival = scene.showOverview(LOOK, true);
+
+		cesium.viewer.scene.canvas.dispatchEvent(new Event('pointerdown'));
+
+		await expect(arrival).resolves.toEqual({ status: 'interrupted' });
+		expect(cesium.flightCancels).toBe(1);
+		expect(heard).toHaveBeenCalledOnce();
+	});
+
+	it('gives way to a wheel as well, and cancels a flight only once', async () => {
+		const scene = await create();
+		scene.subscribeInteraction(() => {});
+		const arrival = scene.showOverview(LOOK, true);
+
+		cesium.viewer.scene.canvas.dispatchEvent(new Event('wheel'));
+		cesium.viewer.scene.canvas.dispatchEvent(new Event('wheel'));
+
+		await expect(arrival).resolves.toEqual({ status: 'interrupted' });
+		expect(cesium.flightCancels).toBe(1);
+	});
+
+	it('does not cancel a flight that has arrived when a press comes later', async () => {
+		const scene = await create();
+		scene.subscribeInteraction(() => {});
+		const arrival = scene.showOverview(LOOK, true);
+		cesium.flightCallbacks.shift()!.complete();
+		await arrival;
+
+		cesium.viewer.scene.canvas.dispatchEvent(new Event('pointerdown'));
+
+		expect(cesium.flightCancels).toBe(0);
+	});
+
+	it('does not cancel a flight to a mountain, which the reader cannot interrupt this way', async () => {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		scene.subscribeInteraction(() => {});
+		void scene.showOverview(LOOK, true);
+		void scene.showMountain(
+			{ slug: 'peak', name: 'Peak', latitude: 1, longitude: 2, elevationMeters: 3000 },
+			'initial'
+		);
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(2));
+		const cancelled = cesium.flightCancels;
+
+		cesium.viewer.scene.canvas.dispatchEvent(new Event('pointerdown'));
+
+		expect(cesium.flightCancels).toBe(cancelled);
+	});
+
+	it('supersedes a flight in the air with the next one', async () => {
+		const scene = await create();
+		const first = scene.showOverview(LOOK, true);
+
+		const second = scene.showOverview({ ...LOOK, longitude: 10 }, true);
+
+		await expect(first).resolves.toEqual({ status: 'interrupted' });
+		cesium.flightCallbacks.pop()!.complete();
+		await expect(second).resolves.toEqual({ status: 'arrived' });
+	});
+
+	it('places the look at once, with no flight, when the reader prefers reduced motion', async () => {
+		vi.stubGlobal('window', { matchMedia: () => ({ matches: true }) });
+		const scene = await create();
+
+		const arrival = scene.showOverview(LOOK, true);
+
+		expect(cesium.flightCallbacks).toEqual([]);
+		expect(cesium.placedLooks).toEqual([LOOK]);
+		await expect(arrival).resolves.toEqual({ status: 'arrived' });
 	});
 });

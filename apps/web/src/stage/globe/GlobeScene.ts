@@ -22,7 +22,12 @@ export interface GlobeScene extends Destroyable {
 	 * and Reset no longer returns to it. The camera stays put and later presentations still work.
 	 */
 	clearTarget(): void;
-	/** Clears any target and moves to a free look; `animate` false places it at once. */
+	/**
+	 * Clears any target and moves to a free look; `animate` false places it at once. A flight gives
+	 * way to the reader: their first press or wheel on the globe cancels it, resolving `interrupted`,
+	 * and the gesture goes on from wherever the camera had got to. Under reduced motion the look is
+	 * always placed at once.
+	 */
 	showOverview(look: LookState, animate: boolean): Promise<CameraOutcome>;
 	/**
 	 * Moves a free camera along its line of sight to `rangeMeters`, keeping its heading, tilt and

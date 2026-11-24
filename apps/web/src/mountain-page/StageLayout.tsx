@@ -7,8 +7,8 @@ import { MarkerChooser } from '../atlas/MarkerChooser';
 import { MarkerHighlightProvider, type MarkerHighlight } from '../atlas/MarkerHighlightContext';
 import { OpenContinentsProvider } from '../atlas/OpenContinentsContext';
 import { toAtlasMarkers } from '../atlas/toAtlasMarkers';
+import { toAtlasView } from '../atlas/toAtlasView';
 import { useMarkerActivation } from '../atlas/useMarkerActivation';
-import { ATLAS_VIEW } from '../stage/globe/atlasView';
 import type { StageController } from '../stage/MountainScene';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
@@ -51,12 +51,18 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	}));
 	const onAtlas = model.kind === 'atlas';
 	const target = onAtlas ? undefined : toSceneTarget(mountainOf(model));
-	const { matches } = useAtlasBrowse(atlasView, onAtlas ? model.mountains : NO_MOUNTAINS);
+	const { matches, view } = useAtlasBrowse(atlasView, onAtlas ? model.mountains : NO_MOUNTAINS);
 	// The scene reconciles the markers it holds with these, so a mountain the filters leave out is
 	// removed and one they let back in is drawn again, on the same Viewer and from the same camera.
 	const markers = useMemo(
 		() => (onAtlas ? toAtlasMarkers(matches) : undefined),
 		[onAtlas, matches]
+	);
+	// The geographic filters decide where the camera rests; the stage moves it only when the places
+	// they leave change, so a new elevation band or sort order never does.
+	const atlas = useMemo(
+		() => (onAtlas ? toAtlasView(view.filters, matches) : undefined),
+		[onAtlas, view.filters, matches]
 	);
 	const { choice, activate, dismiss } = useMarkerActivation(markers);
 
@@ -75,7 +81,7 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 								<LazyMountainScene
 									store={store}
 									target={target}
-									atlas={onAtlas ? ATLAS_VIEW : undefined}
+									atlas={atlas}
 									markers={markers}
 									observer={coordinator}
 									controllerRef={controller}

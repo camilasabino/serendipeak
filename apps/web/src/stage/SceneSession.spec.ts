@@ -5,7 +5,8 @@ import {
 	ATLAS_ORBIT_PERIOD_SECONDS,
 	ATLAS_VIEW,
 	atlasOverviewLook,
-	overviewRangeMeters
+	overviewRangeMeters,
+	type AtlasView
 } from './globe/atlasView';
 import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
@@ -1844,5 +1845,312 @@ describe('SceneSession atlas presentation', () => {
 		session.setAtlas(ATLAS);
 
 		expect(scene.presentations).toEqual([false]);
+	});
+});
+
+describe('SceneSession framing the places the atlas filters leave', () => {
+	const ARGENTINA: AtlasView = {
+		...ATLAS_VIEW,
+		focus: [ACONCAGUA, FITZ_ROY, { latitude: -24.717, longitude: -68.541 }]
+	};
+	// The same framing from another subset: a place repeated adds no extent.
+	const ARGENTINA_AGAIN: AtlasView = {
+		...ATLAS_VIEW,
+		focus: [...ARGENTINA.focus!, { ...ACONCAGUA }]
+	};
+	const MENDOZA: AtlasView = {
+		...ATLAS_VIEW,
+		focus: [ACONCAGUA, { latitude: -33.4, longitude: -69.9 }]
+	};
+	const FRAMED = atlasOverviewLook(ARGENTINA, undefined);
+
+	async function framedOnAtlas(atlas: AtlasView = ARGENTINA, sceneOptions = {}) {
+		const context = setup();
+		context.session.setAtlas(atlas);
+		const scene = context.factory.resolve(0, sceneOptions);
+		await flush();
+		return { ...context, scene };
+	}
+
+	it('opens on the framing, placed at once, and leaves the globe still', async () => {
+		const { scene, store } = await framedOnAtlas();
+
+		expect(scene.overviews).toEqual([{ look: FRAMED, animate: false }]);
+		expect(FRAMED.rangeMeters).toBeLessThan(overviewRangeMeters(undefined));
+		expect(scene.orbits).toEqual([]);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+	});
+
+	it('flies from a turning overview to the framing and stays still on arrival', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.holdShow = true;
+
+		session.setAtlas(ARGENTINA);
+
+		expect(scene.overviews.at(-1)).toEqual({ look: FRAMED, animate: true });
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot()).toMatchObject({ free: false, rotation: 'off' });
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+	});
+
+	it('flies once for the same places, and not at all for an equal object', async () => {
+		const { scene, session } = await onAtlas();
+
+		session.setAtlas(ARGENTINA);
+		session.setAtlas({ ...ARGENTINA, focus: ARGENTINA.focus!.map((place) => ({ ...place })) });
+		session.setAtlas(ARGENTINA);
+
+		expect(scene.overviews).toHaveLength(2);
+	});
+
+	it('flies to the framing of a narrower subset', async () => {
+		const { scene, session } = await framedOnAtlas();
+
+		session.setAtlas(MENDOZA);
+
+		expect(scene.overviews.at(-1)).toEqual({
+			look: atlasOverviewLook(MENDOZA, undefined),
+			animate: true
+		});
+		expect(scene.overviews).toHaveLength(2);
+	});
+
+	it('does not fly for a different subset that frames exactly the same', async () => {
+		const { scene, session, store } = await framedOnAtlas();
+
+		session.setAtlas(ARGENTINA_AGAIN);
+
+		expect(scene.overviews).toHaveLength(1);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+	});
+
+	it('flies back to the framing for a camera the reader moved, even when it is the same one', async () => {
+		const { scene, session } = await framedOnAtlas();
+		scene.interact();
+
+		session.setAtlas(ARGENTINA_AGAIN);
+
+		expect(scene.overviews.at(-1)).toEqual({
+			look: atlasOverviewLook(ARGENTINA_AGAIN, undefined),
+			animate: true
+		});
+		expect(scene.overviews).toHaveLength(2);
+	});
+
+	it('does not move a camera the reader moved when something other than the framing changes', async () => {
+		const { scene, session } = await onAtlas();
+		scene.interact();
+
+		session.setAtlas({ ...ATLAS_VIEW });
+		session.setAtlas({ center: { ...ATLAS_VIEW.center } });
+
+		expect(scene.overviews).toHaveLength(1);
+	});
+
+	it('returns to the overview when the filters are reset, and turns again', async () => {
+		const { scene, store, session } = await framedOnAtlas();
+		scene.holdShow = true;
+
+		session.setAtlas(ATLAS);
+
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+		expect(store.getSnapshot().rotation).toBe('rotating');
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(scene.orbiting).toBe(true);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
+	});
+
+	it('keeps a reader’s pause through a framed visit and back to the overview', async () => {
+		const { scene, store, session } = await onAtlas();
+		session.toggleRotation();
+		expect(store.getSnapshot().rotation).toBe('paused');
+
+		session.setAtlas(ARGENTINA);
+		expect(store.getSnapshot().rotation).toBe('off');
+		// Nothing to resume while framed: the press changes neither the camera nor the choice.
+		session.toggleRotation();
+		expect(scene.orbits).toHaveLength(1);
+
+		session.setAtlas(ATLAS);
+		await flush();
+
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot().rotation).toBe('paused');
+	});
+
+	it('does not turn the globe again under a reader who touched it during the flight', async () => {
+		const { scene, store, session } = await onAtlas();
+		scene.holdShow = true;
+		session.setAtlas(ARGENTINA);
+
+		scene.interact();
+		scene.pendingOverviews[0]!({ status: 'interrupted' });
+		await flush();
+
+		expect(scene.orbiting).toBe(false);
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+		// They own the camera now: an unrelated change of the same framing leaves it where it is.
+		session.setAtlas({ ...ARGENTINA });
+		expect(scene.overviews).toHaveLength(2);
+	});
+
+	it('ignores the arrival of a flight that a newer framing superseded', async () => {
+		const { scene, store, session } = await framedOnAtlas();
+		scene.holdShow = true;
+
+		session.setAtlas(MENDOZA);
+		session.setAtlas(ATLAS);
+		// The scene ends the older flight as interrupted; that must not read as the camera being free.
+		await flush();
+
+		expect(scene.pendingOverviews).toHaveLength(1);
+		expect(store.getSnapshot().free).toBe(false);
+		expect(scene.orbiting).toBe(false);
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(store.getSnapshot().free).toBe(true);
+		expect(scene.orbiting).toBe(true);
+		expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+	});
+
+	it('places a reveal that is still loading on the framing in force when it ends', async () => {
+		const { session, factory, store } = setup();
+		session.setAtlas(ATLAS);
+		const scene = factory.resolve(0, { holdViewReady: true });
+		await flush();
+
+		session.setAtlas(ARGENTINA);
+
+		expect(scene.overviews.map(({ look, animate }) => ({ look, animate }))).toEqual([
+			{ look: OVERVIEW, animate: false },
+			{ look: FRAMED, animate: false }
+		]);
+		expect(store.getSnapshot().state).toEqual({ status: 'loading' });
+
+		await flush();
+		scene.arriveViewReady();
+		await flush();
+
+		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
+		expect(scene.orbiting).toBe(false);
+	});
+
+	it('refits the range of the framing, not the overview, when the stage changes shape', async () => {
+		const { scene, session } = await framedOnAtlas();
+		const portrait = { width: 390, height: 700 };
+
+		session.updateStage(portrait);
+
+		expect(scene.refits).toEqual([atlasOverviewLook(ARGENTINA, portrait).rangeMeters]);
+		expect(scene.refits[0]).not.toBe(overviewRangeMeters(portrait));
+		expect(scene.overviews).toHaveLength(1);
+	});
+
+	it('frames from the stage it has measured', async () => {
+		const { session, factory } = setup();
+		const stage = { width: 390, height: 700 };
+		session.updateStage(stage);
+		session.setAtlas(ARGENTINA);
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.overviews).toEqual([
+			{ look: atlasOverviewLook(ARGENTINA, stage), animate: false }
+		]);
+	});
+
+	it('lets Reset return to the framing the filters set', async () => {
+		const { scene, session } = await framedOnAtlas();
+		scene.interact();
+
+		expect(session.resetView()).toBe('reset');
+
+		expect(scene.overviews.at(-1)).toEqual({ look: FRAMED, animate: true });
+	});
+
+	it('returns from a mountain to the filtered atlas and frames it', async () => {
+		const { scene, session } = await framedOnAtlas();
+		session.setAtlas(undefined);
+		session.setTarget(ACONCAGUA);
+		await flush();
+
+		session.setAtlas(ARGENTINA);
+		session.setTarget(undefined);
+		await flush();
+
+		expect(scene.overviews.at(-1)).toEqual({ look: FRAMED, animate: true });
+		expect(scene.orbiting).toBe(false);
+	});
+
+	it('does not move the camera for a framing change while a mountain is presented', async () => {
+		const { scene, session } = await onAtlas();
+		session.setAtlas(undefined);
+		session.setTarget(ACONCAGUA);
+		await flush();
+		const flights = scene.overviews.length;
+
+		session.setAtlas(ARGENTINA);
+		session.setAtlas(MENDOZA);
+
+		expect(scene.overviews).toHaveLength(flights);
+	});
+
+	it('does not fly again on a resize after the reader interrupted the flight', async () => {
+		const { scene, session } = await onAtlas();
+		scene.holdShow = true;
+		session.setAtlas(ARGENTINA);
+		scene.interact();
+		scene.pendingOverviews[0]!({ status: 'interrupted' });
+		await flush();
+		const flights = scene.overviews.length;
+
+		session.updateStage({ width: 390, height: 700 });
+		session.updateStage({ width: 900, height: 360 });
+
+		expect(scene.overviews).toHaveLength(flights);
+		expect(scene.refits).toEqual([]);
+		expect(scene.orbiting).toBe(false);
+	});
+
+	it('never lets the late arrival of an older flight settle a newer one', async () => {
+		const { scene, store, session } = await onAtlas();
+		const late: ((outcome: { status: 'arrived' }) => void)[] = [];
+		scene.showOverview = (look, animate) => {
+			scene.overviews.push({ look, animate });
+			return new Promise((resolve) => late.push(resolve));
+		};
+
+		session.setAtlas(ARGENTINA);
+		session.setAtlas(MENDOZA);
+		late[0]!({ status: 'arrived' });
+		await flush();
+
+		expect(store.getSnapshot().free).toBe(false);
+		expect(scene.orbiting).toBe(false);
+
+		late[1]!({ status: 'arrived' });
+		await flush();
+
+		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+		expect(scene.overviews.at(-1)!.look).toEqual(atlasOverviewLook(MENDOZA, undefined));
+	});
+
+	it('never moves or turns a scene that has stopped', async () => {
+		const { scene, session } = await framedOnAtlas();
+		session.stop();
+
+		session.setAtlas(MENDOZA);
+
+		expect(scene.overviews).toHaveLength(1);
 	});
 });

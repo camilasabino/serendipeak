@@ -1,13 +1,14 @@
 import {
 	ATLAS_ORBIT_PERIOD_SECONDS,
 	atlasOverviewLook,
-	overviewRangeMeters,
+	sameAtlasFocus,
 	type AtlasView
 } from './globe/atlasView';
 import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { CameraOutcome } from './globe/choreography';
+import type { LookState } from './globe/glidePath';
 import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
 import type { MarkerActivation } from './globe/markerActivation';
@@ -47,8 +48,9 @@ const noop = () => {};
 const FAILED_FLIGHT: CameraOutcome = { status: 'failed', error: undefined };
 
 /**
- * Where the atlas camera stands relative to its overview: `arriving` while placed or flown there,
- * `idle` once there and untouched, which is when the ambient orbit may turn it, and `away` after
+ * Where the atlas camera stands relative to where the atlas rests it, which is the overview or, while
+ * geographic filters are in force, their region: `arriving` while placed or flown there, `idle` once
+ * there and untouched, which is when the ambient orbit may turn the overview, and `away` after
  * anything else moved it.
  */
 type OverviewStage = 'away' | 'arriving' | 'idle';
@@ -147,6 +149,10 @@ export class SceneSession {
 	/**
 	 * Where a free camera returns to. Arriving on the atlas with no mountain to let go of flies there
 	 * at once; with one, letting it go does. Leaving the atlas ends the ambient orbit.
+	 *
+	 * Changing the places the atlas frames flies to the new framing, unless it would not move the
+	 * camera from where a camera that has not been touched already stands. The camera is only ever
+	 * moved from here, never from a render, and a flight toward an older framing is superseded.
 	 */
 	setAtlas(next: AtlasView | undefined): void {
 		if (this.stopped) {
@@ -163,6 +169,10 @@ export class SceneSession {
 		}
 		if (!previous && this.scene && this.revealed && !this.target) {
 			void this.flyToOverview(this.scene, next);
+			return;
+		}
+		if (previous && this.scene && !this.target && !sameAtlasFocus(previous.focus, next.focus)) {
+			this.reframe(this.scene, previous, next);
 			return;
 		}
 		this.publishRotation();
@@ -389,6 +399,24 @@ export class SceneSession {
 		this.settleOverview(outcome);
 	}
 
+	// A reveal still waiting for its tiles is placed again, so it ends on the framing in force. A
+	// camera the reader has moved is flown back even when the framing looks the same: the reader
+	// chose these filters, and the flight is what answers them.
+	private reframe(ready: GlobeScene, previous: AtlasView, next: AtlasView): void {
+		if (!this.revealed) {
+			void this.revealOverview(ready, next);
+			return;
+		}
+		const unmoved =
+			this.overview !== 'away' &&
+			sameLook(atlasOverviewLook(previous, this.stage), atlasOverviewLook(next, this.stage));
+		if (unmoved) {
+			this.publishRotation();
+			return;
+		}
+		void this.flyToOverview(ready, next);
+	}
+
 	// A failed flight leaves the camera wherever it stopped, which is still a free camera.
 	private async flyToOverview(ready: GlobeScene, atlas: AtlasView): Promise<void> {
 		const ticket = ++this.presentation;
@@ -414,7 +442,7 @@ export class SceneSession {
 		if (!ready || !this.atlas || this.overview === 'away' || !(stageAspect(size) > 0)) {
 			return;
 		}
-		if (ready.refitRange(overviewRangeMeters(size)) === 'busy') {
+		if (ready.refitRange(atlasOverviewLook(this.atlas, size).rangeMeters) === 'busy') {
 			void this.flyToOverview(ready, this.atlas);
 		}
 	}
@@ -433,6 +461,7 @@ export class SceneSession {
 			this.atlas &&
 			this.revealed &&
 			this.overview === 'idle' &&
+			!this.framing &&
 			!this.rotationPaused &&
 			!this.orbiting
 		) {
@@ -469,9 +498,22 @@ export class SceneSession {
 		this.publishRotation();
 	}
 
+	// The globe stays where the filters brought it, so there is no orbit to pause or resume, and the
+	// reader's choice about it is kept untouched for the overview.
+	private get framing(): boolean {
+		return this.atlas?.focus !== undefined;
+	}
+
 	private rotationState(): RotationState {
 		const ready = this.scene;
-		if (this.stopped || !ready || !this.atlas || !this.revealed || !ready.canOrbit()) {
+		if (
+			this.stopped ||
+			!ready ||
+			!this.atlas ||
+			this.framing ||
+			!this.revealed ||
+			!ready.canOrbit()
+		) {
 			return 'off';
 		}
 		return this.rotationPaused || this.overview === 'away' ? 'paused' : 'rotating';
@@ -624,4 +666,15 @@ export class SceneSession {
 			}
 		}
 	}
+}
+
+const SAME_LOOK_DEGREES = 1e-4;
+const SAME_LOOK_RANGE_SHARE = 1e-3;
+
+function sameLook(a: LookState, b: LookState): boolean {
+	return (
+		Math.abs(a.latitude - b.latitude) < SAME_LOOK_DEGREES &&
+		Math.abs(a.longitude - b.longitude) < SAME_LOOK_DEGREES &&
+		Math.abs(a.rangeMeters - b.rangeMeters) <= a.rangeMeters * SAME_LOOK_RANGE_SHARE
+	);
 }

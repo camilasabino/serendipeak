@@ -7,7 +7,7 @@ export const EARTH_MEAN_RADIUS_METERS = 6_371_008.8;
 
 const ANTIPODAL_SINE_EPSILON = 1e-9;
 
-type Vector = [number, number, number];
+export type Vector = [number, number, number];
 
 function toRadians(degrees: number): number {
 	return (degrees * Math.PI) / 180;
@@ -17,13 +17,13 @@ function toDegrees(radians: number): number {
 	return (radians * 180) / Math.PI;
 }
 
-function unitVector({ latitude, longitude }: GeoPoint): Vector {
+export function unitVector({ latitude, longitude }: GeoPoint): Vector {
 	const φ = toRadians(latitude);
 	const λ = toRadians(longitude);
 	return [Math.cos(φ) * Math.cos(λ), Math.cos(φ) * Math.sin(λ), Math.sin(φ)];
 }
 
-function geoPoint([x, y, z]: Vector): GeoPoint {
+export function geoPoint([x, y, z]: Vector): GeoPoint {
 	const longitude = toDegrees(Math.atan2(y, x));
 	return {
 		latitude: toDegrees(Math.atan2(z, Math.hypot(x, y))),
@@ -31,15 +31,15 @@ function geoPoint([x, y, z]: Vector): GeoPoint {
 	};
 }
 
-function dot(a: Vector, b: Vector): number {
+export function dot(a: Vector, b: Vector): number {
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-function cross(a: Vector, b: Vector): Vector {
+export function cross(a: Vector, b: Vector): Vector {
 	return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 
-function normalize(vector: Vector): Vector {
+export function normalize(vector: Vector): Vector {
 	const length = Math.hypot(...vector);
 	return length > 0 ? [vector[0] / length, vector[1] / length, vector[2] / length] : vector;
 }

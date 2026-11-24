@@ -107,6 +107,8 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseInteraction: () => void = noop;
 	private releaseFailure: () => void = noop;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
+	/** An overview flight is in the air and gives way to the reader's first touch of the globe. */
+	private yieldingFlight = false;
 	private readonly summitMarkers: SummitMarkers;
 	private destroyed = false;
 
@@ -309,6 +311,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.yieldingFlight = false;
 		const outcome = await this.camera.show(target, placement);
 		if (!this.destroyed) {
 			this.viewer.resize();
@@ -323,7 +326,8 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 	}
 
-	// A free look moves as quickly as Reset does, and holds direct input for as long.
+	// A free look moves as quickly as Reset does. Unlike Reset it does not hold direct input: the
+	// reader's first press or wheel on the globe cancels the flight and takes the camera.
 	showOverview(look: LookState, animate: boolean): Promise<CameraOutcome> {
 		if (this.destroyed) {
 			return Promise.resolve({ status: 'interrupted' });
@@ -335,9 +339,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		const arrival = new Promise<CameraOutcome>((resolve) => {
 			this.director.view(look, flying ? RESET_FLIGHT_SECONDS : 0, resolve);
 		});
-		if (flying && this.director.busy()) {
-			this.flight.holdInputs();
-		}
+		this.yieldingFlight = flying && this.director.busy();
 
 		return arrival;
 	}
@@ -401,11 +403,15 @@ export class CesiumGlobeScene implements GlobeScene {
 
 		const canvas = this.viewer.scene.canvas;
 		const options = { capture: true, passive: true } as const;
-		canvas.addEventListener('pointerdown', listener, options);
-		canvas.addEventListener('wheel', listener, options);
+		const onInput = () => {
+			this.yieldFlight();
+			listener();
+		};
+		canvas.addEventListener('pointerdown', onInput, options);
+		canvas.addEventListener('wheel', onInput, options);
 		const release = () => {
-			canvas.removeEventListener('pointerdown', listener, options);
-			canvas.removeEventListener('wheel', listener, options);
+			canvas.removeEventListener('pointerdown', onInput, options);
+			canvas.removeEventListener('wheel', onInput, options);
 		};
 		this.releaseInteraction = release;
 
@@ -463,6 +469,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.yieldingFlight = false;
 		const result = this.camera.reset();
 		// Only a flight needs protecting; an instant restore under reduced motion hands input back.
 		if (result === 'reset' && this.director.busy()) {
@@ -641,6 +648,15 @@ export class CesiumGlobeScene implements GlobeScene {
 				}
 			]
 		]);
+	}
+
+	// Cancelled before Cesium's own handlers see the event, so the gesture starts from where the
+	// flight had reached and nothing flies on under the reader's hand.
+	private yieldFlight(): void {
+		if (this.yieldingFlight && this.director.busy()) {
+			this.director.release();
+		}
+		this.yieldingFlight = false;
 	}
 
 	private sampleCamera(): CameraReading | undefined {
