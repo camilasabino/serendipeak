@@ -6,3 +6,6 @@ package-lock.json
 playwright-report/
 test-results/
 public/cesium/
+
+# Local Impeccable artifacts.
+.impeccable/
