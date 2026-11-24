@@ -1,0 +1,160 @@
+.search {
+	position: relative;
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 2.75rem;
+	padding: 0 0.75rem;
+	border-bottom: 1px solid var(--sp-divider);
+}
+
+/* The rule under the field is the focus indicator, drawn inside because the popup clips. */
+.search:focus-within {
+	box-shadow: inset 0 -2px 0 var(--sp-focus-ring);
+}
+
+.searchIcon {
+	flex: none;
+	width: 1.05rem;
+	height: 1.05rem;
+	fill: none;
+	stroke: var(--sp-text-muted);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+}
+
+.search:focus-within .searchIcon {
+	stroke: var(--sp-text-accent);
+}
+
+/* 16 px keeps iOS Safari from zooming the page when the field takes focus. */
+.searchInput {
+	flex: 1;
+	min-width: 0;
+	min-height: 2.5rem;
+	padding: 0;
+	border: 0;
+	outline: none;
+	background: transparent;
+	color: var(--sp-text);
+	font: 400 1rem / 1.2 var(--sp-face-ui);
+}
+
+.searchInput::placeholder {
+	color: var(--sp-text-muted);
+	opacity: 1;
+}
+
+.list {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	margin: 0;
+	padding: 0.25rem;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	list-style: none;
+}
+
+.option {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	padding: 0.25rem 0.5rem;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 0.9375rem;
+	line-height: 1.25;
+}
+
+/* A pointer is precise enough for denser rows; touch keeps the full target. */
+@media (pointer: fine) {
+	.option {
+		min-height: 2.5rem;
+	}
+}
+
+.option[data-active] {
+	background: var(--sp-state-hover);
+}
+
+.check {
+	flex: none;
+	width: 1rem;
+	height: 1rem;
+	fill: none;
+	stroke: var(--sp-state-accent);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	opacity: 0;
+}
+
+.option[aria-selected='true'] .check {
+	opacity: 1;
+}
+
+.optionText {
+	display: grid;
+	flex: 1;
+	gap: 0.1rem;
+	min-width: 0;
+	padding-inline-start: calc(var(--depth, 0) * 1rem);
+}
+
+.optionName,
+.optionTrail {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Within a tree, the roots are the headings the descendants hang from. */
+.list[data-tree] .option[data-depth='0'] .optionName {
+	font-weight: 600;
+}
+
+.option[aria-selected='true'] .optionName {
+	color: var(--sp-text-accent);
+}
+
+/* One hairline per level above the option, so depth reads without counting the indent. */
+.option:not([data-depth='0'])::before {
+	content: '';
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: calc(0.5rem + 1rem + 0.5rem + 0.25rem);
+	width: calc(var(--depth) * 1rem);
+	background: repeating-linear-gradient(
+		to right,
+		var(--sp-divider-strong) 0 1px,
+		transparent 1px 1rem
+	);
+	pointer-events: none;
+}
+
+.optionTrail {
+	color: var(--sp-text-muted);
+	font-size: 0.75rem;
+}
+
+.optionCount {
+	flex: none;
+	min-width: 1.5ch;
+	color: var(--sp-text-muted);
+	font-size: 0.8125rem;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.empty {
+	margin: 0;
+	padding: 0.75rem 1rem 1rem;
+	color: var(--sp-text-muted);
+	font-size: 0.875rem;
+	line-height: 1.4;
+}

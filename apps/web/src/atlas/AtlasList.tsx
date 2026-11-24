@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { MountainIndexEntry } from '../api/contract';
 import { mountainHref } from '../explore/navigate';
 import { describeEntry } from '../mountain-index/describeEntry';
-import { ATLAS_LIST_HEADING, mountainCount } from './atlasCopy';
+import { ATLAS_LIST_HEADING, NO_MATCHES_HINT, NO_MATCHES_TITLE, mountainCount } from './atlasCopy';
 import styles from './AtlasList.module.css';
 import type { ContinentGroup } from './groupByContinent';
 import { useMarkerHighlight, type MarkerHighlight } from './MarkerHighlightContext';
@@ -22,7 +23,17 @@ export function listItemId(slug: string): string {
  * keyboard rests on has its marker emphasized on the globe, which is supplementary: the row says
  * everything the marker does.
  */
-export function AtlasList({ groups }: { groups: readonly ContinentGroup[] }) {
+export function AtlasList({
+	groups,
+	results,
+	toolbar
+}: {
+	groups: readonly ContinentGroup[];
+	/** The mountains to list flat, in order, in place of the continents; empty says nothing matched. */
+	results?: readonly MountainIndexEntry[];
+	/** Laid between the heading and the list. */
+	toolbar?: ReactNode;
+}) {
 	const open = useOpenContinents();
 	const { highlight } = useMarkerHighlight();
 
@@ -34,9 +45,25 @@ export function AtlasList({ groups }: { groups: readonly ContinentGroup[] }) {
 			<h2 id="atlas-list-heading" className={styles.heading}>
 				{ATLAS_LIST_HEADING}
 			</h2>
-			{groups.map((group) => (
-				<Continent key={group.code} group={group} open={open} highlight={highlight} />
-			))}
+			{toolbar}
+			{results === undefined ? (
+				groups.map((group) => (
+					<Continent key={group.code} group={group} open={open} highlight={highlight} />
+				))
+			) : results.length === 0 ? (
+				<div className={styles.empty}>
+					<p className={styles.emptyTitle}>{NO_MATCHES_TITLE}</p>
+					<p className={styles.emptyHint}>{NO_MATCHES_HINT}</p>
+				</div>
+			) : (
+				<ul className={styles.results} aria-labelledby="atlas-list-heading">
+					{results.map((mountain) => (
+						<li key={mountain.slug}>
+							<MountainRow mountain={mountain} highlight={highlight} />
+						</li>
+					))}
+				</ul>
+			)}
 		</section>
 	);
 }
@@ -83,19 +110,31 @@ function Continent({
 			<ul className={styles.items} aria-labelledby={headingId}>
 				{mountains.map((mountain) => (
 					<li key={mountain.slug}>
-						<Link
-							id={listItemId(mountain.slug)}
-							className={styles.item}
-							href={mountainHref(mountain.slug)}
-							prefetch={false}
-							{...rowHighlight(highlight, mountain.slug)}
-						>
-							<span className={styles.name}>{mountain.name}</span>
-							<span className={styles.detail}>{describeEntry(mountain)}</span>
-						</Link>
+						<MountainRow mountain={mountain} highlight={highlight} />
 					</li>
 				))}
 			</ul>
 		</details>
+	);
+}
+
+function MountainRow({
+	mountain,
+	highlight
+}: {
+	mountain: MountainIndexEntry;
+	highlight: MarkerHighlight['highlight'];
+}) {
+	return (
+		<Link
+			id={listItemId(mountain.slug)}
+			className={styles.item}
+			href={mountainHref(mountain.slug)}
+			prefetch={false}
+			{...rowHighlight(highlight, mountain.slug)}
+		>
+			<span className={styles.name}>{mountain.name}</span>
+			<span className={styles.detail}>{describeEntry(mountain)}</span>
+		</Link>
 	);
 }

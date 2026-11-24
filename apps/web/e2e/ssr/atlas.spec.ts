@@ -48,6 +48,17 @@ test.describe('atlas page', () => {
 		expect(await stubRequests(request)).toEqual(['/api/v1/mountains']);
 	});
 
+	test('serves no filter or sort controls: they need script, and the list works without them', async ({
+		request
+	}) => {
+		const html = await (await request.get('/atlas')).text();
+
+		expect(html).not.toMatch(/<select|aria-live|Mountain range|Reset filters/);
+		for (const mountain of MOUNTAINS) {
+			expect(html).toContain(`href="/mountains/${mountain.slug}"`);
+		}
+	});
+
 	test('serves every continent collapsed, each named with its count', async ({ request }) => {
 		const html = await (await request.get('/atlas')).text();
 		const groups = [...html.matchAll(/<details[^>]*>/g)].map((match) => match[0]);

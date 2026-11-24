@@ -1,0 +1,27 @@
+/* Overrides what the browser gives a popover: a box centred in the viewport, in its own colours. */
+.popup {
+	position: fixed;
+	inset: auto;
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var(--sp-divider-strong);
+	border-radius: 8px;
+	background: var(--sp-surface-raised);
+	box-shadow: 0 0.75rem 1.75rem rgb(0 0 0 / 50%);
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
+}
+
+/* Text for assistive technology only. */
+.hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}

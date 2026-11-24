@@ -13,7 +13,8 @@ export const SCENARIOS = [
 	'malformed',
 	'server-error',
 	'no-eligible',
-	'catalog'
+	'catalog',
+	'regions'
 ];
 
 const INDEX_PATH = '/api/v1/mountains';
@@ -86,6 +87,95 @@ function catalogIndex(served) {
 	return { mountains };
 }
 
+// `regions` serves a small synthetic index for the atlas filters: nested regions, countries shared
+// across a border, a mountain without a region, and summits on either side of a 1,000 m boundary.
+// Only the three served mountains have pages; the rest exist in the index alone.
+const REGION_ENTRIES = [
+	{
+		slug: 'fitz-roy',
+		name: 'Fitz Roy',
+		coordinates: { latitude: -49.2713, longitude: -73.0432 },
+		elevationMeters: 3405,
+		continent: { code: 'SA', name: 'South America' },
+		countries: [
+			{ code: 'AR', name: 'Argentina' },
+			{ code: 'CL', name: 'Chile' }
+		],
+		region: {
+			slug: 'patagonian-andes',
+			name: 'Patagonian Andes',
+			ancestors: [{ slug: 'andes', name: 'Andes' }]
+		}
+	},
+	{
+		slug: 'mount-everest',
+		name: 'Mount Everest',
+		coordinates: { latitude: 27.9881, longitude: 86.925 },
+		elevationMeters: 8849,
+		continent: { code: 'AS', name: 'Asia' },
+		countries: [
+			{ code: 'NP', name: 'Nepal' },
+			{ code: 'CN', name: 'China' }
+		],
+		region: {
+			slug: 'mahalangur',
+			name: 'Mahalangur',
+			ancestors: [{ slug: 'himalaya', name: 'Himalaya' }]
+		}
+	},
+	{
+		slug: 'mont-blanc',
+		name: 'Mont Blanc',
+		coordinates: { latitude: 45.8326, longitude: 6.8652 },
+		elevationMeters: 4806,
+		continent: { code: 'EU', name: 'Europe' },
+		countries: [
+			{ code: 'FR', name: 'France' },
+			{ code: 'IT', name: 'Italy' }
+		],
+		region: {
+			slug: 'mont-blanc-massif',
+			name: 'Mont Blanc massif',
+			ancestors: [{ slug: 'alps', name: 'Alps' }]
+		}
+	},
+	{
+		slug: 'six-thousand',
+		name: 'Six Thousand',
+		coordinates: { latitude: -23.3, longitude: -67.8 },
+		elevationMeters: 6000,
+		continent: { code: 'SA', name: 'South America' },
+		countries: [{ code: 'CL', name: 'Chile' }],
+		region: null
+	},
+	{
+		slug: 'almost-six',
+		name: 'Almost Six',
+		coordinates: { latitude: -23.9, longitude: -67.1 },
+		elevationMeters: 5999,
+		continent: { code: 'SA', name: 'South America' },
+		countries: [{ code: 'CL', name: 'Chile' }],
+		region: null
+	}
+];
+
+function regionsIndex(served) {
+	const entries = [...served.values()].map(mountainIndexEntry).map((entry) =>
+		entry.slug === 'aconcagua'
+			? {
+					...entry,
+					region: {
+						slug: 'principal-cordillera',
+						name: 'Principal Cordillera',
+						ancestors: [{ slug: 'andes', name: 'Andes' }]
+					}
+				}
+			: entry
+	);
+
+	return { mountains: [...entries, ...REGION_ENTRIES] };
+}
+
 function buildRoutes() {
 	const mountainsBySlug = new Map(
 		['mountain-complete.json', 'mountain-minimal.json', 'mountain-sparse.json']
@@ -100,6 +190,7 @@ function buildRoutes() {
 	return {
 		index,
 		catalogIndex: catalogIndex(mountainsBySlug),
+		regionsIndex: regionsIndex(mountainsBySlug),
 		daily: fixture('daily-mountain.json'),
 		notFound: fixture('error-mountain-not-found.json'),
 		internal: fixture('error-internal.json'),
@@ -125,8 +216,16 @@ function decodeSlug(encoded) {
 }
 
 export function createStubApi() {
-	const { index, catalogIndex, daily, notFound, internal, noEligible, mountainsBySlug } =
-		buildRoutes();
+	const {
+		index,
+		catalogIndex,
+		regionsIndex,
+		daily,
+		notFound,
+		internal,
+		noEligible,
+		mountainsBySlug
+	} = buildRoutes();
 	let scenario = 'ok';
 	let requests = [];
 	// Served by slug only, never in the index or by random, so a test that adds one leaves every
@@ -205,7 +304,7 @@ export function createStubApi() {
 			} else if (scenario === 'server-error') {
 				send(500, internal, { 'Cache-Control': 'no-store' });
 			} else {
-				send(200, scenario === 'catalog' ? catalogIndex : index);
+				send(200, { catalog: catalogIndex, regions: regionsIndex }[scenario] ?? index);
 			}
 			return;
 		}

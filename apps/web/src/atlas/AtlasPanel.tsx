@@ -2,16 +2,26 @@ import { useEffect, useMemo } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { useMountainIndex } from '../mountain-index/MountainIndexContext';
 import { ATLAS_HEADING, atlasLede } from './atlasCopy';
+import { AtlasControls } from './AtlasControls';
 import { AtlasList } from './AtlasList';
 import styles from './AtlasPanel.module.css';
+import { useAtlasBrowse, useAtlasViewStore } from './AtlasViewContext';
 import { groupByContinent } from './groupByContinent';
+import { useHydrated } from './useHydrated';
 
 export const ATLAS_HEADING_ID = 'atlas-heading';
 
-/** The atlas sheet: the catalog by continent, beside the globe the layout shows in overview. */
+/**
+ * The atlas sheet: the catalog by continent, beside the globe the layout shows in overview. Once
+ * the page is interactive the reader can filter and sort it; the list then becomes one ordered
+ * list of matches, and the globe draws the same mountains.
+ */
 export function AtlasPanel({ mountains }: { mountains: MountainIndexEntry[] }) {
 	const indexStore = useMountainIndex();
 	const groups = useMemo(() => groupByContinent(mountains), [mountains]);
+	const viewStore = useAtlasViewStore();
+	const browse = useAtlasBrowse(viewStore, mountains);
+	const interactive = useHydrated();
 
 	useEffect(() => {
 		indexStore.seed(mountains);
@@ -23,7 +33,15 @@ export function AtlasPanel({ mountains }: { mountains: MountainIndexEntry[] }) {
 				{ATLAS_HEADING}
 			</h1>
 			<p className={styles.lede}>{atlasLede(mountains.length)}</p>
-			{groups.length > 0 && <AtlasList groups={groups} />}
+			{groups.length > 0 && (
+				<AtlasList
+					groups={groups}
+					results={browse.isDefault ? undefined : browse.results}
+					toolbar={
+						interactive && <AtlasControls browse={browse} store={viewStore} mountains={mountains} />
+					}
+				/>
+			)}
 		</div>
 	);
 }

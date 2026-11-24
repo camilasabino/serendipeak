@@ -586,6 +586,29 @@ describe('AtlasMarkers index updates', () => {
 		expect(markers.read()!.entities).toBe(3);
 	});
 
+	it('ends the emphasis of a marker that leaves, and draws it again on the same layer when it returns', async () => {
+		const { markers, entity, viewer } = setup();
+		markers.set([OLYMPUS, ACONCAGUA, MONT_BLANC]);
+		await attached();
+		markers.emphasize(OLYMPUS.slug);
+		markers.highlight(ACONCAGUA.slug);
+
+		markers.set([MONT_BLANC]);
+		await attached();
+
+		expect(markers.read()).toMatchObject({ entities: 1, layers: 1 });
+		expect(markers.read()!.hovered).toBeUndefined();
+		expect(markers.read()!.highlighted).toBeUndefined();
+		expect(markers.read()!.markers.map(({ slug }) => slug)).toEqual([MONT_BLANC.slug]);
+
+		markers.set([OLYMPUS, ACONCAGUA, MONT_BLANC]);
+		await attached();
+
+		expect(markers.read()).toMatchObject({ entities: 3, layers: 1 });
+		expect(entity(OLYMPUS.slug)).toBeDefined();
+		expect(viewer.dataSources.length).toBe(1);
+	});
+
 	it('works out the visibility of new markers before they are drawn', async () => {
 		const { markers, entity } = setup();
 		markers.set([OLYMPUS]);

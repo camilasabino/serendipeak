@@ -1,15 +1,10 @@
 import type { MountainIndexEntry } from '../api/contract';
+import { compareByName, compareByNameThenSlug } from './atlasSort';
 
 export interface ContinentGroup {
 	code: string;
 	name: string;
 	mountains: MountainIndexEntry[];
-}
-
-const collator = new Intl.Collator('en', { sensitivity: 'base' });
-
-function byName(a: { name: string }, b: { name: string }): number {
-	return collator.compare(a.name, b.name);
 }
 
 /**
@@ -25,11 +20,9 @@ export function groupByContinent(mountains: readonly MountainIndexEntry[]): Cont
 		groups.set(code, group);
 	}
 
-	const sorted = [...groups.values()].sort(byName);
+	const sorted = [...groups.values()].sort(compareByName);
 	for (const group of sorted) {
-		group.mountains.sort(
-			(a, b) => byName(a, b) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0)
-		);
+		group.mountains.sort(compareByNameThenSlug);
 	}
 
 	return sorted;
