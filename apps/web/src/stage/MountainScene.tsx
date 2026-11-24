@@ -9,7 +9,7 @@ import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
-import { StageControls } from './controls/StageControls';
+import { StageControls, type MarkerToggle } from './controls/StageControls';
 import styles from './MountainScene.module.css';
 import type { PresentationObserver } from './SceneSession';
 import type { SceneStore } from './SceneStore';
@@ -40,7 +40,10 @@ interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
+	/** The markers drawn now; none while the reader has hidden them, and off the atlas. */
 	markers?: readonly AtlasMarker[];
+	/** Given on the atlas only, drawn or not: the switch stays while the markers are away. */
+	markerToggle?: MarkerToggle;
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
 	onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -55,6 +58,7 @@ export default function MountainScene({
 	target,
 	atlas,
 	markers,
+	markerToggle,
 	observer,
 	controllerRef,
 	onMarkerActivate,
@@ -107,7 +111,7 @@ export default function MountainScene({
 				onZoom={zoomView}
 				onToggleRotation={toggleRotation}
 				fullscreen={fullscreen}
-				markers={markers !== undefined}
+				markerToggle={markerToggle}
 			/>
 			{children}
 			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />

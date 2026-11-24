@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState, type FocusEvent } from
 import {
 	BUTTON_NAVIGATION,
 	CLOSE_NAVIGATION_HELP_LABEL,
+	HIDDEN_MARKERS_NAVIGATION,
 	MARKER_NAVIGATION,
 	NAVIGATION_HELP_LABEL,
 	POINTER_NAVIGATION,
@@ -15,18 +16,29 @@ const COARSE_POINTER_QUERY = '(pointer: coarse)';
 
 export function navigationHelpSections(
 	touchFirst: boolean,
-	markers = false
+	markers = false,
+	markersHidden = false
 ): readonly NavigationHelpSection[] {
 	const gestures = touchFirst
 		? [TOUCH_NAVIGATION, POINTER_NAVIGATION, BUTTON_NAVIGATION]
 		: [POINTER_NAVIGATION, TOUCH_NAVIGATION, BUTTON_NAVIGATION];
 
-	return markers ? [MARKER_NAVIGATION, ...gestures] : gestures;
+	if (!markers) {
+		return gestures;
+	}
+
+	return [markersHidden ? HIDDEN_MARKERS_NAVIGATION : MARKER_NAVIGATION, ...gestures];
 }
 
 // A non-modal popover: it never traps focus or blocks the globe, and any interaction elsewhere
 // dismisses it so it cannot linger over the mountain.
-export function NavigationHelp({ markers = false }: { markers?: boolean }) {
+export function NavigationHelp({
+	markers = false,
+	markersHidden = false
+}: {
+	markers?: boolean;
+	markersHidden?: boolean;
+}) {
 	const [open, setOpen] = useState(false);
 	const [touchFirst, setTouchFirst] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
@@ -121,7 +133,7 @@ export function NavigationHelp({ markers = false }: { markers?: boolean }) {
 						<span className={buttonStyles.spoken}>{CLOSE_NAVIGATION_HELP_LABEL}</span>
 					</button>
 				</div>
-				{navigationHelpSections(touchFirst, markers).map(({ heading, gestures }) => (
+				{navigationHelpSections(touchFirst, markers, markersHidden).map(({ heading, gestures }) => (
 					<div key={heading} className={styles.section}>
 						<h3 className={styles.heading}>{heading}</h3>
 						<dl className={styles.gestures}>

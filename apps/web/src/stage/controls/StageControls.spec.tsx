@@ -4,16 +4,19 @@ import type { SceneSnapshot } from '../SceneStore';
 import { SceneStore } from '../SceneStore';
 import type { StageFullscreen } from '../useStageFullscreen';
 import { navigationHelpSections } from './NavigationHelp';
-import { StageControls } from './StageControls';
+import { StageControls, type MarkerToggle } from './StageControls';
 
 const READING = { label: '2 km', meters: 2000, widthPx: 96 };
 
 const UNSUPPORTED: StageFullscreen = { supported: false, active: false, toggle: () => {} };
 
+const SHOWN: MarkerToggle = { shown: true, onToggle: () => {} };
+const HIDDEN: MarkerToggle = { shown: false, onToggle: () => {} };
+
 function render(
 	snapshot: SceneSnapshot,
 	fullscreen: StageFullscreen = UNSUPPORTED,
-	markers = false
+	markerToggle?: MarkerToggle
 ): string {
 	return renderToStaticMarkup(
 		<StageControls
@@ -22,7 +25,7 @@ function render(
 			onZoom={() => {}}
 			onToggleRotation={() => {}}
 			fullscreen={fullscreen}
-			markers={markers}
+			markerToggle={markerToggle}
 		/>
 	);
 }
@@ -205,12 +208,33 @@ describe('StageControls navigation help', () => {
 	});
 
 	it('tells how to open a mountain, what overlapping points do, and where else to find it', () => {
-		const html = render(readyStore().getSnapshot(), UNSUPPORTED, true);
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN);
 
 		expect(html).toContain('Click or tap a mountain&#x27;s point or name.');
 		expect(html).toContain('pick one from the short list that opens');
 		expect(html).toContain('Every mountain is also in the list and in Search.');
 		expect(render(readyStore().getSnapshot())).not.toContain('point or name');
+	});
+
+	it('says how to bring hidden markers back, and where mountains remain, in place of the opening text', () => {
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, HIDDEN);
+
+		expect(html).toContain('Press the pin button');
+		expect(html).toContain('Every mountain is still in the list and in Search.');
+		expect(html).not.toContain('point or name');
+		expect(navigationHelpSections(false, true, true).map((section) => section.heading)).toEqual([
+			'Mountains',
+			'Mouse and trackpad',
+			'Touch',
+			'Buttons'
+		]);
+	});
+
+	it('keeps the visible-marker help as it was', () => {
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN);
+
+		expect(html).toContain('Click or tap a mountain&#x27;s point or name.');
+		expect(html).not.toContain('Press the pin button');
 	});
 
 	it('renders the help content without the browser', () => {
@@ -274,5 +298,70 @@ describe('StageControls globe rotation', () => {
 		store.setState({ status: 'loading' });
 
 		expect(render(store.getSnapshot())).toBe('');
+	});
+});
+
+describe('StageControls marker visibility', () => {
+	const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
+
+	it('offers no switch off the atlas', () => {
+		const html = render(readyStore().getSnapshot(), SUPPORTED);
+
+		expect(html).not.toMatch(/mountain markers/i);
+	});
+
+	it('offers hiding while the markers are drawn, as a plain button named for the action', () => {
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN);
+
+		expect(button(html, 'Hide mountain markers')).toMatch(/^<button type="button"/);
+		expect(html).not.toContain('Show mountain markers');
+	});
+
+	it('offers showing them again once hidden, still enabled', () => {
+		const html = render(readyStore().getSnapshot(), UNSUPPORTED, HIDDEN);
+		const control = button(html, 'Show mountain markers');
+
+		expect(control).not.toContain('disabled');
+		expect(html).not.toContain('Hide mountain markers');
+	});
+
+	it('names the action in its label alone, with no pressed state to contradict it', () => {
+		for (const toggle of [SHOWN, HIDDEN]) {
+			const html = render(readyStore().getSnapshot(), UNSUPPORTED, toggle);
+
+			expect(html).not.toContain('aria-pressed');
+		}
+	});
+
+	it('strikes the pin through only while the markers are hidden', () => {
+		const strike = 'M4 4l16 16';
+		const shown = button(render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN), 'Hide mountain');
+		const hidden = button(render(readyStore().getSnapshot(), UNSUPPORTED, HIDDEN), 'Show mountain');
+
+		expect(shown).not.toContain(strike);
+		expect(hidden).toContain(strike);
+	});
+
+	it('stays available while the scene is settling, like Reset and the help', () => {
+		const store = readyStore();
+		store.setSettled(false);
+
+		expect(button(render(store.getSnapshot(), UNSUPPORTED, HIDDEN), 'Show mountain')).not.toContain(
+			'disabled'
+		);
+	});
+
+	it('sits in the toolbar after Reset and before fullscreen', () => {
+		const html = render(readyStore().getSnapshot(), SUPPORTED, SHOWN);
+
+		expect(html.indexOf('Reset view')).toBeLessThan(html.indexOf('Hide mountain markers'));
+		expect(html.indexOf('Hide mountain markers')).toBeLessThan(html.indexOf('Enter fullscreen'));
+	});
+
+	it('is not drawn over a globe that is not ready', () => {
+		const store = readyStore();
+		store.setState({ status: 'loading' });
+
+		expect(render(store.getSnapshot(), SUPPORTED, SHOWN)).toBe('');
 	});
 });

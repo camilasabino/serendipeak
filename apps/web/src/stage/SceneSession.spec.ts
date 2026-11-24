@@ -1651,6 +1651,38 @@ describe('SceneSession atlas markers', () => {
 		expect(scene.shown).toEqual([{ target: ACONCAGUA, placement: 'next' }]);
 	});
 
+	it('hides and restores the markers on the atlas without touching the camera, the orbit or the look', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(MARKERS);
+		const scene = factory.resolve(0);
+		await flush();
+
+		session.setAtlasMarkers(undefined);
+		expect(scene.atlasMarkers).toBeUndefined();
+		session.setAtlasMarkers(MARKERS);
+
+		expect(scene.atlasMarkers).toBe(MARKERS);
+		expect(scene.markerSets).toEqual([MARKERS, undefined, MARKERS]);
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: false }]);
+		expect(scene.orbits).toHaveLength(1);
+		expect(scene.orbiting).toBe(true);
+		expect(scene.presentations).toEqual([true]);
+	});
+
+	it('keeps the markers hidden for a scene that does not exist yet, and still presents the atlas', async () => {
+		const { session, factory } = setup();
+		session.setAtlas(ATLAS);
+		session.setAtlasMarkers(undefined);
+
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.markerSets).toEqual([]);
+		expect(scene.presentations).toEqual([true]);
+		expect(scene.overviews).toEqual([{ look: OVERVIEW, animate: false }]);
+	});
+
 	it('hands no markers to a scene for a mountain page', async () => {
 		const { session, factory } = setup();
 		session.setTarget(ACONCAGUA);
@@ -1740,6 +1772,18 @@ describe('SceneSession marker activation', () => {
 		scene.activate(OPEN_FITZ_ROY);
 
 		expect(onMarkerActivate).toHaveBeenCalledWith(OPEN_FITZ_ROY);
+	});
+
+	it('passes on nothing while the markers are hidden on the atlas, and again once they are back', async () => {
+		const { session, scene, onMarkerActivate } = await onAtlas();
+
+		session.setAtlasMarkers(undefined);
+		scene.activate(OPEN_FITZ_ROY);
+		expect(onMarkerActivate).not.toHaveBeenCalled();
+
+		session.setAtlasMarkers(MARKERS);
+		scene.activate(OPEN_FITZ_ROY);
+		expect(onMarkerActivate).toHaveBeenCalledOnce();
 	});
 
 	it('passes on nothing once the markers are taken away for a mountain page', async () => {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { ATLAS_STAGE_LABEL } from '../atlas/atlasCopy';
 import { AtlasViewProvider, useAtlasBrowse } from '../atlas/AtlasViewContext';
@@ -9,6 +9,7 @@ import { OpenContinentsProvider } from '../atlas/OpenContinentsContext';
 import { toAtlasMarkers } from '../atlas/toAtlasMarkers';
 import { toAtlasView } from '../atlas/toAtlasView';
 import { useMarkerActivation } from '../atlas/useMarkerActivation';
+import type { MarkerToggle } from '../stage/controls/StageControls';
 import type { StageController } from '../stage/MountainScene';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
@@ -37,7 +38,9 @@ interface StageLayoutProps {
  * mountain shown before and flies to the overview, however it was reached. Only the atlas draws
  * its mountains on the globe, from the same index its list was rendered with, and a press on one
  * opens its page like its link in the list. The reader's filters live here too, so the list and
- * the globe draw the same mountains and a visit to a mountain page leaves them as they were.
+ * the globe draw the same mountains and a visit to a mountain page leaves them as they were. So does
+ * whether the globe draws them at all, a presentation choice kept apart from the filters, from the
+ * camera framing and from the page: hiding takes the markers away without touching the list.
  */
 export function StageLayout({ model, children }: StageLayoutProps) {
 	const coordinator = useTransitionCoordinator();
@@ -67,7 +70,16 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 		() => (onAtlas ? toAtlasView(view.filters, matches) : undefined),
 		[onAtlas, view.filters, matches]
 	);
-	const { choice, activate, dismiss } = useMarkerActivation(markers);
+	const [markersHidden, setMarkersHidden] = useState(false);
+	const toggleMarkers = useCallback(() => setMarkersHidden((hidden) => !hidden), []);
+	// The scene already treats no markers as nothing drawn, heard or hit, so the preference only
+	// decides what the filtered set is handed on as; the switch itself belongs to the atlas alone.
+	const drawnMarkers = markersHidden ? undefined : markers;
+	const markerToggle = useMemo<MarkerToggle | undefined>(
+		() => (onAtlas ? { shown: !markersHidden, onToggle: toggleMarkers } : undefined),
+		[onAtlas, markersHidden, toggleMarkers]
+	);
+	const { choice, activate, dismiss } = useMarkerActivation(drawnMarkers);
 
 	return (
 		<OpenContinentsProvider value={openContinents}>
@@ -85,7 +97,8 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 									store={store}
 									target={target}
 									atlas={atlas}
-									markers={markers}
+									markers={drawnMarkers}
+									markerToggle={markerToggle}
 									observer={coordinator}
 									controllerRef={controller}
 									onMarkerActivate={onAtlas ? activate : undefined}

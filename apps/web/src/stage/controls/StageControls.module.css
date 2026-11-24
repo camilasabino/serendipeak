@@ -8,6 +8,14 @@
 	gap: 0.5rem;
 }
 
+/* Four buttons stacked reach the compass once the stage is short, whatever the layout around it,
+   and the stage's height follows the window's. A row across the top keeps them clear of it. */
+@media (max-height: 32rem) {
+	.toolbar {
+		flex-direction: row;
+	}
+}
+
 /* Navigation sits on the opposite edge: a short phone stage has no room for more buttons above the
    compass. It spans the stage height so the help panel can size to the stage, and lets pointer
    events through everywhere but its own controls so the globe stays draggable beneath it. */

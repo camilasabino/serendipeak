@@ -16,6 +16,9 @@ export const RESET_VIEW_LABEL = 'Reset view';
 export const PAUSE_ROTATION_LABEL = 'Pause globe rotation';
 export const RESUME_ROTATION_LABEL = 'Rotate the globe';
 
+export const HIDE_MARKERS_LABEL = 'Hide mountain markers';
+export const SHOW_MARKERS_LABEL = 'Show mountain markers';
+
 export const ENTER_FULLSCREEN_LABEL = 'Enter fullscreen';
 export const EXIT_FULLSCREEN_LABEL = 'Exit fullscreen';
 
@@ -69,6 +72,18 @@ export const MARKER_NAVIGATION: NavigationHelpSection = {
 			gesture: 'Where points overlap, pick one from the short list that opens, or zoom in.'
 		},
 		{ action: 'Without the globe', gesture: 'Every mountain is also in the list and in Search.' }
+	]
+};
+
+// Shown in its place while the reader has hidden the markers, which keeps the way back in view.
+export const HIDDEN_MARKERS_NAVIGATION: NavigationHelpSection = {
+	heading: 'Mountains',
+	gestures: [
+		{
+			action: 'Markers are hidden',
+			gesture: 'Press the pin button in the top-right buttons to show them again.'
+		},
+		{ action: 'Meanwhile', gesture: 'Every mountain is still in the list and in Search.' }
 	]
 };
 

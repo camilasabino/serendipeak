@@ -342,6 +342,24 @@ describe('StageBinding retry', () => {
 		expect(scene.markerSets).toEqual([second]);
 	});
 
+	it('keeps the markers hidden for the new attempt without losing the atlas', async () => {
+		const markers: AtlasMarker[] = [
+			{ slug: 'a', name: 'A', latitude: 1, longitude: 2, elevationMeters: 3 }
+		];
+		const { factory, binding } = await failedBinding({
+			atlas: { center: { latitude: 0, longitude: 0 } },
+			markers
+		});
+		binding.setAtlasMarkers(undefined);
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.presentations).toEqual([true]);
+		expect(scene.markerSets).toEqual([]);
+	});
+
 	it('keeps the mountain target and the stage size for the new attempt', async () => {
 		const { factory, binding } = await failedBinding({ target: ACONCAGUA });
 		binding.setTarget(FITZ_ROY);
