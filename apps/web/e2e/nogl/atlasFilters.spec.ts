@@ -585,7 +585,7 @@ test.describe('@nogl Atlas filters: elevation bands', () => {
 
 const unitButton = (page: Page, name: 'Metric, meters' | 'Imperial, feet') =>
 	page.getByRole('group', { name: 'Units' }).getByRole('button', { name });
-const keptBands = (page: Page) => popup(page).getByRole('group', { name: 'Selected in meters' });
+const CLEARED_NOTICE = 'Elevation filter cleared after changing units.';
 
 async function showUnits(page: Page, name: 'Metric, meters' | 'Imperial, feet') {
 	await closePopup(page);
@@ -622,7 +622,7 @@ test.describe('@nogl Atlas filters: elevation in feet', () => {
 		expect(watched.pageErrors).toEqual([]);
 	});
 
-	test('keeps metric bands and their matches while feet are shown, until a band in feet replaces them', async ({
+	test('clears the elevation bands on each change of unit and keeps country and sort', async ({
 		page
 	}) => {
 		const watched = await watch(page);
@@ -632,58 +632,63 @@ test.describe('@nogl Atlas filters: elevation in feet', () => {
 		await chooseSort(page, 'elevation-desc');
 		await expectNames(page, ['Six Thousand']);
 
-		for (let round = 0; round < 2; round++) {
-			await showUnits(page, 'Imperial, feet');
-			await expectNames(page, ['Six Thousand']);
-			await expect(count(page)).toHaveText(`Showing 1 of ${TOTAL} mountains`);
-			await expect(elevation(page)).toHaveAccessibleName('Elevation 6,000–6,999 m');
-			await expectChoice(page, 'country', 'CL');
-			await expectSort(page, 'elevation-desc');
-			await openElevation(page);
-			await expect(keptBands(page)).toContainText('6,000–6,999 m');
-			await expect(popup(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
-
-			await showUnits(page, 'Metric, meters');
-			await expectNames(page, ['Six Thousand']);
-			await openElevation(page);
-			await expect(keptBands(page)).toHaveCount(0);
-			await expect(bandBox(page, 6000)).toBeChecked();
-		}
-
 		await showUnits(page, 'Imperial, feet');
-		await openElevation(page);
-		await bandBox(page, 19_000).check();
-		await expect(keptBands(page)).toHaveCount(0);
-		await expect(count(page)).toContainText(
-			'Elevation bands in meters replaced by your choice in feet.'
-		);
-		await closePopup(page);
-		await expect(elevation(page)).toHaveAccessibleName('Elevation 19,000–19,999 ft');
-		await expectNames(page, ['Six Thousand', 'Almost Six']);
+		await expect(elevation(page)).toHaveAccessibleName('Elevation Any elevation');
+		await expect(count(page)).toContainText(CLEARED_NOTICE);
 		await expectChoice(page, 'country', 'CL');
+		await expectSort(page, 'elevation-desc');
+		await expectNames(page, ['Six Thousand', 'Almost Six', 'Fitz Roy']);
+		await openElevation(page);
+		await expect(popup(page).getByRole('group', { name: /Selected in/ })).toHaveCount(0);
+		await expect(popup(page).getByText(/about /)).toHaveCount(0);
+		await expect(popup(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
+		await expect(bandBox(page, 19_000)).toBeVisible();
+
+		await pickBand(page, 19_000);
+		await pickBand(page, 11_000);
+		await expect(elevation(page)).toHaveAccessibleName('Elevation 2 elevation bands');
+
+		await showUnits(page, 'Metric, meters');
+		await expect(elevation(page)).toHaveAccessibleName('Elevation Any elevation');
+		await expect(count(page)).toContainText(CLEARED_NOTICE);
+		await expectChoice(page, 'country', 'CL');
+		await expectSort(page, 'elevation-desc');
+		await openElevation(page);
+		await expect(popup(page).getByRole('checkbox', { checked: true })).toHaveCount(0);
+		await expect(bandBox(page, 6000)).toBeVisible();
 		expect(watched.pageErrors).toEqual([]);
 	});
 
-	test('lets a later country remove only the kept bands it empties, and clears what is kept', async ({
+	test('announces nothing when the unit changes with no elevation selected', async ({ page }) => {
+		await watch(page);
+		await openAtlas(page);
+		await choose(page, 'country', 'CL');
+
+		await showUnits(page, 'Imperial, feet');
+		await expect(count(page)).not.toContainText(CLEARED_NOTICE);
+		await showUnits(page, 'Metric, meters');
+		await expect(count(page)).not.toContainText(CLEARED_NOTICE);
+		await expectChoice(page, 'country', 'CL');
+	});
+
+	test('lets a later country remove only the bands it empties, and clears what is left', async ({
 		page
 	}) => {
 		await watch(page);
 		await openAtlas(page);
-		await pickBand(page, 2000);
-		await pickBand(page, 8000);
 		await showUnits(page, 'Imperial, feet');
-		await expect(elevation(page)).toHaveAccessibleName('Elevation 2 bands in meters');
+		await pickBand(page, 6000);
+		await pickBand(page, 29_000);
 
 		await choose(page, 'country', 'NP');
 		await expectNames(page, ['Mount Everest']);
 		await expect(count(page)).toContainText(
-			'Elevation band 2,000–2,999 m removed: no mountains matched with your choice.'
+			'Elevation band 6,000–6,999 ft removed: no mountains matched with your choice.'
 		);
-		await expect(elevation(page)).toHaveAccessibleName('Elevation 8,000–8,999 m');
+		await expect(elevation(page)).toHaveAccessibleName('Elevation 29,000–29,999 ft');
 
 		await openElevation(page);
 		await clearElevation(page).click();
-		await expect(keptBands(page)).toHaveCount(0);
 		await expect(elevation(page)).toHaveAccessibleName('Elevation Any elevation');
 		await expect(popup(page).getByRole('checkbox').first()).toBeFocused();
 		await closePopup(page);
@@ -702,6 +707,31 @@ test.describe('@nogl Atlas filters: elevation in feet', () => {
 		await page.waitForFunction(() => '__NEXT_DATA__' in window && 'next' in window);
 		await expect(unitButton(page, 'Imperial, feet')).toHaveAttribute('aria-pressed', 'true');
 		expect((await bandLabels(page))[0]).toBe('29,000–29,999 ft (1)');
+		await expect(count(page)).not.toContainText(CLEARED_NOTICE);
+		expect(watched.pageErrors).toEqual([]);
+	});
+
+	test('clears the bands when the unit changes away from the atlas, and says nothing on return', async ({
+		page
+	}) => {
+		const watched = await watch(page);
+		await openAtlas(page);
+		await choose(page, 'country', 'AR');
+		await pickBand(page, 6000);
+		await list(page)
+			.getByRole('link', { name: /Aconcagua/ })
+			.click();
+		await expect(page).toHaveURL(new RegExp(`/mountains/${ACONCAGUA.slug}$`));
+
+		await unitButton(page, 'Imperial, feet').click();
+		await expect(unitButton(page, 'Imperial, feet')).toHaveAttribute('aria-pressed', 'true');
+		await page.goBack();
+
+		await expect(page).toHaveURL(/\/atlas$/);
+		await openFilters(page);
+		await expect(elevation(page)).toHaveAccessibleName('Elevation Any elevation');
+		await expectChoice(page, 'country', 'AR');
+		await expect(count(page)).not.toContainText(CLEARED_NOTICE);
 		expect(watched.pageErrors).toEqual([]);
 	});
 });

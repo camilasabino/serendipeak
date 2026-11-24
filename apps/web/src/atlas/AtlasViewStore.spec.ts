@@ -108,4 +108,71 @@ describe('AtlasViewStore', () => {
 
 		expect(listener).not.toHaveBeenCalled();
 	});
+
+	describe('clearing elevation for a unit change', () => {
+		it('drops every selected band and keeps country, range and sort', () => {
+			const store = new AtlasViewStore();
+			store.setFilters({ country: 'AR', range: 'andes', elevationBands: m(3000, 6000) });
+			store.setSort('elevation-desc');
+
+			store.clearElevationForUnits();
+
+			expect(store.getSnapshot().filters).toEqual({
+				country: 'AR',
+				range: 'andes',
+				elevationBands: null
+			});
+			expect(store.getSnapshot().sort).toBe('elevation-desc');
+		});
+
+		it('clears bands chosen in either system, each time they are selected again', () => {
+			const store = new AtlasViewStore();
+
+			for (const bands of [ft(9000, 29_000), m(6000), ft(11_000)]) {
+				store.setFilters({ elevationBands: bands });
+				store.clearElevationForUnits();
+
+				expect(store.getSnapshot().filters.elevationBands).toBeNull();
+			}
+		});
+
+		it('says so to its listeners once per clear', () => {
+			const store = new AtlasViewStore();
+			const cleared = vi.fn();
+			store.subscribeToUnitClears(cleared);
+
+			store.setFilters({ elevationBands: m(6000) });
+			store.clearElevationForUnits();
+			store.clearElevationForUnits();
+
+			expect(cleared).toHaveBeenCalledTimes(1);
+		});
+
+		it('leaves the view, its object and its listeners alone when no band is selected', () => {
+			const store = new AtlasViewStore();
+			store.setFilters({ country: 'AR' });
+			const stored = store.getSnapshot();
+			const changed = vi.fn();
+			const cleared = vi.fn();
+			store.subscribe(changed);
+			store.subscribeToUnitClears(cleared);
+
+			store.clearElevationForUnits();
+
+			expect(store.getSnapshot()).toBe(stored);
+			expect(changed).not.toHaveBeenCalled();
+			expect(cleared).not.toHaveBeenCalled();
+		});
+
+		it('stops telling a listener that unsubscribed', () => {
+			const store = new AtlasViewStore();
+			const cleared = vi.fn();
+			store.subscribeToUnitClears(cleared)();
+
+			store.setFilters({ elevationBands: m(6000) });
+			store.clearElevationForUnits();
+
+			expect(cleared).not.toHaveBeenCalled();
+		});
+	});
 });

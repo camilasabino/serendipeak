@@ -5,12 +5,8 @@ import {
 	CLEAR_ELEVATION_LABEL,
 	ELEVATION_BANDS_GROUP_LABEL,
 	ELEVATION_FILTER_LABEL,
-	convertedBandLabel,
-	displayedBandsLabel,
 	elevationBandLabel,
-	elevationSummary,
-	retainedBandsHeading,
-	retainedBandsHint
+	elevationSummary
 } from './atlasCopy';
 import type { ElevationOption } from './atlasFilter';
 import controls from './AtlasControls.module.css';
@@ -22,10 +18,8 @@ import styles from './ElevationFilter.module.css';
 interface ElevationFilterProps {
 	/** The bands of the displayed system. */
 	options: readonly ElevationOption[];
-	/** The selected bands, when they were chosen in the other system. */
-	retained: readonly ElevationOption[];
 	selected: BandSelection | null;
-	/** The displayed unit system, which every band ticked here is chosen in. */
+	/** The displayed unit system, which every band offered here is native to. */
 	system: UnitSystem;
 	onChange: (selection: BandSelection | null) => void;
 }
@@ -35,7 +29,7 @@ interface ElevationFilterProps {
  * popup stays open while bands are ticked, and Escape, a press outside or tabbing away closes it.
  */
 export function ElevationFilter(props: ElevationFilterProps) {
-	const { selected, system } = props;
+	const { selected } = props;
 	const [open, setOpen] = useState(false);
 	const labelId = useId();
 	const summaryId = useId();
@@ -70,7 +64,7 @@ export function ElevationFilter(props: ElevationFilterProps) {
 				}}
 			>
 				<span id={summaryId} className={controls.triggerValue}>
-					<span className={controls.triggerText}>{elevationSummary(selected, system)}</span>
+					<span className={controls.triggerText}>{elevationSummary(selected)}</span>
 				</span>
 				<svg className={controls.chevron} viewBox="0 0 24 24" aria-hidden="true">
 					<path d="M6 9l6 6 6-6" />
@@ -101,15 +95,10 @@ function MountainCount({ count }: { count: number }) {
 }
 
 // Mounted only while the popup is open, so focus enters it each time it opens.
-function BandList({ options, retained, selected, system, onChange }: ElevationFilterProps) {
+function BandList({ options, selected, system, onChange }: ElevationFilterProps) {
 	const box = useRef<HTMLDivElement>(null);
-	const retainedId = useId();
-	const hintId = useId();
-	// Bands kept from the other system stay in force, but no band offered here is one of them.
-	const from = selected !== null && selected.system !== system ? selected.system : undefined;
-	const native = from === undefined ? (selected?.floors ?? []) : [];
+	const native = selected?.floors ?? [];
 
-	// Ticking a band of the displayed system replaces any kept from the other one.
 	const toggle = (floor: number, checked: boolean) =>
 		onChange(
 			bandSelection(system, checked ? [...native, floor] : native.filter((f) => f !== floor))
@@ -123,50 +112,11 @@ function BandList({ options, retained, selected, system, onChange }: ElevationFi
 
 	useEffect(focusFirst, []);
 
-	const count = selected?.floors.length ?? 0;
+	const count = native.length;
 
 	return (
 		<>
-			{from !== undefined && (
-				<div
-					className={styles.retained}
-					role="group"
-					aria-labelledby={retainedId}
-					aria-describedby={hintId}
-				>
-					<p id={retainedId} className={styles.retainedHeading}>
-						{retainedBandsHeading(from)}
-					</p>
-					<p id={hintId} className={styles.hint}>
-						{retainedBandsHint(system)}
-					</p>
-					<ul className={styles.retainedList}>
-						{retained.map(({ floor, count: matching }) => (
-							<li key={floor} className={styles.retainedBand}>
-								<svg className={styles.tick} viewBox="0 0 16 16" aria-hidden="true">
-									<path d="M3.5 8.5l3 3 6-7" />
-								</svg>
-								<span className={styles.label}>
-									<span className={styles.retainedText}>
-										<span>{elevationBandLabel(floor, from)}</span>
-										<span className={styles.converted}>
-											{convertedBandLabel(floor, from, system)}
-										</span>
-									</span>
-									<MountainCount count={matching} />
-								</span>
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-			<div
-				ref={box}
-				className={styles.options}
-				role={from !== undefined ? 'group' : undefined}
-				aria-label={from !== undefined ? displayedBandsLabel(system) : undefined}
-				aria-describedby={from !== undefined ? hintId : undefined}
-			>
+			<div ref={box} className={styles.options}>
 				{options.map(({ floor, count: matching }) => (
 					<label key={floor} className={styles.check}>
 						<input

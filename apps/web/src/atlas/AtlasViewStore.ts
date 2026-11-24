@@ -18,12 +18,13 @@ export function isDefaultView({ filters, sort }: AtlasView): boolean {
 /**
  * The atlas view of one reader, held by the stage layout so it outlives the atlas panel: a reader
  * who opens a mountain and returns finds the list and the globe as they left them. Kept in memory
- * only, and never in the URL. The displayed unit system is not part of it: switching units leaves
- * the view, and so what it matches and frames, untouched.
+ * only, and never in the URL. The displayed unit system is not part of it, but elevation bands are
+ * native to one, so `clearElevationForUnits` drops them when the reader switches units.
  */
 export class AtlasViewStore {
 	private snapshot: AtlasView = DEFAULT_ATLAS_VIEW;
 	private readonly listeners = new Set<() => void>();
+	private readonly clearedListeners = new Set<() => void>();
 
 	// Arrow properties because React receives them detached (useSyncExternalStore).
 	readonly subscribe = (listener: () => void): (() => void) => {
@@ -34,6 +35,26 @@ export class AtlasViewStore {
 	};
 
 	readonly getSnapshot = (): AtlasView => this.snapshot;
+
+	/** Called after a unit change cleared the elevation bands, for whoever announces it. */
+	readonly subscribeToUnitClears = (listener: () => void): (() => void) => {
+		this.clearedListeners.add(listener);
+		return () => {
+			this.clearedListeners.delete(listener);
+		};
+	};
+
+	/** Country, range and sort stay; does nothing, and tells no one, when no band is selected. */
+	clearElevationForUnits(): void {
+		if (this.snapshot.filters.elevationBands === null) {
+			return;
+		}
+
+		this.setFilters({ elevationBands: null });
+		for (const listener of [...this.clearedListeners]) {
+			listener();
+		}
+	}
 
 	setFilters(change: Partial<AtlasFilters>): void {
 		const filters = { ...this.snapshot.filters, ...change };

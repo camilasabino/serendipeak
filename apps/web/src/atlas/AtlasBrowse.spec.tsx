@@ -17,6 +17,7 @@ import { AtlasViewProvider, useAtlasBrowse, type AtlasBrowse } from './AtlasView
 import { AtlasViewStore } from './AtlasViewStore';
 import { bandSelection } from './elevationBands';
 import { toAtlasMarkers } from './toAtlasMarkers';
+import { toAtlasView } from './toAtlasView';
 import { choiceIsCurrent, type MarkerChoice } from './useMarkerActivation';
 
 const ANDES = { slug: 'andes', name: 'Andes' };
@@ -202,44 +203,31 @@ describe('the atlas as the displayed unit changes', () => {
 		expect(slugs(inFeet.results)).toEqual(slugs(inMeters.results));
 	});
 
-	it('keeps the selected bands, and exactly their matches, whichever unit is shown', () => {
+	it('leaves the matches, the filters and the framing untouched when no band is selected', () => {
 		const store = new AtlasViewStore();
-		store.setFilters({ elevationBands: m(3000, 6000), country: 'AR' });
-		const stored = store.getSnapshot();
+		store.setFilters({ country: 'AR' });
 		const before = browseOf(store, CATALOG, 'metric');
+		const framingBefore = toAtlasView(before.view.filters, before.matches);
 
-		for (const system of ['imperial', 'metric', 'imperial', 'metric'] as const) {
-			const browse = browseOf(store, CATALOG, system);
+		store.clearElevationForUnits();
+		const after = browseOf(store, CATALOG, 'imperial');
 
-			// The same filters object: nothing the globe frames or draws is recomputed for a unit.
-			expect(browse.view.filters).toBe(stored.filters);
-			expect(slugs(browse.matches)).toEqual(slugs(before.matches));
-			expect(browse.options.retainedBands.map(({ floor }) => floor)).toEqual(
-				system === 'imperial' ? [6000, 3000] : []
-			);
-		}
-		expect(store.getSnapshot()).toBe(stored);
-		expect(slugs(before.matches)).toEqual(['aconcagua', 'fitz-roy']);
+		expect(after.view.filters).toBe(before.view.filters);
+		expect(slugs(after.matches)).toEqual(slugs(before.matches));
+		expect(toAtlasView(after.view.filters, after.matches)).toEqual(framingBefore);
 	});
 
-	it('replaces kept bands with bands chosen in the displayed unit, and resets as before', () => {
+	it('frames the places the remaining filters leave once the bands are cleared', () => {
 		const store = new AtlasViewStore();
-		store.setFilters({ elevationBands: m(6000) });
-		store.setFilters(
-			settleFilters(
-				CATALOG,
-				{ ...store.getSnapshot().filters, elevationBands: ft(29_000) },
-				'elevationBands'
-			).filters
-		);
+		store.setFilters({ country: 'AR', elevationBands: m(6000) });
+		const narrowed = browseOf(store, CATALOG, 'metric');
 
-		const browse = browseOf(store, CATALOG, 'imperial');
-		expect(browse.view.filters.elevationBands).toEqual(ft(29_000));
-		expect(browse.options.retainedBands).toEqual([]);
-		expect(slugs(browse.matches)).toEqual(['everest']);
+		store.clearElevationForUnits();
+		const cleared = browseOf(store, CATALOG, 'imperial');
 
-		store.reset();
-		expect(browseOf(store, CATALOG, 'imperial').view.filters.elevationBands).toBeNull();
+		expect(slugs(narrowed.matches)).toEqual(['aconcagua']);
+		expect(slugs(cleared.matches)).toEqual(['aconcagua', 'fitz-roy']);
+		expect(cleared.view.filters.country).toBe('AR');
 	});
 });
 
@@ -387,15 +375,13 @@ describe('atlas controls', () => {
 		expect(renderControls(store)).toMatch(/aria-live="polite"[^>]*>Showing 1 of 3 mountains</);
 	});
 
-	it('names kept bands in their own unit on the closed Elevation button', () => {
+	it('names the selected bands on the closed Elevation button', () => {
 		const store = new AtlasViewStore();
-		store.setFilters({ elevationBands: m(3000, 6000) });
+		store.setFilters({ elevationBands: ft(22_000, 29_000) });
+		expect(renderControls(store, 'imperial')).toContain('>2 elevation bands</span>');
 
-		expect(renderControls(store, 'imperial')).toContain('>2 bands in meters</span>');
-		expect(renderControls(store, 'metric')).toContain('>2 elevation bands</span>');
-
-		store.setFilters({ elevationBands: m(6000) });
-		expect(renderControls(store, 'imperial')).toContain('>6,000–6,999 m</span>');
+		store.setFilters({ elevationBands: ft(29_000) });
+		expect(renderControls(store, 'imperial')).toContain('>29,000–29,999 ft</span>');
 		expect(renderControls(store, 'imperial')).toContain('aria-label="Filter, 1 active"');
 	});
 

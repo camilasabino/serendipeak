@@ -250,7 +250,6 @@ describe('combined filters', () => {
 		expect(atlasOptions([])).toEqual({
 			countries: [],
 			elevationBands: [],
-			retainedBands: [],
 			ranges: []
 		});
 	});
@@ -425,7 +424,6 @@ describe('faceted options', () => {
 		expect(facetedOptions([], NO_FILTERS)).toEqual({
 			countries: [],
 			elevationBands: [],
-			retainedBands: [],
 			ranges: []
 		});
 	});
@@ -693,47 +691,5 @@ describe('elevation bands in feet', () => {
 
 		expect(settled.filters).toEqual(only({ country: 'AR', elevationBands: ft(11_000, 22_000) }));
 		expect(settled.removedBands).toEqual(ft(29_000));
-	});
-});
-
-describe('bands kept from the other system', () => {
-	const metric = only({ elevationBands: m(3000, 6000) });
-
-	it('stay in force while another system is displayed, matching what they matched', () => {
-		const shownInFeet = facetedOptions(CATALOG, metric, 'imperial');
-
-		expect(slugs(filterMountains(CATALOG, metric))).toEqual(['aconcagua', 'fitz-roy']);
-		expect(shownInFeet.retainedBands).toEqual([
-			{ floor: 6000, count: 1 },
-			{ floor: 3000, count: 1 }
-		]);
-		// The bands offered are the displayed system's own, none standing in for the kept ones.
-		expect(shownInFeet.elevationBands.map(({ floor }) => floor)).toEqual([
-			29_000, 22_000, 13_000, 11_000, 9000
-		]);
-	});
-
-	it('are not set apart while their own system is displayed', () => {
-		expect(facetedOptions(CATALOG, metric, 'metric').retainedBands).toEqual([]);
-		expect(facetedOptions(CATALOG, NO_FILTERS, 'imperial').retainedBands).toEqual([]);
-	});
-
-	it('leave the other options what they were in their own system', () => {
-		const inMeters = facetedOptions(CATALOG, metric, 'metric');
-		const inFeet = facetedOptions(CATALOG, metric, 'imperial');
-
-		expect(inFeet.countries).toEqual(inMeters.countries);
-		expect(inFeet.ranges).toEqual(inMeters.ranges);
-	});
-
-	it('count against the country and range in force, and lose the bands those empty', () => {
-		const chile = only({ country: 'CL', elevationBands: m(3000, 6000) });
-		const settled = settleFilters(CATALOG, chile, 'country');
-
-		expect(settled.filters).toEqual(only({ country: 'CL', elevationBands: m(3000) }));
-		expect(settled.removedBands).toEqual(m(6000));
-		expect(facetedOptions(CATALOG, settled.filters, 'imperial').retainedBands).toEqual([
-			{ floor: 3000, count: 1 }
-		]);
 	});
 });

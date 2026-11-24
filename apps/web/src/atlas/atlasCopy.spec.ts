@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+	ELEVATION_CLEARED_BY_UNITS_NOTICE,
 	autoResetNotice,
 	choicesFound,
-	convertedBandLabel,
 	elevationBandLabel,
 	elevationSummary,
 	noCountriesMessage,
-	noRangesMessage,
-	retainedBandsReplacedNotice
+	noRangesMessage
 } from './atlasCopy';
 import { bandSelection } from './elevationBands';
 
@@ -54,31 +53,22 @@ describe('elevation band labels', () => {
 		expect(elevationBandLabel(0, 'imperial')).toBe('0–999 ft');
 		expect(elevationBandLabel(14_000, 'imperial')).toBe('14,000–14,999 ft');
 	});
+});
 
-	it('places a kept band approximately in the displayed unit', () => {
-		expect(convertedBandLabel(4000, 'metric', 'imperial')).toBe('about 13,123–16,404 ft');
-		expect(convertedBandLabel(7000, 'imperial', 'metric')).toBe('about 2,134–2,438 m');
-	});
-
-	it('says which bands a choice in the displayed unit replaced', () => {
-		expect(retainedBandsReplacedNotice('metric', 'imperial')).toBe(
-			'Elevation bands in meters replaced by your choice in feet.'
+describe('unit change notice', () => {
+	it('says the elevation filter was cleared', () => {
+		expect(ELEVATION_CLEARED_BY_UNITS_NOTICE).toBe(
+			'Elevation filter cleared after changing units.'
 		);
 	});
 });
 
 describe('elevationSummary', () => {
 	it('says any, the one band, or how many', () => {
-		expect(elevationSummary(null, 'metric')).toBe('Any elevation');
-		expect(elevationSummary(m(4000), 'metric')).toBe('4,000–4,999 m');
-		expect(elevationSummary(m(3000, 5000), 'metric')).toBe('2 elevation bands');
-		expect(elevationSummary(ft(3000, 4000, 5000), 'imperial')).toBe('3 elevation bands');
-	});
-
-	it('names the unit of bands kept from the other system', () => {
-		expect(elevationSummary(m(4000), 'imperial')).toBe('4,000–4,999 m');
-		expect(elevationSummary(m(3000, 5000), 'imperial')).toBe('2 bands in meters');
-		expect(elevationSummary(ft(9000, 29_000), 'metric')).toBe('2 bands in feet');
+		expect(elevationSummary(null)).toBe('Any elevation');
+		expect(elevationSummary(m(4000))).toBe('4,000–4,999 m');
+		expect(elevationSummary(m(3000, 5000))).toBe('2 elevation bands');
+		expect(elevationSummary(ft(3000, 4000, 5000))).toBe('3 elevation bands');
 	});
 });
 

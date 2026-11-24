@@ -1,4 +1,11 @@
-import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
+import {
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useSyncExternalStore
+} from 'react';
 import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from './unitSystem';
 
 /** What the components need of the preference, so tests can serve a fixed system. */
@@ -31,4 +38,32 @@ export function useSetUnitSystem(): (system: UnitSystem) => void {
 	const store = useContext(UnitPreferenceContext);
 
 	return useCallback((system: UnitSystem) => store?.set(system), [store]);
+}
+
+/**
+ * Calls back when the visitor switches unit system. It listens to the preference's own change
+ * events, so renders, remounts and the hydration pass from the server's default to a stored
+ * preference never count as a switch.
+ */
+export function useOnUnitSystemChange(onChange: (system: UnitSystem) => void): void {
+	const store = useContext(UnitPreferenceContext);
+	const latest = useRef(onChange);
+	useEffect(() => {
+		latest.current = onChange;
+	});
+
+	useEffect(() => {
+		if (!store) {
+			return;
+		}
+		let seen = store.getSnapshot();
+
+		return store.subscribe(() => {
+			const next = store.getSnapshot();
+			if (next !== seen) {
+				seen = next;
+				latest.current(next);
+			}
+		});
+	}, [store]);
 }

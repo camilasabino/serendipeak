@@ -11,7 +11,7 @@ import { bandFloorOf, bandSelection, inBands, type BandSelection } from './eleva
 export interface AtlasFilters {
 	/** An ISO country code, matched against every country of a mountain. */
 	country: string | null;
-	/** The selected bands with the system they were chosen in, which the displayed unit leaves be. */
+	/** The selected bands, always in the displayed unit system: changing units clears them. */
 	elevationBands: BandSelection | null;
 	/** A region slug, matched against a mountain's region and each of its ancestors. */
 	range: string | null;
@@ -47,11 +47,6 @@ export interface AtlasOptions {
 	countries: CountryOption[];
 	/** The bands of the displayed system that hold at least one mountain, highest first. */
 	elevationBands: ElevationOption[];
-	/**
-	 * The selected bands, highest first, when they were chosen in another system than the one
-	 * displayed: they stay in force but match none of its bands. Empty otherwise.
-	 */
-	retainedBands: ElevationOption[];
 	/** Every region a mountain sits in or under, parents before their children. */
 	ranges: RangeOption[];
 }
@@ -138,20 +133,6 @@ export function elevationOptions(
 		}));
 }
 
-function retainedOptions(
-	mountains: readonly MountainIndexEntry[],
-	selection: BandSelection | null,
-	displayed: UnitSystem
-): ElevationOption[] {
-	if (selection === null || selection.system === displayed) {
-		return [];
-	}
-
-	return elevationOptions(mountains, selection.system).filter(({ floor }) =>
-		selection.floors.includes(floor)
-	);
-}
-
 export function rangeOptions(mountains: readonly MountainIndexEntry[]): RangeOption[] {
 	return flattenRanges(rangeTree(mountains), []).map((range) => ({
 		...range,
@@ -167,7 +148,6 @@ export function atlasOptions(
 	return {
 		countries: countryOptions(mountains),
 		elevationBands: elevationOptions(mountains, system),
-		retainedBands: [],
 		ranges: rangeOptions(mountains)
 	};
 }
@@ -188,7 +168,6 @@ export function facetedOptions(
 	return {
 		countries: countryOptions(filterMountains(mountains, { ...filters, country: null })),
 		elevationBands: elevationOptions(forElevation, system),
-		retainedBands: retainedOptions(forElevation, filters.elevationBands, system),
 		ranges: rangeOptions(filterMountains(mountains, { ...filters, range: null }))
 	};
 }
@@ -234,7 +213,7 @@ export interface SettledFilters {
 	filters: AtlasFilters;
 	/** The selections that had to go back to "all", in the order they were let go. */
 	reset: FilterKey[];
-	/** Selected bands let go while others stayed, in their own system; elevation is not in `reset` then. */
+	/** Selected bands let go while others stayed; elevation is not in `reset` then. */
 	removedBands: BandSelection | null;
 }
 

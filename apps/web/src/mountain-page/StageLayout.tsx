@@ -13,6 +13,7 @@ import type { StageController } from '../stage/MountainScene';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
 import { useTransitionCoordinator } from '../stage/TransitionCoordinatorContext';
+import { useOnUnitSystemChange } from '../units/UnitPreferenceContext';
 import { LazyMountainScene } from './LazyMountainScene';
 import { revealLabel } from './pageCopy';
 import { mountainOf, type StageModel } from './pageModel';
@@ -49,6 +50,8 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	const [markerHighlight] = useState<MarkerHighlight>(() => ({
 		highlight: (slug) => controller.current?.highlightMarker(slug)
 	}));
+	// Elevation bands are native to a unit, so the reader's own switch clears them wherever they are.
+	useOnUnitSystemChange(() => atlasView.clearElevationForUnits());
 	const onAtlas = model.kind === 'atlas';
 	const target = onAtlas ? undefined : toSceneTarget(mountainOf(model));
 	const { matches, view } = useAtlasBrowse(atlasView, onAtlas ? model.mountains : NO_MOUNTAINS);

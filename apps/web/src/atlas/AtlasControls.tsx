@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { useUnitSystem } from '../units/UnitPreferenceContext';
 import {
@@ -9,14 +9,14 @@ import {
 	RANGE_FILTER_LABEL,
 	RESET_ACCESSIBLE_LABEL,
 	RESET_LABEL,
+	ELEVATION_CLEARED_BY_UNITS_NOTICE,
 	SEARCH_COUNTRIES_LABEL,
 	SEARCH_RANGES_LABEL,
 	autoResetNotice,
 	filterToggleLabel,
 	noCountriesMessage,
 	noRangesMessage,
-	resultCount,
-	retainedBandsReplacedNotice
+	resultCount
 } from './atlasCopy';
 import { activeFilterCount, settleFilters, type AtlasFilters } from './atlasFilter';
 import styles from './AtlasControls.module.css';
@@ -75,6 +75,11 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 		[options.ranges]
 	);
 
+	useEffect(
+		() => store.subscribeToUnitClears(() => setNotice(ELEVATION_CLEARED_BY_UNITS_NOTICE)),
+		[store]
+	);
+
 	// A choice is always kept; only the selections it leaves without mountains go back to "all".
 	const choose = (change: Partial<AtlasFilters>) => {
 		const [key] = Object.keys(change) as (keyof AtlasFilters)[];
@@ -84,11 +89,7 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 			key!
 		);
 		store.setFilters(filters);
-		setNotice(
-			[replacedNotice(elevationBands, change.elevationBands), autoResetNotice(reset, removedBands)]
-				.filter(Boolean)
-				.join(' ')
-		);
+		setNotice(autoResetNotice(reset, removedBands));
 	};
 
 	return (
@@ -128,7 +129,6 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 				/>
 				<ElevationFilter
 					options={options.elevationBands}
-					retained={options.retainedBands}
 					selected={elevationBands}
 					system={system}
 					onChange={(bands) => choose({ elevationBands: bands })}
@@ -168,15 +168,4 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 			</div>
 		</div>
 	);
-}
-
-function replacedNotice(
-	before: AtlasFilters['elevationBands'],
-	after: AtlasFilters['elevationBands'] | undefined
-): string {
-	if (!before || !after || before.system === after.system) {
-		return '';
-	}
-
-	return retainedBandsReplacedNotice(before.system, after.system);
 }
