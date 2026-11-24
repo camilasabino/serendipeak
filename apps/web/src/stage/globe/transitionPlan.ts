@@ -1,5 +1,15 @@
-import { glideRangeAt, type GlidePlan, type LookState, type TransitionClass } from './glidePath';
-import { greatCircleDistanceMeters, greatCirclePoint, initialBearingDegrees } from './geodesic';
+import {
+	glidePeakFraction,
+	glideRangeAt,
+	timeGlide,
+	type GlidePace,
+	type GlidePlan,
+	type GlideShape,
+	type LookState,
+	type TimedGlide,
+	type TransitionClass
+} from './glidePath';
+import { greatCircleDistanceMeters } from './geodesic';
 import { SUMMIT_MARKER_STYLE } from './marker';
 
 export type MotionPreference = 'full' | 'direct';
@@ -16,9 +26,38 @@ export const TRANSITION_POLICY = {
 		pitchDegrees: -89,
 		headingDegrees: 0
 	},
+	/**
+	 * The base pace of a glide, from its perceived length: the zoom in factors of e, plus the
+	 * ground slid past in camera ranges, plus the turn and tilt. Distance alone would rush a
+	 * shallow-looking hop that still zooms from the whole globe down to a summit.
+	 */
+	pace: {
+		baseSeconds: 1.6,
+		perceivedLengthPerSecond: 3.8,
+		minSeconds: 2.2,
+		maxSeconds: 7
+	},
+	/**
+	 * Extra time for each unit of perceived length the descent covers near the destination's
+	 * scale: in full within the approach range, easing in from `rampFactor` times it. It brings
+	 * the zoom into the last scales down to well under half the base pace, so the camera slows
+	 * from high above the summit rather than only in its last second.
+	 */
+	arrival: {
+		secondsPerLength: 0.25,
+		rampFactor: 12
+	},
+	/**
+	 * The fastest the slide runs, in units of perceived length per second: about 65° of view per
+	 * second, or a whole-globe turn of about 60° per second near the top of a long route. Stretches
+	 * that would slide faster are slowed; the rest of the glide keeps its pace.
+	 */
+	sweep: {
+		maxSlidePerSecond: 1.8
+	},
 	reveal: {
-		durationSeconds: 3.4,
-		lingerExponent: 1.5
+		// A slow start lets the globe hold for a beat before the descent.
+		ease: { rise: 2, settle: 2 }
 	},
 	explore: {
 		localMaxMeters: 400_000,
@@ -37,16 +76,9 @@ export const TRANSITION_POLICY = {
 		nearbyPitchLiftDegrees: 22,
 		nearbyPitchLiftFullHeightMeters: 12_000,
 		nearbyPitchLiftEndHeightMeters: 200_000,
-		ascentFraction: 0.45,
 		minPeakRangeGain: 1.25,
-		minDurationSeconds: 1.5,
-		maxDurationSeconds: 2.8,
-		durationReferenceMeters: 100_000,
-		durationSecondsPerDecade: 0.55,
-		longHaulStartMeters: 5_000_000,
-		longHaulFullMeters: 12_000_000,
-		longHaulAscentFraction: 0.4,
-		longHaulLingerExponent: 2.0
+		// The arrival settles longer than the departure rises, so the last approach stays legible.
+		ease: { rise: 1.5, settle: 2.2 }
 	},
 	approachRangeMeters: SUMMIT_MARKER_STYLE.maxDistanceMeters
 } as const;
@@ -63,11 +95,6 @@ function smoothstepLog(value: number, start: number, end: number): number {
 	}
 	const t = clamp(Math.log(value / start) / Math.log(end / start), 0, 1);
 	return t * t * (3 - 2 * t);
-}
-
-function longHaulWeight(distanceMeters: number): number {
-	const { longHaulStartMeters, longHaulFullMeters } = TRANSITION_POLICY.explore;
-	return smoothstepLog(distanceMeters, longHaulStartMeters, longHaulFullMeters);
 }
 
 export function classifyTransition(distanceMeters: number): TransitionClass {
@@ -128,35 +155,22 @@ export function explorePeakPitchDegrees(peakHeightMeters: number): number {
 	return regionalPitch + lift;
 }
 
-export function exploreDurationSeconds(distanceMeters: number): number {
-	const {
-		minDurationSeconds,
-		maxDurationSeconds,
-		durationReferenceMeters,
-		durationSecondsPerDecade
-	} = TRANSITION_POLICY.explore;
-	if (!(distanceMeters > durationReferenceMeters)) {
-		return minDurationSeconds;
+export function glideBaseSeconds(perceivedLength: number): number {
+	const { baseSeconds, perceivedLengthPerSecond, minSeconds, maxSeconds } = TRANSITION_POLICY.pace;
+	if (!Number.isFinite(perceivedLength) || !(perceivedLength > 0)) {
+		return minSeconds;
 	}
-	const decades = Math.log10(distanceMeters / durationReferenceMeters);
-	return clamp(
-		minDurationSeconds + durationSecondsPerDecade * decades,
-		minDurationSeconds,
-		maxDurationSeconds
-	);
+	return clamp(baseSeconds + perceivedLength / perceivedLengthPerSecond, minSeconds, maxSeconds);
 }
 
-export function exploreAscentFraction(distanceMeters: number): number {
-	const { ascentFraction, longHaulAscentFraction } = TRANSITION_POLICY.explore;
-	return (
-		ascentFraction + (longHaulAscentFraction - ascentFraction) * longHaulWeight(distanceMeters)
-	);
-}
-
-export function exploreLingerExponent(distanceMeters: number): number {
-	const { longHaulLingerExponent } = TRANSITION_POLICY.explore;
-	return 1 + (longHaulLingerExponent - 1) * longHaulWeight(distanceMeters);
-}
+const GLIDE_PACE: GlidePace = {
+	baseSeconds: glideBaseSeconds,
+	arrival: {
+		rangeMeters: TRANSITION_POLICY.approachRangeMeters,
+		...TRANSITION_POLICY.arrival
+	},
+	sweep: TRANSITION_POLICY.sweep
+};
 
 export function globeLook(
 	destination: Pick<LookState, 'latitude' | 'longitude' | 'altitudeMeters'>
@@ -173,39 +187,35 @@ export function globeLook(
 	};
 }
 
-function heightOf(rangeMeters: number, pitchDegrees: number): number {
-	return rangeMeters * Math.abs(Math.sin((pitchDegrees * Math.PI) / 180));
-}
-
-function withPhases(plan: Omit<GlidePlan, 'phases'>): GlidePlan {
-	const provisional: GlidePlan = {
-		...plan,
-		phases: [
-			{ name: 'context', startFraction: 0, endFraction: 1 },
-			{ name: 'approach', startFraction: 1, endFraction: 1 }
-		]
-	};
-	let approach = plan.ascentFraction;
-	if (glideRangeAt(provisional, approach) > TRANSITION_POLICY.approachRangeMeters) {
-		let low = plan.ascentFraction;
-		let high = 1;
-		for (let step = 0; step < APPROACH_SEARCH_STEPS; step += 1) {
-			const middle = (low + high) / 2;
-			if (glideRangeAt(provisional, middle) > TRANSITION_POLICY.approachRangeMeters) {
-				low = middle;
-			} else {
-				high = middle;
-			}
-		}
-		approach = high;
-	}
+function timedGlide(shape: GlideShape): GlidePlan {
+	const timed = timeGlide(shape, GLIDE_PACE);
+	const approach = approachFraction(timed);
 	return {
-		...plan,
+		...timed,
 		phases: [
 			{ name: 'context', startFraction: 0, endFraction: approach },
 			{ name: 'approach', startFraction: approach, endFraction: 1 }
 		]
 	};
+}
+
+// The first moment of the descent at which the camera is within the summit marker's range.
+function approachFraction(plan: TimedGlide): number {
+	const peak = glidePeakFraction(plan);
+	if (!(glideRangeAt(plan, peak) > TRANSITION_POLICY.approachRangeMeters)) {
+		return peak;
+	}
+	let low = peak;
+	let high = 1;
+	for (let step = 0; step < APPROACH_SEARCH_STEPS; step += 1) {
+		const middle = (low + high) / 2;
+		if (glideRangeAt(plan, middle) > TRANSITION_POLICY.approachRangeMeters) {
+			low = middle;
+		} else {
+			high = middle;
+		}
+	}
+	return high;
 }
 
 export function planFreshApproach(
@@ -215,27 +225,16 @@ export function planFreshApproach(
 	if (motion === 'direct') {
 		return { mode: 'direct' };
 	}
-	const from = globeLook(destination);
 	return {
 		mode: 'glide',
-		...withPhases({
+		...timedGlide({
 			journey: 'reveal',
 			transitionClass: undefined,
 			distanceMeters: 0,
-			durationSeconds: TRANSITION_POLICY.reveal.durationSeconds,
-			from,
+			from: globeLook(destination),
 			to: destination,
-			peak: {
-				rangeMeters: from.rangeMeters,
-				heightMeters: heightOf(from.rangeMeters, from.pitchDegrees),
-				headingDegrees: from.headingDegrees,
-				pitchDegrees: from.pitchDegrees,
-				framingX: from.framingX,
-				framingY: from.framingY
-			},
-			ascentFraction: 0,
-			lingerExponent: TRANSITION_POLICY.reveal.lingerExponent,
-			sweepWeight: 0
+			peak: undefined,
+			ease: TRANSITION_POLICY.reveal.ease
 		})
 	};
 }
@@ -249,45 +248,27 @@ export function planExploreTransition(
 		return { mode: 'direct' };
 	}
 	const distanceMeters = greatCircleDistanceMeters(origin, destination);
-	const policy = TRANSITION_POLICY.explore;
 	const peakHeightMeters = explorePeakHeightMeters(distanceMeters);
 	const peakPitchDegrees = explorePeakPitchDegrees(peakHeightMeters);
 	const peakRangeMeters = peakHeightMeters / Math.abs(Math.sin((peakPitchDegrees * Math.PI) / 180));
-	const ascends = peakRangeMeters > origin.rangeMeters * policy.minPeakRangeGain;
-
-	const midpoint = greatCirclePoint(origin, destination, 0.5);
-	const routeHeadingDegrees =
-		distanceMeters > 1 ? initialBearingDegrees(midpoint, destination) : origin.headingDegrees;
+	const ascends = peakRangeMeters > origin.rangeMeters * TRANSITION_POLICY.explore.minPeakRangeGain;
 
 	return {
 		mode: 'glide',
-		...withPhases({
+		...timedGlide({
 			journey: 'explore',
 			transitionClass: classifyTransition(distanceMeters),
 			distanceMeters,
-			durationSeconds: exploreDurationSeconds(distanceMeters),
 			from: origin,
 			to: destination,
 			peak: ascends
 				? {
 						rangeMeters: peakRangeMeters,
 						heightMeters: peakHeightMeters,
-						headingDegrees: routeHeadingDegrees,
-						pitchDegrees: peakPitchDegrees,
-						framingX: 0,
-						framingY: 0
+						pitchDegrees: peakPitchDegrees
 					}
-				: {
-						rangeMeters: origin.rangeMeters,
-						heightMeters: heightOf(origin.rangeMeters, origin.pitchDegrees),
-						headingDegrees: origin.headingDegrees,
-						pitchDegrees: origin.pitchDegrees,
-						framingX: origin.framingX,
-						framingY: origin.framingY
-					},
-			ascentFraction: ascends ? exploreAscentFraction(distanceMeters) : 0,
-			lingerExponent: exploreLingerExponent(distanceMeters),
-			sweepWeight: longHaulWeight(distanceMeters)
+				: undefined,
+			ease: TRANSITION_POLICY.explore.ease
 		})
 	};
 }

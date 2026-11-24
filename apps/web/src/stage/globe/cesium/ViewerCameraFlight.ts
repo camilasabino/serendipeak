@@ -33,8 +33,12 @@ interface ActiveGlide {
 	cancel(): void;
 }
 
+type Anchor = Pick<LookState, 'latitude' | 'longitude' | 'altitudeMeters'>;
+
 export class ViewerCameraFlight implements CameraFlight {
-	private anchor: Pick<LookState, 'latitude' | 'longitude' | 'altitudeMeters'> | undefined;
+	private anchor: Anchor | undefined;
+	// Where the camera stood when a free look set the anchor; undefined when a mountain did.
+	private lookPlacement: Cartesian3 | undefined;
 	private activeGlide: ActiveGlide | undefined;
 	private inputHold: ReturnType<typeof setTimeout> | undefined;
 	private activeZoom: ActiveGlide | undefined;
@@ -164,7 +168,7 @@ export class ViewerCameraFlight implements CameraFlight {
 	}
 
 	look(): LookState | undefined {
-		const view = this.summitView();
+		const view = this.summitView(this.lookAnchor());
 		if (!view) {
 			return undefined;
 		}
@@ -204,17 +208,58 @@ export class ViewerCameraFlight implements CameraFlight {
 		};
 	}
 
-	private summitView() {
-		if (!this.anchor || this.viewer.isDestroyed()) {
+	// A free look's focus describes the camera only while the camera stays where that look put it.
+	// Once the atlas orbit or the reader has moved it, a flight planned from that stale focus starts
+	// off-centre, even at a positive pitch, and swings across the globe; the point under the centre
+	// of the view is what the reader is actually looking at.
+	private lookAnchor(): Anchor | undefined {
+		if (!this.anchor || !this.lookPlacement || this.viewer.isDestroyed()) {
+			return this.anchor;
+		}
+
+		const { camera } = this.viewer;
+		if (
+			this.cesium.Cartesian3.equalsEpsilon(
+				camera.positionWC,
+				this.lookPlacement,
+				0,
+				EXTERNAL_MOVE_METERS
+			)
+		) {
+			return this.anchor;
+		}
+
+		return this.centreOfView() ?? this.anchor;
+	}
+
+	private centreOfView(): Anchor | undefined {
+		const { Cartographic, IntersectionTests, Ray } = this.cesium;
+		const { camera, scene } = this.viewer;
+		const ray = new Ray(camera.positionWC, camera.directionWC);
+		const hit = IntersectionTests.rayEllipsoid(ray, scene.ellipsoid);
+		if (!hit || !(hit.start > 0)) {
+			return undefined;
+		}
+
+		const ground = Cartographic.fromCartesian(Ray.getPoint(ray, hit.start), scene.ellipsoid);
+		if (!ground) {
+			return undefined;
+		}
+
+		return {
+			latitude: (ground.latitude * 180) / Math.PI,
+			longitude: (ground.longitude * 180) / Math.PI,
+			altitudeMeters: 0
+		};
+	}
+
+	private summitView(anchor: Anchor | undefined = this.anchor) {
+		if (!anchor || this.viewer.isDestroyed()) {
 			return undefined;
 		}
 
 		const { Cartesian3, Matrix4, Transforms } = this.cesium;
-		const focus = Cartesian3.fromDegrees(
-			this.anchor.longitude,
-			this.anchor.latitude,
-			this.anchor.altitudeMeters
-		);
+		const focus = Cartesian3.fromDegrees(anchor.longitude, anchor.latitude, anchor.altitudeMeters);
 		const inverse = Matrix4.inverse(Transforms.eastNorthUpToFixedFrame(focus), new Matrix4());
 		const offset = Matrix4.multiplyByPoint(
 			inverse,
@@ -224,7 +269,7 @@ export class ViewerCameraFlight implements CameraFlight {
 		const size = this.measureStage();
 
 		return {
-			anchor: this.anchor,
+			anchor,
 			reading: readSummitCamera(offset.x, offset.y, offset.z, size.width, size.height),
 			framing: this.sampler.projectFraming(focus)
 		};
@@ -251,7 +296,7 @@ export class ViewerCameraFlight implements CameraFlight {
 			orientation: { direction: this.scratchLook, up: this.scratchLookUp },
 			endTransform: this.cesium.Matrix4.IDENTITY
 		});
-		this.anchorOnLook(look);
+		this.anchorOnLook(look, this.scratchPosition);
 
 		return true;
 	}
@@ -310,7 +355,7 @@ export class ViewerCameraFlight implements CameraFlight {
 		}
 
 		const { Cartesian3, EasingFunction, Matrix4 } = this.cesium;
-		this.anchorOnLook(look);
+		this.anchorOnLook(look, this.scratchPosition);
 		this.viewer.camera.flyTo({
 			destination: Cartesian3.clone(this.scratchPosition),
 			orientation: {
@@ -380,12 +425,13 @@ export class ViewerCameraFlight implements CameraFlight {
 		return true;
 	}
 
-	private anchorOnLook(look: LookState): void {
+	private anchorOnLook(look: LookState, placement: Cartesian3): void {
 		this.anchor = {
 			latitude: look.latitude,
 			longitude: look.longitude,
 			altitudeMeters: look.altitudeMeters
 		};
+		this.lookPlacement = this.cesium.Cartesian3.clone(placement, this.lookPlacement);
 	}
 
 	// A dolly along the current view direction: the heading, tilt and centre-screen focus stay put
@@ -549,6 +595,7 @@ export class ViewerCameraFlight implements CameraFlight {
 			longitude: target.longitude,
 			altitudeMeters: target.elevationMeters
 		};
+		this.lookPlacement = undefined;
 	}
 
 	private summitFixed(target: SceneTarget): Cartesian3 {

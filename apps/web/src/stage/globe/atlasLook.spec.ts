@@ -8,6 +8,7 @@ import {
 	mix
 } from './atlasLook';
 import { atlasOverviewLook, overviewRangeMeters } from './atlasView';
+import { TRANSITION_POLICY } from './transitionPlan';
 
 describe('atlasLookAltitudeWeight', () => {
 	it('is zero at and below the lower threshold, so terrain keeps its imagery', () => {
@@ -107,7 +108,7 @@ describe('the presentation fade', () => {
 	});
 
 	it('finishes before the quickest mountain flight lands', () => {
-		expect(ATLAS_LOOK.fadeSeconds).toBeLessThan(1.5);
+		expect(ATLAS_LOOK.fadeSeconds).toBeLessThan(TRANSITION_POLICY.pace.minSeconds);
 	});
 });
 

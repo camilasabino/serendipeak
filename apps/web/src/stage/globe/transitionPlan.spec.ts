@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { greatCircleDistanceMeters } from './geodesic';
-import { glideRangeAt, sampleGlide, type GlidePlan, type LookState } from './glidePath';
+import {
+	glidePeakFraction,
+	glideRangeAt,
+	sampleGlide,
+	type GlidePeak,
+	type GlidePlan,
+	type LookState
+} from './glidePath';
 import { SUMMIT_MARKER_STYLE } from './marker';
 import {
 	TRANSITION_POLICY,
 	classifyTransition,
-	exploreDurationSeconds,
-	exploreAscentFraction,
-	exploreLingerExponent,
 	explorePeakHeightMeters,
 	explorePeakPitchDegrees,
+	glideBaseSeconds,
 	globeLook,
 	motionPreference,
 	planExploreTransition,
@@ -64,11 +69,24 @@ function glidePlan(plan: TransitionPlan): GlidePlan {
 	return plan;
 }
 
+function peakOf(plan: GlidePlan): GlidePeak {
+	if (!plan.peak) {
+		throw new Error('expected a climbing glide');
+	}
+	return plan.peak;
+}
+
 function planAtDistance(kilometers: number): GlidePlan {
 	const origin = lookAt(0, 0);
 	const destination = lookAt(0, (kilometers * 1000) / ((Math.PI * 6_371_008.8) / 180));
 	return glidePlan(planExploreTransition(origin, destination, 'full'));
 }
+
+// The most the arrival slowdown adds to the base pace: a descent from orbit down to a summit.
+const ARRIVAL_ALLOWANCE_SECONDS = 1.5;
+// The most the sweep limit adds: the globe turning half a revolution on a near-antipodal route.
+const SWEEP_ALLOWANCE_SECONDS = 2.5;
+const EXTRA_ALLOWANCE_SECONDS = ARRIVAL_ALLOWANCE_SECONDS + SWEEP_ALLOWANCE_SECONDS;
 
 const DISTANCES_KM = [
 	0, 1, 15, 100, 399, 400, 1_000, 1_999, 2_000, 5_999, 6_000, 10_000, 15_000, 19_900
@@ -175,68 +193,89 @@ describe('explore peak height', () => {
 	});
 });
 
-describe('explore duration', () => {
-	it('stays inside the responsive bounds for every distance', () => {
-		const { minDurationSeconds, maxDurationSeconds } = TRANSITION_POLICY.explore;
-		for (const km of DISTANCES_KM) {
-			const seconds = exploreDurationSeconds(km * 1000);
-			expect(seconds).toBeGreaterThanOrEqual(minDurationSeconds);
-			expect(seconds).toBeLessThanOrEqual(maxDurationSeconds);
+describe('glide duration', () => {
+	const { minSeconds, maxSeconds } = TRANSITION_POLICY.pace;
+
+	it('keeps the base pace inside its bounds for every perceived length', () => {
+		for (const length of [0, 0.5, 2, 8, 15, 40, 1_000]) {
+			const seconds = glideBaseSeconds(length);
+			expect(seconds).toBeGreaterThanOrEqual(minSeconds);
+			expect(seconds).toBeLessThanOrEqual(maxSeconds);
 		}
-		expect(exploreDurationSeconds(Number.NaN)).toBe(minDurationSeconds);
+		expect(glideBaseSeconds(Number.NaN)).toBe(minSeconds);
+		expect(glideBaseSeconds(-1)).toBe(minSeconds);
 	});
 
-	it('grows with the distance without exploding for antipodal routes', () => {
-		expect(exploreDurationSeconds(15_000)).toBe(1.5);
-		expect(exploreDurationSeconds(400_000)).toBeLessThan(2);
-		expect(exploreDurationSeconds(1_000_000)).toBeGreaterThanOrEqual(1.8);
-		expect(exploreDurationSeconds(1_000_000)).toBeLessThanOrEqual(2.2);
-		expect(exploreDurationSeconds(5_000_000)).toBeGreaterThanOrEqual(2.2);
-		expect(exploreDurationSeconds(12_000_000)).toBeLessThanOrEqual(2.8);
-		expect(exploreDurationSeconds(19_900_000)).toBeLessThanOrEqual(2.8);
-		expect(exploreDurationSeconds(19_900_000) - exploreDurationSeconds(10_000_000)).toBeLessThan(
-			0.3
+	it('grows the base pace with the perceived length', () => {
+		let previous = 0;
+		for (let length = 0; length <= 30; length += 0.5) {
+			const seconds = glideBaseSeconds(length);
+			expect(seconds).toBeGreaterThanOrEqual(previous);
+			previous = seconds;
+		}
+		expect(glideBaseSeconds(12)).toBeGreaterThan(glideBaseSeconds(6));
+	});
+
+	it('plans every distance within the bounds and longer for longer routes', () => {
+		const seconds = DISTANCES_KM.map((km) => planAtDistance(km).durationSeconds);
+
+		for (const value of seconds) {
+			expect(value).toBeGreaterThanOrEqual(minSeconds);
+			expect(value).toBeLessThanOrEqual(maxSeconds + EXTRA_ALLOWANCE_SECONDS);
+		}
+		for (let index = 1; index < seconds.length; index += 1) {
+			expect(seconds[index]).toBeGreaterThanOrEqual(seconds[index - 1]! - 0.05);
+		}
+	});
+
+	it('adds the arrival and the sweep limit on top of the base pace, in proportion to the route', () => {
+		const extra = (plan: GlidePlan) =>
+			plan.durationSeconds - glideBaseSeconds(plan.profile.perceivedLength);
+		const extras = DISTANCES_KM.map((km) => extra(planAtDistance(km)));
+
+		for (const value of extras) {
+			expect(value).toBeGreaterThan(0);
+			expect(value).toBeLessThanOrEqual(EXTRA_ALLOWANCE_SECONDS);
+		}
+		expect(extra(planAtDistance(15))).toBeLessThan(0.4);
+		expect(extra(planAtDistance(15_000))).toBeGreaterThan(1);
+	});
+
+	it('gives each class of journey a deliberate, distinct duration', () => {
+		const nearby = planAtDistance(15).durationSeconds;
+		const regional = planAtDistance(1_000).durationSeconds;
+		const continental = planAtDistance(4_500).durationSeconds;
+		const intercontinental = planAtDistance(15_000).durationSeconds;
+
+		expect(nearby).toBeLessThan(2.8);
+		expect(regional).toBeGreaterThan(4);
+		expect(regional).toBeLessThan(6);
+		expect(continental).toBeGreaterThan(regional);
+		expect(intercontinental).toBeGreaterThan(continental);
+		expect(intercontinental).toBeGreaterThan(6.5);
+	});
+
+	it('counts the zoom from a whole-globe view, not only the ground distance', () => {
+		const overview = lookAt(0, 0, {
+			rangeMeters: 18_000_000,
+			pitchDegrees: -89,
+			headingDegrees: 0,
+			framingY: 0
+		});
+		const fromGlobe = glidePlan(planExploreTransition(overview, lookAt(0, 3), 'full'));
+		const fromNearby = glidePlan(planExploreTransition(lookAt(0, 0), lookAt(0, 3), 'full'));
+
+		expect(fromGlobe.durationSeconds).toBeGreaterThan(3.5);
+		expect(fromGlobe.durationSeconds).toBeGreaterThan(fromNearby.durationSeconds);
+	});
+
+	it('gives a larger turn of the heading more time', () => {
+		const straight = glidePlan(planExploreTransition(lookAt(0, 0), lookAt(0, 0.2), 'full'));
+		const turning = glidePlan(
+			planExploreTransition(lookAt(0, 0), lookAt(0, 0.2, { headingDegrees: 270 }), 'full')
 		);
-	});
-});
 
-describe('long-haul shaping', () => {
-	it('leaves regional and continental routes untouched', () => {
-		for (const meters of [0, 15_000, 400_000, 993_000, 4_915_000, 5_000_000]) {
-			expect(exploreLingerExponent(meters)).toBe(1);
-			expect(exploreAscentFraction(meters)).toBe(TRANSITION_POLICY.explore.ascentFraction);
-		}
-	});
-
-	it('reaches the full long-haul shaping smoothly and monotonically', () => {
-		const { longHaulLingerExponent, longHaulAscentFraction, longHaulFullMeters } =
-			TRANSITION_POLICY.explore;
-		let previousLinger = 1;
-		let previousAscent: number = TRANSITION_POLICY.explore.ascentFraction;
-		for (let km = 5_000; km <= 19_900; km += 100) {
-			const linger = exploreLingerExponent(km * 1000);
-			const ascent = exploreAscentFraction(km * 1000);
-
-			expect(linger).toBeGreaterThanOrEqual(previousLinger);
-			expect(ascent).toBeLessThanOrEqual(previousAscent);
-			expect(linger - previousLinger).toBeLessThan(0.05);
-			previousLinger = linger;
-			previousAscent = ascent;
-		}
-		expect(exploreLingerExponent(longHaulFullMeters)).toBeCloseTo(longHaulLingerExponent, 8);
-		expect(exploreAscentFraction(longHaulFullMeters)).toBeCloseTo(longHaulAscentFraction, 8);
-		expect(exploreLingerExponent(19_900_000)).toBeCloseTo(longHaulLingerExponent, 8);
-	});
-
-	it('plans the shaping on the glide for each distance class', () => {
-		expect(planAtDistance(15).lingerExponent).toBe(1);
-		expect(planAtDistance(993).sweepWeight).toBe(0);
-		expect(planAtDistance(4_915).sweepWeight).toBe(0);
-		const far = planAtDistance(14_291);
-		expect(far.sweepWeight).toBe(1);
-		expect(far.lingerExponent).toBe(TRANSITION_POLICY.explore.longHaulLingerExponent);
-		expect(far.ascentFraction).toBe(TRANSITION_POLICY.explore.longHaulAscentFraction);
-		expect(far.durationSeconds).toBeLessThanOrEqual(TRANSITION_POLICY.explore.maxDurationSeconds);
+		expect(turning.durationSeconds).toBeGreaterThan(straight.durationSeconds);
 	});
 });
 
@@ -250,11 +289,10 @@ describe('planFreshApproach', () => {
 
 		expect(plan.journey).toBe('reveal');
 		expect(plan.transitionClass).toBeUndefined();
-		expect(plan.ascentFraction).toBe(0);
-		expect(plan.durationSeconds).toBeGreaterThanOrEqual(3);
-		expect(plan.durationSeconds).toBeLessThanOrEqual(3.8);
-		expect(plan.lingerExponent).toBeGreaterThan(1);
-		expect(plan.sweepWeight).toBe(0);
+		expect(plan.peak).toBeUndefined();
+		expect(plan.ease).toEqual(TRANSITION_POLICY.reveal.ease);
+		expect(plan.durationSeconds).toBeGreaterThanOrEqual(4);
+		expect(plan.durationSeconds).toBeLessThanOrEqual(5.5);
 		expect(plan.phases.map((phase) => phase.name)).toEqual(['context', 'approach']);
 		expect(plan.phases[0].startFraction).toBe(0);
 		expect(plan.phases[0].endFraction).toBe(plan.phases[1].startFraction);
@@ -311,18 +349,18 @@ describe('planExploreTransition', () => {
 		const nearest = planAtDistance(15);
 		const plan = planAtDistance(63);
 
-		expect(plan.peak.heightMeters).toBeLessThan(40_000);
-		expect(plan.peak.pitchDegrees).toBeGreaterThan(-45);
-		expect(plan.peak.heightMeters).toBeGreaterThan(nearest.peak.heightMeters);
-		expect(plan.peak.pitchDegrees).toBeLessThanOrEqual(nearest.peak.pitchDegrees);
+		expect(peakOf(plan).heightMeters).toBeLessThan(40_000);
+		expect(peakOf(plan).pitchDegrees).toBeGreaterThan(-45);
+		expect(peakOf(plan).heightMeters).toBeGreaterThan(peakOf(nearest).heightMeters);
+		expect(peakOf(plan).pitchDegrees).toBeLessThanOrEqual(peakOf(nearest).pitchDegrees);
 	});
 
 	it('moves from local to regional framing without a threshold jump', () => {
 		const below = planAtDistance(399);
 		const above = planAtDistance(400);
 
-		expect(above.peak.heightMeters / below.peak.heightMeters).toBeLessThan(1.02);
-		expect(Math.abs(above.peak.pitchDegrees - below.peak.pitchDegrees)).toBeLessThan(0.5);
+		expect(peakOf(above).heightMeters / peakOf(below).heightMeters).toBeLessThan(1.02);
+		expect(Math.abs(peakOf(above).pitchDegrees - peakOf(below).pitchDegrees)).toBeLessThan(0.5);
 	});
 
 	it('resolves directly when motion is reduced', () => {
@@ -337,16 +375,16 @@ describe('planExploreTransition', () => {
 		for (const km of DISTANCES_KM) {
 			const plan = planAtDistance(km);
 
-			expect(plan.peak.heightMeters).toBeGreaterThan(0);
-			expect(plan.peak.rangeMeters).toBeGreaterThan(0);
-			expect(plan.peak.heightMeters).toBeLessThanOrEqual(
-				TRANSITION_POLICY.explore.maxPeakHeightMeters
-			);
+			const peak = peakOf(plan);
+
+			expect(peak.heightMeters).toBeGreaterThan(0);
+			expect(peak.rangeMeters).toBeGreaterThan(0);
+			expect(peak.heightMeters).toBeLessThanOrEqual(TRANSITION_POLICY.explore.maxPeakHeightMeters);
 			expect(plan.durationSeconds).toBeLessThanOrEqual(
-				TRANSITION_POLICY.explore.maxDurationSeconds
+				TRANSITION_POLICY.pace.maxSeconds + EXTRA_ALLOWANCE_SECONDS
 			);
-			expect(Number.isFinite(plan.peak.pitchDegrees)).toBe(true);
-			expect(Number.isFinite(plan.peak.headingDegrees)).toBe(true);
+			expect(Number.isFinite(peak.pitchDegrees)).toBe(true);
+			expect(Number.isFinite(plan.profile.perceivedLength)).toBe(true);
 			expect(plan.phases[0].endFraction).toBeGreaterThanOrEqual(0);
 			expect(plan.phases[0].endFraction).toBeLessThanOrEqual(1);
 			expect(plan.phases[0].endFraction).toBe(plan.phases[1].startFraction);
@@ -354,7 +392,7 @@ describe('planExploreTransition', () => {
 	});
 
 	it('raises the peak monotonically with the great-circle distance', () => {
-		const ranges = DISTANCES_KM.map((km) => planAtDistance(km).peak.rangeMeters);
+		const ranges = DISTANCES_KM.map((km) => peakOf(planAtDistance(km)).rangeMeters);
 
 		for (let index = 1; index < ranges.length; index += 1) {
 			expect(ranges[index]).toBeGreaterThanOrEqual(ranges[index - 1]!);
@@ -365,46 +403,46 @@ describe('planExploreTransition', () => {
 		const plan = planAtDistance(15);
 
 		expect(plan.transitionClass).toBe('local');
-		expect(plan.peak.heightMeters).toBeLessThan(20_000);
-		expect(plan.peak.rangeMeters).toBeLessThan(40_000);
-		expect(plan.peak.pitchDegrees).toBeGreaterThan(-35);
-		expect(plan.peak.pitchDegrees).toBeLessThan(-15);
-		expect(plan.durationSeconds).toBe(TRANSITION_POLICY.explore.minDurationSeconds);
-		expect(plan.ascentFraction).toBeGreaterThan(0);
+		expect(peakOf(plan).heightMeters).toBeLessThan(20_000);
+		expect(peakOf(plan).rangeMeters).toBeLessThan(40_000);
+		expect(peakOf(plan).pitchDegrees).toBeGreaterThan(-35);
+		expect(peakOf(plan).pitchDegrees).toBeLessThan(-15);
+		expect(glideBaseSeconds(plan.profile.perceivedLength)).toBe(TRANSITION_POLICY.pace.minSeconds);
+		expect(plan.durationSeconds).toBeLessThan(TRANSITION_POLICY.pace.minSeconds + 0.4);
 	});
 
 	it('gives a regional jump legible regional context', () => {
 		const plan = planAtDistance(1_000);
 
 		expect(plan.transitionClass).toBe('regional');
-		expect(plan.peak.heightMeters).toBeGreaterThan(500_000);
-		expect(plan.peak.heightMeters).toBeLessThan(1_500_000);
-		expect(plan.durationSeconds).toBeGreaterThanOrEqual(1.8);
-		expect(plan.durationSeconds).toBeLessThanOrEqual(2.2);
+		expect(peakOf(plan).heightMeters).toBeGreaterThan(500_000);
+		expect(peakOf(plan).heightMeters).toBeLessThan(1_500_000);
 	});
 
 	it('lifts a continental jump well above regional', () => {
 		const plan = planAtDistance(4_500);
 
 		expect(plan.transitionClass).toBe('continental');
-		expect(plan.peak.heightMeters).toBeGreaterThan(planAtDistance(1_000).peak.heightMeters * 2);
-		expect(plan.durationSeconds).toBeGreaterThanOrEqual(2.2);
+		expect(peakOf(plan).heightMeters).toBeGreaterThan(
+			peakOf(planAtDistance(1_000)).heightMeters * 2
+		);
 	});
 
 	it('gives an intercontinental jump a globe-scale nadir peak', () => {
 		const plan = planAtDistance(12_000);
 
 		expect(plan.transitionClass).toBe('intercontinental');
-		expect(plan.peak.heightMeters).toBeGreaterThanOrEqual(6_000_000);
-		expect(plan.peak.pitchDegrees).toBe(TRANSITION_POLICY.explore.steepPeakPitchDegrees);
-		expect(plan.durationSeconds).toBeLessThanOrEqual(2.8);
+		expect(peakOf(plan).heightMeters).toBeGreaterThanOrEqual(6_000_000);
+		expect(peakOf(plan).pitchDegrees).toBe(TRANSITION_POLICY.explore.steepPeakPitchDegrees);
 	});
 
 	it('caps the peak for a near-antipodal route', () => {
 		const plan = planAtDistance(19_900);
 
-		expect(plan.peak.heightMeters).toBe(TRANSITION_POLICY.explore.maxPeakHeightMeters);
-		expect(plan.durationSeconds).toBeLessThanOrEqual(2.8);
+		expect(peakOf(plan).heightMeters).toBe(TRANSITION_POLICY.explore.maxPeakHeightMeters);
+		expect(plan.durationSeconds).toBeLessThanOrEqual(
+			TRANSITION_POLICY.pace.maxSeconds + EXTRA_ALLOWANCE_SECONDS
+		);
 		expect(plan.distanceMeters).toBeGreaterThan(19_800_000);
 	});
 
@@ -428,7 +466,7 @@ describe('planExploreTransition', () => {
 		for (const km of [15, 1_000, 12_000]) {
 			const plan = planAtDistance(km);
 
-			expect(plan.phases[1].startFraction).toBeGreaterThanOrEqual(plan.ascentFraction);
+			expect(plan.phases[1].startFraction).toBeGreaterThanOrEqual(glidePeakFraction(plan));
 			expect(plan.phases[1].startFraction).toBeGreaterThan(0);
 		}
 	});
@@ -437,8 +475,8 @@ describe('planExploreTransition', () => {
 		const high = lookAt(0, 0, { rangeMeters: 30_000_000, pitchDegrees: -89 });
 		const plan = glidePlan(planExploreTransition(high, lookAt(0, 20), 'full'));
 
-		expect(plan.ascentFraction).toBe(0);
-		expect(plan.peak.rangeMeters).toBe(high.rangeMeters);
+		expect(plan.peak).toBeUndefined();
+		expect(glidePeakFraction(plan)).toBe(0);
 		expect(sampleGlide(plan, 0).rangeMeters).toBeCloseTo(high.rangeMeters, 3);
 	});
 

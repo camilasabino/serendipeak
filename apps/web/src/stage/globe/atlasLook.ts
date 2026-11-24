@@ -23,7 +23,7 @@ export const ATLAS_LOOK = {
 	 */
 	absentBelowMeters: 1_000_000,
 	/**
-	 * Entering or leaving the atlas. Shorter than the quickest mountain flight (1.5 s), so a look
+	 * Entering or leaving the atlas. Shorter than the quickest mountain flight, so a look
 	 * that is leaving is finished while the camera is still travelling, never after it has landed.
 	 */
 	fadeSeconds: 0.7,
