@@ -85,8 +85,8 @@ describe('AppFrame header', () => {
 		const html = render({ model: permalink });
 		const header = html.match(/<header[\s\S]*<\/header>/)?.[0] ?? '';
 
-		expect(textsOf(header, 'button')).toEqual(['Search mountains']);
-		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(header, 'button')).toEqual(['Search mountains', 'm', 'ft']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
 		expect(html).not.toContain('Explore');
 	});
 
@@ -107,7 +107,7 @@ describe('AppFrame header', () => {
 	it('keeps Explore out of the header on the daily page', () => {
 		const html = render({ model: dailyModel });
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
 		expect(html).not.toContain('Explore');
 	});
 
@@ -117,7 +117,7 @@ describe('AppFrame header', () => {
 	])('shows no mountain navigation on %s', (_name, props) => {
 		const html = render(props);
 
-		expect(textsOf(html, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(html, 'button')).toEqual(['Search mountains', 'm', 'ft']);
 		expect(html).toContain('<header');
 		expect(html.match(/<header[\s\S]*<\/header>/)?.[0]).not.toContain('Explore');
 	});
@@ -148,7 +148,7 @@ describe('AppFrame About link', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
 		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Today', 'Atlas', 'About']);
-		expect(textsOf(nav, 'button')).toEqual(['Search mountains']);
+		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'm', 'ft']);
 	});
 
 	it.each([

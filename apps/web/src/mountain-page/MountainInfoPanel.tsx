@@ -2,6 +2,8 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 're
 import type { Mountain } from '../api/contract';
 import { ExternalLink } from '../links/ExternalLink';
 import { formatElevationValue } from '../formatElevation';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
+import { elevationUnit } from '../units/unitSystem';
 import {
 	distinctCountryNames,
 	formatCoordinates,
@@ -109,6 +111,8 @@ function Description({ text }: { text: string }) {
 }
 
 function ElevationFigure({ meters }: { meters: number }) {
+	const system = useUnitSystem();
+
 	return (
 		<p className={styles.figure}>
 			<svg className={styles.glyph} viewBox="0 0 14 13" aria-hidden="true">
@@ -118,8 +122,8 @@ function ElevationFigure({ meters }: { meters: number }) {
 				/>
 			</svg>
 			<span className={styles.hidden}>Elevation </span>
-			<span className={styles.num}>{formatElevationValue(meters)}</span>{' '}
-			<span className={styles.unit}>m</span>
+			<span className={styles.num}>{formatElevationValue(meters, system)}</span>{' '}
+			<span className={styles.unit}>{elevationUnit(system)}</span>
 		</p>
 	);
 }

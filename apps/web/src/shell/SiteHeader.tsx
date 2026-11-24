@@ -4,6 +4,7 @@ import { ATLAS_LINK_LABEL } from '../atlas/atlasCopy';
 import { ATLAS_PATH } from '../atlas/atlasQuery';
 import { TODAY_LINK_LABEL, TODAY_PATH } from '../mountain-page/pageCopy';
 import { SearchControl } from '../search/SearchControl';
+import { UnitSelector } from '../units/UnitSelector';
 import { BrandSymbol, BrandWordmark } from './BrandLogo';
 import styles from './SiteHeader.module.css';
 
@@ -43,6 +44,7 @@ export function SiteHeader({ pathname }: SiteHeaderProps) {
 				>
 					{ABOUT_LINK_LABEL}
 				</Link>
+				<UnitSelector />
 			</nav>
 		</header>
 	);

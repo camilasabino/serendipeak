@@ -18,6 +18,8 @@ import { AppFrame } from '../mountain-page/AppFrame';
 import '../shell/tokens.css';
 import { TransitionCoordinator } from '../stage/TransitionCoordinator';
 import { TransitionCoordinatorProvider } from '../stage/TransitionCoordinatorContext';
+import { UnitPreferenceProvider } from '../units/UnitPreferenceContext';
+import { browserPreferenceStorage, UnitPreferenceStore } from '../units/UnitPreferenceStore';
 
 // Composition root: each of these lives as long as the app, across every client navigation.
 export default function App({ Component, pageProps, router }: AppProps) {
@@ -26,6 +28,7 @@ export default function App({ Component, pageProps, router }: AppProps) {
 	const [coordinator] = useState(() => new TransitionCoordinator());
 	const [mountainIndex] = useState(() => new MountainIndexStore({ api }));
 	const [atlasReturn] = useState(() => new AtlasReturn());
+	const [unitPreference] = useState(() => new UnitPreferenceStore(browserPreferenceStorage()));
 
 	// It owns the router's pop hook, so it must listen from the first navigation on.
 	useEffect(() => atlasReturn.bind(Router), [atlasReturn]);
@@ -35,15 +38,17 @@ export default function App({ Component, pageProps, router }: AppProps) {
 			<ImagePreloaderProvider value={preloader}>
 				<TransitionCoordinatorProvider value={coordinator}>
 					<MountainIndexProvider value={mountainIndex}>
-						<AtlasReturnProvider value={atlasReturn}>
-							<AppFrame
-								pageProps={pageProps}
-								year={new Date().getUTCFullYear()}
-								pathname={router.pathname}
-							>
-								<Component {...pageProps} />
-							</AppFrame>
-						</AtlasReturnProvider>
+						<UnitPreferenceProvider value={unitPreference}>
+							<AtlasReturnProvider value={atlasReturn}>
+								<AppFrame
+									pageProps={pageProps}
+									year={new Date().getUTCFullYear()}
+									pathname={router.pathname}
+								>
+									<Component {...pageProps} />
+								</AppFrame>
+							</AtlasReturnProvider>
+						</UnitPreferenceProvider>
 					</MountainIndexProvider>
 				</TransitionCoordinatorProvider>
 			</ImagePreloaderProvider>

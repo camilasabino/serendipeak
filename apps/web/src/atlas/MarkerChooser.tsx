@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { mountainHref } from '../explore/navigate';
 import { formatElevation } from '../formatElevation';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import { scaleSpecForStage } from '../stage/globe/scaleBar';
 import { CLOSE_MARKER_CHOOSER_LABEL, MARKER_CHOOSER_TITLE } from './atlasCopy';
 import { isIntentionalClick } from './chooserClick';
@@ -32,6 +33,7 @@ interface MarkerChooserProps {
  * dismisses it when the stage changes shape, which the stage already observes.
  */
 export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
+	const unitSystem = useUnitSystem();
 	const rootRef = useRef<HTMLDivElement>(null);
 	const optionsRef = useRef<HTMLUListElement>(null);
 	const titleId = useId();
@@ -173,7 +175,9 @@ export function MarkerChooser({ choice, onClose }: MarkerChooserProps) {
 							<span className={styles.name}>{mountain.name}</span>
 							{/* A flex container drops the space from the layout but not from the link's
 							    accessible name, which would otherwise run the two together. */}{' '}
-							<span className={styles.elevation}>{formatElevation(mountain.elevationMeters)}</span>
+							<span className={styles.elevation}>
+								{formatElevation(mountain.elevationMeters, unitSystem)}
+							</span>
 						</Link>
 					</li>
 				))}

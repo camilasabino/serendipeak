@@ -10,6 +10,7 @@ import {
 } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { moveActiveOption } from './activeOption';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import { describeEntry } from '../mountain-index/describeEntry';
 import { findMountains, prepareIndex } from './findMountains';
 import { foldName } from './foldName';
@@ -112,6 +113,7 @@ export function SearchCombobox({
 	initialQuery = ''
 }: SearchComboboxProps) {
 	const id = useId();
+	const unitSystem = useUnitSystem();
 	const listId = `${id}-results`;
 	const [query, setQuery] = useState(initialQuery);
 	const [active, setActive] = useState(-1);
@@ -214,7 +216,7 @@ export function SearchCombobox({
 							onClick={() => onSelect(entry.slug)}
 						>
 							<span className={styles.name}>{entry.name}</span>
-							<span className={styles.detail}>{describeEntry(entry)}</span>
+							<span className={styles.detail}>{describeEntry(entry, unitSystem)}</span>
 						</li>
 					))}
 				</ul>

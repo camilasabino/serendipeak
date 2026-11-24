@@ -21,3 +21,16 @@ describe('formatElevationValue', () => {
 		expect(formatElevationValue(8848.86)).toBe('8,849');
 	});
 });
+
+describe('imperial elevations', () => {
+	it('converts with the exact foot and rounds to whole feet', () => {
+		expect(formatElevation(8848.86, 'imperial')).toBe('29,032 ft');
+		expect(formatElevation(1000, 'imperial')).toBe('3,281 ft');
+		expect(formatElevation(0.3048, 'imperial')).toBe('1 ft');
+		expect(formatElevationValue(852, 'imperial')).toBe('2,795');
+	});
+
+	it('is metric unless asked otherwise', () => {
+		expect(formatElevation(6961)).toBe(formatElevation(6961, 'metric'));
+	});
+});

@@ -1,5 +1,6 @@
 import type { MountainIndexEntry } from '../api/contract';
 import { formatElevation } from '../formatElevation';
+import { type UnitSystem } from '../units/unitSystem';
 import { formatCountries, formatRegion } from '../mountain-page/format';
 
 // Where a mountain is, as concisely as the data allows: its countries, else its region, else its
@@ -12,6 +13,6 @@ export function placeOf({ countries, region, continent }: MountainIndexEntry): s
 	return region === null ? continent.name : formatRegion(region);
 }
 
-export function describeEntry(entry: MountainIndexEntry): string {
-	return `${placeOf(entry)} · ${formatElevation(entry.elevationMeters)}`;
+export function describeEntry(entry: MountainIndexEntry, system: UnitSystem = 'metric'): string {
+	return `${placeOf(entry)} · ${formatElevation(entry.elevationMeters, system)}`;
 }

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { mountainHref } from '../explore/navigate';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import { describeEntry } from '../mountain-index/describeEntry';
 import { ATLAS_LIST_HEADING, NO_MATCHES_HINT, NO_MATCHES_TITLE, mountainCount } from './atlasCopy';
 import styles from './AtlasList.module.css';
@@ -125,6 +126,8 @@ function MountainRow({
 	mountain: MountainIndexEntry;
 	highlight: MarkerHighlight['highlight'];
 }) {
+	const unitSystem = useUnitSystem();
+
 	return (
 		<Link
 			id={listItemId(mountain.slug)}
@@ -134,7 +137,7 @@ function MountainRow({
 			{...rowHighlight(highlight, mountain.slug)}
 		>
 			<span className={styles.name}>{mountain.name}</span>
-			<span className={styles.detail}>{describeEntry(mountain)}</span>
+			<span className={styles.detail}>{describeEntry(mountain, unitSystem)}</span>
 		</Link>
 	);
 }
