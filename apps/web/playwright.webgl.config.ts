@@ -16,23 +16,25 @@ const webEnvironment = {
 
 const host = `--hostname 127.0.0.1 --port ${WEB_PORT}`;
 
-// Development exercises React Strict Mode's double effects, and runs only the @lifecycle scenarios
-// (npm run test:webgl -- --grep @lifecycle); production runs every scenario.
+// Development exercises React Strict Mode's double effects and runs only the @lifecycle scenarios;
+// production runs the whole smoke suite against the real build.
 export default defineConfig({
 	testDir: './e2e/webgl',
-	// Playwright shards by contiguous groups, and a group is a whole file unless tests run fully
-	// parallel, which leaves the shards badly unbalanced. One worker still runs the tests in order.
-	fullyParallel: true,
 	workers: 1,
+	// A software renderer paints one or two frames per second, so each action waits on frames.
 	timeout: 90_000,
-	// Ends the run, and writes its report, before the CI job's own limit would cancel it.
-	globalTimeout: 16 * 60_000,
 	expect: { timeout: 15_000 },
 	use: {
 		baseURL: `http://127.0.0.1:${WEB_PORT}`,
 		trace: { mode: 'retain-on-failure', snapshots: false, screenshots: false }
 	},
-	projects: [{ name: 'webgl', grep: /@webgl/, use: { browserName: 'chromium' } }],
+	projects: [
+		{
+			name: 'webgl',
+			grep: PRODUCTION ? /@webgl/ : /@lifecycle/,
+			use: { browserName: 'chromium' }
+		}
+	],
 	webServer: [
 		{
 			command: 'node e2e/stub-api/server.mjs',

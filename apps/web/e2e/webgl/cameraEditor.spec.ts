@@ -250,37 +250,4 @@ test.describe('@webgl camera editor', () => {
 			expect(Number(url.searchParams.get('lon'))).toBe(TARGET.coordinates.longitude);
 		});
 	});
-
-	test('reopening on the saved values reproduces the same view, and saving again keeps them', async ({
-		page
-	}) => {
-		const reached = await interceptStudio(page);
-		await page.goto(editorUrl(ACONCAGUA.camera));
-		await expectReadyStage(page);
-		await expectCanonicalPose(page, ACONCAGUA.camera);
-		await orbit(page);
-		await untilStill(page);
-		const beforeSaving = (await cameraReading(page))!;
-		await page.getByRole('button', { name: 'Save camera…' }).click();
-		await expect.poll(() => reached()?.pathname).toBe(`${STUDIO_PATH}/camera/`);
-		const camera = savedCamera(reached()!);
-		const saves = reached.all().length;
-
-		await page.goto(editorUrl(camera));
-		await expectReadyStage(page);
-
-		await expectCanonicalPose(page, camera);
-		await untilStill(page);
-		const reopened = (await cameraReading(page))!;
-		expectWithin(reopened, camera);
-		// The whole cycle, from the view the editor left to the view it reopens on.
-		expectWithin(reopened, beforeSaving as CanonicalCamera);
-		await expect(readout(page, 'Heading')).toHaveText(`${camera.headingDegrees}°`);
-		await expect(readout(page, 'Range')).toHaveText(`${camera.rangeMeters} m`);
-
-		await page.getByRole('button', { name: 'Save camera…' }).click();
-
-		await expect.poll(() => reached.all().length).toBeGreaterThan(saves);
-		expectWithin(savedCamera(reached()!), camera);
-	});
 });

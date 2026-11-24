@@ -165,13 +165,20 @@ npm run build
 npm run check:production-gate
 npm run test:ssr
 npm run test:nogl
-npm run test:webgl
-npm run test:webgl:prod
 ```
 
 While working, run the focused specs for the code you touch. When you change a shared frontend component or contract (header, layout, brand, navigation, tokens), also run the specs that consume it indirectly, such as page and layout specs that assert on its markup. Lint and type checking do not replace tests.
 
 The `ssr` and `nogl` Playwright projects assume a production build: `npm run test:ssr` and `npm run test:nogl` build first, and the build inlines `NEXT_PUBLIC_*` values, so a local `.env.local` with an ion token also breaks the `stageFailure` scenarios, which expect none. Pointing them at `next dev` reports failures that production does not have, because styles and route changes settle later there.
+
+**WebGL smoke tests (optional, local).** A small Playwright suite drives the real Cesium Viewer in Chromium. It covers the Viewer boot on the canonical camera, reuse and teardown across routes, atlas marker click versus drag, zoom and Reset, the Camera Editor round trip and the summit marker layout. It never runs in CI and gates neither merging nor deployment.
+
+```bash
+npm run test:webgl        # development server: only the @lifecycle scenarios, under React Strict Mode
+npm run test:webgl:prod   # production build: the whole smoke suite
+```
+
+Both commands copy the Cesium assets, start the stub API and a dedicated web server, and use one worker with a 90-second limit per test. Failed tests keep a Playwright trace under `apps/web/test-results`. Set `STUB_API_PORT` if port 8099 is taken. Because rendering is real, run them on a machine that stays awake. For substantial changes to Cesium, camera interaction, terrain, imagery or summit markers, also check the result by hand on a real device.
 
 API checks, from `services/api` with local PostGIS running:
 
@@ -188,7 +195,7 @@ npm ci
 npm run contracts:verify
 ```
 
-API tests run against a real PostGIS database rather than mocks, and the WebGL suites exercise real WebGL in Chromium. **Core CI** (GitHub Actions, on pull requests and pushes to `main`) runs commit-message, frozen-contract, API, web (lint, type check, unit tests, production build and gate, SSR and no-WebGL browser tests) and script checks. The real-WebGL suites are a separate **WebGL** workflow that is not a required check: it runs weekly and on manual dispatch, with the production-build suite split across two runners and a lean subset of development-server scenarios. Run `npm run test:webgl` or `npm run test:webgl:prod` locally when you change the 3D scene. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
+API tests run against a real PostGIS database rather than mocks. **CI** (GitHub Actions, on pull requests and pushes to `main`) runs commit-message, frozen-contract, API, web (lint, type check, unit tests, production build and gate, SSR and no-WebGL browser tests) and script checks. Real-WebGL coverage is limited to the optional local smoke tests above. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) through Husky and commitlint.
 
 ## Deployment
 

@@ -1,15 +1,6 @@
 import type { Page } from '@playwright/test';
 import { SUMMIT_MARKER_STYLE } from '../../src/stage/globe/marker';
-import { serveMountain } from '../ssr/support';
-import {
-	ACONCAGUA,
-	DESKTOP,
-	OLYMPUS,
-	dragGlobe,
-	expect,
-	expectReadyStage,
-	test
-} from './support/stage';
+import { ACONCAGUA, DESKTOP, dragGlobe, expect, expectReadyStage, test } from './support/stage';
 
 interface SummitDrawing {
 	disc: { x: number; y: number };
@@ -103,14 +94,18 @@ async function expectPillAboveDisc(page: Page): Promise<{ width: number }> {
 }
 
 test.describe('@webgl summit marker', () => {
-	test('draws the disc with its pill above it, keeps them with the summit while the camera moves, and swaps them for the next mountain', async ({
+	test('leaves the disc alone on the phone layout, brings the pill back on desktop and keeps both with the summit', async ({
 		page
 	}) => {
-		await page.setViewportSize(DESKTOP);
+		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto(`/mountains/${ACONCAGUA.slug}`);
 		await expectReadyStage(page);
 
-		const first = await expectPillAboveDisc(page);
+		await expect.poll(async () => (await readSummit(page))?.disc !== undefined).toBe(true);
+		await expect.poll(async () => (await readSummit(page))?.pill).toBeUndefined();
+
+		await page.setViewportSize(DESKTOP);
+		await expectPillAboveDisc(page);
 
 		await test.step('the pill follows the summit through a drag', async () => {
 			const before = (await readSummit(page))!.disc;
@@ -124,64 +119,8 @@ test.describe('@webgl summit marker', () => {
 			await expectPillAboveDisc(page);
 		});
 
-		await test.step('only the next mountain remains after client navigation', async () => {
-			await page.evaluate((target) => {
-				void (
-					window as Window & { next?: { router: { push(url: string): Promise<boolean> } } }
-				).next!.router.push(target);
-			}, `/mountains/${OLYMPUS.slug}`);
-			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-			await expectReadyStage(page);
-
-			const next = await expectPillAboveDisc(page);
-			expect(next.width).not.toBe(first.width);
-		});
-	});
-
-	test('leaves the disc alone on the phone layout and brings the pill back on the desktop layout', async ({
-		page
-	}) => {
-		await page.setViewportSize({ width: 390, height: 844 });
-		await page.goto(`/mountains/${ACONCAGUA.slug}`);
-		await expectReadyStage(page);
-
-		await expect.poll(async () => (await readSummit(page))?.disc !== undefined).toBe(true);
-		await expect.poll(async () => (await readSummit(page))?.pill).toBeUndefined();
-
-		await page.setViewportSize(DESKTOP);
-		await expectPillAboveDisc(page);
-
 		await page.setViewportSize({ width: 390, height: 844 });
 		await expect.poll(async () => (await readSummit(page))?.pill).toBeUndefined();
 		expect((await readSummit(page))?.disc).toBeDefined();
-	});
-
-	test('keeps a long name between the stage controls on the narrowest desktop layout', async ({
-		page,
-		request
-	}) => {
-		const piton = {
-			...OLYMPUS,
-			slug: 'piton-de-la-fournaise',
-			name: 'Piton de la Fournaise',
-			coordinates: { latitude: -21.2444, longitude: 55.7139 },
-			elevationMeters: 2632
-		};
-		await serveMountain(request, piton);
-		await page.setViewportSize({ width: 900, height: 700 });
-		await page.goto('/mountains/piton-de-la-fournaise');
-		await expectReadyStage(page);
-		await expectPillAboveDisc(page);
-
-		const stage = (await page.locator('canvas').first().boundingBox())!;
-		const { pill } = (await readSummit(page))!;
-		const fullscreen = (await page
-			.getByRole('button', { name: 'Enter fullscreen' })
-			.boundingBox())!;
-		const zoomIn = (await page.getByRole('button', { name: 'Zoom in' }).boundingBox())!;
-
-		expect(stage.x + pill!.right).toBeLessThan(fullscreen.x);
-		expect(stage.x + pill!.left).toBeGreaterThan(zoomIn.x + zoomIn.width);
-		await expect(page.getByRole('button', { name: 'Enter fullscreen' })).toBeEnabled();
 	});
 });

@@ -449,12 +449,15 @@ The R2 smoke test checks a real S3-compatible store and is deselected by default
 
 ### Continuous integration
 
-Two GitHub Actions workflows cover the repository.
+One GitHub Actions workflow covers the repository.
 
 - **CI** (`.github/workflows/ci.yml`, pull requests and pushes to `main`): commit messages (commitlint), frozen-contract integrity, the API (Ruff, `manage.py check` under development and production-shaped settings, `makemigrations --check`, `migrate`, pytest against PostGIS `18-3.6`), the web app (lint, type check, Vitest, production build, `check:production-gate`, `test:ssr`, `test:nogl`) and the Node tests of the repository, backup and offsite-backup scripts. This is the required gate and it needs no real WebGL.
-- **WebGL** (`.github/workflows/webgl.yml`, weekly on Mondays at 06:00 UTC and manual dispatch; never on pushes or pull requests, not a required check): the real-WebGL Chromium suites. The production-build suite runs every scenario in two shards; the development-server suite runs only scenarios tagged `@lifecycle`, which exist for React Strict Mode and viewer lifecycle. A final job fails when a test ran twice, a development test is untagged, or a `@lifecycle` test did not run. Failure traces and duration reports are uploaded as artifacts.
 
-Run the WebGL suites locally only when changing the 3D scene lifecycle, bundling or production-only behavior; the project's default is to leave them to the workflow.
+### WebGL smoke tests
+
+No workflow runs real WebGL, and it is neither a required check nor a deployment gate. A small Playwright suite in `apps/web/e2e/webgl/` covers what only a real Cesium Viewer can show: boot on the canonical camera with the stage controls, Viewer reuse across routes and teardown without a mountain, atlas marker click versus drag, zoom and Reset, the Camera Editor round trip, and the summit marker layout on phone and desktop. Everything else about the 3D scene is covered by Vitest, SSR and no-WebGL tests.
+
+Run it locally on demand, in particular after changing Cesium lifecycle, bundling, camera interaction, terrain, imagery or summit markers, and check substantial changes by hand on a real device. `npm run test:webgl` uses `next dev` and runs only the `@lifecycle` scenarios, which exist for React Strict Mode; `npm run test:webgl:prod` runs the whole suite against a production build. Failed tests leave a trace in `apps/web/test-results`.
 
 ## Web
 
@@ -497,8 +500,8 @@ The server also reads one runtime value, so changing it needs a restart but no n
 | `npm run test:ssr`              | Builds with `NEXT_PUBLIC_API_BASE_URL` pointing at the stub API, starts `next start` and the stub, and runs the HTTP-level SSR tests (status, title, heading, `Cache-Control`) plus the Try again browser flow; overwrites `.next`, so run it after the production gate |
 | `npm run check:production-gate` | Fails when forbidden diagnostic identifiers reach `.next/static` or `.next/server`; run it after `build`                                                                                                                                                                |
 | `npm run test:nogl`             | Builds against the stub API and runs the browser tests of stage failure states in a browser without WebGL; overwrites `.next` like `test:ssr`                                                                                                                           |
-| `npm run test:webgl`            | Real-WebGL scene tests (`@webgl`, Chromium) against `next dev`, where React Strict Mode runs effects twice; builds nothing in `.next`. CI runs only its `@lifecycle` scenarios, in the scheduled WebGL workflow                                                         |
-| `npm run test:webgl:prod`       | The same suite against a production build served by `next start`; run in two shards by the scheduled WebGL workflow                                                                                                                                                     |
+| `npm run test:webgl`            | Real-WebGL smoke tests (Chromium) against `next dev`, where React Strict Mode runs effects twice; runs only the `@lifecycle` scenarios and builds nothing in `.next`. Local only                                                         |
+| `npm run test:webgl:prod`       | The whole smoke suite against a production build served by `next start`. Local only                                                                                                                                                     |
 
 Repository-root commands for the local stack: `npm run dev:start` starts PostGIS and then restarts the API and the web dev servers (logs in `.dev-logs/`), `npm run dev:restart` restarts only the two servers, and `npm run dev:stop` stops them.
 

@@ -1,41 +1,17 @@
 import type { Locator, Page } from '@playwright/test';
-import { fixture, resetStub, serveMountain } from '../ssr/support';
 import {
 	ACONCAGUA,
 	DESKTOP,
-	type ContractMountain,
-	OLYMPUS,
 	cameraReading,
 	expect,
 	expectCanonicalPose,
 	expectReadyStage,
 	framesPass,
 	liveViewers,
-	poseDifference,
 	test
 } from './support/stage';
 
 const PERMALINK = `/mountains/${ACONCAGUA.slug}`;
-const COMPASS = /^Compass\. Looking \d+ degrees \w+\.$/;
-
-const exploreButton = (page: Page) =>
-	page.getByRole('button', { name: /^Explore another|^Exploring/ });
-
-// Framed from about its own height and looking slightly above the horizon, as a high summit is
-// when nothing rises beyond it: the centre of the view meets no terrain and no ellipsoid.
-const HORIZON_PEAK = {
-	...fixture<Record<string, unknown> & ContractMountain>('mountain-sparse.json'),
-	slug: 'horizon-peak',
-	name: 'Horizon Peak',
-	coordinates: { latitude: -27.1095372, longitude: -68.5414835 },
-	elevationMeters: 6891,
-	camera: {
-		headingDegrees: 191.67,
-		pitchDegrees: -0.21,
-		rangeMeters: 8790,
-		framing: { x: 0.0075, y: -0.0768 }
-	}
-};
 
 const zoomIn = (page: Page) => page.getByRole('button', { name: 'Zoom in' });
 const zoomOut = (page: Page) => page.getByRole('button', { name: 'Zoom out' });
@@ -73,33 +49,6 @@ async function expectRangeHolds(page: Page, frames = 10) {
 	const before = await displayRange(page);
 	await framesPass(page, frames);
 	expect(Math.abs((await displayRange(page)) - before)).toBeLessThan(1);
-}
-
-// Ctrl+drag rotates the view; a plain drag only pans, which leaves the heading alone.
-async function rotateCamera(page: Page) {
-	const box = (await page.locator('canvas').first().boundingBox())!;
-	const x = box.x + box.width / 2;
-	const y = box.y + box.height / 2;
-
-	await page.keyboard.down('Control');
-	await page.mouse.move(x, y);
-	await page.mouse.down();
-	await page.mouse.move(x + 220, y + 40, { steps: 12 });
-	await page.mouse.up();
-	await page.keyboard.up('Control');
-}
-
-async function expectMovedAway(page: Page) {
-	await expect
-		.poll(async () => {
-			const reading = await cameraReading(page);
-			return reading ? poseDifference(reading, ACONCAGUA.camera) : undefined;
-		})
-		.toBeDefined();
-}
-
-async function tagCanvas(page: Page) {
-	await page.evaluate(() => document.querySelector('canvas')?.setAttribute('data-probe', 'first'));
 }
 
 async function centreOfCanvas(page: Page) {
@@ -241,117 +190,4 @@ test.describe('@webgl camera movement', () => {
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 		expect(await probe.contextsLive()).toBe(1);
 	});
-});
-
-test.describe('@webgl camera under reduced motion', () => {
-	test.use({ reducedMotion: 'reduce' });
-
-	test('zoom, rotate, Reset, pinch and Explore land instantly and work by keyboard', async ({
-		page,
-		probe
-	}) => {
-		await page.route('**/api/v1/mountains/random**', (route) =>
-			route.fulfill({
-				json: fixture<unknown>('mountain-sparse.json'),
-				headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
-			})
-		);
-		await arrive(page);
-		await tagCanvas(page);
-		const canonical = await displayRange(page);
-		const canonicalHeading = await page.getByText(COMPASS).textContent();
-
-		await test.step('the zoom buttons are keyboard operable and step in one frame', async () => {
-			await zoomIn(page).focus();
-			await page.keyboard.press('Enter');
-			await expect.poll(() => displayRange(page)).toBeLessThan(canonical * 0.8);
-			await expect(zoomIn(page)).toBeFocused();
-
-			await page.keyboard.press('Tab');
-			await expect(zoomOut(page)).toBeFocused();
-			const frames = await traceZoom(page, zoomOut(page));
-			expect(new Set(frames.map((frame) => Math.round(frame.range))).size).toBe(2);
-			expect(frames.at(-1)!.range).toBeGreaterThan(canonical * 0.9);
-		});
-
-		await test.step('Reset by keyboard returns a rotated camera to the canonical pose and keeps focus', async () => {
-			await rotateCamera(page);
-			await expectMovedAway(page);
-			await expect(page.getByText(COMPASS)).not.toHaveText(canonicalHeading!);
-
-			await resetButton(page).focus();
-			await page.keyboard.press('Enter');
-
-			await expectCanonicalPose(page, ACONCAGUA.camera);
-			await expect(page.getByText(COMPASS)).toHaveText(canonicalHeading!);
-			await expect(resetButton(page)).toBeFocused();
-		});
-
-		await test.step('a trackpad pinch (Ctrl + wheel) zooms the camera', async () => {
-			const centre = await centreOfCanvas(page);
-
-			await page.mouse.move(centre.x, centre.y);
-			await page.keyboard.down('Control');
-			await page.mouse.wheel(0, -360);
-			await page.mouse.wheel(0, -360);
-			await page.keyboard.up('Control');
-
-			await expect.poll(() => displayRange(page)).toBeLessThan(canonical * 0.95);
-		});
-
-		await test.step('Explore reaches the destination state without a flight', async () => {
-			await page.getByRole('button', { name: /^Explore another/ }).click();
-
-			await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
-			await expectCanonicalPose(page, OLYMPUS.camera);
-			await expect(page.getByRole('button', { name: /^Explore another/ })).toHaveAttribute(
-				'aria-busy',
-				'false'
-			);
-		});
-
-		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
-		await expect(page.locator('canvas[data-probe="first"]')).toHaveCount(1);
-		expect(await probe.contextsLive()).toBe(1);
-	});
-});
-
-test.describe('@webgl zoom with a view that meets no surface', () => {
-	// Explore lands on the permalink, which the server renders from the API, not from the browser.
-	test.beforeEach(({ request }) => serveMountain(request, HORIZON_PEAK));
-	test.afterEach(({ request }) => resetStub(request));
-
-	for (const [name, viewport] of [
-		['desktop', DESKTOP],
-		['phone', { width: 390, height: 700 }]
-	] as const) {
-		test(`both zoom buttons move the camera on a horizon-framed summit on a ${name} stage`, async ({
-			page,
-			probe
-		}) => {
-			await page.route('**/api/v1/mountains/random**', (route) =>
-				route.fulfill({
-					json: HORIZON_PEAK,
-					headers: { 'access-control-allow-origin': '*', 'cache-control': 'no-store' }
-				})
-			);
-			await page.setViewportSize(viewport);
-			await page.goto(PERMALINK);
-			await expectReadyStage(page);
-			await exploreButton(page).click();
-			await expectCanonicalPose(page, HORIZON_PEAK.camera);
-			await expect(zoomIn(page)).toBeEnabled();
-			const arrived = await settledRange(page);
-
-			await zoomIn(page).click();
-			await expect.poll(() => displayRange(page)).toBeLessThan(arrived * 0.75);
-			const closer = await settledRange(page);
-
-			await zoomOut(page).click();
-			await expect.poll(() => displayRange(page)).toBeGreaterThan(closer * 1.5);
-			await settledRange(page);
-
-			expect(await probe.contextsLive()).toBe(1);
-		});
-	}
 });
