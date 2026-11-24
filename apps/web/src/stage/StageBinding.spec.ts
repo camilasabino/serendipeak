@@ -584,6 +584,43 @@ describe('StageBinding target changes', () => {
 	});
 });
 
+describe('StageBinding mountain orbit', () => {
+	it('hands the toggle to the session, and nothing once disposed', async () => {
+		const { factory, store, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const scene = factory.resolve(0);
+		await flush();
+
+		binding.toggleMountainOrbit();
+		expect(store.getSnapshot().mountainOrbit).toBe('orbiting');
+		expect(scene.mountainOrbiting).toBe(true);
+
+		binding.dispose();
+		binding.toggleMountainOrbit();
+		expect(scene.mountainOrbits).toHaveLength(1);
+		expect(scene.mountainOrbiting).toBe(false);
+	});
+
+	it('starts a retried scene idle, with the old orbit gone with its scene', async () => {
+		const { factory, store, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		const failed = factory.resolve(0);
+		await flush();
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		binding.toggleMountainOrbit();
+		failed.failRendering(new Error('lost context'));
+		await flush();
+
+		binding.retry();
+		const next = factory.resolve(1);
+		await flush();
+
+		expect(failed.mountainOrbiting).toBe(false);
+		expect(next.mountainOrbits).toEqual([]);
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+});
+
 describe('store snapshots through the binding', () => {
 	it('reach a React-style subscriber that holds subscribe and getSnapshot detached', async () => {
 		const { factory, store, mount } = setup();

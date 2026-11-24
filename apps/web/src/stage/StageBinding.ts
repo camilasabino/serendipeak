@@ -113,6 +113,12 @@ export class StageBinding {
 		}
 	}
 
+	toggleMountainOrbit(): void {
+		if (!this.disposed) {
+			this.session.toggleMountainOrbit();
+		}
+	}
+
 	readCamera(): CameraReading | undefined {
 		return this.disposed ? undefined : this.session.readCamera();
 	}

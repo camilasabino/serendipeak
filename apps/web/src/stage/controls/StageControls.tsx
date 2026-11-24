@@ -5,6 +5,7 @@ import type { StageFullscreen } from '../useStageFullscreen';
 import { Compass } from './Compass';
 import { FullscreenControl } from './FullscreenControl';
 import { MarkerVisibilityControl } from './MarkerVisibilityControl';
+import { MountainOrbitControl } from './MountainOrbitControl';
 import { NavigationHelp } from './NavigationHelp';
 import { ResetControl } from './ResetControl';
 import { RotationControl } from './RotationControl';
@@ -23,6 +24,8 @@ interface StageControlsProps {
 	onReset: () => void;
 	onZoom: (direction: ZoomDirection) => void;
 	onToggleRotation: () => void;
+	/** Given where the stage offers the orbit around its mountain. */
+	onToggleMountainOrbit?: () => void;
 	fullscreen: StageFullscreen;
 	/** The globe carries atlas markers, which the help then explains and this switches. */
 	markerToggle?: MarkerToggle;
@@ -33,10 +36,11 @@ export function StageControls({
 	onReset,
 	onZoom,
 	onToggleRotation,
+	onToggleMountainOrbit,
 	fullscreen,
 	markerToggle
 }: StageControlsProps) {
-	const { state, headingDegrees, scale, rotation } = snapshot;
+	const { state, headingDegrees, scale, rotation, mountainOrbit } = snapshot;
 	const controls = stageControlsFor(state, snapshot);
 	if (!controls.visible) {
 		return null;
@@ -57,6 +61,9 @@ export function StageControls({
 				<ResetControl enabled={controls.resetEnabled} onReset={onReset} />
 				{rotation !== 'off' && (
 					<RotationControl rotating={rotation === 'rotating'} onToggle={onToggleRotation} />
+				)}
+				{onToggleMountainOrbit && mountainOrbit !== 'off' && (
+					<MountainOrbitControl state={mountainOrbit} onToggle={onToggleMountainOrbit} />
 				)}
 				{markerToggle && (
 					<MarkerVisibilityControl shown={markerToggle.shown} onToggle={markerToggle.onToggle} />

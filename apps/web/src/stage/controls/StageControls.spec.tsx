@@ -16,7 +16,8 @@ const HIDDEN: MarkerToggle = { shown: false, onToggle: () => {} };
 function render(
 	snapshot: SceneSnapshot,
 	fullscreen: StageFullscreen = UNSUPPORTED,
-	markerToggle?: MarkerToggle
+	markerToggle?: MarkerToggle,
+	onToggleMountainOrbit?: () => void
 ): string {
 	return renderToStaticMarkup(
 		<StageControls
@@ -24,6 +25,7 @@ function render(
 			onReset={() => {}}
 			onZoom={() => {}}
 			onToggleRotation={() => {}}
+			onToggleMountainOrbit={onToggleMountainOrbit}
 			fullscreen={fullscreen}
 			markerToggle={markerToggle}
 		/>
@@ -363,5 +365,76 @@ describe('StageControls marker visibility', () => {
 		store.setState({ status: 'loading' });
 
 		expect(render(store.getSnapshot(), SUPPORTED, SHOWN)).toBe('');
+	});
+});
+
+describe('StageControls mountain orbit', () => {
+	const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
+	const toggle = () => {};
+
+	function withOrbit(state: SceneSnapshot['mountainOrbit']): SceneSnapshot {
+		const store = readyStore();
+		store.setMountainOrbit(state);
+		return store.getSnapshot();
+	}
+
+	it('offers no orbit where there is no mountain to circle, such as the atlas', () => {
+		const html = render(withOrbit('off'), SUPPORTED, SHOWN, toggle);
+
+		expect(html).not.toMatch(/mountain orbit/i);
+	});
+
+	it('offers no orbit on a stage that does not ask for one', () => {
+		expect(render(withOrbit('idle'))).not.toMatch(/mountain orbit/i);
+	});
+
+	it('names the action for each state, as a plain button with no pressed state', () => {
+		const labels = {
+			idle: 'Start mountain orbit',
+			orbiting: 'Pause mountain orbit',
+			paused: 'Resume mountain orbit'
+		} as const;
+
+		for (const [state, label] of Object.entries(labels)) {
+			const html = render(withOrbit(state as keyof typeof labels), UNSUPPORTED, undefined, toggle);
+			const control = button(html, label);
+
+			expect(control).toMatch(/^<button type="button"/);
+			expect(control).not.toContain('disabled');
+			expect(control).not.toContain('aria-pressed');
+			expect(html.match(/mountain orbit/g)).toHaveLength(1);
+		}
+	});
+
+	it('shows the pause bars only while orbiting', () => {
+		const bars = 'M9 6v12M15 6v12';
+
+		expect(
+			button(render(withOrbit('orbiting'), UNSUPPORTED, undefined, toggle), 'Pause')
+		).toContain(bars);
+		expect(
+			button(render(withOrbit('paused'), UNSUPPORTED, undefined, toggle), 'Resume')
+		).not.toContain(bars);
+	});
+
+	it('is shown but disabled while the mountain is still being presented', () => {
+		const html = render(withOrbit('unavailable'), UNSUPPORTED, undefined, toggle);
+
+		expect(button(html, 'Start mountain orbit')).toContain('disabled');
+	});
+
+	it('sits in the toolbar after Reset and before fullscreen', () => {
+		const html = render(withOrbit('idle'), SUPPORTED, undefined, toggle);
+
+		expect(html.indexOf('Reset view')).toBeLessThan(html.indexOf('Start mountain orbit'));
+		expect(html.indexOf('Start mountain orbit')).toBeLessThan(html.indexOf('Enter fullscreen'));
+	});
+
+	it('is not drawn over a globe that is not ready', () => {
+		const store = readyStore();
+		store.setMountainOrbit('idle');
+		store.setState({ status: 'loading' });
+
+		expect(render(store.getSnapshot(), UNSUPPORTED, undefined, toggle)).toBe('');
 	});
 });

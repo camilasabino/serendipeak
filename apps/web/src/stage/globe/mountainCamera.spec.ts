@@ -439,6 +439,26 @@ describe('MountainCamera.reset', () => {
 		};
 	}
 
+	it('names the mountain it arrived at until the next is shown, it is cleared or stopped', async () => {
+		const { camera } = setup();
+		expect(camera.presented()).toBeUndefined();
+
+		await camera.show(MATTERHORN, 'initial');
+		expect(camera.presented()).toBe(MATTERHORN);
+
+		const next = camera.show(EVEREST, 'next');
+		expect(camera.presented()).toBeUndefined();
+		await next;
+		expect(camera.presented()).toBe(EVEREST);
+
+		camera.clear();
+		expect(camera.presented()).toBeUndefined();
+
+		await camera.show(MATTERHORN, 'next');
+		camera.stop();
+		expect(camera.presented()).toBeUndefined();
+	});
+
 	it('clears the presented mountain: Reset is unavailable and the director lets go', async () => {
 		const { camera, reframe, director } = setup();
 		await camera.show(MATTERHORN, 'initial');

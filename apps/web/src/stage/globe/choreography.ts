@@ -51,6 +51,8 @@ export interface CameraFlight {
 export interface CameraDirectorOptions {
 	cameraHeight?: () => number;
 	motion?: () => MotionPreference;
+	/** Heard each time a run takes the camera or lets it go, never for one that places it at once. */
+	onBusyChange?: (busy: boolean) => void;
 }
 
 export interface ReframeOptions {
@@ -123,17 +125,32 @@ interface ActiveRun {
 export class CameraDirector {
 	private readonly cameraHeight: () => number;
 	private readonly motion: () => MotionPreference;
+	private readonly onBusyChange: ((busy: boolean) => void) | undefined;
 	private stopped = false;
 	private settled: SceneTarget | undefined;
-	private run: ActiveRun | undefined;
+	private current: ActiveRun | undefined;
 
 	constructor(
 		private readonly flight: CameraFlight,
 		private readonly markers: SummitMarkerDisplay,
-		{ cameraHeight = () => 0, motion = () => 'full' }: CameraDirectorOptions = {}
+		{ cameraHeight = () => 0, motion = () => 'full', onBusyChange }: CameraDirectorOptions = {}
 	) {
 		this.cameraHeight = cameraHeight;
 		this.motion = motion;
+		this.onBusyChange = onBusyChange;
+	}
+
+	private get run(): ActiveRun | undefined {
+		return this.current;
+	}
+
+	// Every run starts and ends through here, so a listener hears exactly the changes in busy().
+	private set run(next: ActiveRun | undefined) {
+		const wasBusy = this.current !== undefined;
+		this.current = next;
+		if (wasBusy !== (next !== undefined)) {
+			this.onBusyChange?.(next !== undefined);
+		}
 	}
 
 	place(

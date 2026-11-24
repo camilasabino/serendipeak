@@ -11,6 +11,7 @@ import {
 import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
+import { MOUNTAIN_ORBIT_PERIOD_SECONDS } from './globe/mountainOrbit';
 import {
 	SceneSession,
 	type PresentationObserver,
@@ -2347,5 +2348,273 @@ describe('SceneSession unit system', () => {
 
 		expect(() => session.setUnitSystem('imperial')).not.toThrow();
 		expect(store.getSnapshot().state).toMatchObject({ status: 'failed' });
+	});
+});
+
+describe('SceneSession mountain orbit', () => {
+	async function settledOn(sceneOptions = {}, target: SceneTarget = ACONCAGUA) {
+		const context = await presenting({ holdShow: true, ...sceneOptions }, target);
+		context.scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		return context;
+	}
+
+	it('is unavailable while the mountain is presented, and offered once it has arrived', async () => {
+		const { scene, store, session } = await presenting({ holdShow: true });
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbits).toEqual([]);
+
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('stays unavailable when the presentation did not arrive', async () => {
+		const { scene, store } = await presenting({ holdShow: true });
+
+		scene.pendingShows[0]!.resolve({ status: 'interrupted' });
+		await flush();
+
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+	});
+
+	it('is never offered on the atlas, apart from the atlas rotation', async () => {
+		const { scene, store, session } = await onAtlas();
+
+		expect(store.getSnapshot()).toMatchObject({ rotation: 'rotating', mountainOrbit: 'off' });
+		session.toggleMountainOrbit();
+
+		expect(scene.mountainOrbits).toEqual([]);
+		expect(scene.orbiting).toBe(true);
+	});
+
+	it('never starts by itself', async () => {
+		const { scene, store } = await settledOn();
+
+		expect(scene.mountainOrbits).toEqual([]);
+		expect(store.getSnapshot()).toMatchObject({ mountainOrbit: 'idle', rotation: 'off' });
+	});
+
+	it('starts from wherever the camera is, with no reset and no flight', async () => {
+		const { scene, store, session } = await settledOn();
+
+		session.toggleMountainOrbit();
+
+		expect(scene.mountainOrbits).toEqual([
+			expect.objectContaining({ periodSeconds: MOUNTAIN_ORBIT_PERIOD_SECONDS, running: true })
+		]);
+		expect(store.getSnapshot().mountainOrbit).toBe('orbiting');
+		expect(scene.resets).toBe(0);
+		expect(scene.shown).toHaveLength(1);
+		expect(scene.overviews).toEqual([]);
+		expect(scene.orbits).toEqual([]);
+	});
+
+	it('pauses where it is and resumes from there, never resetting the camera', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('paused');
+
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbiting).toBe(true);
+		expect(scene.mountainOrbits).toHaveLength(2);
+		expect(store.getSnapshot().mountainOrbit).toBe('orbiting');
+		expect(scene.resets).toBe(0);
+	});
+
+	it('leaves the camera to the reader at a press or a wheel on the globe', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		scene.interact();
+
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+		expect(scene.resets).toBe(0);
+
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+		scene.interact();
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('stops before an explicit zoom step acts', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+		const stop = vi.spyOn(scene, 'stopMountainOrbit');
+		const zoom = vi.spyOn(scene, 'zoomView');
+
+		expect(session.zoomView('in')).toBe('zoomed');
+
+		expect(stop.mock.invocationCallOrder[0]).toBeLessThan(zoom.mock.invocationCallOrder[0]!);
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('stops before Reset, which restores the curated pose', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+		const stop = vi.spyOn(scene, 'stopMountainOrbit');
+		const reset = vi.spyOn(scene, 'resetView');
+
+		expect(session.resetView()).toBe('reset');
+
+		expect(stop.mock.invocationCallOrder[0]).toBeLessThan(reset.mock.invocationCallOrder[0]!);
+		expect(scene.resets).toBe(1);
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('forgets a pause once Reset or a zoom step has moved the camera', async () => {
+		const { store, session } = await settledOn();
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+		expect(store.getSnapshot().mountainOrbit).toBe('paused');
+
+		session.resetView();
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+		session.zoomView('out');
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('is unavailable while a flight owns the camera, and offered again once it lands', async () => {
+		const { scene, store, session } = await settledOn();
+		scene.flying = true;
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbits).toEqual([]);
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+
+		scene.flying = false;
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+		session.toggleMountainOrbit();
+		expect(store.getSnapshot().mountainOrbit).toBe('orbiting');
+	});
+
+	it('is unavailable through a reframe that halts a turning orbit, and idle once it lands', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		scene.flying = true;
+		scene.haltMountainOrbit();
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+
+		scene.flying = false;
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('keeps a pause through a flight, offering the resume once it lands', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+		session.toggleMountainOrbit();
+
+		scene.flying = true;
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+		scene.flying = false;
+
+		expect(store.getSnapshot().mountainOrbit).toBe('paused');
+	});
+
+	it('hears no flight once stopped', async () => {
+		const { scene, store, session } = await settledOn();
+		scene.flying = true;
+
+		session.stop();
+		scene.flying = false;
+
+		expect(store.getSnapshot().mountainOrbit).toBe('off');
+	});
+
+	it('returns to idle when the orbit halts by itself', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		scene.haltMountainOrbit();
+
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+	});
+
+	it('cancels the orbit at once when the page moves on to another mountain', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		session.setTarget(FITZ_ROY);
+
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('unavailable');
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbits).toHaveLength(1);
+
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+		await flush();
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+		expect(scene.mountainOrbiting).toBe(false);
+	});
+
+	it('cancels the orbit when the reader returns to the atlas, whose rotation goes on', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+
+		session.setAtlas(ATLAS);
+		session.setTarget(undefined);
+
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('off');
+
+		scene.pendingOverviews[0]!({ status: 'arrived' });
+		await flush();
+		expect(scene.orbiting).toBe(true);
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot()).toMatchObject({ rotation: 'rotating', mountainOrbit: 'off' });
+	});
+
+	it('is never offered to a reader who prefers reduced motion', async () => {
+		const { scene, store, session } = await settledOn({ reducedMotion: true });
+
+		expect(store.getSnapshot().mountainOrbit).toBe('off');
+		session.toggleMountainOrbit();
+
+		expect(scene.mountainOrbits).toEqual([]);
+	});
+
+	it('ends with the session, and a retried scene starts idle', async () => {
+		const { scene, store, session, open, factory } = await settledOn();
+		session.toggleMountainOrbit();
+
+		session.stop();
+		expect(scene.mountainOrbiting).toBe(false);
+		expect(store.getSnapshot().mountainOrbit).toBe('off');
+		session.toggleMountainOrbit();
+		expect(scene.mountainOrbits).toHaveLength(1);
+
+		const retried = open();
+		retried.setTarget(ACONCAGUA);
+		const next = factory.resolve(1);
+		await flush();
+
+		expect(store.getSnapshot().mountainOrbit).toBe('idle');
+		expect(next.mountainOrbits).toEqual([]);
+	});
+
+	it('ignores a halt that arrives after the session stopped', async () => {
+		const { scene, store, session } = await settledOn();
+		session.toggleMountainOrbit();
+		const { onHalted } = scene.mountainOrbits[0]!;
+
+		session.stop();
+		onHalted();
+
+		expect(store.getSnapshot().mountainOrbit).toBe('off');
 	});
 });

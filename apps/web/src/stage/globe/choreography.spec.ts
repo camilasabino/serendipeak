@@ -494,6 +494,56 @@ describe('CameraDirector travel', () => {
 	});
 });
 
+describe('camera busy changes', () => {
+	it('reports a reframe flight taking the camera and letting it go', () => {
+		const fake = createFakeFlight();
+		const onBusyChange = vi.fn();
+		const director = new CameraDirector(fake.flight, createMarkers().display, { onBusyChange });
+
+		director.reframe(ACONCAGUA, OFFSET, true);
+		expect(onBusyChange.mock.calls).toEqual([[true]]);
+
+		fake.complete();
+		expect(onBusyChange.mock.calls).toEqual([[true], [false]]);
+	});
+
+	it('reports nothing for a camera placed at once', () => {
+		const fake = createFakeFlight();
+		const onBusyChange = vi.fn();
+		const director = new CameraDirector(fake.flight, createMarkers().display, { onBusyChange });
+
+		director.reframe(ACONCAGUA, OFFSET, false);
+		director.place(ACONCAGUA, OFFSET);
+
+		expect(onBusyChange).not.toHaveBeenCalled();
+	});
+
+	it('reports a flight that is cancelled, and one that stops the director', () => {
+		const fake = createFakeFlight();
+		const onBusyChange = vi.fn();
+		const director = new CameraDirector(fake.flight, createMarkers().display, { onBusyChange });
+		director.reframe(ACONCAGUA, OFFSET, true);
+
+		director.release();
+		director.reframe(ACONCAGUA, OFFSET, true);
+		director.stop();
+
+		expect(onBusyChange.mock.calls).toEqual([[true], [false], [true], [false]]);
+	});
+
+	it('reports a route as one busy period however it ends', () => {
+		const fake = createFakeFlight();
+		const onBusyChange = vi.fn();
+		const director = new CameraDirector(fake.flight, createMarkers().display, { onBusyChange });
+
+		director.travel(ACONCAGUA, OFFSET, 'reveal');
+		expect(director.busy()).toBe(true);
+		fake.arrive();
+
+		expect(onBusyChange.mock.calls).toEqual([[true], [false]]);
+	});
+});
+
 describe('superseding reframe', () => {
 	const SUPERSEDE = { supersede: true, durationSeconds: RESET_FLIGHT_SECONDS };
 

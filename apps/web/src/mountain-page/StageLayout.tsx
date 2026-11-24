@@ -99,6 +99,7 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 									atlas={atlas}
 									markers={drawnMarkers}
 									markerToggle={markerToggle}
+									mountainOrbit
 									observer={coordinator}
 									controllerRef={controller}
 									onMarkerActivate={onAtlas ? activate : undefined}

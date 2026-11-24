@@ -47,6 +47,7 @@ import { createCesiumTerrainSource } from './cesiumTerrain';
 import { COMPACT_STAGE_QUERY, SummitMarkers } from './SummitMarkers';
 import { ViewerCameraFlight } from './ViewerCameraFlight';
 import { ViewerOrbit } from './ViewerOrbit';
+import { ViewerSummitOrbit } from './ViewerSummitOrbit';
 import { ViewSampler } from './ViewSampler';
 
 export const CESIUM_BASE_URL = '/cesium/';
@@ -91,6 +92,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private readonly flight: ViewerCameraFlight;
 	private readonly director: CameraDirector;
 	private readonly orbit: ViewerOrbit;
+	private readonly summitOrbit: ViewerSummitOrbit;
 	private readonly atlasMarkers: AtlasMarkers;
 	private readonly atlasPicker: AtlasPicker;
 	private readonly atlasLook: AtlasLook;
@@ -108,6 +110,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private releaseAtlasLook: () => void = noop;
 	private releaseInteraction: () => void = noop;
 	private releaseFailure: () => void = noop;
+	private flightListener: ((flying: boolean) => void) | undefined;
 	private viewReadyWaiter: ViewReadyWaiter | undefined;
 	/** An overview flight is in the air and gives way to the reader's first touch of the globe. */
 	private yieldingFlight = false;
@@ -237,6 +240,11 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.flight = new ViewerCameraFlight(cesium, viewer, this.sampler, () => this.measureStage());
 		this.terrainSession = createTerrainCameraSession();
 		this.orbit = new ViewerOrbit(cesium, viewer, () => this.canOrbit());
+		this.summitOrbit = new ViewerSummitOrbit(
+			cesium,
+			viewer,
+			() => this.canOrbit() && !this.director.busy()
+		);
 		const measureText = createTextMeasure();
 		// One pill cache for the summit and the atlas: a mountain named in either is drawn once.
 		const sprites = new SummitSprites();
@@ -263,7 +271,12 @@ export class CesiumGlobeScene implements GlobeScene {
 		const terrain = createCesiumTerrainSource(cesium, terrainProvider);
 		this.director = new CameraDirector(this.flight, markers, {
 			cameraHeight: () => viewer.camera.positionCartographic.height,
-			motion: () => this.motion()
+			motion: () => this.motion(),
+			onBusyChange: (busy) => {
+				if (!this.destroyed) {
+					this.flightListener?.(busy);
+				}
+			}
 		});
 
 		this.camera = createMountainCamera({
@@ -313,6 +326,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.summitOrbit.stop();
 		this.yieldingFlight = false;
 		const outcome = await this.camera.show(target, placement);
 		if (!this.destroyed) {
@@ -324,6 +338,7 @@ export class CesiumGlobeScene implements GlobeScene {
 
 	clearTarget(): void {
 		if (!this.destroyed) {
+			this.summitOrbit.stop();
 			this.camera.clear();
 		}
 	}
@@ -336,6 +351,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.summitOrbit.stop();
 		this.camera.clear();
 		const flying = animate && this.motion() !== 'direct';
 		const arrival = new Promise<CameraOutcome>((resolve) => {
@@ -366,11 +382,31 @@ export class CesiumGlobeScene implements GlobeScene {
 	}
 
 	startOrbit(periodSeconds: number, onHalted: () => void): boolean {
-		return !this.destroyed && !this.director.busy() && this.orbit.start(periodSeconds, onHalted);
+		if (this.destroyed || this.director.busy()) {
+			return false;
+		}
+		this.summitOrbit.stop();
+		return this.orbit.start(periodSeconds, onHalted);
 	}
 
 	stopOrbit(): void {
 		this.orbit.stop();
+	}
+
+	startMountainOrbit(periodSeconds: number, onHalted: () => void): boolean {
+		if (this.destroyed || this.director.busy()) {
+			return false;
+		}
+		const summit = this.camera.presented();
+		if (!summit) {
+			return false;
+		}
+		this.orbit.stop();
+		return this.summitOrbit.start(summit, periodSeconds, onHalted);
+	}
+
+	stopMountainOrbit(): void {
+		this.summitOrbit.stop();
 	}
 
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void {
@@ -393,6 +429,19 @@ export class CesiumGlobeScene implements GlobeScene {
 
 	subscribeMarkerActivation(listener: (activation: MarkerActivation) => void): () => void {
 		return this.destroyed ? noop : this.atlasPicker.subscribe(listener);
+	}
+
+	subscribeFlight(listener: (flying: boolean) => void): () => void {
+		if (this.destroyed) {
+			return noop;
+		}
+		this.flightListener = listener;
+
+		return () => {
+			if (this.flightListener === listener) {
+				this.flightListener = undefined;
+			}
+		};
 	}
 
 	// Heard before Cesium's own handlers act on the event, so the orbit never fights a gesture.
@@ -471,6 +520,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.summitOrbit.stop();
 		this.yieldingFlight = false;
 		const result = this.camera.reset();
 		// Only a flight needs protecting; an instant restore under reduced motion hands input back.
@@ -487,6 +537,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		}
 
 		this.orbit.stop();
+		this.summitOrbit.stop();
 		return this.flight.zoom(direction, this.motion() === 'direct' ? 0 : ZOOM_FLIGHT_SECONDS);
 	}
 
@@ -642,6 +693,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['interaction listeners', releaseInteraction],
 			['render failure listener', releaseFailure],
 			['orbit', () => this.orbit.stop()],
+			['mountain orbit', () => this.summitOrbit.stop()],
 			['view-ready waiter', () => this.viewReadyWaiter?.settle()],
 			['imagery monitor', () => this.imagery.release()],
 			['failed layer removal', () => this.failedBaseLayer?.release()],

@@ -46,6 +46,19 @@ export interface GlobeScene extends Destroyable {
 	startOrbit(periodSeconds: number, onHalted: () => void): boolean;
 	stopOrbit(): void;
 	/**
+	 * Circles the camera around the summit of the mountain it arrived at, from wherever the camera
+	 * is now, keeping its range and the summit's place on screen, one revolution every
+	 * `periodSeconds`. Its tilt holds too, except where rising ground ahead makes it climb around the
+	 * summit, settling back once past. Kept apart from the atlas orbit, which it stops. It halts on
+	 * stopMountainOrbit(), any camera movement it did not make, a flight, ground it cannot climb
+	 * gently enough to clear or a switch to reduced motion; `onHalted` reports all but the first.
+	 * Returns false if it cannot start, as while a flight owns the camera or no mountain has been
+	 * arrived at.
+	 */
+	startMountainOrbit(periodSeconds: number, onHalted: () => void): boolean;
+	/** Leaves the camera where the orbit had brought it. Idempotent. */
+	stopMountainOrbit(): void;
+	/**
 	 * Draws these mountains on the globe, replacing the set drawn before, or with `undefined` takes
 	 * them away at once. Markers only show where they can be seen: in front of the camera, above the
 	 * horizon and inside the stage, and never move the camera.
@@ -75,6 +88,12 @@ export interface GlobeScene extends Destroyable {
 	 * air flies on.
 	 */
 	setUnitSystem(system: UnitSystem): void;
+	/**
+	 * Whether a flight owns the camera, heard each time that changes: a flight between mountains, a
+	 * Reset, or a reframe after the stage changes shape. Nothing is heard for a camera placed at
+	 * once, never from after destroy. A new subscription replaces the previous one.
+	 */
+	subscribeFlight(listener: (flying: boolean) => void): () => void;
 	/** Direct input on the globe, a press or a wheel. A new subscription replaces the previous one. */
 	subscribeInteraction(listener: () => void): () => void;
 	/** Resolves when the view is ready, superseded by a later call, or the scene is destroyed. */

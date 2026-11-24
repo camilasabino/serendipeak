@@ -44,6 +44,8 @@ interface MountainSceneProps {
 	markers?: readonly AtlasMarker[];
 	/** Given on the atlas only, drawn or not: the switch stays while the markers are away. */
 	markerToggle?: MarkerToggle;
+	/** Offers the reader an orbit around the presented mountain; never shown on the atlas. */
+	mountainOrbit?: boolean;
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
 	onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -59,6 +61,7 @@ export default function MountainScene({
 	atlas,
 	markers,
 	markerToggle,
+	mountainOrbit = false,
 	observer,
 	controllerRef,
 	onMarkerActivate,
@@ -72,6 +75,7 @@ export default function MountainScene({
 		resetView,
 		zoomView,
 		toggleRotation,
+		toggleMountainOrbit,
 		readCamera,
 		highlightMarker,
 		retry
@@ -110,6 +114,7 @@ export default function MountainScene({
 				onReset={resetView}
 				onZoom={zoomView}
 				onToggleRotation={toggleRotation}
+				onToggleMountainOrbit={mountainOrbit ? toggleMountainOrbit : undefined}
 				fullscreen={fullscreen}
 				markerToggle={markerToggle}
 			/>

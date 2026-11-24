@@ -15,9 +15,18 @@ export interface SceneSnapshot {
 	 * motion), otherwise whether it turns or waits to be resumed.
 	 */
 	readonly rotation: RotationState;
+	/**
+	 * The reader's orbit around the presented mountain, apart from the atlas turn: `off` where there
+	 * is no mountain to circle (the atlas, a free camera, reduced motion), `unavailable` while its
+	 * presentation is still moving the camera, otherwise `idle` until started, `orbiting`, or
+	 * `paused` where the reader paused it.
+	 */
+	readonly mountainOrbit: MountainOrbitState;
 }
 
 export type RotationState = 'off' | 'rotating' | 'paused';
+
+export type MountainOrbitState = 'off' | 'unavailable' | 'idle' | 'orbiting' | 'paused';
 
 function sameState(a: SceneState, b: SceneState): boolean {
 	if (a.status !== b.status) {
@@ -46,7 +55,8 @@ export class SceneStore {
 		scale: undefined,
 		settled: false,
 		free: false,
-		rotation: 'off'
+		rotation: 'off',
+		mountainOrbit: 'off'
 	};
 	private readonly listeners = new Set<() => void>();
 
@@ -104,6 +114,13 @@ export class SceneStore {
 			return;
 		}
 		this.replace({ rotation });
+	}
+
+	setMountainOrbit(mountainOrbit: MountainOrbitState): void {
+		if (mountainOrbit === this.snapshot.mountainOrbit) {
+			return;
+		}
+		this.replace({ mountainOrbit });
 	}
 
 	private replace(change: Partial<SceneSnapshot>): void {

@@ -14,12 +14,13 @@ import type { GlobeScene } from './globe/GlobeScene';
 import { MissingIonTokenError, requireIonToken } from './globe/ionToken';
 import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
+import { MOUNTAIN_ORBIT_PERIOD_SECONDS } from './globe/mountainOrbit';
 import { stageAspect, type StageSize } from './globe/stageFrame';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { startScene } from './lifecycle';
 import { releaseBestEffort } from './releaseBestEffort';
 import { INITIALIZATION_FAILED_STATE } from './sceneState';
-import type { RotationState, SceneStore } from './SceneStore';
+import type { MountainOrbitState, RotationState, SceneStore } from './SceneStore';
 
 export type PresentationOutcome = CameraOutcome['status'];
 
@@ -56,6 +57,9 @@ const FAILED_FLIGHT: CameraOutcome = { status: 'failed', error: undefined };
  */
 type OverviewStage = 'away' | 'arriving' | 'idle';
 
+/** What the reader last asked of the mountain orbit; it only turns while a mountain is settled. */
+type MountainOrbitIntent = Extract<MountainOrbitState, 'idle' | 'orbiting' | 'paused'>;
+
 // The constructor starts the session; `stop()` is its only teardown and is idempotent.
 export class SceneSession {
 	private readonly store: SceneStore;
@@ -69,9 +73,12 @@ export class SceneSession {
 	private releaseInteraction: () => void = noop;
 	private releaseActivation: () => void = noop;
 	private releaseFailure: () => void = noop;
+	private releaseFlight: () => void = noop;
 	private stopScene: () => void = noop;
 	private imageryDegraded = false;
 	private settled = false;
+	/** A flight owns the camera: between mountains, a Reset, or a reframe after the stage changed. */
+	private flying = false;
 	private free = false;
 	private target: SceneTarget | undefined;
 	private atlas: AtlasView | undefined;
@@ -85,6 +92,7 @@ export class SceneSession {
 	private orbiting = false;
 	/** The reader paused the ambient orbit; kept until they resume it, across atlas visits. */
 	private rotationPaused = false;
+	private mountainOrbit: MountainOrbitIntent = 'idle';
 
 	constructor({
 		ionToken,
@@ -231,6 +239,28 @@ export class SceneSession {
 		this.resumeOrbit();
 	}
 
+	/**
+	 * Starts circling the settled mountain from wherever the camera is, pauses it where it is, or
+	 * resumes it from there. Nothing happens while no mountain is settled or a flight owns the
+	 * camera, and the camera is never sent back to the mountain's pose.
+	 */
+	toggleMountainOrbit(): void {
+		const ready = this.scene;
+		const state = this.mountainOrbitState();
+		if (!ready || state === 'off' || state === 'unavailable') {
+			return;
+		}
+		if (state === 'orbiting') {
+			this.mountainOrbit = 'paused';
+			ready.stopMountainOrbit();
+		} else if (
+			ready.startMountainOrbit(MOUNTAIN_ORBIT_PERIOD_SECONDS, () => this.mountainOrbitHalted())
+		) {
+			this.mountainOrbit = 'orbiting';
+		}
+		this.publishMountainOrbit();
+	}
+
 	updateStage(size: StageSize): void {
 		if (this.stopped) {
 			return;
@@ -246,6 +276,7 @@ export class SceneSession {
 			return 'unavailable';
 		}
 		if (this.settled) {
+			this.endMountainOrbit();
 			return this.scene.resetView();
 		}
 		if (this.free && this.atlas) {
@@ -262,6 +293,7 @@ export class SceneSession {
 			return 'unavailable';
 		}
 		this.leaveOverview();
+		this.endMountainOrbit();
 		return this.scene.zoomView(direction);
 	}
 
@@ -280,6 +312,8 @@ export class SceneSession {
 		this.publishFree(false);
 		this.orbiting = false;
 		this.publishRotation();
+		this.mountainOrbit = 'idle';
+		this.publishMountainOrbit();
 		this.store.setOrientation(undefined);
 		this.store.setScale(undefined);
 		this.scene = undefined;
@@ -292,6 +326,7 @@ export class SceneSession {
 			releaseInteraction,
 			releaseActivation,
 			releaseFailure,
+			releaseFlight,
 			stopScene
 		} = this;
 		this.releaseOrientation = noop;
@@ -300,6 +335,7 @@ export class SceneSession {
 		this.releaseInteraction = noop;
 		this.releaseActivation = noop;
 		this.releaseFailure = noop;
+		this.releaseFlight = noop;
 		this.stopScene = noop;
 
 		// The scene goes last: a retry must never meet a live Viewer because a release threw.
@@ -310,6 +346,7 @@ export class SceneSession {
 			['interaction subscription', releaseInteraction],
 			['marker activation subscription', releaseActivation],
 			['render failure subscription', releaseFailure],
+			['flight subscription', releaseFlight],
 			['scene', stopScene]
 		]);
 	}
@@ -340,6 +377,7 @@ export class SceneSession {
 
 	private wire(ready: GlobeScene): void {
 		this.scene = ready;
+		this.flying = false;
 		ready.setUnitSystem(this.units);
 		this.releaseOrientation = ready.subscribeOrientation((orientation) => {
 			if (!this.stopped) {
@@ -362,6 +400,13 @@ export class SceneSession {
 		});
 		this.releaseInteraction = ready.subscribeInteraction(() => this.interacted());
 		this.releaseFailure = ready.subscribeFailure((error) => this.failScene(error));
+		this.releaseFlight = ready.subscribeFlight((flying) => {
+			if (this.stopped || flying === this.flying) {
+				return;
+			}
+			this.flying = flying;
+			this.publishMountainOrbit();
+		});
 		const onMarkerActivate = this.onMarkerActivate;
 		if (onMarkerActivate) {
 			this.releaseActivation = ready.subscribeMarkerActivation((activation) => {
@@ -495,9 +540,16 @@ export class SceneSession {
 		this.publishRotation();
 	}
 
+	// A gesture on the globe takes the camera from either orbit; neither resumes under the reader.
 	private interacted(): void {
-		if (!this.stopped && (this.overview !== 'away' || this.orbiting)) {
+		if (this.stopped) {
+			return;
+		}
+		if (this.overview !== 'away' || this.orbiting) {
 			this.leaveOverview();
+		}
+		if (this.mountainOrbit !== 'idle') {
+			this.endMountainOrbit();
 		}
 	}
 
@@ -539,11 +591,41 @@ export class SceneSession {
 		this.store.setRotation(this.rotationState());
 	}
 
+	private mountainOrbitHalted(): void {
+		if (this.stopped || this.mountainOrbit !== 'orbiting') {
+			return;
+		}
+		this.mountainOrbit = 'idle';
+		this.publishMountainOrbit();
+	}
+
+	// Ending it leaves the camera where it is: whatever ends it decides where the camera goes next.
+	private endMountainOrbit(): void {
+		if (this.mountainOrbit === 'orbiting') {
+			this.scene?.stopMountainOrbit();
+		}
+		this.mountainOrbit = 'idle';
+		this.publishMountainOrbit();
+	}
+
+	private mountainOrbitState(): MountainOrbitState {
+		const ready = this.scene;
+		if (this.stopped || !ready || !this.target || !ready.canOrbit()) {
+			return 'off';
+		}
+		return this.settled && !this.flying ? this.mountainOrbit : 'unavailable';
+	}
+
+	private publishMountainOrbit(): void {
+		this.store.setMountainOrbit(this.mountainOrbitState());
+	}
+
 	// The presentation ticket moves on first, so no outcome of the released target is reported. A
 	// reveal still in progress ends here: there is nothing left for the loader to wait for.
 	private release(ready: GlobeScene): void {
 		this.presentation += 1;
 		this.leaveOverview();
+		this.endMountainOrbit();
 		this.publishSettled(false);
 		ready.clearTarget();
 		this.observer?.cleared();
@@ -566,6 +648,7 @@ export class SceneSession {
 		}
 		this.settled = next;
 		this.store.setSettled(next);
+		this.publishMountainOrbit();
 	}
 
 	private publishFree(next: boolean): void {
@@ -585,6 +668,7 @@ export class SceneSession {
 		this.leaveOverview();
 		const ticket = ++this.presentation;
 		this.publishSettled(false);
+		this.endMountainOrbit();
 		this.publishFree(false);
 		this.observer?.presenting(next);
 		if (!this.revealed) {

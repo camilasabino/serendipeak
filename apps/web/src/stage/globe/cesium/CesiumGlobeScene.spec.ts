@@ -19,6 +19,8 @@ const cesium = vi.hoisted(() => ({
 	placedLooks: [] as unknown[],
 	holdInputs: vi.fn(),
 	orbits: [] as { periodSeconds: number; running: boolean }[],
+	summitOrbits: [] as { summit: unknown; periodSeconds: number; running: boolean }[],
+	summitOrbitAllowed: (() => false) as () => boolean,
 	adopts: 0,
 	ranges: [] as number[],
 	rangeResult: true,
@@ -195,6 +197,23 @@ vi.mock('./ViewerOrbit', () => ({
 		}
 		get running() {
 			return cesium.orbits.some((orbit) => orbit.running);
+		}
+	}
+}));
+vi.mock('./ViewerSummitOrbit', () => ({
+	ViewerSummitOrbit: class {
+		constructor(_cesium: unknown, _viewer: unknown, allowed: () => boolean) {
+			cesium.summitOrbitAllowed = allowed;
+		}
+		start(summit: unknown, periodSeconds: number) {
+			this.stop();
+			cesium.summitOrbits.push({ summit, periodSeconds, running: true });
+			return true;
+		}
+		stop() {
+			for (const orbit of cesium.summitOrbits) {
+				orbit.running = false;
+			}
 		}
 	}
 }));
@@ -937,6 +956,189 @@ describe('CesiumGlobeScene ambient orbit', () => {
 		expect(heard).toHaveBeenCalledTimes(2);
 		expect(cesium.orbits.every((orbit) => !orbit.running)).toBe(true);
 		expect(scene.canOrbit()).toBe(false);
+	});
+});
+
+describe('CesiumGlobeScene mountain orbit', () => {
+	const TARGET = {
+		slug: 'aconcagua',
+		name: 'Aconcagua',
+		latitude: -32.65,
+		longitude: -70.01,
+		elevationMeters: 6961
+	};
+	const OTHER = { ...TARGET, slug: 'fitz-roy', name: 'Fitz Roy', latitude: -49.27 };
+	const LOOK = {
+		latitude: 0,
+		longitude: 0,
+		altitudeMeters: 0,
+		headingDegrees: 0,
+		pitchDegrees: -90,
+		rangeMeters: 12_000_000,
+		framingX: 0,
+		framingY: 0
+	};
+	let motion: { matches: boolean };
+
+	beforeEach(() => {
+		motion = { matches: false };
+		vi.stubGlobal('HTMLLinkElement', FakeLinkElement);
+		vi.stubGlobal('document', { getElementById: () => new FakeLinkElement() });
+		vi.stubGlobal('window', { matchMedia: () => motion });
+		cesium.flightCallbacks.length = 0;
+		cesium.orbits.length = 0;
+		cesium.summitOrbits.length = 0;
+		cesium.viewer = fakeViewer();
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	const running = () => cesium.summitOrbits.filter((orbit) => orbit.running);
+
+	async function sceneWithMountain(): Promise<CesiumGlobeScene> {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		const arrival = scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+		cesium.flightCallbacks.shift()!.complete();
+		await arrival;
+
+		return scene;
+	}
+
+	it('refuses before a mountain has been arrived at, and while its reveal flies', async () => {
+		const scene = await create(undefined, { clientWidth: 1280, clientHeight: 800 } as HTMLElement);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+
+		void scene.showMountain(TARGET, 'initial');
+		await vi.waitFor(() => expect(cesium.flightCallbacks).toHaveLength(1));
+
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+		expect(cesium.summitOrbits).toEqual([]);
+	});
+
+	it('circles the summit of the mountain it arrived at, and stops the atlas orbit', async () => {
+		const scene = await sceneWithMountain();
+		scene.startOrbit(300, () => {});
+
+		expect(scene.startMountainOrbit(60, () => {})).toBe(true);
+
+		expect(running()).toEqual([{ summit: TARGET, periodSeconds: 60, running: true }]);
+		expect(cesium.orbits.every((orbit) => !orbit.running)).toBe(true);
+	});
+
+	it('reports a restore flight taking the camera and landing, and nothing once destroyed', async () => {
+		const scene = await sceneWithMountain();
+		const listener = vi.fn();
+		const release = scene.subscribeFlight(listener);
+
+		expect(scene.resetView()).toBe('reset');
+		expect(listener.mock.calls).toEqual([[true]]);
+		cesium.flightCallbacks.shift()!.complete();
+		expect(listener.mock.calls).toEqual([[true], [false]]);
+
+		expect(scene.resetView()).toBe('reset');
+		scene.destroy();
+		expect(listener.mock.calls).toEqual([[true], [false], [true]]);
+		release();
+	});
+
+	it('keeps only the latest flight subscription, and none after release', async () => {
+		const scene = await sceneWithMountain();
+		const first = vi.fn();
+		const second = vi.fn();
+		scene.subscribeFlight(first);
+		const release = scene.subscribeFlight(second);
+		release();
+
+		expect(scene.resetView()).toBe('reset');
+
+		expect(first).not.toHaveBeenCalled();
+		expect(second).not.toHaveBeenCalled();
+	});
+
+	it('is stopped by the atlas orbit, so the two never turn the camera together', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		scene.startOrbit(300, () => {});
+
+		expect(running()).toEqual([]);
+	});
+
+	it('stops for Reset, which still restores the pose, and is refused while it flies', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		expect(scene.resetView()).toBe('reset');
+
+		expect(running()).toEqual([]);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+		expect(cesium.summitOrbitAllowed()).toBe(false);
+
+		cesium.flightCallbacks.shift()!.complete();
+		expect(cesium.summitOrbitAllowed()).toBe(true);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(true);
+	});
+
+	it('stops before a zoom step', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		expect(scene.zoomView('in')).toBe('zoomed');
+
+		expect(running()).toEqual([]);
+	});
+
+	it('stops when the next mountain is shown, and refuses until it arrives', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		const arrival = scene.showMountain(OTHER, 'next');
+
+		expect(running()).toEqual([]);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+
+		// This flight double has no pose to plan from, so the next mountain is placed directly.
+		await expect(arrival).resolves.toEqual({ status: 'arrived' });
+		expect(scene.startMountainOrbit(60, () => {})).toBe(true);
+		expect(running()).toEqual([{ summit: OTHER, periodSeconds: 60, running: true }]);
+	});
+
+	it('stops when the mountain is let go or the overview is shown', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		scene.clearTarget();
+		expect(running()).toEqual([]);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+
+		const again = await sceneWithMountain();
+		again.startMountainOrbit(60, () => {});
+		void again.showOverview(LOOK, true);
+		expect(running()).toEqual([]);
+	});
+
+	it('is not allowed to turn under reduced motion', async () => {
+		await sceneWithMountain();
+		expect(cesium.summitOrbitAllowed()).toBe(true);
+
+		motion.matches = true;
+
+		expect(cesium.summitOrbitAllowed()).toBe(false);
+	});
+
+	it('stops with the scene and refuses once destroyed', async () => {
+		const scene = await sceneWithMountain();
+		scene.startMountainOrbit(60, () => {});
+
+		scene.destroy();
+
+		expect(running()).toEqual([]);
+		expect(scene.startMountainOrbit(60, () => {})).toBe(false);
+		expect(() => scene.stopMountainOrbit()).not.toThrow();
 	});
 });
 

@@ -127,6 +127,10 @@ export class FakeGlobeScene implements GlobeScene {
 	readonly highlights: (string | undefined)[] = [];
 	/** Every orbit started, with whether it is still turning. */
 	readonly orbits: { periodSeconds: number; running: boolean; onHalted: () => void }[] = [];
+	/** Every orbit around the presented mountain started, with whether it is still turning. */
+	readonly mountainOrbits: { periodSeconds: number; running: boolean; onHalted: () => void }[] = [];
+	private flightActive = false;
+	private flightListener: ((flying: boolean) => void) | undefined;
 
 	private readonly onDestroy: (() => void) | undefined;
 	private readonly throwOn: Partial<Record<FakeSetupStep, Error>>;
@@ -196,6 +200,10 @@ export class FakeGlobeScene implements GlobeScene {
 		return this.orbits.some((orbit) => orbit.running);
 	}
 
+	get mountainOrbiting(): boolean {
+		return this.mountainOrbits.some((orbit) => orbit.running);
+	}
+
 	prepareReveal(target: SceneTarget): boolean {
 		this.failIfRequested('prepareReveal');
 		this.prepared.push(target);
@@ -204,6 +212,7 @@ export class FakeGlobeScene implements GlobeScene {
 
 	showMountain(target: SceneTarget, placement: MountainPlacement): Promise<CameraOutcome> {
 		this.stopOrbit();
+		this.stopMountainOrbit();
 		this.shown.push({ target, placement });
 		if (this.destroyed) {
 			return Promise.resolve({ status: 'interrupted' });
@@ -222,6 +231,7 @@ export class FakeGlobeScene implements GlobeScene {
 			return;
 		}
 		this.clears += 1;
+		this.stopMountainOrbit();
 		this.interruptPending();
 	}
 
@@ -267,6 +277,31 @@ export class FakeGlobeScene implements GlobeScene {
 		}
 	}
 
+	startMountainOrbit(periodSeconds: number, onHalted: () => void): boolean {
+		this.stopMountainOrbit();
+		if (!this.canOrbit() || this.flying) {
+			return false;
+		}
+		this.stopOrbit();
+		this.mountainOrbits.push({ periodSeconds, running: true, onHalted });
+		return true;
+	}
+
+	stopMountainOrbit(): void {
+		for (const orbit of this.mountainOrbits) {
+			orbit.running = false;
+		}
+	}
+
+	/** The mountain orbit ends by itself, as when a flight or the terrain stops it. */
+	haltMountainOrbit(): void {
+		const running = this.mountainOrbits.find((orbit) => orbit.running);
+		if (running) {
+			running.running = false;
+			running.onHalted();
+		}
+	}
+
 	/** The orbit ends by itself, as when something else moves the camera. */
 	haltOrbit(): void {
 		const running = this.orbits.find((orbit) => orbit.running);
@@ -303,6 +338,33 @@ export class FakeGlobeScene implements GlobeScene {
 	/** The markers the scene draws now. */
 	get atlasMarkers(): readonly AtlasMarker[] | undefined {
 		return this.markerSets.at(-1);
+	}
+
+	/** Whether a flight owns the camera, which refuses a mountain orbit as the real scene does. */
+	get flying(): boolean {
+		return this.flightActive;
+	}
+
+	set flying(next: boolean) {
+		if (next === this.flightActive) {
+			return;
+		}
+		this.flightActive = next;
+		if (!this.destroyed) {
+			this.flightListener?.(next);
+		}
+	}
+
+	subscribeFlight(listener: (flying: boolean) => void): () => void {
+		if (this.destroyed) {
+			return () => {};
+		}
+		this.flightListener = listener;
+		return () => {
+			if (this.flightListener === listener) {
+				this.flightListener = undefined;
+			}
+		};
 	}
 
 	subscribeInteraction(listener: () => void): () => void {
@@ -363,6 +425,7 @@ export class FakeGlobeScene implements GlobeScene {
 			return 'unavailable';
 		}
 		this.stopOrbit();
+		this.stopMountainOrbit();
 		this.resets += 1;
 		return this.resetResult;
 	}
@@ -372,6 +435,7 @@ export class FakeGlobeScene implements GlobeScene {
 			return 'unavailable';
 		}
 		this.stopOrbit();
+		this.stopMountainOrbit();
 		this.zooms.push(direction);
 		return this.zoomResult;
 	}
@@ -434,6 +498,7 @@ export class FakeGlobeScene implements GlobeScene {
 		this.activation = undefined;
 		this.failure = undefined;
 		this.stopOrbit();
+		this.stopMountainOrbit();
 		for (const waiter of this.viewWaiters.splice(0)) {
 			waiter.resolve();
 		}

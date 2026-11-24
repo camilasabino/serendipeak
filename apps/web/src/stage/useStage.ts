@@ -40,6 +40,7 @@ export interface UseStageResult {
 	resetView: () => ResetResult;
 	zoomView: (direction: ZoomDirection) => ZoomResult;
 	toggleRotation: () => void;
+	toggleMountainOrbit: () => void;
 	readCamera: () => CameraReading | undefined;
 	highlightMarker: (slug: string | undefined) => void;
 	retry: () => void;
@@ -149,6 +150,8 @@ export function useStage({
 
 	const toggleRotation = useCallback(() => bindingRef.current?.toggleRotation(), []);
 
+	const toggleMountainOrbit = useCallback(() => bindingRef.current?.toggleMountainOrbit(), []);
+
 	const readCamera = useCallback(() => bindingRef.current?.readCamera(), []);
 
 	const highlightMarker = useCallback(
@@ -164,6 +167,7 @@ export function useStage({
 		resetView,
 		zoomView,
 		toggleRotation,
+		toggleMountainOrbit,
 		readCamera,
 		highlightMarker,
 		retry

@@ -22,6 +22,8 @@ export interface MountainCamera {
 	show(target: SceneTarget, placement: MountainPlacement): Promise<CameraOutcome>;
 	remember(pose: TerrainCameraPose, size: StageSize): void;
 	reset(): ResetResult;
+	/** The mountain the camera arrived at and still presents, which Reset returns to. */
+	presented(): SceneTarget | undefined;
 	updateStage(size: StageSize): void;
 	/** Forgets the presented mountain and its pose; unlike stop(), later shows still work. */
 	clear(): void;
@@ -169,6 +171,9 @@ export function createMountainCamera({
 				return 'unavailable';
 			}
 			return 'reset';
+		},
+		presented() {
+			return !stopped && activePose && arrivedTicket === ticket ? activeTarget : undefined;
 		},
 		remember(pose, size) {
 			if (stopped || !activeTarget) {

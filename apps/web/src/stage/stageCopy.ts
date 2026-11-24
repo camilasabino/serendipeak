@@ -16,6 +16,10 @@ export const RESET_VIEW_LABEL = 'Reset view';
 export const PAUSE_ROTATION_LABEL = 'Pause globe rotation';
 export const RESUME_ROTATION_LABEL = 'Rotate the globe';
 
+export const START_MOUNTAIN_ORBIT_LABEL = 'Start mountain orbit';
+export const PAUSE_MOUNTAIN_ORBIT_LABEL = 'Pause mountain orbit';
+export const RESUME_MOUNTAIN_ORBIT_LABEL = 'Resume mountain orbit';
+
 export const HIDE_MARKERS_LABEL = 'Hide mountain markers';
 export const SHOW_MARKERS_LABEL = 'Show mountain markers';
 

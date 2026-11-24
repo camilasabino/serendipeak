@@ -9,8 +9,22 @@ describe('SceneStore', () => {
 			scale: undefined,
 			settled: false,
 			free: false,
-			rotation: 'off'
+			rotation: 'off',
+			mountainOrbit: 'off'
 		});
+	});
+
+	it('publishes the mountain orbit only when it changes, apart from the atlas rotation', () => {
+		const store = new SceneStore();
+		const listener = vi.fn();
+		store.subscribe(listener);
+
+		store.setMountainOrbit('idle');
+		store.setMountainOrbit('idle');
+		store.setMountainOrbit('orbiting');
+
+		expect(listener).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot()).toMatchObject({ mountainOrbit: 'orbiting', rotation: 'off' });
 	});
 
 	it('publishes free navigation only when it changes', () => {

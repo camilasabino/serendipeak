@@ -50,6 +50,25 @@ describe('MountainScene markup', () => {
 		expect(html).not.toContain('role="alert"');
 	});
 
+	it('offers the mountain orbit only where the page asks for it, as mountain pages do', () => {
+		const markup = (mountainOrbit: boolean) => {
+			const store = new SceneStore();
+			store.setState({ status: 'ready' });
+			store.setMountainOrbit('idle');
+			return renderToStaticMarkup(
+				<MountainScene
+					store={store}
+					target={TARGET}
+					observer={new TransitionCoordinator()}
+					mountainOrbit={mountainOrbit}
+				/>
+			);
+		};
+
+		expect(markup(true)).toContain('Start mountain orbit');
+		expect(markup(false)).not.toContain('mountain orbit');
+	});
+
 	it('renders no stage controls before the globe is ready', () => {
 		for (const state of [
 			undefined,
