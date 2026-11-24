@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NO_FILTERS } from './atlasFilter';
 import { AtlasViewStore, DEFAULT_ATLAS_VIEW, isDefaultView } from './AtlasViewStore';
+import { bandSelection } from './elevationBands';
+
+const m = (...floors: number[]) => bandSelection('metric', floors);
+const ft = (...floors: number[]) => bandSelection('imperial', floors);
 
 describe('AtlasViewStore', () => {
 	it('starts on the default view: no filters, name order', () => {
@@ -17,29 +21,32 @@ describe('AtlasViewStore', () => {
 
 		store.setFilters({ country: 'AR' });
 		store.setFilters({ range: 'andes' });
-		store.setFilters({ elevationBands: [6000] });
+		store.setFilters({ elevationBands: m(6000) });
 
 		expect(store.getSnapshot().filters).toEqual({
 			country: 'AR',
 			range: 'andes',
-			elevationBands: [6000]
+			elevationBands: m(6000)
 		});
 		expect(listener).toHaveBeenCalledTimes(3);
 	});
 
 	it('treats the same bands as no change, and different bands as one', () => {
 		const store = new AtlasViewStore();
-		store.setFilters({ elevationBands: [3000, 4000] });
+		store.setFilters({ elevationBands: m(3000, 4000) });
 		const listener = vi.fn();
 		store.subscribe(listener);
 
-		store.setFilters({ elevationBands: [3000, 4000] });
+		store.setFilters({ elevationBands: m(3000, 4000) });
 		expect(listener).not.toHaveBeenCalled();
 
-		store.setFilters({ elevationBands: [3000] });
+		store.setFilters({ elevationBands: m(3000) });
 		expect(listener).toHaveBeenCalledTimes(1);
 
-		store.setFilters({ elevationBands: [] });
+		store.setFilters({ elevationBands: ft(3000) });
+		expect(listener).toHaveBeenCalledTimes(2);
+
+		store.setFilters({ elevationBands: null });
 		expect(store.getSnapshot().filters).toEqual(NO_FILTERS);
 	});
 

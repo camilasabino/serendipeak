@@ -1,5 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import {
 	ANY_COUNTRY_LABEL,
 	ANY_RANGE_LABEL,
@@ -14,7 +15,8 @@ import {
 	filterToggleLabel,
 	noCountriesMessage,
 	noRangesMessage,
-	resultCount
+	resultCount,
+	retainedBandsReplacedNotice
 } from './atlasCopy';
 import { activeFilterCount, settleFilters, type AtlasFilters } from './atlasFilter';
 import styles from './AtlasControls.module.css';
@@ -42,6 +44,7 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 	const total = mountains.length;
 	const { options, view, isDefault, matches } = browse;
 	const { country, elevationBands, range } = view.filters;
+	const system = useUnitSystem();
 	const active = activeFilterCount(view.filters);
 	const [open, setOpen] = useState(false);
 	const panelId = useId();
@@ -81,7 +84,11 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 			key!
 		);
 		store.setFilters(filters);
-		setNotice(autoResetNotice(reset, removedBands));
+		setNotice(
+			[replacedNotice(elevationBands, change.elevationBands), autoResetNotice(reset, removedBands)]
+				.filter(Boolean)
+				.join(' ')
+		);
 	};
 
 	return (
@@ -121,7 +128,9 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 				/>
 				<ElevationFilter
 					options={options.elevationBands}
+					retained={options.retainedBands}
 					selected={elevationBands}
+					system={system}
 					onChange={(bands) => choose({ elevationBands: bands })}
 				/>
 				<ChoiceFilter
@@ -159,4 +168,15 @@ export function AtlasControls({ browse, store, mountains }: AtlasControlsProps) 
 			</div>
 		</div>
 	);
+}
+
+function replacedNotice(
+	before: AtlasFilters['elevationBands'],
+	after: AtlasFilters['elevationBands'] | undefined
+): string {
+	if (!before || !after || before.system === after.system) {
+		return '';
+	}
+
+	return retainedBandsReplacedNotice(before.system, after.system);
 }

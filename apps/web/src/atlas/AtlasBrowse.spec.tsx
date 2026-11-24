@@ -5,6 +5,9 @@ import { indexEntry } from '../api/test-support/indexEntries';
 import { anchorsOf, textsOf } from '../mountain-page/test-support/markup';
 import { TestExperience } from '../test/TestExperience';
 import { TestRouter } from '../test/TestRouter';
+import { UnitPreferenceProvider } from '../units/UnitPreferenceContext';
+import { fixedPreference } from '../units/test-support';
+import type { UnitSystem } from '../units/unitSystem';
 import { AtlasControls } from './AtlasControls';
 import { settleFilters, type AtlasFilters } from './atlasFilter';
 import { AtlasList } from './AtlasList';
@@ -12,6 +15,7 @@ import { AtlasPanel } from './AtlasPanel';
 import { groupByContinent } from './groupByContinent';
 import { AtlasViewProvider, useAtlasBrowse, type AtlasBrowse } from './AtlasViewContext';
 import { AtlasViewStore } from './AtlasViewStore';
+import { bandSelection } from './elevationBands';
 import { toAtlasMarkers } from './toAtlasMarkers';
 import { choiceIsCurrent, type MarkerChoice } from './useMarkerActivation';
 
@@ -43,14 +47,24 @@ const CATALOG: MountainIndexEntry[] = [
 ];
 
 const slugs = (list: readonly { slug: string }[]) => list.map(({ slug }) => slug);
+const m = (...floors: number[]) => bandSelection('metric', floors);
+const ft = (...floors: number[]) => bandSelection('imperial', floors);
 
-function browseOf(store: AtlasViewStore, mountains = CATALOG): AtlasBrowse {
+function browseOf(
+	store: AtlasViewStore,
+	mountains = CATALOG,
+	system: UnitSystem = 'metric'
+): AtlasBrowse {
 	let browse: AtlasBrowse | undefined;
 	function Probe() {
 		browse = useAtlasBrowse(store, mountains);
 		return null;
 	}
-	renderToStaticMarkup(<Probe />);
+	renderToStaticMarkup(
+		<UnitPreferenceProvider value={fixedPreference(system)}>
+			<Probe />
+		</UnitPreferenceProvider>
+	);
 
 	return browse!;
 }
@@ -117,11 +131,11 @@ describe('the atlas as the view shows it', () => {
 			);
 
 		choose({ range: 'andes' }, 'range');
-		choose({ elevationBands: [3000] }, 'elevationBands');
+		choose({ elevationBands: m(3000) }, 'elevationBands');
 		choose({ country: 'NP' }, 'country');
 
 		const browse = browseOf(store);
-		expect(browse.view.filters).toEqual({ country: 'NP', elevationBands: [], range: null });
+		expect(browse.view.filters).toEqual({ country: 'NP', elevationBands: null, range: null });
 		expect(slugs(browse.results)).toEqual(['everest']);
 		expect(slugs(toAtlasMarkers(browse.matches))).toEqual(slugs(browse.results));
 
@@ -136,17 +150,17 @@ describe('the atlas as the view shows it', () => {
 				settleFilters(CATALOG, { ...store.getSnapshot().filters, ...change }, key).filters
 			);
 
-		choose({ elevationBands: [3000, 8000] }, 'elevationBands');
+		choose({ elevationBands: m(3000, 8000) }, 'elevationBands');
 		expect(slugs(toAtlasMarkers(browseOf(store).matches)).sort()).toEqual(['everest', 'fitz-roy']);
 
 		choose({ country: 'CL' }, 'country');
 		const browse = browseOf(store);
-		expect(browse.view.filters.elevationBands).toEqual([3000]);
+		expect(browse.view.filters.elevationBands).toEqual(m(3000));
 		expect(slugs(toAtlasMarkers(browse.matches))).toEqual(['fitz-roy']);
 		expect(slugs(browse.results)).toEqual(slugs(toAtlasMarkers(browse.matches)));
 
 		store.reset();
-		expect(browseOf(store).view.filters.elevationBands).toEqual([]);
+		expect(browseOf(store).view.filters.elevationBands).toBeNull();
 		expect(slugs(toAtlasMarkers(browseOf(store).matches))).toEqual(slugs(CATALOG));
 	});
 
@@ -155,7 +169,7 @@ describe('the atlas as the view shows it', () => {
 		store.setFilters({ country: 'NP', range: 'andes' });
 		const browse = browseOf(store);
 
-		expect(browse.view.filters).toEqual({ country: 'NP', elevationBands: [], range: null });
+		expect(browse.view.filters).toEqual({ country: 'NP', elevationBands: null, range: null });
 		expect(slugs(toAtlasMarkers(browse.matches))).toEqual(['everest']);
 	});
 
@@ -168,6 +182,64 @@ describe('the atlas as the view shows it', () => {
 		expect(browse.view.filters.country).toBeNull();
 		expect(browse.isDefault).toBe(true);
 		expect(browse.matches).toBe(smaller);
+	});
+});
+
+describe('the atlas as the displayed unit changes', () => {
+	it('offers the displayed system’s own bands when no band is selected, and nothing else moves', () => {
+		const store = new AtlasViewStore();
+		store.setFilters({ country: 'AR' });
+		store.setSort('elevation-desc');
+		const inMeters = browseOf(store, CATALOG, 'metric');
+		const inFeet = browseOf(store, CATALOG, 'imperial');
+
+		expect(inMeters.options.elevationBands.map(({ floor }) => floor)).toEqual([6000, 3000]);
+		expect(inFeet.options.elevationBands.map(({ floor }) => floor)).toEqual([22_000, 11_000]);
+		expect(inFeet.view).toEqual(inMeters.view);
+		expect(inFeet.view.filters).toBe(store.getSnapshot().filters);
+		expect(inFeet.options.countries).toEqual(inMeters.options.countries);
+		expect(inFeet.options.ranges).toEqual(inMeters.options.ranges);
+		expect(slugs(inFeet.results)).toEqual(slugs(inMeters.results));
+	});
+
+	it('keeps the selected bands, and exactly their matches, whichever unit is shown', () => {
+		const store = new AtlasViewStore();
+		store.setFilters({ elevationBands: m(3000, 6000), country: 'AR' });
+		const stored = store.getSnapshot();
+		const before = browseOf(store, CATALOG, 'metric');
+
+		for (const system of ['imperial', 'metric', 'imperial', 'metric'] as const) {
+			const browse = browseOf(store, CATALOG, system);
+
+			// The same filters object: nothing the globe frames or draws is recomputed for a unit.
+			expect(browse.view.filters).toBe(stored.filters);
+			expect(slugs(browse.matches)).toEqual(slugs(before.matches));
+			expect(browse.options.retainedBands.map(({ floor }) => floor)).toEqual(
+				system === 'imperial' ? [6000, 3000] : []
+			);
+		}
+		expect(store.getSnapshot()).toBe(stored);
+		expect(slugs(before.matches)).toEqual(['aconcagua', 'fitz-roy']);
+	});
+
+	it('replaces kept bands with bands chosen in the displayed unit, and resets as before', () => {
+		const store = new AtlasViewStore();
+		store.setFilters({ elevationBands: m(6000) });
+		store.setFilters(
+			settleFilters(
+				CATALOG,
+				{ ...store.getSnapshot().filters, elevationBands: ft(29_000) },
+				'elevationBands'
+			).filters
+		);
+
+		const browse = browseOf(store, CATALOG, 'imperial');
+		expect(browse.view.filters.elevationBands).toEqual(ft(29_000));
+		expect(browse.options.retainedBands).toEqual([]);
+		expect(slugs(browse.matches)).toEqual(['everest']);
+
+		store.reset();
+		expect(browseOf(store, CATALOG, 'imperial').view.filters.elevationBands).toBeNull();
 	});
 });
 
@@ -216,8 +288,12 @@ describe('atlas panel', () => {
 });
 
 describe('atlas controls', () => {
-	function renderControls(store: AtlasViewStore): string {
-		return renderToStaticMarkup(<Controls store={store} />);
+	function renderControls(store: AtlasViewStore, system: UnitSystem = 'metric'): string {
+		return renderToStaticMarkup(
+			<UnitPreferenceProvider value={fixedPreference(system)}>
+				<Controls store={store} />
+			</UnitPreferenceProvider>
+		);
 	}
 	function Controls({ store }: { store: AtlasViewStore }) {
 		const browse = useAtlasBrowse(store, CATALOG);
@@ -251,7 +327,7 @@ describe('atlas controls', () => {
 		expect(html).toContain('>Any elevation</span>');
 		expect(html).toContain('>All ranges</span>');
 
-		store.setFilters({ country: 'AR', range: 'patagonian-andes', elevationBands: [3000, 6000] });
+		store.setFilters({ country: 'AR', range: 'patagonian-andes', elevationBands: m(3000, 6000) });
 		html = renderControls(store);
 		expect(html).toContain('>Argentina</span>');
 		// Argentina's Patagonian Andes hold no 6,000 m mountain, so only the 3,000 m band stays.
@@ -309,6 +385,18 @@ describe('atlas controls', () => {
 		store.setFilters({ country: 'CL' });
 
 		expect(renderControls(store)).toMatch(/aria-live="polite"[^>]*>Showing 1 of 3 mountains</);
+	});
+
+	it('names kept bands in their own unit on the closed Elevation button', () => {
+		const store = new AtlasViewStore();
+		store.setFilters({ elevationBands: m(3000, 6000) });
+
+		expect(renderControls(store, 'imperial')).toContain('>2 bands in meters</span>');
+		expect(renderControls(store, 'metric')).toContain('>2 elevation bands</span>');
+
+		store.setFilters({ elevationBands: m(6000) });
+		expect(renderControls(store, 'imperial')).toContain('>6,000–6,999 m</span>');
+		expect(renderControls(store, 'imperial')).toContain('aria-label="Filter, 1 active"');
 	});
 
 	it('offers a reset only once the view has left the default, and counts active filters', () => {

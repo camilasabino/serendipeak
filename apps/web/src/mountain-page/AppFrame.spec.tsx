@@ -148,7 +148,15 @@ describe('AppFrame About link', () => {
 		const nav = render({ model: permalink }).match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? '';
 
 		expect(anchorsOf(nav).map(({ text }) => text)).toEqual(['Today', 'Atlas', 'About']);
-		expect(textsOf(nav, 'button')).toEqual(['Search mountains', 'm', 'ft']);
+		expect(textsOf(nav, 'button')).toEqual(['Search mountains']);
+	});
+
+	it('sets the unit selector apart from the navigation, after it in the header', () => {
+		const html = render({ model: permalink });
+		const units = html.indexOf('role="group" aria-label="Units"');
+
+		expect(units).toBeGreaterThan(html.indexOf('</nav>'));
+		expect(units).toBeLessThan(html.indexOf('</header>'));
 	});
 
 	it.each([

@@ -3,13 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { indexEntry } from '../api/test-support/indexEntries';
-import {
-	ELEVATION_BAND_METERS,
-	elevationBandOf,
-	filterMountains,
-	NO_FILTERS
-} from '../atlas/atlasFilter';
+import { filterMountains, NO_FILTERS } from '../atlas/atlasFilter';
 import { elevationBandLabel } from '../atlas/atlasCopy';
+import { bandFloorOf, bandSelection } from '../atlas/elevationBands';
 import { AtlasList } from '../atlas/AtlasList';
 import { groupByContinent } from '../atlas/groupByContinent';
 import { MarkerChooser } from '../atlas/MarkerChooser';
@@ -91,18 +87,29 @@ describe('MountainInfoPanel', () => {
 });
 
 describe('atlas elevation bands', () => {
-	it('stay 1,000 meter bands labelled in meters whatever the displayed unit', () => {
-		expect(ELEVATION_BAND_METERS).toBe(1000);
-		expect(elevationBandLabel(4000, ELEVATION_BAND_METERS)).toBe('4,000–4,999 m');
+	it('are 1,000 of the displayed unit, labelled in it', () => {
+		expect(elevationBandLabel(4000, 'metric')).toBe('4,000–4,999 m');
+		expect(elevationBandLabel(15_000, 'imperial')).toBe('15,000–15,999 ft');
 	});
 
-	it('filter on canonical meters, not on displayed feet', () => {
+	it('filter on canonical meters, converted without rounding', () => {
 		const high = indexEntry('high', 'High', { elevationMeters: 4806 });
 		const low = indexEntry('low', 'Low', { elevationMeters: 3281 });
 
-		expect(elevationBandOf(4806)).toBe(4000);
+		expect(bandFloorOf(4806, 'metric')).toBe(4000);
+		expect(bandFloorOf(4806, 'imperial')).toBe(15_000);
 		expect(
-			filterMountains([high, low], { ...NO_FILTERS, elevationBands: [4000] }).map((m) => m.slug)
+			filterMountains([high, low], {
+				...NO_FILTERS,
+				elevationBands: bandSelection('metric', [4000])
+			}).map((m) => m.slug)
 		).toEqual(['high']);
+		// 3,281 m is 10,764 ft.
+		expect(
+			filterMountains([high, low], {
+				...NO_FILTERS,
+				elevationBands: bandSelection('imperial', [10_000])
+			}).map((m) => m.slug)
+		).toEqual(['low']);
 	});
 });

@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState, useSyncExternalStore } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
+import { useUnitSystem } from '../units/UnitPreferenceContext';
 import { facetedOptions, filterMountains, settleFilters, type AtlasOptions } from './atlasFilter';
 import { sortMountains } from './atlasSort';
 import { AtlasViewStore, isDefaultView, type AtlasView } from './AtlasViewStore';
@@ -17,7 +18,7 @@ export function useAtlasViewStore(): AtlasViewStore {
 }
 
 export interface AtlasBrowse {
-	/** What each filter offers given the other two, with the mountains each would leave. */
+	/** What each filter offers given the other two, in the displayed unit, with what each leaves. */
 	options: AtlasOptions;
 	/** The view in force: a selection the catalog no longer offers is already dropped. */
 	view: AtlasView;
@@ -38,24 +39,26 @@ export function useAtlasBrowse(
 	mountains: readonly MountainIndexEntry[]
 ): AtlasBrowse {
 	const stored = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+	const system = useUnitSystem();
 	const filters = useMemo(
 		() => settleFilters(mountains, stored.filters, null).filters,
 		[mountains, stored.filters]
 	);
-	const options = useMemo(() => facetedOptions(mountains, filters), [mountains, filters]);
+	// Only the options read the displayed unit; the filters, matches and results never do.
+	const options = useMemo(
+		() => facetedOptions(mountains, filters, system),
+		[mountains, filters, system]
+	);
 	// Keyed on the filters alone, so a new sort order never rebuilds what the globe draws.
 	const matches = useMemo(() => filterMountains(mountains, filters), [mountains, filters]);
+	const view = useMemo(() => ({ filters, sort: stored.sort }), [filters, stored.sort]);
+	const results = useMemo(
+		() => (isDefaultView(view) ? matches : sortMountains(matches, view.sort)),
+		[view, matches]
+	);
 
-	return useMemo(() => {
-		const view = { filters, sort: stored.sort };
-		const isDefault = isDefaultView(view);
-
-		return {
-			options,
-			view,
-			isDefault,
-			matches,
-			results: isDefault ? matches : sortMountains(matches, view.sort)
-		};
-	}, [filters, stored.sort, options, matches]);
+	return useMemo(
+		() => ({ options, view, isDefault: isDefaultView(view), matches, results }),
+		[options, view, matches, results]
+	);
 }

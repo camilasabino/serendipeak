@@ -44,8 +44,8 @@ export function SiteHeader({ pathname }: SiteHeaderProps) {
 				>
 					{ABOUT_LINK_LABEL}
 				</Link>
-				<UnitSelector />
 			</nav>
+			<UnitSelector />
 		</header>
 	);
 }

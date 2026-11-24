@@ -1,4 +1,7 @@
+import { formatElevationValue } from '../formatElevation';
 import { documentTitle, type ErrorContent } from '../mountain-page/pageCopy';
+import { elevationUnit, type UnitSystem } from '../units/unitSystem';
+import { bandBounds, ELEVATION_BAND_SIZE, type BandSelection } from './elevationBands';
 
 export const ATLAS_LINK_LABEL = 'Atlas';
 export const ATLAS_TITLE = documentTitle('Atlas');
@@ -59,25 +62,60 @@ export const SORT_OPTION_LABELS = {
 	'elevation-asc': 'Lowest first'
 } as const;
 
-export function elevationBandLabel(floorMeters: number, bandMeters: number): string {
-	const format = (meters: number) => meters.toLocaleString('en');
+const UNIT_NAMES: Record<UnitSystem, string> = { metric: 'meters', imperial: 'feet' };
 
-	return `${format(floorMeters)}–${format(floorMeters + bandMeters - 1)} m`;
+/** A band as whole numbers with both ends included, though it holds every value up to the next. */
+export function elevationBandLabel(floor: number, system: UnitSystem): string {
+	const format = (value: number) => value.toLocaleString('en');
+
+	return `${format(floor)}–${format(floor + ELEVATION_BAND_SIZE - 1)} ${elevationUnit(system)}`;
+}
+
+/** Where a band chosen in one system lies in another, whose whole units its bounds miss. */
+export function convertedBandLabel(floor: number, from: UnitSystem, to: UnitSystem): string {
+	const { min, max } = bandBounds(floor, from);
+
+	return `about ${formatElevationValue(min, to)}–${formatElevationValue(max, to)} ${elevationUnit(to)}`;
 }
 
 export const CLEAR_ELEVATION_LABEL = 'Clear';
 export const CLEAR_ELEVATION_ACCESSIBLE_LABEL = 'Clear elevation bands';
 export const ELEVATION_BANDS_GROUP_LABEL = 'Elevation bands';
 
-/** What the closed Elevation control shows: nothing chosen, the one band, or how many. */
-export function elevationSummary(floors: readonly number[], bandMeters: number): string {
-	if (floors.length === 0) {
+export function retainedBandsHeading(system: UnitSystem): string {
+	return `Selected in ${UNIT_NAMES[system]}`;
+}
+
+export function retainedBandsHint(displayed: UnitSystem): string {
+	return `Choosing a band in ${UNIT_NAMES[displayed]} replaces this selection.`;
+}
+
+export function displayedBandsLabel(displayed: UnitSystem): string {
+	return `Bands in ${UNIT_NAMES[displayed]}`;
+}
+
+/**
+ * What the closed Elevation control shows: nothing chosen, the one band, or how many, naming the
+ * unit when the bands were chosen in another system than the one displayed.
+ */
+export function elevationSummary(selection: BandSelection | null, displayed: UnitSystem): string {
+	if (selection === null) {
 		return ANY_ELEVATION_LABEL;
 	}
 
-	return floors.length === 1
-		? elevationBandLabel(floors[0]!, bandMeters)
-		: `${floors.length} elevation bands`;
+	const { system, floors } = selection;
+	if (floors.length === 1) {
+		return elevationBandLabel(floors[0]!, system);
+	}
+
+	return system === displayed
+		? `${floors.length} elevation bands`
+		: `${floors.length} bands in ${UNIT_NAMES[system]}`;
+}
+
+/** Said when a band chosen in the displayed system took the place of bands kept from the other. */
+export function retainedBandsReplacedNotice(from: UnitSystem, to: UnitSystem): string {
+	return `Elevation bands in ${UNIT_NAMES[from]} replaced by your choice in ${UNIT_NAMES[to]}.`;
 }
 
 export const SEARCH_COUNTRIES_LABEL = 'Search countries';
@@ -111,8 +149,7 @@ const FILTER_RESET_VALUES = {
 /** Said after a choice that left another selection with no mountains. */
 export function autoResetNotice(
 	reset: readonly (keyof typeof FILTER_NAMES)[],
-	removedBands: readonly number[] = [],
-	bandMeters = 1000
+	removedBands: BandSelection | null = null
 ): string {
 	const sentences: string[] = [];
 	if (reset.length > 0) {
@@ -121,8 +158,10 @@ export function autoResetNotice(
 			names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
 		sentences.push(`${list} reset: no mountains matched with your choice.`);
 	}
-	if (removedBands.length > 0) {
-		const bands = removedBands.map((floor) => elevationBandLabel(floor, bandMeters));
+	if (removedBands !== null) {
+		const bands = removedBands.floors.map((floor) =>
+			elevationBandLabel(floor, removedBands.system)
+		);
 		const noun = bands.length === 1 ? 'band' : 'bands';
 		sentences.push(
 			`Elevation ${noun} ${bands.join(', ')} removed: no mountains matched with your choice.`

@@ -1,23 +1,23 @@
 import type { MountainIndexEntry } from '../api/contract';
+import type { UnitSystem } from '../units/unitSystem';
 import { compareByName } from './atlasSort';
+import { bandFloorOf, bandSelection, inBands, type BandSelection } from './elevationBands';
 
 /**
- * Country and range pick one value, `null` leaving them off; elevation picks any number of bands,
- * none leaving it off. A mountain passes when it matches any selected band (OR) and every other
- * active filter (AND).
+ * Country and range pick one value, `null` leaving them off; elevation picks any number of bands
+ * in one unit system, `null` leaving it off. A mountain passes when it matches any selected band
+ * (OR) and every other active filter (AND).
  */
 export interface AtlasFilters {
 	/** An ISO country code, matched against every country of a mountain. */
 	country: string | null;
-	/** The lower bounds of the selected 1,000 m bands, in metres, ascending and without repeats. */
-	elevationBands: readonly number[];
+	/** The selected bands with the system they were chosen in, which the displayed unit leaves be. */
+	elevationBands: BandSelection | null;
 	/** A region slug, matched against a mountain's region and each of its ancestors. */
 	range: string | null;
 }
 
-export const NO_FILTERS: AtlasFilters = { country: null, elevationBands: [], range: null };
-
-export const ELEVATION_BAND_METERS = 1000;
+export const NO_FILTERS: AtlasFilters = { country: null, elevationBands: null, range: null };
 
 export interface CountryOption {
 	code: string;
@@ -27,7 +27,7 @@ export interface CountryOption {
 }
 
 export interface ElevationOption {
-	/** The lower bound of the band, in metres. */
+	/** The lower bound of the band, in the unit of the system it was built for. */
 	floor: number;
 	count: number;
 }
@@ -45,14 +45,15 @@ export interface RangeOption {
 
 export interface AtlasOptions {
 	countries: CountryOption[];
-	/** The bands that hold at least one mountain, highest first. */
+	/** The bands of the displayed system that hold at least one mountain, highest first. */
 	elevationBands: ElevationOption[];
+	/**
+	 * The selected bands, highest first, when they were chosen in another system than the one
+	 * displayed: they stay in force but match none of its bands. Empty otherwise.
+	 */
+	retainedBands: ElevationOption[];
 	/** Every region a mountain sits in or under, parents before their children. */
 	ranges: RangeOption[];
-}
-
-export function elevationBandOf(elevationMeters: number): number {
-	return Math.floor(elevationMeters / ELEVATION_BAND_METERS) * ELEVATION_BAND_METERS;
 }
 
 interface RangeNode {
@@ -121,12 +122,34 @@ export function countryOptions(mountains: readonly MountainIndexEntry[]): Countr
 		.sort((a, b) => compareByName(a, b) || (a.code < b.code ? -1 : 1));
 }
 
-export function elevationOptions(mountains: readonly MountainIndexEntry[]): ElevationOption[] {
-	const floors = new Set(mountains.map(({ elevationMeters }) => elevationBandOf(elevationMeters)));
+export function elevationOptions(
+	mountains: readonly MountainIndexEntry[],
+	system: UnitSystem
+): ElevationOption[] {
+	const floors = new Set(
+		mountains.map(({ elevationMeters }) => bandFloorOf(elevationMeters, system))
+	);
 
 	return [...floors]
 		.sort((a, b) => b - a)
-		.map((floor) => ({ floor, count: countMatching(mountains, { elevationBands: [floor] }) }));
+		.map((floor) => ({
+			floor,
+			count: countMatching(mountains, { elevationBands: bandSelection(system, [floor]) })
+		}));
+}
+
+function retainedOptions(
+	mountains: readonly MountainIndexEntry[],
+	selection: BandSelection | null,
+	displayed: UnitSystem
+): ElevationOption[] {
+	if (selection === null || selection.system === displayed) {
+		return [];
+	}
+
+	return elevationOptions(mountains, selection.system).filter(({ floor }) =>
+		selection.floors.includes(floor)
+	);
 }
 
 export function rangeOptions(mountains: readonly MountainIndexEntry[]): RangeOption[] {
@@ -137,10 +160,14 @@ export function rangeOptions(mountains: readonly MountainIndexEntry[]): RangeOpt
 }
 
 /** What each filter offers for these mountains alone; O(n log n + o·n) for n mountains, o options. */
-export function atlasOptions(mountains: readonly MountainIndexEntry[]): AtlasOptions {
+export function atlasOptions(
+	mountains: readonly MountainIndexEntry[],
+	system: UnitSystem
+): AtlasOptions {
 	return {
 		countries: countryOptions(mountains),
-		elevationBands: elevationOptions(mountains),
+		elevationBands: elevationOptions(mountains, system),
+		retainedBands: [],
 		ranges: rangeOptions(mountains)
 	};
 }
@@ -153,13 +180,15 @@ export function atlasOptions(mountains: readonly MountainIndexEntry[]): AtlasOpt
  */
 export function facetedOptions(
 	mountains: readonly MountainIndexEntry[],
-	filters: AtlasFilters
+	filters: AtlasFilters,
+	system: UnitSystem
 ): AtlasOptions {
+	const forElevation = filterMountains(mountains, { ...filters, elevationBands: null });
+
 	return {
 		countries: countryOptions(filterMountains(mountains, { ...filters, country: null })),
-		elevationBands: elevationOptions(
-			filterMountains(mountains, { ...filters, elevationBands: [] })
-		),
+		elevationBands: elevationOptions(forElevation, system),
+		retainedBands: retainedOptions(forElevation, filters.elevationBands, system),
 		ranges: rangeOptions(filterMountains(mountains, { ...filters, range: null }))
 	};
 }
@@ -175,24 +204,14 @@ export function matchesFilters(mountain: MountainIndexEntry, filters: AtlasFilte
 
 	return (
 		(country === null || mountain.countries.some(({ code }) => code === country)) &&
-		(elevationBands.length === 0 ||
-			elevationBands.includes(elevationBandOf(mountain.elevationMeters))) &&
+		(elevationBands === null || inBands(mountain.elevationMeters, elevationBands)) &&
 		(range === null || inRange(mountain, range))
 	);
 }
 
 /** How many of the three filters are on; elevation counts once however many bands it holds. */
 export function activeFilterCount({ country, elevationBands, range }: AtlasFilters): number {
-	return [country !== null, elevationBands.length > 0, range !== null].filter(Boolean).length;
-}
-
-/** Bands in the one form the filter keeps them in: ascending, each once. */
-export function normalizeBands(bands: readonly number[]): number[] {
-	return [...new Set(bands)].sort((a, b) => a - b);
-}
-
-export function sameBands(a: readonly number[], b: readonly number[]): boolean {
-	return a.length === b.length && a.every((band, index) => band === b[index]);
+	return [country !== null, elevationBands !== null, range !== null].filter(Boolean).length;
 }
 
 /** The mountains that pass every active filter, in the order given; the same array when none is on. */
@@ -215,8 +234,8 @@ export interface SettledFilters {
 	filters: AtlasFilters;
 	/** The selections that had to go back to "all", in the order they were let go. */
 	reset: FilterKey[];
-	/** Selected bands let go while others stayed; elevation is not in `reset` then. */
-	removedBands: number[];
+	/** Selected bands let go while others stayed, in their own system; elevation is not in `reset` then. */
+	removedBands: BandSelection | null;
 }
 
 /**
@@ -239,7 +258,7 @@ export function settleFilters(
 	const reset: FilterKey[] = [];
 	for (const key of order) {
 		const value = filters[key];
-		if (value === null || (Array.isArray(value) && value.length === 0)) {
+		if (value === null) {
 			continue;
 		}
 		const candidate = { ...kept, [key]: value };
@@ -250,14 +269,21 @@ export function settleFilters(
 		}
 	}
 
-	const bands = normalizeBands(kept.elevationBands);
-	const valid = bands.filter(
-		(band) => filterMountains(mountains, { ...kept, elevationBands: [band] }).length > 0
-	);
-	const removedBands = bands.filter((band) => !valid.includes(band));
-	const settled = { ...kept, elevationBands: valid };
-	const unchanged =
-		reset.length === 0 && removedBands.length === 0 && sameBands(filters.elevationBands, valid);
+	const bands = kept.elevationBands;
+	const holds = (floor: number) =>
+		bands !== null &&
+		filterMountains(mountains, { ...kept, elevationBands: bandSelection(bands.system, [floor]) })
+			.length > 0;
+	const valid = bands && bandSelection(bands.system, bands.floors.filter(holds));
+	const removedBands =
+		bands &&
+		bandSelection(
+			bands.system,
+			bands.floors.filter((floor) => !holds(floor))
+		);
+	if (reset.length === 0 && removedBands === null) {
+		return { filters, reset, removedBands };
+	}
 
-	return unchanged ? { filters, reset, removedBands } : { filters: settled, reset, removedBands };
+	return { filters: { ...kept, elevationBands: valid }, reset, removedBands };
 }

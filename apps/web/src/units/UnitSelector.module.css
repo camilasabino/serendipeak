@@ -1,7 +1,22 @@
+/* The track is drawn inside the 44 px row, so each segment keeps a full-height hit area while the
+   control reads as one compact capsule. */
 .group {
+	position: relative;
 	display: inline-flex;
 	flex: none;
-	align-items: center;
+	align-items: stretch;
+	padding-inline: 2px;
+	isolation: isolate;
+}
+
+.group::before {
+	content: '';
+	position: absolute;
+	inset: 0.5rem 0;
+	z-index: -1;
+	border: 1px solid var(--sp-geo-plate-ring);
+	border-radius: 6px;
+	background: var(--sp-surface-raised);
 }
 
 /* The unit symbols are lowercase by definition, unlike the header's uppercase links. */
@@ -11,9 +26,9 @@
 	align-items: center;
 	justify-content: center;
 	box-sizing: border-box;
-	min-width: 1.375rem;
+	min-width: 1.5rem;
 	min-height: 2.75rem;
-	padding: 0 0.25rem;
+	padding: 0 0.375rem;
 	border: 0;
 	background: transparent;
 	color: var(--sp-text-muted);
@@ -26,29 +41,59 @@
 	transition: color var(--sp-duration-short) var(--sp-ease-out);
 }
 
-/* The selected state is a tinted capsule, so it does not read as the header's current-page rule. */
 .option::before {
 	content: '';
 	position: absolute;
-	inset: 0.6rem 0;
+	inset: calc(0.5rem + 2px) 0;
 	z-index: -1;
 	border-radius: 4px;
-	background: transparent;
+	transition:
+		background-color var(--sp-duration-short) var(--sp-ease-out),
+		box-shadow var(--sp-duration-short) var(--sp-ease-out);
 }
 
 .option:hover {
 	color: var(--sp-text);
 }
 
-.option[aria-pressed='true'] {
-	color: var(--sp-state-accent);
-}
-
-.option[aria-pressed='true']::before {
+.option:hover::before {
 	background: var(--sp-state-hover);
 }
 
+.option:active::before {
+	background: color-mix(in srgb, var(--sp-snow) 14%, transparent);
+}
+
+.option[aria-pressed='true'] {
+	color: var(--sp-copper-light);
+	cursor: default;
+}
+
+.option[aria-pressed='true']::before {
+	background: color-mix(in srgb, var(--sp-copper) 16%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sp-copper) 50%, transparent);
+}
+
+/* The ring follows the visible segment rather than the taller hit area. */
 .option:focus-visible {
+	outline: none;
+}
+
+.option:focus-visible::before {
 	outline: 2px solid var(--sp-focus-ring);
-	outline-offset: -2px;
+	outline-offset: 1px;
+}
+
+/* Matches the header's tightest setting, reached only with enlarged text. */
+@media (max-width: 17.5rem) {
+	.option {
+		padding-inline: 0.25rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.option,
+	.option::before {
+		transition: none;
+	}
 }

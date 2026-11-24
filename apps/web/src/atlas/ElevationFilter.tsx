@@ -1,29 +1,41 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import type { UnitSystem } from '../units/unitSystem';
 import {
 	CLEAR_ELEVATION_ACCESSIBLE_LABEL,
 	CLEAR_ELEVATION_LABEL,
 	ELEVATION_BANDS_GROUP_LABEL,
 	ELEVATION_FILTER_LABEL,
+	convertedBandLabel,
+	displayedBandsLabel,
 	elevationBandLabel,
-	elevationSummary
+	elevationSummary,
+	retainedBandsHeading,
+	retainedBandsHint
 } from './atlasCopy';
-import { ELEVATION_BAND_METERS, normalizeBands, type ElevationOption } from './atlasFilter';
+import type { ElevationOption } from './atlasFilter';
 import controls from './AtlasControls.module.css';
+import { bandSelection, type BandSelection } from './elevationBands';
 import { FilterPopup } from './FilterPopup';
 import popup from './FilterPopup.module.css';
 import styles from './ElevationFilter.module.css';
 
 interface ElevationFilterProps {
+	/** The bands of the displayed system. */
 	options: readonly ElevationOption[];
-	selected: readonly number[];
-	onChange: (bands: number[]) => void;
+	/** The selected bands, when they were chosen in the other system. */
+	retained: readonly ElevationOption[];
+	selected: BandSelection | null;
+	/** The displayed unit system, which every band ticked here is chosen in. */
+	system: UnitSystem;
+	onChange: (selection: BandSelection | null) => void;
 }
 
 /**
  * Elevation as a button over a popup of checkboxes, since a native select takes one value. The
  * popup stays open while bands are ticked, and Escape, a press outside or tabbing away closes it.
  */
-export function ElevationFilter({ options, selected, onChange }: ElevationFilterProps) {
+export function ElevationFilter(props: ElevationFilterProps) {
+	const { selected, system } = props;
 	const [open, setOpen] = useState(false);
 	const labelId = useId();
 	const summaryId = useId();
@@ -58,9 +70,7 @@ export function ElevationFilter({ options, selected, onChange }: ElevationFilter
 				}}
 			>
 				<span id={summaryId} className={controls.triggerValue}>
-					<span className={controls.triggerText}>
-						{elevationSummary(selected, ELEVATION_BAND_METERS)}
-					</span>
+					<span className={controls.triggerText}>{elevationSummary(selected, system)}</span>
 				</span>
 				<svg className={controls.chevron} viewBox="0 0 24 24" aria-hidden="true">
 					<path d="M6 9l6 6 6-6" />
@@ -74,18 +84,36 @@ export function ElevationFilter({ options, selected, onChange }: ElevationFilter
 					role="group"
 					label={ELEVATION_BANDS_GROUP_LABEL}
 				>
-					<BandList options={options} selected={selected} onChange={onChange} />
+					<BandList {...props} />
 				</FilterPopup>
 			)}
 		</div>
 	);
 }
 
+function MountainCount({ count }: { count: number }) {
+	return (
+		<span className={styles.count}>
+			{count.toLocaleString('en')}
+			<span className={popup.hidden}> {count === 1 ? 'mountain' : 'mountains'}</span>
+		</span>
+	);
+}
+
 // Mounted only while the popup is open, so focus enters it each time it opens.
-function BandList({ options, selected, onChange }: ElevationFilterProps) {
+function BandList({ options, retained, selected, system, onChange }: ElevationFilterProps) {
 	const box = useRef<HTMLDivElement>(null);
+	const retainedId = useId();
+	const hintId = useId();
+	// Bands kept from the other system stay in force, but no band offered here is one of them.
+	const from = selected !== null && selected.system !== system ? selected.system : undefined;
+	const native = from === undefined ? (selected?.floors ?? []) : [];
+
+	// Ticking a band of the displayed system replaces any kept from the other one.
 	const toggle = (floor: number, checked: boolean) =>
-		onChange(normalizeBands(checked ? [...selected, floor] : selected.filter((b) => b !== floor)));
+		onChange(
+			bandSelection(system, checked ? [...native, floor] : native.filter((f) => f !== floor))
+		);
 
 	const focusFirst = () => {
 		const inputs = box.current?.querySelectorAll<HTMLInputElement>('input');
@@ -95,37 +123,73 @@ function BandList({ options, selected, onChange }: ElevationFilterProps) {
 
 	useEffect(focusFirst, []);
 
+	const count = selected?.floors.length ?? 0;
+
 	return (
 		<>
-			<div ref={box} className={styles.options}>
-				{options.map(({ floor, count }) => (
+			{from !== undefined && (
+				<div
+					className={styles.retained}
+					role="group"
+					aria-labelledby={retainedId}
+					aria-describedby={hintId}
+				>
+					<p id={retainedId} className={styles.retainedHeading}>
+						{retainedBandsHeading(from)}
+					</p>
+					<p id={hintId} className={styles.hint}>
+						{retainedBandsHint(system)}
+					</p>
+					<ul className={styles.retainedList}>
+						{retained.map(({ floor, count: matching }) => (
+							<li key={floor} className={styles.retainedBand}>
+								<svg className={styles.tick} viewBox="0 0 16 16" aria-hidden="true">
+									<path d="M3.5 8.5l3 3 6-7" />
+								</svg>
+								<span className={styles.label}>
+									<span className={styles.retainedText}>
+										<span>{elevationBandLabel(floor, from)}</span>
+										<span className={styles.converted}>
+											{convertedBandLabel(floor, from, system)}
+										</span>
+									</span>
+									<MountainCount count={matching} />
+								</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+			<div
+				ref={box}
+				className={styles.options}
+				role={from !== undefined ? 'group' : undefined}
+				aria-label={from !== undefined ? displayedBandsLabel(system) : undefined}
+				aria-describedby={from !== undefined ? hintId : undefined}
+			>
+				{options.map(({ floor, count: matching }) => (
 					<label key={floor} className={styles.check}>
 						<input
 							type="checkbox"
-							checked={selected.includes(floor)}
+							checked={native.includes(floor)}
 							onChange={(event) => toggle(floor, event.target.checked)}
 						/>
 						<span className={styles.label}>
-							<span>{elevationBandLabel(floor, ELEVATION_BAND_METERS)}</span>
-							<span className={styles.count}>
-								{count.toLocaleString('en')}
-								<span className={popup.hidden}> {count === 1 ? 'mountain' : 'mountains'}</span>
-							</span>
+							<span>{elevationBandLabel(floor, system)}</span>
+							<MountainCount count={matching} />
 						</span>
 					</label>
 				))}
 			</div>
 			<div className={styles.footer}>
-				<span aria-hidden="true">
-					{selected.length === 0 ? 'None selected' : `${selected.length} selected`}
-				</span>
+				<span aria-hidden="true">{count === 0 ? 'None selected' : `${count} selected`}</span>
 				<button
 					type="button"
 					className={styles.clear}
-					disabled={selected.length === 0}
+					disabled={count === 0}
 					aria-label={CLEAR_ELEVATION_ACCESSIBLE_LABEL}
 					onClick={() => {
-						onChange([]);
+						onChange(null);
 						focusFirst();
 					}}
 				>

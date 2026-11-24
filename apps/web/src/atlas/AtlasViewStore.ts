@@ -1,5 +1,6 @@
-import { activeFilterCount, NO_FILTERS, sameBands, type AtlasFilters } from './atlasFilter';
+import { activeFilterCount, NO_FILTERS, type AtlasFilters } from './atlasFilter';
 import { DEFAULT_ATLAS_SORT, type AtlasSort } from './atlasSort';
+import { sameSelection } from './elevationBands';
 
 /** How the reader has narrowed and ordered the atlas. Immutable: every change is a new object. */
 export interface AtlasView {
@@ -17,7 +18,8 @@ export function isDefaultView({ filters, sort }: AtlasView): boolean {
 /**
  * The atlas view of one reader, held by the stage layout so it outlives the atlas panel: a reader
  * who opens a mountain and returns finds the list and the globe as they left them. Kept in memory
- * only, and never in the URL.
+ * only, and never in the URL. The displayed unit system is not part of it: switching units leaves
+ * the view, and so what it matches and frames, untouched.
  */
 export class AtlasViewStore {
 	private snapshot: AtlasView = DEFAULT_ATLAS_VIEW;
@@ -37,7 +39,7 @@ export class AtlasViewStore {
 		const filters = { ...this.snapshot.filters, ...change };
 		const unchanged =
 			filters.country === this.snapshot.filters.country &&
-			sameBands(filters.elevationBands, this.snapshot.filters.elevationBands) &&
+			sameSelection(filters.elevationBands, this.snapshot.filters.elevationBands) &&
 			filters.range === this.snapshot.filters.range;
 		if (!unchanged) {
 			this.publish({ ...this.snapshot, filters });
