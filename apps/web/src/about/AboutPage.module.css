@@ -214,3 +214,144 @@
 		max-width: 38rem;
 	}
 }
+
+.behind {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--sp-space-5);
+	margin-top: clamp(1rem, 3vh, 2rem);
+	padding-block: clamp(2.5rem, 7vh, 4rem) 0;
+	border-top: 1px solid var(--sp-divider);
+}
+
+.behind::before {
+	content: '';
+	position: absolute;
+	top: -1px;
+	left: 0;
+	width: 3rem;
+	height: 1px;
+	background: var(--sp-divider-accent);
+}
+
+.story {
+	min-width: 0;
+}
+
+/* Three equal photographs set as steps: each one starts further down the page than the next, so
+   the trio reads as a climb from the approach to the summit. */
+.ascent {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--sp-space-4);
+	margin-top: var(--sp-space-3);
+}
+
+.step {
+	box-sizing: border-box;
+	width: 60%;
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	border-radius: var(--sp-radius);
+	background: var(--sp-photo-mat);
+}
+
+.step:nth-child(2) {
+	margin-left: 20%;
+}
+
+.step:nth-child(3) {
+	margin-left: 40%;
+}
+
+.step img {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.behindHeading {
+	margin: 0;
+	color: var(--sp-text);
+	font-family: var(--sp-face-display);
+	font-size: clamp(2rem, 6vw, 2.75rem);
+	font-weight: 400;
+	letter-spacing: 0;
+	line-height: 1.1;
+	text-wrap: balance;
+}
+
+.behindProse {
+	min-width: 0;
+	max-width: 36rem;
+}
+
+.behindProse p {
+	margin: 0;
+	font-size: 1.0625rem;
+	line-height: 1.65;
+	text-wrap: pretty;
+}
+
+.behindProse p + p {
+	margin-top: var(--sp-space-4);
+}
+
+.author {
+	border-radius: 2px;
+	color: var(--sp-link);
+	text-decoration-color: var(--sp-link-rule);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.2em;
+	transition: color var(--sp-duration-short) var(--sp-ease-out);
+}
+
+.author:hover {
+	color: var(--sp-text);
+	text-decoration-color: currentColor;
+}
+
+.author:focus-visible {
+	outline: 2px solid var(--sp-focus-ring);
+	outline-offset: 2px;
+}
+
+@media (min-width: 44rem) {
+	.behind {
+		grid-template-columns: minmax(0, clamp(12rem, 30vw, 20rem)) minmax(0, 1fr);
+		column-gap: clamp(2rem, 6vw, 4.5rem);
+		row-gap: clamp(2.5rem, 6vh, 3.5rem);
+	}
+
+	.ascent {
+		--step-rise: clamp(1.25rem, 4vw, 3rem);
+
+		grid-column: 1 / -1;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		align-items: start;
+		gap: clamp(0.75rem, 2.5vw, 1.5rem);
+		margin-top: 0;
+		padding-bottom: calc(var(--step-rise) * 2);
+	}
+
+	.step:nth-child(n) {
+		width: auto;
+		margin-left: 0;
+	}
+
+	.step:nth-child(1) {
+		transform: translateY(calc(var(--step-rise) * 2));
+	}
+
+	.step:nth-child(2) {
+		transform: translateY(var(--step-rise));
+	}
+}
+
+@media (min-width: 56rem) {
+	.behindProse p {
+		font-size: 1.125rem;
+	}
+}

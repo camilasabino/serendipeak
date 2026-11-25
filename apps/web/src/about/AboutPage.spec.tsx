@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { anchorsOf, countOf, hasEmptyElement, textsOf } from '../mountain-page/test-support/markup';
@@ -9,6 +9,11 @@ import {
 	ABOUT_HEADING,
 	ABOUT_LEDE_PARAGRAPHS,
 	ABOUT_TITLE,
+	BEHIND_AUTHOR,
+	BEHIND_AUTHOR_URL,
+	BEHIND_HEADING,
+	BEHIND_PARAGRAPHS,
+	BEHIND_PHOTOS,
 	EXPERIENCE_BLOCKS,
 	LOVE_PARAGRAPHS
 } from './aboutCopy';
@@ -24,14 +29,15 @@ describe('About page structure', () => {
 	it('names each section with an h2', () => {
 		expect(textsOf(html, 'h2')).toEqual([
 			'Discover. Explore. Wander.',
-			'For the love of mountains'
+			'For the love of mountains',
+			BEHIND_HEADING
 		]);
 	});
 
 	it('labels every section by its heading', () => {
 		const sections = [...html.matchAll(/<section[^>]*aria-labelledby="([^"]+)"/g)];
 
-		expect(sections).toHaveLength(2);
+		expect(sections).toHaveLength(3);
 		for (const [, id] of sections) {
 			expect(html).toMatch(new RegExp(`<h2 id="${id}"`));
 		}
@@ -41,9 +47,8 @@ describe('About page structure', () => {
 		expect(countOf(html, 'h3')).toBe(0);
 	});
 
-	it('renders no empty elements and no images', () => {
+	it('renders no empty elements', () => {
 		expect(hasEmptyElement(html)).toBe(false);
-		expect(countOf(html, 'img')).toBe(0);
 	});
 
 	it('hides the decorative motif from assistive technology', () => {
@@ -96,8 +101,53 @@ describe('About page content', () => {
 		expect(copy).not.toMatch(/route|track|planning/i);
 	});
 
-	it('links nowhere outside the site', () => {
-		expect(anchorsOf(html).filter(({ href }) => /^https?:/.test(href))).toEqual([]);
+	it('links outside the site only to the author, safely and from within the story', () => {
+		const external = anchorsOf(html).filter(({ href }) => /^https?:/.test(href));
+
+		expect(external.map(({ href, text }) => ({ href, text }))).toEqual([
+			{ href: BEHIND_AUTHOR_URL, text: BEHIND_AUTHOR }
+		]);
+		expect(external[0]?.attributes).toContain('rel="external noopener noreferrer"');
+		expect(html.indexOf(BEHIND_AUTHOR_URL)).toBeGreaterThan(html.indexOf('about-behind'));
+	});
+});
+
+describe('About page personal section', () => {
+	const section = html.slice(html.lastIndexOf('<section'));
+	const photos = BEHIND_PHOTOS;
+
+	it('tells the story in the first person with the approved paragraphs', () => {
+		expect(BEHIND_PARAGRAPHS).toHaveLength(3);
+		expect(textsOf(section, 'p')).toEqual(['Behind SerendiPeak', ...BEHIND_PARAGRAPHS]);
+	});
+
+	it('shows three equally sized photographs below the fold with described, size-reserving images', () => {
+		const images = [...section.matchAll(/<img\s[^>]*>/g)].map(([tag]) => tag);
+
+		expect(images).toHaveLength(3);
+		expect(new Set(photos.map(({ width, height }) => `${width}x${height}`)).size).toBe(1);
+		expect(html.slice(0, html.indexOf('about-behind'))).not.toContain('<img');
+		for (const [index, tag] of images.entries()) {
+			const photo = photos[index]!;
+
+			expect(tag).toContain('loading="lazy"');
+			expect(tag).toContain(`width="${photo.width}"`);
+			expect(tag).toContain(`height="${photo.height}"`);
+			expect(tag).toContain('alt="');
+			expect(photo.alt.length).toBeGreaterThan(40);
+		}
+	});
+
+	it('serves every referenced derivative from public/about without local paths', () => {
+		for (const { src, srcSet } of photos) {
+			const files = [src, ...srcSet.split(',').map((entry) => entry.trim().split(' ')[0]!)];
+
+			for (const file of files) {
+				expect(file).toMatch(/^\/about\/[a-z0-9-]+\.webp$/);
+				expect(existsSync(new URL(`../../public${file}`, import.meta.url))).toBe(true);
+			}
+		}
+		expect(html).not.toMatch(/Downloads|PSX_|\/Users\//);
 	});
 });
 
