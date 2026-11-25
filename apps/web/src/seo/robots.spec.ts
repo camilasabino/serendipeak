@@ -41,7 +41,7 @@ describe('buildRobotsTxt', () => {
 		const publicPaths = ['/', '/atlas', '/about', '/mountains/aconcagua', '/_next/static/a.js'];
 		const assets = [
 			'/brand/serendipeak-mark.png',
-			'/brand/serendipeak-mountain-social-v1.png',
+			'/brand/serendipeak-mountain-social-v2.png',
 			'/cesium/Widgets/widgets.css'
 		];
 

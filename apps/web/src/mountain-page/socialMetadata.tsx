@@ -11,7 +11,7 @@ import { SITE_DESCRIPTION, SITE_NAME } from './pageCopy';
 
 export const HOME_PATH = '/';
 export const BRAND_IMAGE_PATH = '/brand/serendipeak-mark.png';
-export const MOUNTAIN_CARD_PATH = '/brand/serendipeak-mountain-social-v1.png';
+export const MOUNTAIN_CARD_PATH = '/brand/serendipeak-mountain-social-v2.png';
 const BRAND_IMAGE_SIZE = 1254;
 const BRAND_IMAGE_ALT = 'The SerendiPeak symbol: concentric contour lines around a summit';
 const MOUNTAIN_CARD_ALT =

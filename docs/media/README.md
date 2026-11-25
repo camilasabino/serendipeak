@@ -63,9 +63,9 @@ GitHub does not read the card from the repository: upload it under Settings → 
 ### Two different social images
 
 - **`docs/brand/social-preview.png`** is the *GitHub repository* social preview. It is not referenced by any page and is never served by the web app; it only exists to be uploaded by hand. Its right half is a real Half Dome capture in World Imagery, with the imagery and terrain credits printed as text.
-- **`apps/web/public/brand/serendipeak-mountain-social-v1.png`** is the *mountain page* Open Graph card, below.
+- **`apps/web/public/brand/serendipeak-mountain-social-v2.png`** is the *mountain page* Open Graph card, below.
 
-The Open Graph card for mountain pages is a separate, static asset: `apps/web/public/brand/serendipeak-mountain-social-v1.png` (1200x630), original artwork of contour lines on `--sp-basalt` with no photograph, satellite imagery or Cesium capture, so it needs no credits. It is served as-is and never regenerated; to change it, add a new `-vN` file and point `MOUNTAIN_CARD_PATH` at it.
+The Open Graph card for mountain pages is a separate, static asset: `apps/web/public/brand/serendipeak-mountain-social-v2.png` (1200x630), original artwork of contour lines on `--sp-basalt` with no photograph, satellite imagery or Cesium capture, so it needs no credits. It is an 8-bit palette PNG kept under 300 KB, because WhatsApp ignores `og:image` files over roughly 600 KB and falls back to a text-only preview; a unit test enforces the limit. It is served as-is and never regenerated; to change it, add a new `-vN` file and point `MOUNTAIN_CARD_PATH` at it.
 
 ## Credits and rights
 

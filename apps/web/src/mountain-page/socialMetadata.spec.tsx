@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +12,7 @@ import {
 	socialTags
 } from './socialMetadata';
 
+const MAX_SOCIAL_IMAGE_BYTES = 300_000;
 const ORIGIN = 'https://serendipeak.example';
 const complete = contractFixture('mountain-complete.json') as Mountain;
 const minimal = contractFixture('mountain-minimal.json') as Mountain;
@@ -159,10 +160,20 @@ describe('social image', () => {
 			fileURLToPath(new URL(`../../public${MOUNTAIN_CARD_PATH}`, import.meta.url))
 		);
 
+		expect(MOUNTAIN_CARD_PATH).toMatch(/-v\d+\.png$/);
 		expect(file.subarray(1, 4).toString('ascii')).toBe('PNG');
 		expect(file.readUInt32BE(16)).toBe(1200);
 		expect(file.readUInt32BE(20)).toBe(630);
-		expect(file.length).toBeLessThan(1_000_000);
+	});
+
+	// WhatsApp drops og:image files over roughly 600 KB and keeps the text-only card, so the
+	// limit leaves a wide margin below it.
+	it('keeps the illustrated card small enough for WhatsApp link previews', () => {
+		const { size } = statSync(
+			fileURLToPath(new URL(`../../public${MOUNTAIN_CARD_PATH}`, import.meta.url))
+		);
+
+		expect(size).toBeLessThanOrEqual(MAX_SOCIAL_IMAGE_BYTES);
 	});
 
 	it('uses a public-domain photograph as a wide card', () => {

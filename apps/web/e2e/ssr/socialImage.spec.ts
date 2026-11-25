@@ -11,7 +11,7 @@ function meta(html: string, attribute: 'name' | 'property', key: string): string
 }
 
 test.describe('social image', () => {
-	const card = `${SITE_ORIGIN}/brand/serendipeak-mountain-social-v1.png`;
+	const card = `${SITE_ORIGIN}/brand/serendipeak-mountain-social-v2.png`;
 
 	test('gives a mountain page the illustrated card as an absolute, wide image', async ({
 		request
@@ -34,12 +34,13 @@ test.describe('social image', () => {
 	});
 
 	test('serves the card as a PNG', async ({ request }) => {
-		const response = await request.get('/brand/serendipeak-mountain-social-v1.png');
+		const response = await request.get('/brand/serendipeak-mountain-social-v2.png');
 		const body = await response.body();
 
 		expect(response.status()).toBe(200);
 		expect(response.headers()['content-type']).toBe('image/png');
 		expect(body.readUInt32BE(16)).toBe(1200);
 		expect(body.readUInt32BE(20)).toBe(630);
+		expect(body.length).toBeLessThanOrEqual(300_000);
 	});
 });
