@@ -26,8 +26,8 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 | Unit                           | What it is                                                                                                           | Public                                      |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `postgres`                     | PostgreSQL with PostGIS, same major version as CI (`postgis/postgis:18-3.6`), on a volume                            | never                                       |
-| `api`                          | image built from `services/api/Dockerfile`; serves the API and the Studio                                            | `https://api.serendipeak.camilasabino.dev`  |
-| `web`                          | image built from `apps/web/Dockerfile`                                                                               | `https://serendipeak.camilasabino.dev`      |
+| `api`                          | image built from `services/api/Dockerfile`; serves the API and the Studio                                            | `https://api.serendipeak.com`  |
+| `web`                          | image built from `apps/web/Dockerfile`                                                                               | `https://serendipeak.com`      |
 | `backup`                       | cron service built from `services/backup`; daily `pg_dump` to a private R2 bucket                                    | never                                       |
 | R2 bucket `<public-bucket>`    | public photograph renditions                                                                                         | `https://media.serendipeak.camilasabino.dev` (custom domain) |
 | R2 bucket `<originals-bucket>` | private original photographs                                                                                         | never                                       |
@@ -35,6 +35,18 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 | B2 bucket `<offsite-bucket>`   | private independent copy (`originals/`, `media/`, `db-backups/`, `manifests/`)                                       | never                                       |
 
 `WEB_ORIGIN` and `CORS_ALLOWED_ORIGIN` are single origins and must name the web origin in use. The web build inlines the API origin, so changing the API host needs a new web build. A custom domain on an R2 bucket needs the zone, or a Cloudflare-supported partial setup for that hostname, on Cloudflare.
+
+### Legacy hostnames
+
+The production origins are `https://serendipeak.com` (web) and `https://api.serendipeak.com` (API). The former `camilasabino.dev` hostnames are kept only for compatibility:
+
+| Hostname                                  | State                                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `serendipeak.camilasabino.dev`            | Cloudflare permanent (301) redirect to `https://serendipeak.com`, preserving path and query                            |
+| `api.serendipeak.camilasabino.dev`        | still served by `api` and listed in `ALLOWED_HOSTS`, so existing clients keep working; to be removed once they have moved |
+| `media.serendipeak.camilasabino.dev`      | **still the active public media host** (`MEDIA_PUBLIC_BASE_URL`); moving it to the new domain is pending and has not been done |
+
+Removing the legacy API host means dropping it from `ALLOWED_HOSTS` and detaching the custom domain from `api`. Do not touch the media host until the media migration is planned: published renditions and cached pages refer to it.
 
 ## Operator shell
 
@@ -78,8 +90,8 @@ openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 | `APP_ENV`                                                                       | `production`                                                                                                                             |
 | `DATABASE_URL`                                                                  | reference to the Postgres service's private `DATABASE_URL`                                                                               |
 | `DJANGO_SECRET_KEY`, `PREVIEW_SIGNING_KEY`                                      | the generated secrets                                                                                                                    |
-| `ALLOWED_HOSTS`                                                                 | `api.serendipeak.camilasabino.dev,healthcheck.railway.app`; add the Railway-generated hostname only while it is in use, or remove that domain from the service |
-| `CORS_ALLOWED_ORIGIN`, `WEB_ORIGIN`                                             | `https://serendipeak.camilasabino.dev` (no path or trailing slash)                                                                       |
+| `ALLOWED_HOSTS`                                                                 | `api.serendipeak.com,api.serendipeak.camilasabino.dev,healthcheck.railway.app` (the second host is the temporarily retained legacy API host, see "Legacy hostnames"); add the Railway-generated hostname only while it is in use, or remove that domain from the service |
+| `CORS_ALLOWED_ORIGIN`, `WEB_ORIGIN`                                             | `https://serendipeak.com` (no path or trailing slash)                                                                       |
 | `TRUSTED_PROXY_HOPS`                                                            | `1`, only while the conditions of "Trusting forwarded headers" hold                                                                      |
 | `MEDIA_STORE`                                                                   | `s3`                                                                                                                                     |
 | `MEDIA_PUBLIC_BASE_URL`                                                         | `https://media.serendipeak.camilasabino.dev`                                                                                             |
@@ -93,7 +105,7 @@ openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 
 | Variable                          | Value                                                                                                                                        |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_BASE_URL`        | `https://api.serendipeak.camilasabino.dev` (the build fails unless it is an `https` origin)                                                  |
+| `NEXT_PUBLIC_API_BASE_URL`        | `https://api.serendipeak.com` (the build fails unless it is an `https` origin)                                                  |
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN`    | a Cesium ion token restricted to the allowed web origins in the ion dashboard (the build fails when empty; the value ships to every browser) |
 | `NEXT_PUBLIC_CESIUM_IMAGERY_MODE` | unset (`world` in production)                                                                                                                |
 
@@ -101,7 +113,7 @@ openssl rand -base64 48   # PREVIEW_SIGNING_KEY
 
 | Variable      | Value                                                                                                     |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| `SITE_ORIGIN` | `https://serendipeak.camilasabino.dev` (no path or trailing slash); without it no canonical links are published and `/sitemap.xml` answers 500 |
+| `SITE_ORIGIN` | `https://serendipeak.com` (no path or trailing slash); without it no canonical links are published and `/sitemap.xml` answers 500 |
 
 **Service settings:**
 
@@ -386,8 +398,8 @@ Monitoring uses the Better Stack free plan and no additional infrastructure: one
 
 | Monitor              | Type      | Target                                              | Alert when                                                                 |
 | -------------------- | --------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
-| `serendipeak-web`    | uptime    | `GET https://serendipeak.camilasabino.dev/`         | the response is not 2xx, or does not arrive in time                        |
-| `serendipeak-api`    | uptime    | `GET https://api.serendipeak.camilasabino.dev/healthz` | the response is not 2xx, or does not arrive in time                     |
+| `serendipeak-web`    | uptime    | `GET https://serendipeak.com/`         | the response is not 2xx, or does not arrive in time                        |
+| `serendipeak-api`    | uptime    | `GET https://api.serendipeak.com/healthz` | the response is not 2xx, or does not arrive in time                     |
 | `serendipeak-backup` | heartbeat | the URL Better Stack generates for it               | no ping arrives for 24 h plus the grace period, or a `/fail` ping arrives |
 | `serendipeak-offsite` | heartbeat | its own URL, never the one of `serendipeak-backup`  | no ping arrives for 24 h plus the grace period, or a `/fail` ping arrives |
 
@@ -575,12 +587,12 @@ Copy exactly the objects the snapshot references, nothing else: a source bucket 
 
 ## 6. Smoke tests
 
-Set `API=https://api.serendipeak.camilasabino.dev`, `WEB=https://serendipeak.camilasabino.dev`, `MEDIA=https://media.serendipeak.camilasabino.dev`. All are read-only except the Studio session and, on a new UTC date, today's discovery, which the first request for it persists (that is the product working, not a test artifact).
+Set `API=https://api.serendipeak.com`, `WEB=https://serendipeak.com`, `MEDIA=https://media.serendipeak.camilasabino.dev`. All are read-only except the Studio session and, on a new UTC date, today's discovery, which the first request for it persists (that is the product working, not a test artifact).
 
 **HTTPS, hosts and forwarded headers**
 
 ```sh
-curl -sI  "http://api.serendipeak.camilasabino.dev/healthz" | head -1            # 301 to https
+curl -sI  "http://api.serendipeak.com/healthz" | head -1            # 301 to https
 curl -si  "$API/healthz" | head -1                                               # 200
 curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' "$API/healthz" # 400 or an edge error, never 200
 curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Forwarded-Host: evil.example' "$API/studio/login/"   # 200, and no link in the page names evil.example

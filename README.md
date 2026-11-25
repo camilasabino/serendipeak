@@ -4,7 +4,7 @@
 
 SerendiPeak is a mountain discovery and exploration experience. Explore the world's mountains through an interactive 3D globe, curated geography, and real photography, with one featured mountain every day.
 
-[**Explore SerendiPeak →**](https://serendipeak.camilasabino.dev) &nbsp;·&nbsp; [![CI](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml/badge.svg)](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml)
+[**Explore SerendiPeak →**](https://serendipeak.com) &nbsp;·&nbsp; [![CI](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml/badge.svg)](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml)
 
 ![The SerendiPeak Atlas: a 3D globe with a marker for every published mountain, beside filter and sort controls and a list grouped by continent](docs/media/atlas.webp)
 
@@ -14,13 +14,13 @@ Every day the site features one mountain from a curated catalog, inviting visito
 
 - **Discover today's mountain.** A daily selection, chosen per UTC date, shared by every visitor and kept across restarts.
 - **Explore another.** Travel to a different mountain without leaving the 3D experience.
-- **Browse the atlas.** Every published mountain as a marker on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent. Filter by country, elevation band or mountain range and sort by name or elevation: the list narrows to one sorted set of matches and the globe keeps only their markers; a country or range also turns the globe to frame them. Nearby markers are decluttered, and a chooser opens where several overlap.
+- **Browse the atlas.** Every published mountain as a marker on an interactive globe at [/atlas](https://serendipeak.com/atlas), with a list grouped by continent. Filter by country, elevation band or mountain range and sort by name or elevation: the list narrows to one sorted set of matches and the globe keeps only their markers; a country or range also turns the globe to frame them. Nearby markers are decluttered, and a chooser opens where several overlap.
 - **Search by name.** Find a mountain from any page, ignoring case and accents. Search is keyboard operable and announces its results.
 - **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale bar, zoom, reset and fullscreen controls. A 360° orbit circles the summit, and one switch hides or shows the mountain markers on the atlas, today's mountain and every mountain page. Every control explains itself in a tooltip, and a tabbed **How to navigate** guide covers mouse, touch and the controls. Visitors who prefer reduced motion get direct moves instead of animated flights, and no orbit or globe rotation.
 - **Choose your units.** Switch between metric and imperial from the header; elevations, markers, the scale bar and the atlas elevation bands follow, and the choice is remembered in the browser.
 - **Understand the geography.** See elevation, coordinates, continent, countries, and the mountain's region hierarchy, with a short summary and, where one is written, a longer description that expands in place.
 - **See the mountain beyond the map.** View a real photograph with its author, license, and source.
-- **Share a place.** Each mountain has a permanent URL such as [Aconcagua](https://serendipeak.camilasabino.dev/mountains/aconcagua). If a mountain's slug changes, its former address redirects permanently to the new one. Pages carry canonical URLs and social preview metadata, and a share control uses the native share sheet or copies the link.
+- **Share a place.** Each mountain has a permanent URL such as [Aconcagua](https://serendipeak.com/mountains/aconcagua). If a mountain's slug changes, its former address redirects permanently to the new one. Pages carry canonical URLs and social preview metadata, and a share control uses the native share sheet or copies the link.
 
 ![SerendiPeak page for K2: a 3D terrain scene of the mountain beside its elevation, region, photograph and details](docs/media/mountain-view.webp)
 
@@ -220,7 +220,7 @@ Mountain records and photographs live in the production database and object stor
 
 ## Status
 
-Live at [serendipeak.camilasabino.dev](https://serendipeak.camilasabino.dev) and actively maintained. Features, data and internal interfaces may evolve.
+Live at [serendipeak.com](https://serendipeak.com) and actively maintained. Features, data and internal interfaces may evolve.
 
 ## License
 
