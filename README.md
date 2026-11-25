@@ -6,7 +6,7 @@ SerendiPeak is a mountain discovery and exploration experience. Explore the worl
 
 [**Explore SerendiPeak →**](https://serendipeak.camilasabino.dev) &nbsp;·&nbsp; [![CI](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml/badge.svg)](https://github.com/camilasabino/serendipeak/actions/workflows/ci.yml)
 
-[![The SerendiPeak Atlas: a 3D globe with a red marker for every published mountain, beside a list grouped by continent](docs/media/atlas.webp)](docs/media/atlas.webp)
+![The SerendiPeak Atlas: a 3D globe with a marker for every published mountain, beside filter and sort controls and a list grouped by continent](docs/media/atlas.webp)
 
 ## What it does
 
@@ -14,22 +14,23 @@ Every day the site features one mountain from a curated catalog, inviting visito
 
 - **Discover today's mountain.** A daily selection, chosen per UTC date, shared by every visitor and kept across restarts.
 - **Explore another.** Travel to a different mountain without leaving the 3D experience.
-- **Browse the atlas.** Every published mountain as a marker on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent. Nearby markers are decluttered, and a chooser opens where several overlap.
+- **Browse the atlas.** Every published mountain as a marker on an interactive globe at [/atlas](https://serendipeak.camilasabino.dev/atlas), with a list grouped by continent. Filter by country, elevation band or mountain range and sort by name or elevation: the list narrows to one sorted set of matches and the globe keeps only their markers; a country or range also turns the globe to frame them. Nearby markers are decluttered, and a chooser opens where several overlap.
 - **Search by name.** Find a mountain from any page, ignoring case and accents. Search is keyboard operable and announces its results.
-- **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale bar, zoom, reset, fullscreen and a navigation help panel. Visitors who prefer reduced motion get direct moves instead of animated flights.
-- **Understand the geography.** See elevation, coordinates, continent, countries, and the mountain's region hierarchy, with links to supporting geographic data.
+- **Explore the terrain.** Navigate a Cesium-powered 3D scene framed by a curated, mountain-specific camera, with compass, scale bar, zoom, reset and fullscreen controls. A 360° orbit circles the summit, and one switch hides or shows the mountain markers on the atlas, today's mountain and every mountain page. Every control explains itself in a tooltip, and a tabbed **How to navigate** guide covers mouse, touch and the controls. Visitors who prefer reduced motion get direct moves instead of animated flights, and no orbit or globe rotation.
+- **Choose your units.** Switch between metric and imperial from the header; elevations, markers, the scale bar and the atlas elevation bands follow, and the choice is remembered in the browser.
+- **Understand the geography.** See elevation, coordinates, continent, countries, and the mountain's region hierarchy, with a short summary and, where one is written, a longer description that expands in place.
 - **See the mountain beyond the map.** View a real photograph with its author, license, and source.
 - **Share a place.** Each mountain has a permanent URL such as [Aconcagua](https://serendipeak.camilasabino.dev/mountains/aconcagua). If a mountain's slug changes, its former address redirects permanently to the new one. Pages carry canonical URLs and social preview metadata, and a share control uses the native share sheet or copies the link.
 
-[![SerendiPeak page for K2: a 3D terrain scene of the mountain beside its elevation, region, photograph and details](docs/media/mountain-view.webp)](docs/media/mountain-view.webp)
+![SerendiPeak page for K2: a 3D terrain scene of the mountain beside its elevation, region, photograph and details](docs/media/mountain-view.webp)
 
 The public experience is open without an account and adapts to small screens:
 
 <p align="center">
-  <a href="docs/media/mountain-view-mobile.webp">
-    <img src="docs/media/mountain-view-mobile.webp" alt="SerendiPeak on a 390 px wide viewport: the mountain name and elevation above the 3D scene of Fitz Roy, with the details below" width="260" />
-  </a>
+  <img src="docs/media/mountain-view-mobile.webp" alt="SerendiPeak on a 390 px wide viewport: the mountain name and elevation above the 3D scene of Fitz Roy and its controls, with the summary below" width="260" />
 </p>
+
+<sub>Screenshot credits. Terrain: Cesium World Terrain (data available from the U.S. Geological Survey, © CGIAR-CSI, produced using Copernicus data and information funded by the European Union - EU-DEM layers, data available from Land Information New Zealand, data available from data.gov.uk, data courtesy Geoscience Australia). Imagery: Cesium World Imagery (© 2026 Microsoft Corporation, © Mapbox, © Maxar, ©CNES (2026) Distribution Airbus DS, Earthstar Geographics SIO), both streamed through Cesium ion. Photographs: K2 by Zacharie Grossen and Fitz Roy by Sebgigon, both [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0). Credits and terms in [docs/media/README.md](docs/media/README.md#credits-and-rights).</sub>
 
 ## Editorial workflow
 
@@ -57,7 +58,7 @@ flowchart LR
     Studio --> PG
     Backup["Scheduled backup job"] --> PG
     Backup --> R2Backup["Cloudflare R2<br/>private backups"]
-    Offsite["Scheduled offsite job"] --> R2
+    Offsite["Offsite job<br/>(not deployed)"] --> R2
     Offsite --> R2Backup
     Offsite --> B2["Backblaze B2<br/>independent copy"]
 ```
@@ -68,7 +69,7 @@ flowchart LR
 - **3D scene lifecycle.** Navigating between mountain pages reuses one Cesium viewer instead of recreating its WebGL context for every destination.
 - **Publishing.** Drafts are invisible to the public API. Draft previews use signed, time-limited, single-mountain tokens.
 - **Search engines.** The web app serves a dynamic `sitemap.xml` and `robots.txt` built from the public mountain index, so only published mountains are listed.
-- **Operations.** Web and API run as separate Docker images on Railway. A scheduled service dumps the database to private storage, and a second one keeps an independent copy of the media and dumps at another provider.
+- **Operations.** Web and API run as separate Docker images on Railway. A scheduled service dumps the database to private storage. A second job, defined in the repository with its own image and runbook, copies the media and dumps to another provider; no such service is deployed in production yet.
 
 ### Engineering decisions
 
@@ -171,7 +172,7 @@ While working, run the focused specs for the code you touch. When you change a s
 
 The `ssr` and `nogl` Playwright projects assume a production build: `npm run test:ssr` and `npm run test:nogl` build first, and the build inlines `NEXT_PUBLIC_*` values, so a local `.env.local` with an ion token also breaks the `stageFailure` scenarios, which expect none. Pointing them at `next dev` reports failures that production does not have, because styles and route changes settle later there.
 
-**WebGL smoke tests (optional, local).** A small Playwright suite drives the real Cesium Viewer in Chromium. It covers the Viewer boot on the canonical camera, reuse and teardown across routes, atlas marker click versus drag, zoom and Reset, the Camera Editor round trip and the summit marker layout. It never runs in CI and gates neither merging nor deployment.
+**WebGL smoke tests (optional, local).** A Playwright suite drives the real Cesium Viewer in Chromium. It covers the Viewer boot on the canonical camera, reuse and teardown across routes, atlas marker click versus drag, atlas filters and geographic framing, marker visibility, zoom and Reset, control tooltips and the navigation guide, metric and imperial units, the Camera Editor round trip and the summit marker layout. It never runs in CI and gates neither merging nor deployment.
 
 ```bash
 npm run test:webgl        # development server: only the @lifecycle scenarios, under React Strict Mode
@@ -199,7 +200,7 @@ API tests run against a real PostGIS database rather than mocks. **CI** (GitHub 
 
 ## Deployment
 
-The web app and the API run as separate Docker-based services on Railway, with PostgreSQL/PostGIS and the scheduled database and offsite backup jobs as further services. Cloudflare R2 serves the optimized public photographs and keeps originals in a private bucket; Backblaze B2 holds the independent offsite copy.
+The web app and the API run as separate Docker-based services on Railway, with PostgreSQL/PostGIS and a scheduled database backup job as further services. Cloudflare R2 serves the optimized public photographs, keeps originals in a private bucket and holds the database dumps. The offsite copy at Backblaze B2 has its own job and runbook; that job is not deployed in production yet.
 
 See [docs/deployment.md](docs/deployment.md) for configuration, health checks, monitoring, backups, smoke tests (including sitemap and redirect checks) and recovery procedures.
 

@@ -31,7 +31,7 @@ This runbook documents procedures and shapes. Keep these in the owner's private 
 | `backup`                       | cron service built from `services/backup`; daily `pg_dump` to a private R2 bucket                                    | never                                       |
 | R2 bucket `<public-bucket>`    | public photograph renditions                                                                                         | `https://media.serendipeak.camilasabino.dev` (custom domain) |
 | R2 bucket `<originals-bucket>` | private original photographs                                                                                         | never                                       |
-| `offsite-backup`               | cron service built from `services/offsite-backup`; copies the originals, renditions and dumps to Backblaze B2 | never                                       |
+| `offsite-backup` (not yet created) | cron service built from `services/offsite-backup`; copies the originals, renditions and dumps to Backblaze B2 | never                                       |
 | B2 bucket `<offsite-bucket>`   | private independent copy (`originals/`, `media/`, `db-backups/`, `manifests/`)                                       | never                                       |
 
 `WEB_ORIGIN` and `CORS_ALLOWED_ORIGIN` are single origins and must name the web origin in use. The web build inlines the API origin, so changing the API host needs a new web build. A custom domain on an R2 bucket needs the zone, or a Cloudflare-supported partial setup for that hostname, on Cloudflare.
@@ -187,6 +187,8 @@ The `backup` service is a Railway cron service built from `services/backup` (Doc
 ### Offsite media and database copy
 
 R2 holds the photographs and the dumps, and so does the account that could lose them. The `offsite-backup` service copies all of it to one private Backblaze B2 bucket, under another provider and other credentials, so that a lost or compromised Cloudflare account, a mistaken deletion or a corrupted object does not take the only copy with it.
+
+**Status.** Three things are separate. (1) *Implemented:* the job, its image and its tests are in this repository. (2) *Not deployed:* a read-only `railway status` of `serendipeak/production` on 2026-11-24 listed only `web`, `api`, `postgres` and `backup`, so no `offsite-backup` service runs and nothing alerts on it. (3) *Not verified from the repository:* whether the Backblaze bucket and key, the read-only R2 token and the Better Stack heartbeat exist. Their absence is not implied by the missing service; confirm them in their own consoles and skip the setup steps below that are already done. The service counts as live only when `railway status` lists it and a run has logged `offsite ok:`.
 
 It is a cron service with its own root directory, `services/offsite-backup`, and its own `Dockerfile` (Dockerfile builder, like the other services). It needs only `curl` and `rclone`, no PostgreSQL client and no database credentials. It shares no file with the `backup` service, so a change to either one redeploys only that service: keep the watch path of each at its own directory (`/services/backup/**` and `/services/offsite-backup/**`). It reads R2 with a read-only token and writes B2 with a key that cannot delete.
 
@@ -403,7 +405,7 @@ Monitoring uses the Better Stack free plan and no additional infrastructure: one
 
 **Configure once**
 
-1. In Better Stack create the four monitors above with an email alert policy. Create each heartbeat first and copy its URL.
+1. In Better Stack create the monitors above with an email alert policy (the `serendipeak-offsite` heartbeat only once the offsite service exists). Create each heartbeat first and copy its URL.
 2. In Railway, on the `backup` service only, set `BACKUP_HEARTBEAT_URL` to the URL of `serendipeak-backup`, and on `offsite-backup` only, `OFFSITE_HEARTBEAT_URL` to the URL of `serendipeak-offsite`. Confirm the target with `railway status` before writing.
 3. Check each monitor shows its first result: the uptime monitors immediately, the heartbeats after the next scheduled run.
 
@@ -425,7 +427,7 @@ To pause alerts for planned work, pause the monitor in Better Stack and resume i
 
 ### Daily discovery retention
 
-Production has no scheduled job for this: the environment holds only `web`, `api`, `postgres`, `backup` and `offsite-backup`. Nothing fails without it; the `daily_discovery` table just grows by one row a day. The command `python manage.py prune_daily_discoveries` is idempotent and safe to run at any time, and the database refuses to delete a discovery inside the retention window. Run it from the operator shell when needed (see "Operator shell"). Scheduling it would be a new cron service built from `services/api` with the same variables as `api`, and it would have to join the list in "Trusting forwarded headers". See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
+Production has no scheduled job for this: the environment holds only `web`, `api`, `postgres` and `backup` (plus `offsite-backup` once it is created). Nothing fails without it; the `daily_discovery` table just grows by one row a day. The command `python manage.py prune_daily_discoveries` is idempotent and safe to run at any time, and the database refuses to delete a discovery inside the retention window. Run it from the operator shell when needed (see "Operator shell"). Scheduling it would be a new cron service built from `services/api` with the same variables as `api`, and it would have to join the list in "Trusting forwarded headers". See the [developer reference](engineering/developer-reference.md#daily-discovery-retention).
 
 ## 3. R2 buckets and media domain
 
@@ -644,7 +646,7 @@ Reversing the first migration drops the `postgis` extension and fails if other o
 Django believes `X-Forwarded-Proto` only when `TRUSTED_PROXY_HOPS` is above `0` (`SECURE_PROXY_SSL_HEADER`), and uses the same value to pick the client address out of `X-Forwarded-For`. Gunicorn is configured not to derive the scheme from any header, `X-Forwarded-Host` is never trusted, and `ALLOWED_HOSTS` is an exact list. On Railway, `TRUSTED_PROXY_HOPS=1` is correct while **all** of these are true:
 
 1. **Every outside request passes through Railway's HTTP edge.** The edge states `X-Forwarded-Proto: https` for what it forwards and redirects plain HTTP (a plain POST is turned into a GET and redirected), so a request that reaches the service from the internet was received over HTTPS. The `api` service has no TCP proxy and no other public route.
-2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web`, `backup`, `offsite-backup`). `web` calls the API through its public HTTPS address, not through the private one.
+2. **The private network is a trust boundary.** Services in the same environment reach `api` without passing the edge and can send any header. The environment holds only services the owner controls (`postgres`, `web` and `backup`, and `offsite-backup` once it is created). `web` calls the API through its public HTTPS address, not through the private one.
 3. **The edge replaces the header; Django fails closed otherwise.** Django compares the whole header value with `https`. `http`, an empty value or a list such as `http, https` make the request insecure, which turns into a redirect or a refused form post, never into a request treated as secure. A forged `X-Forwarded-Proto: https` from the internet is harmless, because the edge only forwards requests that really arrived over HTTPS. The smoke test above checks that the edge does not pass a client's `http` through.
 4. **The hop count matches the proxies that append to `X-Forwarded-For`.** One for Railway's edge. Django reads the entry that many places from the right, so a client-supplied left-hand entry is ignored. Railway's documentation does not say whether the edge strips or appends client-supplied `X-Forwarded-For` values; reading from the right works in both cases. Adding another proxy in front (a Cloudflare-proxied record for the API host) makes it `2`. A wrong count is visible in the throttling check of the smoke tests.
 5. **The health check needs none of this.** It arrives over plain HTTP from `healthcheck.railway.app`, carries no forwarding header, and is exempt from the redirect.
