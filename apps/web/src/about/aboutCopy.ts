@@ -25,24 +25,24 @@ export const EXPERIENCE_BLOCKS: readonly Feature[] = [
 	{
 		name: 'One mountain each day',
 		description:
-			'Every day, SerendiPeak features a different mountain, shared by everyone. Discover somewhere new, take a closer look, or explore another whenever you feel like it.'
+			'Every day, SerendiPeak features a different mountain, the same one for everyone. Spend a moment with it, or travel to another whenever you feel like it.'
 	},
 	{
 		name: 'See the landscape differently',
 		description:
-			'Move around the mountain in 3D to explore its shape and surroundings. Discover its elevation, location, and the landscapes that make it distinctive.'
+			'Start from a viewpoint chosen for each mountain, move around its terrain in 3D, then circle the summit in a full 360° orbit.'
 	},
 	{
 		name: "A world beyond today's mountain",
 		description:
-			"The Atlas opens up mountains across the continents. Wander through the collection, discover unfamiliar names, and find places you'd like to know more about."
+			"The Atlas puts the whole collection on a single globe. Browse by country, mountain range, or elevation, or search for a name, and find your way to peaks you didn't know existed."
 	}
 ];
 
 export const LOVE_HEADING = 'For the love of mountains';
 export const LOVE_PARAGRAPHS: readonly string[] = [
 	'Some mountains are famous. Others are rarely heard of. Each has its own landscape, geography, and place in the world.',
-	"SerendiPeak is for mountaineers, explorers, travelers, and anyone drawn to mountains. Whether you've stood on a summit or simply wondered about a distant peak, there's always somewhere new to discover."
+	"SerendiPeak is for mountaineers, explorers, travelers, and anyone drawn to mountains. Whether you've stood on a summit or simply wondered about a distant peak, there's always another mountain worth a closer look."
 ];
 
 export const BEHIND_EYEBROW = 'Behind SerendiPeak';
