@@ -1,4 +1,4 @@
-import { isValidElement } from 'react';
+import { isValidElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ResetControl } from './ResetControl';
@@ -7,7 +7,7 @@ describe('ResetControl', () => {
 	it('is a native button named "Reset view" that submits nothing', () => {
 		const html = renderToStaticMarkup(<ResetControl enabled onReset={() => {}} />);
 
-		expect(html).toMatch(/^<button type="button"/);
+		expect(html).toContain('<button type="button"');
 		expect(html).toContain('Reset view</span>');
 		expect(html).not.toContain('role=');
 		expect(html).not.toContain('tabindex');
@@ -35,8 +35,9 @@ describe('ResetControl', () => {
 		const onReset = vi.fn();
 		const element = ResetControl({ enabled: true, onReset });
 
-		expect(isValidElement<{ onClick: () => void }>(element)).toBe(true);
-		const { onClick } = (element as { props: { onClick: () => void } }).props;
+		expect(isValidElement<{ children: ReactElement<{ onClick: () => void }> }>(element)).toBe(true);
+		const { onClick } = (element as { props: { children: ReactElement<{ onClick: () => void }> } })
+			.props.children.props;
 		onClick();
 		onClick();
 

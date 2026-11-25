@@ -7,8 +7,10 @@
 	left: calc(100% + 0.4rem);
 	box-sizing: border-box;
 	width: min(19rem, calc(100cqw - 4.35rem));
-	max-height: 100%;
+	/* The bottom edge stays clear of Cesium's attribution, which the stage must always show. */
+	max-height: calc(100% - 1.9rem);
 	padding: var(--sp-space-3) var(--sp-space-4) var(--sp-space-4);
+	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	border: 1px solid var(--sp-divider-strong);
@@ -30,8 +32,11 @@
 	outline-offset: 2px;
 }
 
+/* Enlarged text can leave the heading no room beside the close button; the button then drops to
+   its own line rather than the heading breaking inside a word. */
 .header {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--sp-space-3);
@@ -47,6 +52,7 @@
 
 .close {
 	display: flex;
+	margin-left: auto;
 	flex: none;
 	align-items: center;
 	justify-content: center;
@@ -79,38 +85,108 @@
 	stroke-linecap: round;
 }
 
-.section {
-	margin-top: var(--sp-space-3);
-	padding-top: var(--sp-space-3);
-	border-top: 1px solid var(--sp-divider);
+/* The tabs wrap rather than overflow once enlarged text leaves them too little width. */
+.tabs {
+	display: flex;
+	flex-wrap: wrap;
+	margin-top: var(--sp-space-2);
+	border-bottom: 1px solid var(--sp-divider);
 }
 
-.heading {
-	margin: 0 0 var(--sp-space-2);
-	color: var(--sp-text-accent);
+.tab {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 2.25rem;
+	padding: 0 var(--sp-space-2);
+	border: 0;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
+	background: transparent;
+	color: var(--sp-text-muted);
 	font: 600 0.75rem / 1.5 var(--sp-face-ui);
 	font-stretch: var(--sp-stretch-caps);
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
+	cursor: pointer;
 }
 
-.gestures {
-	display: grid;
-	gap: 0.4rem;
-	margin: 0;
+.tab:hover {
+	color: var(--sp-state-accent);
 }
 
-.gesture {
+.tab[aria-selected='true'] {
+	border-bottom-color: var(--sp-state-accent);
+	color: var(--sp-text-accent);
+}
+
+.tab:focus-visible,
+.tabpanel:focus-visible {
+	outline: 2px solid var(--sp-focus);
+	outline-offset: 2px;
+}
+
+/* Touch targets keep their full height where the pointer is a finger. */
+@media (pointer: coarse) {
+	.tab {
+		min-height: 2.75rem;
+	}
+}
+
+.tabpanel[hidden] {
+	display: none;
+}
+
+.rows {
 	display: grid;
-	grid-template-columns: 6.5rem minmax(0, 1fr);
+	gap: 0.15rem;
+	margin: var(--sp-space-2) 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.row {
+	display: grid;
+	grid-template-columns: 1.25rem minmax(0, 1fr);
+	align-items: start;
 	gap: var(--sp-space-3);
+	padding: 0.3rem 0;
 }
 
-.gesture dt {
+.icon {
+	width: 1.25rem;
+	height: 1.25rem;
+	margin-top: 0.1em;
+	fill: none;
+	stroke: var(--sp-text-accent);
+	stroke-width: 1.6;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.action {
 	font-weight: 600;
 }
 
-.gesture dd {
-	margin: 0;
+.description {
 	color: var(--sp-text-muted);
+}
+
+.note {
+	margin: var(--sp-space-2) 0 0;
+	padding-top: var(--sp-space-2);
+	border-top: 1px solid var(--sp-divider);
+	color: var(--sp-text-muted);
+	font-size: 0.8125rem;
+}
+
+/* A short stage trades some row spacing for fewer lines to scroll. */
+@media (max-height: 32rem) {
+	.row {
+		padding: 0.15rem 0;
+	}
+
+	.note {
+		margin-top: var(--sp-space-1, 0.25rem);
+		padding-top: var(--sp-space-1, 0.25rem);
+	}
 }

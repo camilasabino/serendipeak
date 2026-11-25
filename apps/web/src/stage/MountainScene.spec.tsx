@@ -38,7 +38,7 @@ describe('MountainScene markup', () => {
 		['loading', undefined],
 		['ready', { status: 'ready' } as const]
 	])('renders no notice while %s', (_name, state) => {
-		expect(render(state)).not.toMatch(/role="alert"|globe/);
+		expect(render(state)).not.toMatch(/role="alert"|3D globe/);
 	});
 
 	it('keeps the stage controls and adds the polite imagery notice while degraded', () => {

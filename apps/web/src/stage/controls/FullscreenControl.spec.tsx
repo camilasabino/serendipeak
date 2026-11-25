@@ -7,7 +7,7 @@ describe('FullscreenControl', () => {
 		const enter = renderToStaticMarkup(<FullscreenControl active={false} onToggle={() => {}} />);
 		const exit = renderToStaticMarkup(<FullscreenControl active onToggle={() => {}} />);
 
-		expect(enter).toMatch(/^<button type="button"/);
+		expect(enter).toContain('<button type="button"');
 		expect(enter).toContain('Enter fullscreen</span>');
 		expect(exit).toContain('Exit fullscreen</span>');
 		for (const html of [enter, exit]) {
@@ -37,7 +37,9 @@ describe('FullscreenControl', () => {
 	it('runs the toggle command once per activation', () => {
 		const onToggle = vi.fn();
 		const element = FullscreenControl({ active: false, onToggle });
-		const { onClick } = (element as unknown as { props: { onClick: () => void } }).props;
+		const { onClick } = (
+			element as unknown as { props: { children: { props: { onClick: () => void } } } }
+		).props.children.props;
 		onClick();
 
 		expect(onToggle).toHaveBeenCalledTimes(1);

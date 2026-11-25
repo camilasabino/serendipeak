@@ -1,0 +1,55 @@
+.anchor {
+	position: relative;
+	display: flex;
+}
+
+/* A disabled button swallows pointer events in some browsers; letting them through to the anchor
+   keeps the explanation of why it is unavailable reachable. */
+.anchor > :disabled {
+	pointer-events: none;
+}
+
+/* Opaque basalt, as the buttons settle on hover: terrain and snow never show through the text. It
+   appears and disappears at once, with no transition, so there is no delay and nothing to reduce. */
+.tooltip {
+	position: absolute;
+	z-index: 3;
+	top: 50%;
+	box-sizing: border-box;
+	width: max-content;
+	max-width: min(18rem, calc(100cqw - 1.5rem));
+	padding: 0.3rem 0.6rem;
+	border: 1px solid var(--sp-chip-rule);
+	border-radius: 4px;
+	background: var(--sp-surface-base);
+	color: var(--sp-snow);
+	font-family: var(--sp-face-ui);
+	font-size: var(--sp-text-ui);
+	line-height: 1.35;
+	box-shadow: 0 2px 8px -2px rgb(0 0 0 / 50%);
+	pointer-events: none;
+	visibility: hidden;
+	translate: var(--tooltip-shift-x, 0) calc(-50% + var(--tooltip-shift-y, 0px));
+}
+
+.tooltip[data-visible='true'] {
+	visibility: visible;
+}
+
+.tooltip[data-side='end'] {
+	left: calc(100% + 0.5rem);
+}
+
+.tooltip[data-side='start'] {
+	right: calc(100% + 0.5rem);
+}
+
+/* The toolbar lays out in a row on a short stage, where a tooltip beside a button would cover its
+   neighbours; it opens below, end-aligned, instead. */
+@media (max-height: 32rem) {
+	.tooltip[data-side='start'] {
+		top: calc(100% + 0.5rem);
+		right: 0;
+		translate: var(--tooltip-shift-x, 0) var(--tooltip-shift-y, 0px);
+	}
+}

@@ -3,15 +3,24 @@ import { describe, expect, it } from 'vitest';
 import type { SceneSnapshot } from '../SceneStore';
 import { SceneStore } from '../SceneStore';
 import type { StageFullscreen } from '../useStageFullscreen';
-import { navigationHelpSections } from './NavigationHelp';
+import { navigationGuide, type NavigationHelpContext } from '../stageCopy';
 import { StageControls, type MarkerToggle } from './StageControls';
 
 const READING = { label: '2 km', meters: 2000, widthPx: 96 };
 
 const UNSUPPORTED: StageFullscreen = { supported: false, active: false, toggle: () => {} };
+const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
 
 const SHOWN: MarkerToggle = { shown: true, onToggle: () => {} };
 const HIDDEN: MarkerToggle = { shown: false, onToggle: () => {} };
+
+const ATLAS: NavigationHelpContext = {
+	kind: 'atlas',
+	markersHidden: false,
+	rotation: true,
+	fullscreen: true
+};
+const MOUNTAIN: NavigationHelpContext = { kind: 'mountain', orbit: true, fullscreen: true };
 
 function render(
 	snapshot: SceneSnapshot,
@@ -115,7 +124,7 @@ describe('StageControls follow the store', () => {
 		store.setState({ status: 'ready' });
 		const html = render(store.getSnapshot());
 
-		expect(html.match(/<button/g)).toHaveLength(5);
+		expect(html.match(/<button/g)).toHaveLength(8);
 		expect(html).not.toMatch(/Compass|Scale:/);
 		expect(html.match(/<button[^>]*\sdisabled/g)).toHaveLength(3);
 	});
@@ -184,72 +193,215 @@ describe('StageControls navigation help', () => {
 		expect(html.indexOf('role="dialog"')).toBeLessThan(html.indexOf('Close navigation help'));
 	});
 
-	it('lists pointer gestures first unless the device has a coarse pointer', () => {
-		const headings = (touchFirst: boolean) =>
-			navigationHelpSections(touchFirst).map((section) => section.heading);
+	it('offers Mouse, Touch and Controls as tabs, with one panel each and the labels as names', () => {
+		const html = render(readyStore().getSnapshot());
+		const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)];
 
-		expect(headings(false)).toEqual(['Mouse and trackpad', 'Touch', 'Buttons']);
-		expect(headings(true)).toEqual(['Touch', 'Mouse and trackpad', 'Buttons']);
+		expect(tabs.map((tab) => tab[1])).toEqual(['Mouse', 'Touch', 'Controls']);
+		expect(html.match(/role="tablist"/g)).toHaveLength(1);
+		expect(html.match(/role="tabpanel"/g)).toHaveLength(3);
+		for (const [markup] of tabs) {
+			const panel = /aria-controls="([^"]+)"/.exec(markup)![1];
+			expect(html).toContain(`id="${panel}" aria-labelledby=`);
+		}
+	});
+
+	it('selects the Mouse tab until the browser reports a coarse pointer, and shows only that panel', () => {
+		const html = render(readyStore().getSnapshot());
+
+		expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
+		expect(/role="tab"[^>]*aria-selected="true"[^>]*>Mouse</.test(html)).toBe(true);
+		expect(html.match(/role="tabpanel"[^>]*\shidden=""/g)).toHaveLength(2);
+		expect(html.match(/tabindex="-1"[^>]*class="[^"]*"[^>]*>(Touch|Controls)</g)).toHaveLength(2);
+	});
+
+	it('draws every row with a decorative icon, an action and a short description', () => {
+		const guide = navigationGuide(MOUNTAIN);
+
+		for (const { rows } of Object.values(guide)) {
+			for (const row of rows) {
+				expect(row.action.length).toBeGreaterThan(0);
+				expect(row.description.length).toBeLessThanOrEqual(40);
+			}
+		}
+		const html = render(readyStore().getSnapshot());
+		expect(html.match(/<li[^>]*><svg[^>]*aria-hidden="true"/g)?.length).toBeGreaterThan(8);
 	});
 
 	it('explains moving, zooming, tilting and turning for each input', () => {
-		const [pointer, touch, buttons] = navigationHelpSections(false);
+		const { mouse, touch } = navigationGuide(MOUNTAIN);
 
-		expect(pointer!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt and turn']);
-		expect(touch!.gestures.map((g) => g.action)).toEqual(['Move', 'Zoom', 'Tilt', 'Turn']);
-		expect(buttons!.gestures.map((g) => g.action)).toEqual(['+ and −', 'Reset view']);
-	});
-
-	it('explains opening mountains from the globe first, only where it carries markers', () => {
-		const headings = (touchFirst: boolean, markers: boolean) =>
-			navigationHelpSections(touchFirst, markers).map((section) => section.heading);
-
-		expect(headings(false, true)).toEqual(['Mountains', 'Mouse and trackpad', 'Touch', 'Buttons']);
-		expect(headings(true, true)).toEqual(['Mountains', 'Touch', 'Mouse and trackpad', 'Buttons']);
-		expect(headings(false, false)).not.toContain('Mountains');
-	});
-
-	it('tells how to open a mountain, what overlapping points do, and where else to find it', () => {
-		const html = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN);
-
-		expect(html).toContain('Click or tap a mountain&#x27;s point or name.');
-		expect(html).toContain('pick one from the short list that opens');
-		expect(html).toContain('Every mountain is also in the list and in Search.');
-		expect(render(readyStore().getSnapshot())).not.toContain('point or name');
-	});
-
-	it('says how to bring hidden markers back, and where mountains remain, in place of the opening text', () => {
-		const html = render(readyStore().getSnapshot(), UNSUPPORTED, HIDDEN);
-
-		expect(html).toContain('Press the pin button');
-		expect(html).toContain('Every mountain is still in the list and in Search.');
-		expect(html).not.toContain('point or name');
-		expect(navigationHelpSections(false, true, true).map((section) => section.heading)).toEqual([
-			'Mountains',
-			'Mouse and trackpad',
-			'Touch',
-			'Buttons'
+		expect(mouse.rows.map((row) => row.action)).toEqual(['Move', 'Zoom', 'Tilt & rotate']);
+		expect(touch.rows.map((row) => row.action)).toEqual(['Move', 'Zoom', 'Tilt', 'Turn']);
+		expect(mouse.rows.map((row) => row.description)).toEqual([
+			'Drag the globe',
+			'Scroll, or right-drag',
+			'Ctrl + drag'
 		]);
 	});
 
-	it('keeps the visible-marker help as it was', () => {
-		const html = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN);
+	it('offers opening a mountain on both gesture tabs only where markers are drawn', () => {
+		const atlas = navigationGuide(ATLAS);
+		const hidden = navigationGuide({ ...ATLAS, markersHidden: true });
 
-		expect(html).toContain('Click or tap a mountain&#x27;s point or name.');
-		expect(html).not.toContain('Press the pin button');
+		expect(atlas.mouse.rows.at(-1)).toMatchObject({ action: 'Open' });
+		expect(atlas.touch.rows.at(-1)).toMatchObject({ action: 'Open' });
+		expect(atlas.mouse.note).toBe('Where points overlap, a short list opens.');
+		for (const guide of [navigationGuide(MOUNTAIN), hidden]) {
+			expect(guide.mouse.rows.map((row) => row.action)).not.toContain('Open');
+			expect(guide.touch.rows.map((row) => row.action)).not.toContain('Open');
+			expect(guide.mouse.note).toBeUndefined();
+		}
+	});
+});
+
+describe('StageControls help controls', () => {
+	const controls = (context: NavigationHelpContext) =>
+		navigationGuide(context).controls.rows.map((row) => row.action);
+
+	it('lists every atlas control, with the atlas overview as what Reset returns to', () => {
+		expect(controls(ATLAS)).toEqual(['+ and −', 'Reset view', 'Rotation', 'Markers', 'Fullscreen']);
+		expect(navigationGuide(ATLAS).controls.rows[1]!.description).toBe('Back to the Atlas overview');
 	});
 
-	it('renders the help content without the browser', () => {
-		const html = render(readyStore().getSnapshot());
+	it('lists every mountain control, with the orbit and a note on how it stops', () => {
+		const { controls: mountain } = navigationGuide(MOUNTAIN);
 
-		expect(html).toContain('Pinch with two fingers.');
-		expect(html).toContain('Hold Ctrl and drag');
+		expect(mountain.rows.map((row) => row.action)).toEqual([
+			'+ and −',
+			'Reset view',
+			'360° orbit',
+			'Fullscreen'
+		]);
+		expect(mountain.rows[1]!.description).toBe('Back to the starting view');
+		expect(mountain.note).toBe('Moving the map yourself stops the orbit.');
+		expect(mountain.rows.map((row) => row.action)).not.toContain('Take over');
+	});
+
+	it('drops the lines of controls that are not there', () => {
+		expect(controls({ ...ATLAS, rotation: false })).not.toContain('Rotation');
+		expect(controls({ ...ATLAS, fullscreen: false })).not.toContain('Fullscreen');
+		expect(controls({ ...MOUNTAIN, fullscreen: false })).not.toContain('Fullscreen');
+		expect(controls({ ...MOUNTAIN, orbit: false, fullscreen: false })).toEqual([
+			'+ and −',
+			'Reset view'
+		]);
+		expect(navigationGuide({ ...MOUNTAIN, orbit: false }).controls.note).toBeUndefined();
+	});
+
+	it('offers showing the markers while they are hidden, and says where mountains remain', () => {
+		const hidden = navigationGuide({ ...ATLAS, markersHidden: true }).controls;
+
+		expect(hidden.rows.find((row) => row.action === 'Markers')!.description).toBe(
+			'Show the mountain markers'
+		);
+		expect(hidden.note).toBe(
+			'Markers are hidden. Every mountain is still in the list and in Search.'
+		);
+		expect(navigationGuide(ATLAS).controls.note).toBeUndefined();
+	});
+
+	it('keeps atlas controls out of a mountain guide and mountain controls out of the atlas guide', () => {
+		const store = readyStore();
+		store.setMountainOrbit('idle');
+		const mountain = render(store.getSnapshot(), SUPPORTED, undefined, () => {});
+		const atlasStore = readyStore();
+		atlasStore.setRotation('rotating');
+		const atlas = render(atlasStore.getSnapshot(), SUPPORTED, SHOWN);
+		const guideOf = (html: string) =>
+			html.slice(html.indexOf('role="dialog"'), html.indexOf('role="dialog"') + 6000);
+
+		expect(guideOf(mountain)).not.toMatch(/Atlas overview|markers|Rotation|point or name/i);
+		expect(guideOf(atlas)).not.toMatch(/orbit|starting view|summit/i);
+		expect(guideOf(atlas)).toContain('Back to the Atlas overview');
+		expect(guideOf(mountain)).toContain('Circle the summit');
+	});
+
+	it('omits the orbit where the stage offers none', () => {
+		const html = render(readyStore().getSnapshot(), SUPPORTED);
+
+		expect(html.slice(html.indexOf('role="dialog"'))).not.toMatch(/360° orbit|stops the orbit/);
+	});
+});
+
+describe('StageControls tooltips', () => {
+	const tooltips = (html: string) =>
+		[
+			...html.matchAll(
+				/<span aria-hidden="true" class="[^"]*" data-side="[^"]*" data-visible="false">([^<]*)<\/span>/g
+			)
+		].map((match) => match[1]);
+
+	it('gives every control one hidden tooltip with the action it performs', () => {
+		const store = readyStore();
+		store.setMountainOrbit('idle');
+		store.setRotation('rotating');
+		const html = render(store.getSnapshot(), SUPPORTED, SHOWN, () => {});
+
+		expect(tooltips(html)).toEqual([
+			'Zoom in — Move closer',
+			'Zoom out — Move farther away',
+			'View navigation instructions',
+			'Reset to the original view',
+			'Pause globe rotation',
+			'Start 360° orbit',
+			'Hide mountain markers',
+			'Enter fullscreen'
+		]);
+	});
+
+	it('keeps tooltips out of the accessibility tree and out of every accessible name', () => {
+		const html = render(readyStore().getSnapshot(), SUPPORTED, SHOWN);
+
+		expect(html).not.toMatch(/\stitle="/);
+		expect(html.match(/<span aria-hidden="true" class="[^"]*" data-side/g)).toHaveLength(
+			tooltips(html).length
+		);
+		for (const text of tooltips(html)) {
+			expect(button(html, 'Reset view')).not.toContain(text);
+		}
+	});
+
+	it('follows the state of each toggle', () => {
+		const store = readyStore();
+		store.setRotation('paused');
+		store.setMountainOrbit('orbiting');
+		expect(
+			tooltips(
+				render(
+					store.getSnapshot(),
+					{ supported: true, active: true, toggle: () => {} },
+					HIDDEN,
+					() => {}
+				)
+			)
+		).toEqual(
+			expect.arrayContaining([
+				'Resume globe rotation',
+				'Pause 360° orbit',
+				'Show mountain markers',
+				'Exit fullscreen'
+			])
+		);
+
+		store.setMountainOrbit('paused');
+		expect(tooltips(render(store.getSnapshot(), UNSUPPORTED, undefined, () => {}))).toContain(
+			'Resume 360° orbit'
+		);
+	});
+
+	it('explains a control that is not available yet, in place of its action', () => {
+		const store = readyStore();
+		store.setSettled(false);
+		store.setMountainOrbit('unavailable');
+		const texts = tooltips(render(store.getSnapshot(), UNSUPPORTED, undefined, () => {}));
+
+		expect(texts.filter((text) => text === 'Available once the view settles')).toHaveLength(4);
+		expect(texts).toContain('View navigation instructions');
 	});
 });
 
 describe('StageControls fullscreen', () => {
-	const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
-
 	it('offers no fullscreen control when the browser cannot provide it', () => {
 		expect(render(readyStore().getSnapshot())).not.toMatch(/fullscreen/i);
 	});
@@ -304,8 +456,6 @@ describe('StageControls globe rotation', () => {
 });
 
 describe('StageControls marker visibility', () => {
-	const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
-
 	it('offers no switch off the atlas', () => {
 		const html = render(readyStore().getSnapshot(), SUPPORTED);
 
@@ -369,7 +519,6 @@ describe('StageControls marker visibility', () => {
 });
 
 describe('StageControls mountain orbit', () => {
-	const SUPPORTED: StageFullscreen = { supported: true, active: false, toggle: () => {} };
 	const toggle = () => {};
 
 	function withOrbit(state: SceneSnapshot['mountainOrbit']): SceneSnapshot {

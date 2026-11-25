@@ -1,51 +1,49 @@
-import { useCallback, useEffect, useId, useRef, useState, type FocusEvent } from 'react';
 import {
-	BUTTON_NAVIGATION,
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+	type FocusEvent,
+	type KeyboardEvent as ReactKeyboardEvent
+} from 'react';
+import {
 	CLOSE_NAVIGATION_HELP_LABEL,
-	HIDDEN_MARKERS_NAVIGATION,
-	MARKER_NAVIGATION,
+	GUIDE_TAB_LABELS,
+	GUIDE_TABS,
 	NAVIGATION_HELP_LABEL,
-	POINTER_NAVIGATION,
-	TOUCH_NAVIGATION,
-	type NavigationHelpSection
+	NAVIGATION_HELP_TOOLTIP,
+	navigationGuide,
+	type GuideTab,
+	type NavigationHelpContext
 } from '../stageCopy';
+import { GuideIcon } from './GuideIcon';
 import buttonStyles from './StageButton.module.css';
 import styles from './NavigationHelp.module.css';
+import { Tooltip } from './Tooltip';
 
 const COARSE_POINTER_QUERY = '(pointer: coarse)';
-
-export function navigationHelpSections(
-	touchFirst: boolean,
-	markers = false,
-	markersHidden = false
-): readonly NavigationHelpSection[] {
-	const gestures = touchFirst
-		? [TOUCH_NAVIGATION, POINTER_NAVIGATION, BUTTON_NAVIGATION]
-		: [POINTER_NAVIGATION, TOUCH_NAVIGATION, BUTTON_NAVIGATION];
-
-	if (!markers) {
-		return gestures;
-	}
-
-	return [markersHidden ? HIDDEN_MARKERS_NAVIGATION : MARKER_NAVIGATION, ...gestures];
-}
 
 // A non-modal popover: it never traps focus or blocks the globe, and any interaction elsewhere
 // dismisses it so it cannot linger over the mountain.
 export function NavigationHelp({
-	markers = false,
-	markersHidden = false
+	context,
+	onOpenChange
 }: {
-	markers?: boolean;
-	markersHidden?: boolean;
+	context: NavigationHelpContext;
+	/** Tells the stage while the panel is open, so nothing else is drawn over it. */
+	onOpenChange?: (open: boolean) => void;
 }) {
 	const [open, setOpen] = useState(false);
-	const [touchFirst, setTouchFirst] = useState(false);
+	const [tab, setTab] = useState<GuideTab>('mouse');
 	const rootRef = useRef<HTMLDivElement>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const panelRef = useRef<HTMLElement>(null);
 	const panelId = useId();
 	const titleId = useId();
+	const tabsId = useId();
+	const tabRefs = useRef<Partial<Record<GuideTab, HTMLButtonElement | null>>>({});
+	const guide = navigationGuide(context);
 
 	const close = useCallback((restoreFocus: boolean) => {
 		setOpen(false);
@@ -53,6 +51,12 @@ export function NavigationHelp({
 			triggerRef.current?.focus();
 		}
 	}, []);
+
+	useEffect(() => {
+		onOpenChange?.(open);
+
+		return () => onOpenChange?.(false);
+	}, [open, onOpenChange]);
 
 	useEffect(() => {
 		if (!open) {
@@ -85,8 +89,29 @@ export function NavigationHelp({
 			close(false);
 			return;
 		}
-		setTouchFirst(window.matchMedia(COARSE_POINTER_QUERY).matches);
+		setTab(window.matchMedia(COARSE_POINTER_QUERY).matches ? 'touch' : 'mouse');
 		setOpen(true);
+	};
+
+	const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+		const index = GUIDE_TABS.indexOf(tab);
+		const next =
+			event.key === 'ArrowRight'
+				? (index + 1) % GUIDE_TABS.length
+				: event.key === 'ArrowLeft'
+					? (index + GUIDE_TABS.length - 1) % GUIDE_TABS.length
+					: event.key === 'Home'
+						? 0
+						: event.key === 'End'
+							? GUIDE_TABS.length - 1
+							: undefined;
+		if (next === undefined) {
+			return;
+		}
+		event.preventDefault();
+		const target = GUIDE_TABS[next]!;
+		setTab(target);
+		tabRefs.current[target]?.focus();
 	};
 
 	const onBlur = (event: FocusEvent<HTMLDivElement>) => {
@@ -98,21 +123,23 @@ export function NavigationHelp({
 
 	return (
 		<div ref={rootRef} onBlur={onBlur}>
-			<button
-				ref={triggerRef}
-				type="button"
-				className={buttonStyles.button}
-				aria-expanded={open}
-				aria-controls={panelId}
-				onClick={toggle}
-			>
-				<svg viewBox="0 0 24 24" aria-hidden="true">
-					<circle cx="12" cy="12" r="9" />
-					<path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.8v.5" />
-					<path d="M12 17.3v.2" />
-				</svg>
-				<span className={buttonStyles.spoken}>{NAVIGATION_HELP_LABEL}</span>
-			</button>
+			<Tooltip text={NAVIGATION_HELP_TOOLTIP} side="end">
+				<button
+					ref={triggerRef}
+					type="button"
+					className={buttonStyles.button}
+					aria-expanded={open}
+					aria-controls={panelId}
+					onClick={toggle}
+				>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<circle cx="12" cy="12" r="9" />
+						<path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.8v.5" />
+						<path d="M12 17.3v.2" />
+					</svg>
+					<span className={buttonStyles.spoken}>{NAVIGATION_HELP_LABEL}</span>
+				</button>
+			</Tooltip>
 			<section
 				ref={panelRef}
 				id={panelId}
@@ -133,17 +160,49 @@ export function NavigationHelp({
 						<span className={buttonStyles.spoken}>{CLOSE_NAVIGATION_HELP_LABEL}</span>
 					</button>
 				</div>
-				{navigationHelpSections(touchFirst, markers, markersHidden).map(({ heading, gestures }) => (
-					<div key={heading} className={styles.section}>
-						<h3 className={styles.heading}>{heading}</h3>
-						<dl className={styles.gestures}>
-							{gestures.map(({ action, gesture }) => (
-								<div key={action} className={styles.gesture}>
-									<dt>{action}</dt>
-									<dd>{gesture}</dd>
-								</div>
+				<div role="tablist" aria-label="Guide sections" className={styles.tabs}>
+					{GUIDE_TABS.map((name) => (
+						<button
+							key={name}
+							ref={(element) => {
+								tabRefs.current[name] = element;
+							}}
+							type="button"
+							role="tab"
+							id={`${tabsId}-tab-${name}`}
+							aria-selected={tab === name}
+							aria-controls={`${tabsId}-panel-${name}`}
+							tabIndex={tab === name ? 0 : -1}
+							className={styles.tab}
+							onClick={() => setTab(name)}
+							onKeyDown={onTabKeyDown}
+						>
+							{GUIDE_TAB_LABELS[name]}
+						</button>
+					))}
+				</div>
+				{GUIDE_TABS.map((name) => (
+					<div
+						key={name}
+						role="tabpanel"
+						id={`${tabsId}-panel-${name}`}
+						aria-labelledby={`${tabsId}-tab-${name}`}
+						hidden={tab !== name}
+						tabIndex={0}
+						className={styles.tabpanel}
+					>
+						<ul className={styles.rows}>
+							{guide[name].rows.map(({ icon, action, description }) => (
+								<li key={action} className={styles.row}>
+									<GuideIcon name={icon} className={styles.icon} />
+									<span>
+										<strong className={styles.action}>{action}</strong>{' '}
+										<span className={styles.description}>{description}</span>
+									</span>
+								</li>
 							))}
-						</dl>
+						</ul>
+						{guide[name].note && <p className={styles.note}>{guide[name].note}</p>}
 					</div>
 				))}
 			</section>
