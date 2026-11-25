@@ -157,6 +157,13 @@ test.describe('@nogl Header menu on a narrow header', () => {
 		await page.setViewportSize({ width: 800, height: 640 });
 		await expect(link(page, 'Atlas')).toBeVisible();
 		await expect(menuButton(page)).toBeHidden();
+		// Polling visibility forces a layout but not the resize notification, which only arrives with
+		// a rendered frame. The menu closing is the signal that the widening was observed; narrowing
+		// before it would let the two resizes coalesce into one with no net change. The button is
+		// hidden here, so the role query has to include hidden elements.
+		await expect(
+			primary(page).getByRole('button', { name: 'Menu', includeHidden: true })
+		).toHaveAttribute('aria-expanded', 'false');
 
 		await page.setViewportSize({ width: 320, height: 640 });
 		await expect(menuButton(page)).toBeVisible();

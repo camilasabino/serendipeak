@@ -102,11 +102,16 @@ test.describe('@nogl About page', () => {
 		await expect(page.getByRole('banner')).toHaveCount(1);
 		await expect(page.getByRole('main')).toHaveCount(1);
 		await expect(page.getByRole('contentinfo')).toHaveCount(1);
-		await expect(page.getByRole('heading', { level: 2 })).toHaveText([
+		const sections = [
 			'Discover. Explore. Wander.',
-			'For the love of mountains'
-		]);
-		await expect(page.getByRole('region', { name: 'Discover. Explore. Wander.' })).toBeVisible();
+			'For the love of mountains',
+			'Where two passions meet.'
+		];
+		await expect(page.getByRole('heading', { level: 2 })).toHaveText(sections);
+		await expect(page.getByRole('region')).toHaveCount(sections.length);
+		for (const name of sections) {
+			await expect(page.getByRole('region', { name })).toBeVisible();
+		}
 	});
 
 	test('never loads or initializes the 3D stage', async ({ page }) => {
