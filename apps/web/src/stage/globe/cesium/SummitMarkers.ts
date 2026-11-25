@@ -41,6 +41,10 @@ export interface CompactStageQuery {
  * The disc appears at once. The pill appears when its faces are ready, and only if the same
  * summit is still showing by then. On the phone layout the pill is left out, and drawn only if the
  * stage grows past that breakpoint while the summit is showing.
+ *
+ * The reader may hide the summit marker. Hiding takes the disc and the pill off the stage but keeps
+ * the summit being presented, so showing it again, or a mountain presented while hidden, draws
+ * the same disc and pill as if it had never been hidden. Nothing here touches the camera.
  */
 export class SummitMarkers implements SummitMarkerDisplay {
 	private readonly heightReference: HeightReference;
@@ -48,6 +52,7 @@ export class SummitMarkers implements SummitMarkerDisplay {
 	private generation = 0;
 	private current: { marker: SummitMarker; position: Cartesian3 } | undefined;
 	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
+	private visible = true;
 	private readonly onLayoutChange = () => this.syncPill();
 
 	constructor(
@@ -63,26 +68,37 @@ export class SummitMarkers implements SummitMarkerDisplay {
 	show(marker: SummitMarker): void {
 		this.hide();
 
-		const { canvas } = this.viewer.scene;
 		const position = this.cesium.Cartesian3.fromDegrees(
 			marker.longitude,
 			marker.latitude,
 			marker.elevationMeters
 		);
 
-		this.viewer.entities.add({
-			id: SUMMIT_MARKER_ID,
-			position,
-			billboard: {
-				image: this.sprites.disc(renderRatio(canvas)).image,
-				heightReference: this.heightReference,
-				distanceDisplayCondition: this.distance
-			}
-		});
-
 		this.current = { marker, position };
 		this.compactStage.addEventListener('change', this.onLayoutChange);
+		this.drawDisc(position);
 		this.syncPill();
+	}
+
+	/** Idempotent. Hidden, a summit is still presented; it is just not drawn. */
+	setVisible(next: boolean): void {
+		if (next === this.visible) {
+			return;
+		}
+		this.visible = next;
+
+		if (!this.current || this.viewer.isDestroyed()) {
+			return;
+		}
+		if (next) {
+			this.drawDisc(this.current.position);
+			this.syncPill();
+			return;
+		}
+
+		// A pill still being drawn must not land on a stage that has been cleared.
+		this.generation += 1;
+		this.removeEntities();
 	}
 
 	setUnitSystem(system: UnitSystem): void {
@@ -91,7 +107,7 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		}
 		this.units = system;
 
-		if (this.current && !this.compactStage.matches && !this.viewer.isDestroyed()) {
+		if (this.drawsPill() && this.current && !this.viewer.isDestroyed()) {
 			this.drawPill(this.current);
 		}
 	}
@@ -101,6 +117,30 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		this.current = undefined;
 		this.compactStage.removeEventListener('change', this.onLayoutChange);
 
+		this.removeEntities();
+	}
+
+	private drawsPill(): boolean {
+		return this.visible && !this.compactStage.matches;
+	}
+
+	private drawDisc(position: Cartesian3): void {
+		if (!this.visible || this.viewer.isDestroyed()) {
+			return;
+		}
+
+		this.viewer.entities.add({
+			id: SUMMIT_MARKER_ID,
+			position,
+			billboard: {
+				image: this.sprites.disc(renderRatio(this.viewer.scene.canvas)).image,
+				heightReference: this.heightReference,
+				distanceDisplayCondition: this.distance
+			}
+		});
+	}
+
+	private removeEntities(): void {
 		if (!this.viewer.isDestroyed()) {
 			this.viewer.entities.removeById(SUMMIT_MARKER_ID);
 			this.viewer.entities.removeById(SUMMIT_LABEL_ID);
@@ -114,7 +154,7 @@ export class SummitMarkers implements SummitMarkerDisplay {
 		}
 
 		this.viewer.entities.removeById(SUMMIT_LABEL_ID);
-		if (!this.current || this.compactStage.matches) {
+		if (!this.current || !this.drawsPill()) {
 			return;
 		}
 

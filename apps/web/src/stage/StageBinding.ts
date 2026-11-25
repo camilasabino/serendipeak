@@ -27,6 +27,8 @@ export interface StageBindingOptions {
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
 	markers?: readonly AtlasMarker[];
+	/** Whether the presented mountain's summit marker is drawn; it is unless told otherwise. */
+	summitMarkerVisible?: boolean;
 	unitSystem?: UnitSystem;
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
@@ -46,6 +48,7 @@ export class StageBinding {
 	private atlas: AtlasView | undefined;
 	private markers: readonly AtlasMarker[] | undefined;
 	private unitSystem: UnitSystem | undefined;
+	private summitMarkerVisible: boolean;
 	private published: StageSize | undefined;
 	private disposed = false;
 
@@ -54,6 +57,7 @@ export class StageBinding {
 		this.atlas = options.atlas;
 		this.markers = options.markers;
 		this.unitSystem = options.unitSystem;
+		this.summitMarkerVisible = options.summitMarkerVisible ?? true;
 		this.session = this.openSession();
 		this.present();
 
@@ -83,6 +87,14 @@ export class StageBinding {
 		}
 		this.markers = markers;
 		this.session.setAtlasMarkers(markers);
+	}
+
+	setSummitMarkerVisible(visible: boolean): void {
+		if (this.disposed) {
+			return;
+		}
+		this.summitMarkerVisible = visible;
+		this.session.setSummitMarkerVisible(visible);
 	}
 
 	setUnitSystem(system: UnitSystem): void {
@@ -166,6 +178,7 @@ export class StageBinding {
 		if (this.unitSystem) {
 			this.session.setUnitSystem(this.unitSystem);
 		}
+		this.session.setSummitMarkerVisible(this.summitMarkerVisible);
 		this.session.setAtlas(this.atlas);
 		this.session.setAtlasMarkers(this.markers);
 		this.session.setTarget(this.target);

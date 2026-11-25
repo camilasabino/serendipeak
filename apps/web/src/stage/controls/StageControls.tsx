@@ -16,7 +16,7 @@ import styles from './StageControls.module.css';
 import { TooltipSuppressionProvider } from './Tooltip';
 import { ZoomControls } from './ZoomControls';
 
-/** The reader's switch for the atlas markers; present only where the globe carries them. */
+/** The reader's switch for the markers the globe draws, which the help explains and this controls. */
 export interface MarkerToggle {
 	shown: boolean;
 	onToggle: () => void;
@@ -30,8 +30,9 @@ interface StageControlsProps {
 	/** Given where the stage offers the orbit around its mountain. */
 	onToggleMountainOrbit?: () => void;
 	fullscreen: StageFullscreen;
-	/** The globe carries atlas markers, which the help then explains and this switches. */
 	markerToggle?: MarkerToggle;
+	/** The stage presents the atlas, not a mountain; decides what the help describes. */
+	onAtlas?: boolean;
 }
 
 export function StageControls({
@@ -41,24 +42,24 @@ export function StageControls({
 	onToggleRotation,
 	onToggleMountainOrbit,
 	fullscreen,
-	markerToggle
+	markerToggle,
+	onAtlas = false
 }: StageControlsProps) {
 	const [helpOpen, setHelpOpen] = useState(false);
 	const { state, headingDegrees, scale, rotation, mountainOrbit } = snapshot;
 	const controls = stageControlsFor(state, snapshot);
 	const orbit = onToggleMountainOrbit !== undefined && mountainOrbit !== 'off';
-	const helpContext = useMemo<NavigationHelpContext>(
-		() =>
-			markerToggle
-				? {
-						kind: 'atlas',
-						markersHidden: !markerToggle.shown,
-						rotation: rotation !== 'off',
-						fullscreen: fullscreen.supported
-					}
-				: { kind: 'mountain', orbit, fullscreen: fullscreen.supported },
-		[markerToggle, rotation, orbit, fullscreen.supported]
-	);
+	const helpContext = useMemo<NavigationHelpContext>(() => {
+		const markersHidden = markerToggle ? !markerToggle.shown : undefined;
+		return onAtlas
+			? {
+					kind: 'atlas',
+					markersHidden,
+					rotation: rotation !== 'off',
+					fullscreen: fullscreen.supported
+				}
+			: { kind: 'mountain', markersHidden, orbit, fullscreen: fullscreen.supported };
+	}, [onAtlas, markerToggle, rotation, orbit, fullscreen.supported]);
 	if (!controls.visible) {
 		return null;
 	}

@@ -85,6 +85,7 @@ export class SceneSession {
 	private markers: readonly AtlasMarker[] | undefined;
 	private stage: StageSize | undefined;
 	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
+	private summitMarkerVisible = true;
 	private stopped = false;
 	private revealed = false;
 	private presentation = 0;
@@ -198,6 +199,19 @@ export class SceneSession {
 		}
 		this.markers = next;
 		this.scene?.setAtlasMarkers(next);
+	}
+
+	/**
+	 * Whether the presented mountain's summit marker is drawn. Kept for a scene that does not exist
+	 * yet, such as one a retry builds, and applied before the first mountain is presented. Never
+	 * restarts a presentation or moves the camera.
+	 */
+	setSummitMarkerVisible(next: boolean): void {
+		if (this.stopped) {
+			return;
+		}
+		this.summitMarkerVisible = next;
+		this.scene?.setSummitMarkerVisible(next);
 	}
 
 	/**
@@ -379,6 +393,7 @@ export class SceneSession {
 		this.scene = ready;
 		this.flying = false;
 		ready.setUnitSystem(this.units);
+		ready.setSummitMarkerVisible(this.summitMarkerVisible);
 		this.releaseOrientation = ready.subscribeOrientation((orientation) => {
 			if (!this.stopped) {
 				this.store.setOrientation(orientation);

@@ -142,10 +142,7 @@ test.describe('@webgl atlas marker visibility', () => {
 		});
 	});
 
-	test('keeps the preference across a mountain page and back, and offers it nowhere else', async ({
-		page,
-		request
-	}) => {
+	test('keeps the preference across a mountain page and back', async ({ page, request }) => {
 		await page.setViewportSize(DESKTOP);
 		await useScenario(request, 'catalog');
 		await page.goto('/atlas');
@@ -163,7 +160,7 @@ test.describe('@webgl atlas marker visibility', () => {
 			.click();
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
 		await expectReadyStage(page);
-		await expect(page.getByRole('button', { name: /mountain markers/ })).toHaveCount(0);
+		await expect(show(page)).toBeVisible();
 
 		await page.goBack();
 		await expect(page).toHaveURL(/\/atlas$/);
@@ -178,9 +175,11 @@ test.describe('@webgl atlas marker visibility', () => {
 		await show(page).click();
 		await expect.poll(async () => (await seen(page)).length).toBeGreaterThan(2);
 
+		// A full load starts over: the preference lives in the page, not in storage.
 		await page.goto('/');
 		await expectReadyStage(page);
-		await expect(page.getByRole('button', { name: /mountain markers/ })).toHaveCount(0);
+		await expect(hide(page)).toBeVisible();
+		await expect(show(page)).toHaveCount(0);
 	});
 
 	test('restores the markers matching the filters chosen while hidden', async ({
@@ -294,10 +293,8 @@ test.describe('@webgl atlas marker visibility', () => {
 					};
 					const root = document.querySelector('main [data-stage]')!;
 					const buttons = [...root.querySelectorAll('button')];
-					// The toolbar is positioned against the scene, which is not always the anchor's box.
-					const scene = buttons.find(
-						(button) => button.textContent?.trim() === labels[0]
-					)!.offsetParent!;
+					// A button's offsetParent is its tooltip anchor, so the canvas, which fills the stage, bounds it.
+					const scene = root.querySelector('canvas')!;
 					return {
 						stage: rect(scene),
 						boxes: labels.map((label) => {

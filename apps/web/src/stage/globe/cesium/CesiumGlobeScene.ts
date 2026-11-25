@@ -541,6 +541,12 @@ export class CesiumGlobeScene implements GlobeScene {
 		return this.flight.zoom(direction, this.motion() === 'direct' ? 0 : ZOOM_FLIGHT_SECONDS);
 	}
 
+	setSummitMarkerVisible(visible: boolean): void {
+		if (!this.destroyed) {
+			this.summitMarkers.setVisible(visible);
+		}
+	}
+
 	setUnitSystem(system: UnitSystem): void {
 		if (this.destroyed || system === this.units) {
 			return;

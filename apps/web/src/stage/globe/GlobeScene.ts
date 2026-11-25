@@ -65,6 +65,13 @@ export interface GlobeScene extends Destroyable {
 	 */
 	setAtlasMarkers(markers: readonly AtlasMarker[] | undefined): void;
 	/**
+	 * Whether the summit marker of the presented mountain is drawn, the disc and its pill, drawn
+	 * until told otherwise. Hiding leaves the mountain presented: the camera, its orbit pivot and
+	 * Reset are untouched, a mountain presented while hidden is simply not drawn, and showing again
+	 * redraws the marker of the one presented now. Idempotent, and never restarts a presentation.
+	 */
+	setSummitMarkerVisible(visible: boolean): void;
+	/**
 	 * Whether the scene is presenting the atlas. The atlas wears a darker look that fades with the
 	 * camera's height and never applies to a mountain; the first call places it at once, later ones
 	 * fade, and reduced motion always places it at once. Independent of the markers drawn.

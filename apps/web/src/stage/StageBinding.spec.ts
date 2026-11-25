@@ -44,6 +44,7 @@ function setup(
 		atlas?: AtlasView;
 		markers?: readonly AtlasMarker[];
 		unitSystem?: UnitSystem;
+		summitMarkerVisible?: boolean;
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
 		onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -63,6 +64,7 @@ function setup(
 			atlas: options.atlas,
 			markers: options.markers,
 			unitSystem: options.unitSystem,
+			summitMarkerVisible: options.summitMarkerVisible,
 			observer: options.observer,
 			onMarkerActivate: options.onMarkerActivate,
 			onStageResize: options.onStageResize
@@ -996,5 +998,73 @@ describe('StageBinding unit system', () => {
 		binding.setUnitSystem('imperial');
 
 		expect(scene.unitSystems).toEqual(['metric']);
+	});
+});
+
+describe('StageBinding summit marker visibility', () => {
+	async function mounted(options: Parameters<typeof setup>[0] = {}) {
+		const context = setup(options);
+		const binding = context.mount();
+		const scene = context.factory.resolve(0);
+		await flush();
+
+		return { ...context, binding, scene };
+	}
+
+	it('draws the summit marker unless the binding was mounted with it hidden', async () => {
+		const { scene } = await mounted();
+		const hidden = await mounted({ summitMarkerVisible: false });
+
+		expect(scene.summitMarkerVisible).toBe(true);
+		expect(hidden.scene.summitMarkerVisible).toBe(false);
+	});
+
+	it('hands a change to the live scene without creating another or presenting again', async () => {
+		const { factory, binding, scene } = await mounted({ target: ACONCAGUA });
+		const shown = scene.shown.length;
+
+		binding.setSummitMarkerVisible(false);
+		binding.setSummitMarkerVisible(true);
+		binding.setSummitMarkerVisible(false);
+
+		expect(scene.summitVisibility).toEqual([true, false, true, false]);
+		expect(scene.shown).toHaveLength(shown);
+		expect(scene.destroyCount).toBe(0);
+		expect(factory.calls).toHaveLength(1);
+	});
+
+	it('holds a change made while the scene is still loading and applies it once it exists', async () => {
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+
+		binding.setSummitMarkerVisible(false);
+		const scene = factory.resolve(0);
+		await flush();
+
+		expect(scene.summitVisibility).toEqual([false]);
+	});
+
+	it('applies the choice made since mounting to the scene a retry builds', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { factory, mount } = setup({ target: ACONCAGUA });
+		const binding = mount();
+		factory.reject(0, new Error('terrain unavailable'));
+		await flush();
+
+		binding.setSummitMarkerVisible(false);
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.summitMarkerVisible).toBe(false);
+	});
+
+	it('does nothing once disposed', async () => {
+		const { binding, scene } = await mounted();
+		binding.dispose();
+
+		binding.setSummitMarkerVisible(false);
+
+		expect(scene.summitVisibility).toEqual([true]);
 	});
 });

@@ -424,6 +424,164 @@ describe('SummitMarkers', () => {
 		});
 	});
 
+	describe('visibility', () => {
+		const ids = (viewer: ReturnType<typeof setup>['viewer']) =>
+			viewer.entities.values.map((entity) => entity.id).sort();
+
+		it('is drawn until told otherwise', () => {
+			const { markers, viewer } = setup();
+
+			markers.setVisible(true);
+			markers.show(SUMMIT);
+
+			expect(ids(viewer)).toEqual(['summit-marker']);
+		});
+
+		it('takes the disc and the pill off the stage, and draws both again on return', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0);
+			await settle();
+			expect(ids(viewer)).toEqual(['summit-label', 'summit-marker']);
+
+			markers.setVisible(false);
+			expect(ids(viewer)).toEqual([]);
+
+			markers.setVisible(true);
+			expect(ids(viewer)).toEqual(['summit-marker']);
+			sprites.finish(1);
+			await settle();
+			expect(ids(viewer)).toEqual(['summit-label', 'summit-marker']);
+			expect(sprites.pillRequests.map((request) => request.name)).toEqual([
+				'Matterhorn',
+				'Matterhorn'
+			]);
+		});
+
+		it('keeps the summit at the same place across a hide', () => {
+			const { markers, viewer } = setup();
+			markers.show(SUMMIT);
+
+			markers.setVisible(false);
+			markers.setVisible(true);
+
+			const position = viewer.entities.getById('summit-marker')!.position!.getValue(NOW)!;
+			expect(cesium.Cartesian3.equals(position, cesium.Cartesian3.fromDegrees(7, 46, 4478))).toBe(
+				true
+			);
+		});
+
+		it('drops a pill still being drawn when hidden', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+
+			markers.setVisible(false);
+			sprites.finish(0);
+			await settle();
+
+			expect(ids(viewer)).toEqual([]);
+		});
+
+		it('draws nothing for a summit shown while hidden, and the one shown now on return', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.setVisible(false);
+
+			markers.show(SUMMIT);
+			markers.show({ ...SUMMIT, name: 'Weisshorn' });
+			await settle();
+			expect(ids(viewer)).toEqual([]);
+			expect(sprites.pillRequests).toHaveLength(0);
+
+			markers.setVisible(true);
+			sprites.finish(0);
+			await settle();
+			expect(ids(viewer)).toEqual(['summit-label', 'summit-marker']);
+			expect(viewer.entities.getById('summit-label')!.billboard!.image!.getValue(NOW)).toBe(
+				'pill:Weisshorn'
+			);
+		});
+
+		it('draws nothing on return once the summit was let go while hidden', async () => {
+			const { markers, viewer, sprites } = setup();
+			markers.show(SUMMIT);
+			markers.setVisible(false);
+
+			markers.hide();
+			markers.setVisible(true);
+
+			expect(ids(viewer)).toEqual([]);
+			expect(sprites.pillRequests).toHaveLength(1);
+		});
+
+		it('is idempotent: the same state draws and asks for nothing more', async () => {
+			const { markers, viewer, sprites, settle } = setup();
+			markers.show(SUMMIT);
+			sprites.finish(0);
+			await settle();
+
+			markers.setVisible(true);
+			markers.setVisible(true);
+			expect(sprites.pillRequests).toHaveLength(1);
+			expect(ids(viewer)).toEqual(['summit-label', 'summit-marker']);
+
+			markers.setVisible(false);
+			markers.setVisible(false);
+			markers.setVisible(true);
+			expect(sprites.pillRequests).toHaveLength(2);
+		});
+
+		it('words a pill redrawn on return in the unit chosen while hidden', () => {
+			const { markers, sprites } = setup();
+			markers.show(SUMMIT);
+			markers.setVisible(false);
+
+			markers.setUnitSystem('imperial');
+			expect(sprites.pillRequests).toHaveLength(1);
+
+			markers.setVisible(true);
+			expect(sprites.pillRequests.at(-1)!.elevation).toMatch(/ft/);
+		});
+
+		it('keeps to the phone layout on return: the disc alone', async () => {
+			const { markers, viewer, sprites, settle } = setup(undefined, true);
+			markers.show(SUMMIT);
+
+			markers.setVisible(false);
+			markers.setVisible(true);
+			await settle();
+
+			expect(ids(viewer)).toEqual(['summit-marker']);
+			expect(sprites.pillRequests).toHaveLength(0);
+		});
+
+		it('ignores a layout change while hidden, and obeys the layout on return', async () => {
+			const { markers, viewer, sprites, settle, layout } = setup(undefined, true);
+			markers.show(SUMMIT);
+			markers.setVisible(false);
+
+			layout.switchTo(false);
+			await settle();
+			expect(ids(viewer)).toEqual([]);
+			expect(sprites.pillRequests).toHaveLength(0);
+
+			markers.setVisible(true);
+			sprites.finish(0);
+			await settle();
+			expect(ids(viewer)).toEqual(['summit-label', 'summit-marker']);
+		});
+
+		it('touches nothing once the viewer is destroyed', () => {
+			const { markers, viewer } = setup();
+			markers.show(SUMMIT);
+			viewer.destroyed = true;
+
+			expect(() => {
+				markers.setVisible(false);
+				markers.setVisible(true);
+			}).not.toThrow();
+		});
+	});
+
 	describe('on the phone layout', () => {
 		it('keeps the disc and never draws a pill', async () => {
 			const { markers, viewer, sprites, settle } = setup(undefined, true);

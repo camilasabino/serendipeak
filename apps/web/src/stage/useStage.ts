@@ -26,6 +26,8 @@ export interface UseStageOptions {
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
 	markers?: readonly AtlasMarker[];
+	/** Applied without rebuilding the scene; drawn unless told otherwise. */
+	summitMarkerVisible?: boolean;
 	/** Applied to the scene without rebuilding it; the stage is metric until one is given. */
 	unitSystem?: UnitSystem;
 	observer?: PresentationObserver;
@@ -53,6 +55,7 @@ export function useStage({
 	target,
 	atlas,
 	markers,
+	summitMarkerVisible = true,
 	unitSystem,
 	observer,
 	onMarkerActivate,
@@ -63,6 +66,7 @@ export function useStage({
 	const targetRef = useRef(target);
 	const atlasRef = useRef(atlas);
 	const markersRef = useRef(markers);
+	const summitVisibleRef = useRef(summitMarkerVisible);
 	const unitSystemRef = useRef(unitSystem);
 	const activateRef = useRef(onMarkerActivate);
 	const resizeRef = useRef(onStageResize);
@@ -98,6 +102,11 @@ export function useStage({
 	}, [stableMarkers]);
 
 	useEffect(() => {
+		summitVisibleRef.current = summitMarkerVisible;
+		bindingRef.current?.setSummitMarkerVisible(summitMarkerVisible);
+	}, [summitMarkerVisible]);
+
+	useEffect(() => {
 		unitSystemRef.current = unitSystem;
 		if (unitSystem) {
 			bindingRef.current?.setUnitSystem(unitSystem);
@@ -128,6 +137,7 @@ export function useStage({
 			target: targetRef.current,
 			atlas: atlasRef.current,
 			markers: markersRef.current,
+			summitMarkerVisible: summitVisibleRef.current,
 			unitSystem: unitSystemRef.current,
 			observer,
 			onMarkerActivate: (activation) => activateRef.current?.(activation),

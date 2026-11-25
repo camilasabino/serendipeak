@@ -40,9 +40,11 @@ interface MountainSceneProps {
 	store: SceneStore;
 	target: SceneTarget | undefined;
 	atlas?: AtlasView;
-	/** The markers drawn now; none while the reader has hidden them, and off the atlas. */
+	/** The atlas markers drawn now; none while the reader has hidden them, and off the atlas. */
 	markers?: readonly AtlasMarker[];
-	/** Given on the atlas only, drawn or not: the switch stays while the markers are away. */
+	/** Whether the presented mountain's summit marker is drawn; it is unless the reader hid it. */
+	summitMarkerVisible?: boolean;
+	/** The reader's switch for every marker on the globe, drawn or not: it stays while they are away. */
 	markerToggle?: MarkerToggle;
 	/** Offers the reader an orbit around the presented mountain; never shown on the atlas. */
 	mountainOrbit?: boolean;
@@ -60,6 +62,7 @@ export default function MountainScene({
 	target,
 	atlas,
 	markers,
+	summitMarkerVisible = true,
 	markerToggle,
 	mountainOrbit = false,
 	observer,
@@ -86,6 +89,7 @@ export default function MountainScene({
 		target,
 		atlas,
 		markers,
+		summitMarkerVisible,
 		unitSystem,
 		observer,
 		onMarkerActivate,
@@ -117,6 +121,7 @@ export default function MountainScene({
 				onToggleMountainOrbit={mountainOrbit ? toggleMountainOrbit : undefined}
 				fullscreen={fullscreen}
 				markerToggle={markerToggle}
+				onAtlas={atlas !== undefined}
 			/>
 			{children}
 			<SceneStatus state={state} onRetry={sceneCanRetry(state) ? retry : undefined} />

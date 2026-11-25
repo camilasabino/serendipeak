@@ -72,13 +72,14 @@ export interface GuideContent {
 }
 
 /**
- * What the guide may describe: the atlas explains its markers, rotation and overview, a mountain
- * its orbit and starting view, and neither mentions the other's controls. The buttons listed are
- * those the stage shows now.
+ * What the guide may describe: the atlas explains its rotation and overview, a mountain its orbit
+ * and starting view, and neither mentions the other's controls. The buttons listed are those the
+ * stage shows now. Both explain the markers switch, each in its own words, wherever the stage
+ * offers one: `markersHidden` is absent where it does not.
  */
 export type NavigationHelpContext =
-	| { kind: 'atlas'; markersHidden: boolean; rotation: boolean; fullscreen: boolean }
-	| { kind: 'mountain'; orbit: boolean; fullscreen: boolean };
+	| { kind: 'atlas'; markersHidden?: boolean; rotation: boolean; fullscreen: boolean }
+	| { kind: 'mountain'; markersHidden?: boolean; orbit: boolean; fullscreen: boolean };
 
 const FULLSCREEN_ROW: GuideRow = {
 	icon: 'fullscreen',
@@ -91,7 +92,7 @@ const ZOOM_ROW: GuideRow = { icon: 'zoom', action: '+ and −', description: 'Zo
 // Each gesture is a camera binding this stage actually has: Cesium's defaults, plus a trackpad
 // pinch, which browsers report as Ctrl and the wheel.
 function gestureRows(tab: 'mouse' | 'touch', context: NavigationHelpContext): readonly GuideRow[] {
-	const openable = context.kind === 'atlas' && !context.markersHidden;
+	const openable = context.kind === 'atlas' && context.markersHidden !== true;
 	if (tab === 'mouse') {
 		return [
 			{ icon: 'move', action: 'Move', description: 'Drag the globe' },
@@ -128,6 +129,17 @@ function controlRows(context: NavigationHelpContext): readonly GuideRow[] {
 						}
 					]
 				: []),
+			...(context.markersHidden === undefined
+				? []
+				: [
+						{
+							icon: 'markers' as const,
+							action: 'Markers',
+							description: context.markersHidden
+								? 'Show the summit marker'
+								: 'Hide the summit marker'
+						}
+					]),
 			...(context.fullscreen ? [FULLSCREEN_ROW] : [])
 		];
 	}
@@ -144,23 +156,29 @@ function controlRows(context: NavigationHelpContext): readonly GuideRow[] {
 					}
 				]
 			: []),
-		{
-			icon: 'markers',
-			action: 'Markers',
-			description: context.markersHidden ? 'Show the mountain markers' : 'Hide the mountain markers'
-		},
+		...(context.markersHidden === undefined
+			? []
+			: [
+					{
+						icon: 'markers' as const,
+						action: 'Markers',
+						description: context.markersHidden
+							? 'Show the mountain markers'
+							: 'Hide the mountain markers'
+					}
+				]),
 		...(context.fullscreen ? [FULLSCREEN_ROW] : [])
 	];
 }
 
 export function navigationGuide(context: NavigationHelpContext): Record<GuideTab, GuideContent> {
 	const gestureNote =
-		context.kind === 'atlas' && !context.markersHidden
+		context.kind === 'atlas' && context.markersHidden !== true
 			? 'Where points overlap, a short list opens.'
 			: undefined;
 	const controlsNote =
 		context.kind === 'atlas'
-			? context.markersHidden
+			? context.markersHidden === true
 				? 'Markers are hidden. Every mountain is still in the list and in Search.'
 				: undefined
 			: context.orbit

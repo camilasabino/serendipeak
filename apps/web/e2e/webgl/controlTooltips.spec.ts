@@ -158,7 +158,7 @@ test.describe('@webgl control tooltips on the atlas', () => {
 });
 
 test.describe('@webgl control tooltips on a mountain', () => {
-	test('names the orbit by its action and keeps atlas controls out of the help', async ({
+	test('names the orbit and the markers by their actions and keeps atlas controls out of the help', async ({
 		page
 	}) => {
 		await page.setViewportSize(DESKTOP);
@@ -178,7 +178,35 @@ test.describe('@webgl control tooltips on a mountain', () => {
 		await expect(help).toContainText('360° orbit');
 		await expect(help).toContainText('Moving the map yourself stops the orbit');
 		await expect(help).toContainText('Back to the starting view');
-		await expect(help).not.toContainText(/markers|Atlas overview|rotation/i);
+		await expect(help).toContainText('Hide the summit marker');
+		await expect(help).not.toContainText(/mountain markers|Atlas overview|rotation/i);
+	});
+
+	test('explains the markers switch by what it does now, and the tooltip follows it', async ({
+		page
+	}) => {
+		await page.setViewportSize(DESKTOP);
+		await openMountain(page);
+		const markers = control(page, 'Hide mountain markers');
+
+		await markers.hover();
+		await expect(shownTooltips(page)).toHaveText('Hide mountain markers', { timeout: 250 });
+		await markers.click();
+		await expect(shownTooltips(page)).toHaveText('Show mountain markers', { timeout: 250 });
+
+		await control(page, 'How to navigate').click();
+		await expect(helpDialog(page)).toContainText('Show the summit marker');
+		await page.keyboard.press('Escape');
+
+		await control(page, 'Show mountain markers').focus();
+		await expect(shownTooltips(page).filter({ hasText: 'Show mountain markers' })).toHaveCount(1, {
+			timeout: 250
+		});
+		await page.keyboard.press('Space');
+		await expect(control(page, 'Hide mountain markers')).toBeFocused();
+		await expect(shownTooltips(page).filter({ hasText: 'Hide mountain markers' })).toHaveCount(1, {
+			timeout: 250
+		});
 	});
 });
 
@@ -332,7 +360,8 @@ test.describe('@webgl navigation guide tabs', () => {
 		const visible = panels(page).filter({ visible: true });
 		await expect(visible).toContainText('Circle the summit');
 		await expect(visible).toContainText('Moving the map yourself stops the orbit.');
-		await expect(visible).not.toContainText(/Markers|Rotation|Atlas/);
+		await expect(visible).toContainText('Hide the summit marker');
+		await expect(visible).not.toContainText(/mountain markers|Rotation|Atlas/);
 		await tab(page, 'Mouse').click();
 		await expect(panels(page).filter({ visible: true })).not.toContainText('Open');
 	});

@@ -20,13 +20,19 @@ const ATLAS: NavigationHelpContext = {
 	rotation: true,
 	fullscreen: true
 };
-const MOUNTAIN: NavigationHelpContext = { kind: 'mountain', orbit: true, fullscreen: true };
+const MOUNTAIN: NavigationHelpContext = {
+	kind: 'mountain',
+	markersHidden: false,
+	orbit: true,
+	fullscreen: true
+};
 
 function render(
 	snapshot: SceneSnapshot,
 	fullscreen: StageFullscreen = UNSUPPORTED,
 	markerToggle?: MarkerToggle,
-	onToggleMountainOrbit?: () => void
+	onToggleMountainOrbit?: () => void,
+	onAtlas = false
 ): string {
 	return renderToStaticMarkup(
 		<StageControls
@@ -37,6 +43,7 @@ function render(
 			onToggleMountainOrbit={onToggleMountainOrbit}
 			fullscreen={fullscreen}
 			markerToggle={markerToggle}
+			onAtlas={onAtlas}
 		/>
 	);
 }
@@ -271,6 +278,7 @@ describe('StageControls help controls', () => {
 			'+ and −',
 			'Reset view',
 			'360° orbit',
+			'Markers',
 			'Fullscreen'
 		]);
 		expect(mountain.rows[1]!.description).toBe('Back to the starting view');
@@ -283,6 +291,15 @@ describe('StageControls help controls', () => {
 		expect(controls({ ...ATLAS, fullscreen: false })).not.toContain('Fullscreen');
 		expect(controls({ ...MOUNTAIN, fullscreen: false })).not.toContain('Fullscreen');
 		expect(controls({ ...MOUNTAIN, orbit: false, fullscreen: false })).toEqual([
+			'+ and −',
+			'Reset view',
+			'Markers'
+		]);
+		expect(controls({ kind: 'mountain', orbit: false, fullscreen: false })).toEqual([
+			'+ and −',
+			'Reset view'
+		]);
+		expect(controls({ kind: 'atlas', rotation: false, fullscreen: false })).toEqual([
 			'+ and −',
 			'Reset view'
 		]);
@@ -301,17 +318,52 @@ describe('StageControls help controls', () => {
 		expect(navigationGuide(ATLAS).controls.note).toBeUndefined();
 	});
 
+	it('describes the markers switch on a mountain page by what it does to the summit marker', () => {
+		const rows = (markersHidden: boolean) =>
+			navigationGuide({ ...MOUNTAIN, markersHidden }).controls.rows.find(
+				(row) => row.action === 'Markers'
+			);
+
+		expect(rows(false)).toMatchObject({ icon: 'markers', description: 'Hide the summit marker' });
+		expect(rows(true)).toMatchObject({ icon: 'markers', description: 'Show the summit marker' });
+		expect(navigationGuide({ ...MOUNTAIN, markersHidden: true }).controls.note).toBe(
+			'Moving the map yourself stops the orbit.'
+		);
+		for (const markersHidden of [false, true]) {
+			const { mouse, touch } = navigationGuide({ ...MOUNTAIN, markersHidden });
+			expect(mouse.rows.map((row) => row.action)).not.toContain('Open');
+			expect(touch.rows.map((row) => row.action)).not.toContain('Open');
+		}
+	});
+
+	it('words the same switch for the whole atlas, and places it after the orbit or rotation', () => {
+		const atlas = navigationGuide(ATLAS).controls.rows;
+		const mountain = navigationGuide(MOUNTAIN).controls.rows;
+
+		expect(atlas.find((row) => row.action === 'Markers')!.description).toBe(
+			'Hide the mountain markers'
+		);
+		expect(atlas.map((row) => row.action).indexOf('Markers')).toBeGreaterThan(
+			atlas.map((row) => row.action).indexOf('Rotation')
+		);
+		expect(mountain.map((row) => row.action).indexOf('Markers')).toBeGreaterThan(
+			mountain.map((row) => row.action).indexOf('360° orbit')
+		);
+	});
+
 	it('keeps atlas controls out of a mountain guide and mountain controls out of the atlas guide', () => {
 		const store = readyStore();
 		store.setMountainOrbit('idle');
-		const mountain = render(store.getSnapshot(), SUPPORTED, undefined, () => {});
+		const mountain = render(store.getSnapshot(), SUPPORTED, SHOWN, () => {});
 		const atlasStore = readyStore();
 		atlasStore.setRotation('rotating');
-		const atlas = render(atlasStore.getSnapshot(), SUPPORTED, SHOWN);
+		const atlas = render(atlasStore.getSnapshot(), SUPPORTED, SHOWN, undefined, true);
 		const guideOf = (html: string) =>
 			html.slice(html.indexOf('role="dialog"'), html.indexOf('role="dialog"') + 6000);
 
-		expect(guideOf(mountain)).not.toMatch(/Atlas overview|markers|Rotation|point or name/i);
+		expect(guideOf(mountain)).not.toMatch(
+			/Atlas overview|mountain markers|Rotation|point or name/i
+		);
 		expect(guideOf(atlas)).not.toMatch(/orbit|starting view|summit/i);
 		expect(guideOf(atlas)).toContain('Back to the Atlas overview');
 		expect(guideOf(mountain)).toContain('Circle the summit');
@@ -456,10 +508,54 @@ describe('StageControls globe rotation', () => {
 });
 
 describe('StageControls marker visibility', () => {
-	it('offers no switch off the atlas', () => {
+	it('offers no switch where the stage is given none', () => {
 		const html = render(readyStore().getSnapshot(), SUPPORTED);
 
-		expect(html).not.toMatch(/mountain markers/i);
+		expect(html).not.toMatch(/mountain markers|summit marker/i);
+	});
+
+	it('offers the same switch on a mountain page as on the atlas, with the same labels', () => {
+		const mountain = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN, () => {});
+		const atlas = render(readyStore().getSnapshot(), UNSUPPORTED, SHOWN, undefined, true);
+		const hidden = render(readyStore().getSnapshot(), UNSUPPORTED, HIDDEN, () => {});
+
+		for (const html of [mountain, atlas]) {
+			expect(button(html, 'Hide mountain markers')).toMatch(/^<button type="button"/);
+			expect(html).toContain('Hide mountain markers</span></button><span aria-hidden="true"');
+			expect(html).not.toContain('Show mountain markers');
+		}
+		expect(button(hidden, 'Show mountain markers')).not.toContain('disabled');
+		expect(hidden).not.toContain('Hide mountain markers');
+	});
+
+	it('explains the switch in the help of every context, following its state', () => {
+		const guide = (html: string) =>
+			html.slice(html.indexOf('role="dialog"'), html.indexOf('</section>'));
+		const store = readyStore();
+		store.setRotation('rotating');
+		store.setMountainOrbit('idle');
+		const atlasHtml = (toggle: MarkerToggle) =>
+			guide(render(store.getSnapshot(), UNSUPPORTED, toggle, undefined, true));
+		const mountainHtml = (toggle: MarkerToggle) =>
+			guide(render(store.getSnapshot(), UNSUPPORTED, toggle, () => {}));
+
+		expect(atlasHtml(SHOWN)).toContain('Hide the mountain markers');
+		expect(atlasHtml(HIDDEN)).toContain('Show the mountain markers');
+		expect(mountainHtml(SHOWN)).toContain('Hide the summit marker');
+		expect(mountainHtml(HIDDEN)).toContain('Show the summit marker');
+		expect(mountainHtml(SHOWN)).not.toMatch(/mountain markers|Atlas overview/);
+	});
+
+	it('keeps the switch where it is, between the orbit and fullscreen, on a mountain page', () => {
+		const store = readyStore();
+		store.setMountainOrbit('idle');
+		const html = render(store.getSnapshot(), SUPPORTED, SHOWN, () => {});
+
+		expect(html.indexOf('Reset view')).toBeLessThan(html.indexOf('Start mountain orbit'));
+		expect(html.indexOf('Start mountain orbit')).toBeLessThan(
+			html.indexOf('Hide mountain markers')
+		);
+		expect(html.indexOf('Hide mountain markers')).toBeLessThan(html.indexOf('Enter fullscreen'));
 	});
 
 	it('offers hiding while the markers are drawn, as a plain button named for the action', () => {

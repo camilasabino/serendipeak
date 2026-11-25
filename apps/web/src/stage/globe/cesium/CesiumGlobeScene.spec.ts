@@ -12,6 +12,7 @@ const cesium = vi.hoisted(() => ({
 	atlasSets: [] as unknown[],
 	unitCalls: [] as string[],
 	summitCalls: [] as string[],
+	summitVisibility: [] as boolean[],
 	groundScaleUnits: [] as unknown[],
 	scaleTrackers: [] as { sample(): unknown; refreshes: number; released: boolean }[],
 	flightCallbacks: [] as { kind: 'glide' | 'fly' | 'view'; complete(): void }[],
@@ -133,6 +134,9 @@ vi.mock('./SummitMarkers', () => ({
 		}
 		setUnitSystem(system: string) {
 			cesium.unitCalls.push(`summit:${system}`);
+		}
+		setVisible(visible: boolean) {
+			cesium.summitVisibility.push(visible);
 		}
 	}
 }));
@@ -1363,6 +1367,7 @@ describe('CesiumGlobeScene unit system', () => {
 		cesium.atlasSets.length = 0;
 		cesium.unitCalls.length = 0;
 		cesium.summitCalls.length = 0;
+		cesium.summitVisibility.length = 0;
 		cesium.groundScaleUnits.length = 0;
 		cesium.scaleTrackers.length = 0;
 		cesium.viewer = fakeViewer();
@@ -1381,6 +1386,29 @@ describe('CesiumGlobeScene unit system', () => {
 
 		expect(cesium.unitCalls).toEqual(['summit:imperial', 'atlas:imperial']);
 		expect(cesium.scaleTrackers[0]!.refreshes).toBe(1);
+	});
+
+	it('hands the summit marker choice to the summit markers alone, leaving the atlas ones and the camera', async () => {
+		const scene = await create();
+		const atlas = cesium.atlasSets.length;
+
+		scene.setSummitMarkerVisible(false);
+		scene.setSummitMarkerVisible(true);
+
+		expect(cesium.summitVisibility).toEqual([false, true]);
+		expect(cesium.atlasSets).toHaveLength(atlas);
+		expect(cesium.summitCalls).toEqual([]);
+		expect(cesium.flightCallbacks).toHaveLength(0);
+	});
+
+	it('ignores a summit marker choice once destroyed', async () => {
+		const scene = await create();
+		scene.destroy();
+		cesium.summitVisibility.length = 0;
+
+		scene.setSummitMarkerVisible(false);
+
+		expect(cesium.summitVisibility).toEqual([]);
 	});
 
 	it('words the next scale reading in the unit in force', async () => {

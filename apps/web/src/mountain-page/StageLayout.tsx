@@ -39,8 +39,9 @@ interface StageLayoutProps {
  * its mountains on the globe, from the same index its list was rendered with, and a press on one
  * opens its page like its link in the list. The reader's filters live here too, so the list and
  * the globe draw the same mountains and a visit to a mountain page leaves them as they were. So does
- * whether the globe draws them at all, a presentation choice kept apart from the filters, from the
- * camera framing and from the page: hiding takes the markers away without touching the list.
+ * whether the globe draws markers at all, the atlas's and a mountain's summit alike: a presentation
+ * choice kept apart from the filters, from the camera framing and from the page, so hiding takes
+ * the markers away without touching the list, the mountain presented or the details panel.
  */
 export function StageLayout({ model, children }: StageLayoutProps) {
 	const coordinator = useTransitionCoordinator();
@@ -72,12 +73,14 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	);
 	const [markersHidden, setMarkersHidden] = useState(false);
 	const toggleMarkers = useCallback(() => setMarkersHidden((hidden) => !hidden), []);
-	// The scene already treats no markers as nothing drawn, heard or hit, so the preference only
-	// decides what the filtered set is handed on as; the switch itself belongs to the atlas alone.
+	// One preference for every marker on the globe, reaching the scene by the path each kind already
+	// has. The scene treats no atlas markers as nothing drawn, heard or hit, so hiding only changes
+	// what the filtered set is handed on as; the summit marker is told whether it may be drawn, and
+	// stays presented while it is not.
 	const drawnMarkers = markersHidden ? undefined : markers;
-	const markerToggle = useMemo<MarkerToggle | undefined>(
-		() => (onAtlas ? { shown: !markersHidden, onToggle: toggleMarkers } : undefined),
-		[onAtlas, markersHidden, toggleMarkers]
+	const markerToggle = useMemo<MarkerToggle>(
+		() => ({ shown: !markersHidden, onToggle: toggleMarkers }),
+		[markersHidden, toggleMarkers]
 	);
 	const { choice, activate, dismiss } = useMarkerActivation(drawnMarkers);
 
@@ -98,6 +101,7 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 									target={target}
 									atlas={atlas}
 									markers={drawnMarkers}
+									summitMarkerVisible={!markersHidden}
 									markerToggle={markerToggle}
 									mountainOrbit
 									observer={coordinator}

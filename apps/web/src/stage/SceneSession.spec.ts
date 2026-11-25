@@ -2316,6 +2316,91 @@ describe('SceneSession unit system', () => {
 		expect(scene.orbits).toHaveLength(1);
 	});
 
+	it('draws the summit marker at wiring when none was chosen', async () => {
+		const { scene } = await readySession();
+
+		expect(scene.summitVisibility).toEqual([true]);
+	});
+
+	it('applies a summit marker choice made before the scene exists, before a mountain is presented', async () => {
+		const { session, factory } = setup();
+		session.setSummitMarkerVisible(false);
+		session.setTarget(ACONCAGUA);
+		const scene = factory.resolve(0);
+		const visibility = vi.spyOn(scene, 'setSummitMarkerVisible');
+		const shown = vi.spyOn(scene, 'showMountain');
+		await flush();
+
+		expect(visibility).toHaveBeenCalledWith(false);
+		expect(visibility.mock.invocationCallOrder[0]!).toBeLessThan(
+			shown.mock.invocationCallOrder[0]!
+		);
+		expect(scene.summitMarkerVisible).toBe(false);
+	});
+
+	it('hands a summit marker change to a presenting scene without presenting anything again', async () => {
+		const { session, scene } = await presenting();
+		const before = presentation(scene);
+
+		session.setSummitMarkerVisible(false);
+		session.setSummitMarkerVisible(true);
+
+		expect(scene.summitVisibility).toEqual([true, false, true]);
+		expect(presentation(scene)).toEqual(before);
+	});
+
+	it('keeps the choice while the mountain changes, and leaves the camera and orbit to the scene', async () => {
+		const { session, scene } = await presenting();
+		session.setSummitMarkerVisible(false);
+
+		session.setTarget(FITZ_ROY);
+		await flush();
+
+		expect(scene.shown.map((shown) => shown.target.slug)).toEqual(['aconcagua', 'fitz-roy']);
+		expect(scene.summitMarkerVisible).toBe(false);
+		expect(scene.resets).toBe(0);
+		expect(scene.clears).toBe(0);
+	});
+
+	it('keeps the choice across the atlas and back, unchanged', async () => {
+		const { session, scene } = await presenting();
+		session.setSummitMarkerVisible(false);
+
+		session.setAtlas(ATLAS);
+		session.setTarget(undefined);
+		await flush();
+		session.setAtlas(undefined);
+		session.setTarget(ACONCAGUA);
+		await flush();
+
+		expect(scene.summitMarkerVisible).toBe(false);
+		expect(scene.summitVisibility.filter((visible) => visible)).toHaveLength(1);
+	});
+
+	it('hands the summit marker choice to the scene a retry builds', async () => {
+		const first = setup();
+		first.session.setSummitMarkerVisible(false);
+		first.factory.resolve(0);
+		await flush();
+		first.session.stop();
+
+		const second = first.open();
+		second.setSummitMarkerVisible(false);
+		const scene = first.factory.resolve(1);
+		await flush();
+
+		expect(scene.summitVisibility).toEqual([false]);
+	});
+
+	it('ignores a summit marker choice once stopped, and never reaches the scene it released', async () => {
+		const { session, scene } = await readySession();
+		session.stop();
+
+		session.setSummitMarkerVisible(false);
+
+		expect(scene.summitVisibility).toEqual([true]);
+	});
+
 	it('hands the choice to the scene a retry builds', async () => {
 		const first = setup();
 		first.session.setUnitSystem('imperial');

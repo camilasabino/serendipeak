@@ -121,6 +121,7 @@ export class FakeGlobeScene implements GlobeScene {
 	readonly markerSets: (readonly AtlasMarker[] | undefined)[] = [];
 	/** Every unit system the scene was told, in order. */
 	readonly unitSystems: UnitSystem[] = [];
+	readonly summitVisibility: boolean[] = [];
 	/** Every atlas presentation state the scene was told, in order. */
 	readonly presentations: boolean[] = [];
 	/** Every marker emphasis the scene was asked for, in order; `undefined` ended one. */
@@ -321,6 +322,17 @@ export class FakeGlobeScene implements GlobeScene {
 		if (!this.destroyed) {
 			this.unitSystems.push(system);
 		}
+	}
+
+	setSummitMarkerVisible(visible: boolean): void {
+		if (!this.destroyed) {
+			this.summitVisibility.push(visible);
+		}
+	}
+
+	/** Whether the summit marker is drawn now: it is until the scene is told otherwise. */
+	get summitMarkerVisible(): boolean {
+		return this.summitVisibility.at(-1) ?? true;
 	}
 
 	setAtlasPresentation(active: boolean): void {
