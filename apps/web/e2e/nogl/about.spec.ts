@@ -49,7 +49,7 @@ test.describe('@nogl About page', () => {
 		await expect(page.getByRole('heading', { level: 1 })).toHaveText(
 			'A world of mountains to explore.'
 		);
-		await expect(page).toHaveTitle('About · SerendiPeak');
+		await expect(page).toHaveTitle('About SerendiPeak — Our Story');
 		await expect(aboutLink(page)).toHaveAttribute('aria-current', 'page');
 		await expect(page.locator('body[data-probe="persistent"]')).toHaveCount(1);
 
