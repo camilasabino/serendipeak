@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { SITE_ORIGIN } from '../support/ports';
 import { headingsOf, resetStub, stubRequests, titleOf } from './support';
 
 const ABOUT_LINK = /<a[^>]*href="\/about"[^>]*>About<\/a>/;
@@ -18,9 +19,11 @@ test.describe('about page', () => {
 		const html = await response.text();
 
 		expect(response.status()).toBe(200);
-		expect(titleOf(html)).toBe('About · SerendiPeak');
-		expect(descriptionOf(html)).toMatch(/one mountain every day/);
-		expect(descriptionOf(html)).toMatch(/atlas/);
+		expect(titleOf(html)).toBe('About SerendiPeak — Our Story');
+		expect(descriptionOf(html)).toMatch(/Camila Sabino/);
+		expect(html.match(/<link[^>]*rel="canonical"[^>]*href="([^"]*)"/)?.[1]).toBe(
+			`${SITE_ORIGIN}/about`
+		);
 		expect(headingsOf(html)).toEqual(['A world of mountains to explore.']);
 		expect(html).toContain('<html lang="en"');
 	});
@@ -33,7 +36,7 @@ test.describe('about page', () => {
 		expect(html).not.toContain('role="status"');
 	});
 
-	test('is indexable and publicly cacheable like any static page', async ({ request }) => {
+	test('is indexable and publicly cacheable', async ({ request }) => {
 		const response = await request.get('/about');
 		const html = await response.text();
 

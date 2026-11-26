@@ -3,7 +3,7 @@ import { elevationUnit, type UnitSystem } from '../units/unitSystem';
 import { ELEVATION_BAND_SIZE, type BandSelection } from './elevationBands';
 
 export const ATLAS_LINK_LABEL = 'Atlas';
-export const ATLAS_TITLE = documentTitle('Atlas');
+export const ATLAS_TITLE = documentTitle('3D Mountain Atlas — Explore Peaks');
 export const ATLAS_DESCRIPTION =
 	'Every mountain on SerendiPeak on an interactive 3D globe: see where each one rises, how high it is, and open its page.';
 

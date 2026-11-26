@@ -20,7 +20,7 @@ test('Try again recovers through the page flow once the API is back', async ({ p
 	await page.getByRole('button', { name: 'Try again' }).click();
 
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(daily.mountain.name);
-	await expect(page).toHaveTitle(`Today's discovery: ${daily.mountain.name} · SerendiPeak`);
+	await expect(page).toHaveTitle('SerendiPeak — Explore Mountains in 3D');
 });
 
 test('Try again keeps the error view while the API stays down', async ({ page, request }) => {

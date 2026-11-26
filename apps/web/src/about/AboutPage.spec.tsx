@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { anchorsOf, countOf, hasEmptyElement, textsOf } from '../mountain-page/test-support/markup';
 import { SITE_TAGLINE } from '../mountain-page/pageCopy';
 import { AboutPage } from './AboutPage';
@@ -18,7 +19,11 @@ import {
 	LOVE_PARAGRAPHS
 } from './aboutCopy';
 
-const html = renderToStaticMarkup(<AboutPage />);
+vi.mock('next/head', () => ({
+	default: ({ children }: { children: ReactNode }) => <>{children}</>
+}));
+
+const html = renderToStaticMarkup(<AboutPage canonicalUrl="https://serendipeak.example/about" />);
 
 describe('About page structure', () => {
 	it('has one main landmark with a single h1', () => {
@@ -152,8 +157,13 @@ describe('About page personal section', () => {
 });
 
 describe('About page metadata copy', () => {
-	it('titles the page like every other page', () => {
-		expect(ABOUT_TITLE).toBe('About · SerendiPeak');
+	it('titles the page for search', () => {
+		expect(ABOUT_TITLE).toBe('About SerendiPeak — Our Story');
+	});
+
+	it('publishes the canonical URL it is given, and none without one', () => {
+		expect(html).toContain('<link rel="canonical" href="https://serendipeak.example/about"/>');
+		expect(renderToStaticMarkup(<AboutPage canonicalUrl={null} />)).not.toContain('canonical');
 	});
 
 	it('describes the page within a search snippet', () => {

@@ -43,12 +43,18 @@ function BehindParagraph({ text }: { text: string }) {
 	);
 }
 
-export function AboutPage() {
+export interface AboutPageProps {
+	/** Absent when the site origin is not configured; the page is then left without one. */
+	canonicalUrl: string | null;
+}
+
+export function AboutPage({ canonicalUrl }: AboutPageProps) {
 	return (
 		<>
 			<Head>
 				<title>{ABOUT_TITLE}</title>
 				<meta name="description" content={ABOUT_DESCRIPTION} />
+				{canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
 			</Head>
 			<main className={styles.page}>
 				<ContourMotif pattern={ABOUT_CONTOURS} className={styles.motif} />

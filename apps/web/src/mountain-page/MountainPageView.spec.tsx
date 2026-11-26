@@ -56,4 +56,30 @@ describe('MountainPageView head', () => {
 		expect(html).toContain(`<link rel="canonical" href="${ORIGIN}/"/>`);
 		expect(html).not.toContain(`/mountains/${daily.mountain.slug}`);
 	});
+
+	it('gives the daily page a stable title and one WebSite JSON-LD from the configured origin', () => {
+		const html = renderToStaticMarkup(
+			<MountainPageView model={{ kind: 'daily', daily }} siteOrigin={ORIGIN} />
+		);
+
+		expect(html).toContain('<title>SerendiPeak — Explore Mountains in 3D</title>');
+		expect(html).toContain('<meta property="og:title" content="SerendiPeak"/>');
+		expect(html).toContain(`"@type":"WebSite","name":"SerendiPeak","url":"${ORIGIN}/"`);
+		expect(html.match(/application\/ld\+json/g)).toHaveLength(1);
+	});
+
+	it('publishes no structured data on mountain pages or without an origin', () => {
+		const mountain = renderToStaticMarkup(
+			<MountainPageView
+				model={{ kind: 'mountain', mountain: daily.mountain }}
+				siteOrigin={ORIGIN}
+			/>
+		);
+		const noOrigin = renderToStaticMarkup(
+			<MountainPageView model={{ kind: 'daily', daily }} siteOrigin={null} />
+		);
+
+		expect(mountain).not.toContain('ld+json');
+		expect(noOrigin).not.toContain('ld+json');
+	});
 });

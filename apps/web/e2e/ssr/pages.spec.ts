@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { SITE_ORIGIN } from '../support/ports';
 import {
 	fixture,
 	hasTryAgain,
@@ -35,8 +36,20 @@ test.describe('daily page', () => {
 
 		expect(response.status()).toBe(200);
 		expect(response.headers()['cache-control']).toBe('no-store');
-		expect(titleOf(html)).toBe(`Today's discovery: ${daily.mountain.name} · SerendiPeak`);
+		expect(titleOf(html)).toBe('SerendiPeak — Explore Mountains in 3D');
 		expect(headingsOf(html)).toEqual([daily.mountain.name]);
+		expect(html).toMatch(/<meta property="og:title" content="SerendiPeak"/);
+
+		const jsonLd = [
+			...html.matchAll(/<script type="application\/ld\+json"[^>]*>([^<]*)<\/script>/g)
+		];
+		expect(jsonLd).toHaveLength(1);
+		expect(JSON.parse(jsonLd[0]?.[1] ?? '')).toEqual({
+			'@context': 'https://schema.org',
+			'@type': 'WebSite',
+			name: 'SerendiPeak',
+			url: `${SITE_ORIGIN}/`
+		});
 	});
 
 	test('answers 503 with no-store when the API is unreachable', async ({ request }) => {

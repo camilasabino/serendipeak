@@ -34,7 +34,11 @@ export const SITE_NAME = 'SerendiPeak';
 export const SITE_TAGLINE = 'A world of mountains to explore.';
 
 export const SITE_DESCRIPTION =
-	'Discover one mountain every day, with real photography, interactive 3D terrain and curated geography, then explore the collection in the atlas.';
+	'Discover mountains around the world through interactive 3D terrain, real photography, curated geography, and a global mountain atlas.';
+
+// The daily mountain changes the page's content, not its search result: a stable title keeps
+// the home page's appearance in search consistent.
+export const HOME_TITLE = `${SITE_NAME} — Explore Mountains in 3D`;
 
 export function documentTitle(title: string): string {
 	return `${title} · ${SITE_NAME}`;
@@ -49,7 +53,7 @@ export function pageTitle(model: MountainPageModel): string {
 					: `${model.mountain.name} (${formatElevation(model.mountain.elevationMeters)})`
 			);
 		case 'daily':
-			return documentTitle(`Today's discovery: ${model.daily.mountain.name}`);
+			return HOME_TITLE;
 		case 'error':
 			return documentTitle(describeFailure(model.reason).title);
 	}

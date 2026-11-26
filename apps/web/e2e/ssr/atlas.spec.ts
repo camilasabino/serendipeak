@@ -35,7 +35,7 @@ test.describe('atlas page', () => {
 
 		expect(response.status()).toBe(200);
 		expect(response.headers()['x-robots-tag']).toBeUndefined();
-		expect(titleOf(html)).toBe('Atlas · SerendiPeak');
+		expect(titleOf(html)).toBe('3D Mountain Atlas — Explore Peaks · SerendiPeak');
 		expect(descriptionOf(html)).toMatch(/Every mountain on SerendiPeak/);
 		expect(canonicalsOf(html)).toEqual([`${SITE_ORIGIN}/atlas`]);
 		expect(html).not.toMatch(/name="robots"/);
@@ -103,7 +103,7 @@ test.describe('atlas page', () => {
 		expect(response.status()).toBe(200);
 		expect(new URL(response.url()).pathname + new URL(response.url()).search).toBe('/atlas');
 		expect(canonicalsOf(html)).toEqual([`${SITE_ORIGIN}/atlas`]);
-		expect(titleOf(html)).toBe('Atlas · SerendiPeak');
+		expect(titleOf(html)).toBe('3D Mountain Atlas — Explore Peaks · SerendiPeak');
 	});
 
 	test('keeps the bare canonical on an atlas reached with unrelated parameters', async ({

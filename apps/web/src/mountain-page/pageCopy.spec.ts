@@ -16,9 +16,7 @@ describe('pageTitle', () => {
 	});
 
 	it("titles the daily page with today's discovery", () => {
-		expect(pageTitle({ kind: 'daily', daily })).toBe(
-			`Today's discovery: ${daily.mountain.name} · SerendiPeak`
-		);
+		expect(pageTitle({ kind: 'daily', daily })).toBe('SerendiPeak — Explore Mountains in 3D');
 	});
 
 	it.each<[FailureReason, string]>([

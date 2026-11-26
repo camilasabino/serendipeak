@@ -1,10 +1,11 @@
-import { SITE_DESCRIPTION, SITE_TAGLINE, documentTitle } from '../mountain-page/pageCopy';
+import { SITE_TAGLINE } from '../mountain-page/pageCopy';
 
 export const ABOUT_PATH = '/about';
 export const ABOUT_LINK_LABEL = 'About';
 
-export const ABOUT_TITLE = documentTitle('About');
-export const ABOUT_DESCRIPTION = SITE_DESCRIPTION;
+export const ABOUT_TITLE = 'About SerendiPeak — Our Story';
+export const ABOUT_DESCRIPTION =
+	'SerendiPeak is a personal project for discovering mountains, built by Camila Sabino: real photography, interactive 3D terrain and a new peak every day.';
 
 export const ABOUT_EYEBROW = 'About SerendiPeak';
 export const ABOUT_HEADING = SITE_TAGLINE;
