@@ -41,3 +41,15 @@ apps/web/public/cesium/
 
 # Output of collectstatic.
 services/api/staticfiles/
+
+# Local AI-agent instructions and configuration (any depth).
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.gemini/
+.codex/
+.cursor/
+.windsurf/
+.aider*
+.github/copilot-instructions.md
