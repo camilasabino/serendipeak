@@ -9,7 +9,10 @@ import {
 	facetedOptions as facetedIn,
 	filterMountains,
 	settleFilters,
-	type AtlasFilters
+	settleInScope,
+	WHOLE_ATLAS,
+	type AtlasFilters,
+	type AtlasScope
 } from './atlasFilter';
 import { bandFloorOf, bandSelection } from './elevationBands';
 
@@ -202,6 +205,18 @@ describe('mountain range filter', () => {
 			['himalaya', 0],
 			['mahalangur', 1]
 		]);
+	});
+
+	it('names the range each one sits under, and none for a root', () => {
+		expect(atlasOptions(CATALOG).ranges.map(({ slug, parent }) => [slug, parent])).toEqual(
+			atlasOptions(CATALOG).ranges.map(({ slug, depth }) => [
+				slug,
+				depth === 0 ? null : expect.any(String)
+			])
+		);
+		const andes = atlasOptions(CATALOG).ranges.filter(({ parent }) => parent === 'andes');
+		expect(andes.length).toBeGreaterThan(0);
+		expect(andes.every(({ depth }) => depth === 1)).toBe(true);
 	});
 
 	it('keeps the names of the ancestors above each range, root first', () => {
@@ -691,5 +706,193 @@ describe('elevation bands in feet', () => {
 
 		expect(settled.filters).toEqual(only({ country: 'AR', elevationBands: ft(11_000, 22_000) }));
 		expect(settled.removedBands).toEqual(ft(29_000));
+	});
+});
+
+describe('options within the scope the reader has navigated to', () => {
+	const SA = { code: 'SA', name: 'South America' };
+	const EU = { code: 'EU', name: 'Europe' };
+	const AS = { code: 'AS', name: 'Asia' };
+	const RU = { code: 'RU', name: 'Russia' };
+
+	const SCOPED = [
+		indexEntry('aconcagua', 'Aconcagua', {
+			continent: SA,
+			countries: [AR],
+			elevationMeters: 6961,
+			region: region('principal-cordillera', 'Principal Cordillera', ANDES, SOUTHERN)
+		}),
+		indexEntry('ojos-del-salado', 'Ojos del Salado', {
+			continent: SA,
+			countries: [AR, CL],
+			elevationMeters: 6893,
+			region: region('southern-andes', 'Southern Andes', ANDES)
+		}),
+		indexEntry('fitz-roy', 'Fitz Roy', {
+			continent: SA,
+			countries: [AR, CL],
+			elevationMeters: 3405,
+			region: region('patagonian-andes', 'Patagonian Andes', ANDES)
+		}),
+		indexEntry('chimborazo', 'Chimborazo', {
+			continent: SA,
+			countries: [{ code: 'EC', name: 'Ecuador' }],
+			elevationMeters: 6263,
+			region: region('northern-andes', 'Northern Andes', ANDES)
+		}),
+		indexEntry('everest', 'Mount Everest', {
+			continent: AS,
+			countries: [NP, CN],
+			elevationMeters: 8849,
+			region: region('mahalangur', 'Mahalangur', HIMALAYA)
+		}),
+		indexEntry('elbrus', 'Mount Elbrus', {
+			continent: EU,
+			countries: [RU],
+			elevationMeters: 5642,
+			region: region('caucasus', 'Caucasus')
+		}),
+		indexEntry('kazbek', 'Mount Kazbek', {
+			continent: AS,
+			countries: [{ code: 'GE', name: 'Georgia' }, RU],
+			elevationMeters: 5054,
+			region: region('caucasus', 'Caucasus')
+		}),
+		indexEntry('kilimanjaro', 'Kilimanjaro', {
+			continent: { code: 'AF', name: 'Africa' },
+			countries: [{ code: 'TZ', name: 'Tanzania' }],
+			elevationMeters: 5895
+		})
+	];
+
+	const continent = (code: string): AtlasScope => ({ kind: 'continent', code });
+	const range = (slug: string): AtlasScope => ({ kind: 'range', slug });
+	const optionsIn = (scope: AtlasScope, filters: AtlasFilters = NO_FILTERS) =>
+		facetedIn(SCOPED, filters, 'metric', scope);
+	const codes = (scope: AtlasScope, filters?: AtlasFilters) =>
+		optionsIn(scope, filters).countries.map(({ code }) => code);
+	const ranges = (scope: AtlasScope, filters?: AtlasFilters) =>
+		optionsIn(scope, filters).ranges.map(({ slug, depth, count }) => [slug, depth, count]);
+
+	it('offers the whole catalog across all continents, as with no scope at all', () => {
+		expect(optionsIn(WHOLE_ATLAS)).toEqual(facetedIn(SCOPED, NO_FILTERS, 'metric'));
+		expect(codes(WHOLE_ATLAS)).toEqual(['AR', 'CL', 'CN', 'EC', 'GE', 'NP', 'RU', 'TZ']);
+	});
+
+	it('offers only the countries, bands and ranges of a continent', () => {
+		expect(codes(continent('SA'))).toEqual(['AR', 'CL', 'EC']);
+		expect(optionsIn(continent('SA')).elevationBands).toEqual([
+			{ floor: 6000, count: 3 },
+			{ floor: 3000, count: 1 }
+		]);
+		expect(ranges(continent('SA'))).toEqual([
+			['andes', 0, 4],
+			['northern-andes', 1, 1],
+			['patagonian-andes', 1, 1],
+			['southern-andes', 1, 2],
+			['principal-cordillera', 2, 1]
+		]);
+	});
+
+	it('offers a range that crosses continents in each, counted whole as choosing it browses it', () => {
+		expect(codes(continent('EU'))).toEqual(['RU']);
+		expect(ranges(continent('EU'))).toEqual([['caucasus', 0, 2]]);
+		expect(ranges(continent('AS'))).toEqual([
+			['caucasus', 0, 2],
+			['himalaya', 0, 1],
+			['mahalangur', 1, 1]
+		]);
+	});
+
+	it('offers a continent without ranges no range at all', () => {
+		expect(codes(continent('AF'))).toEqual(['TZ']);
+		expect(ranges(continent('AF'))).toEqual([]);
+	});
+
+	it('offers a range only itself and its descendants, at the top of the tree', () => {
+		expect(ranges(range('andes'))).toEqual([
+			['andes', 0, 4],
+			['northern-andes', 1, 1],
+			['patagonian-andes', 1, 1],
+			['southern-andes', 1, 2],
+			['principal-cordillera', 2, 1]
+		]);
+		expect(ranges(range('southern-andes'))).toEqual([
+			['southern-andes', 0, 2],
+			['principal-cordillera', 1, 1]
+		]);
+		// Each still names where it sits, which the re-indented tree leaves out.
+		expect(optionsIn(range('southern-andes')).ranges.map(({ ancestors }) => ancestors)).toEqual([
+			['Andes'],
+			['Andes', 'Southern Andes']
+		]);
+	});
+
+	it('offers every country a range holds, across its subranges and its borders', () => {
+		const scope = range('southern-andes');
+
+		expect(codes(scope, only({ range: 'southern-andes' }))).toEqual(['AR', 'CL']);
+		expect(codes(range('caucasus'), only({ range: 'caucasus' }))).toEqual(['GE', 'RU']);
+	});
+
+	it('still offers the alternatives to a selection, not only what it leaves', () => {
+		const filters = only({ range: 'andes', country: 'EC' });
+
+		expect(codes(range('andes'), filters)).toEqual(['AR', 'CL', 'EC']);
+		expect(ranges(range('andes'), filters)).toEqual([
+			['andes', 0, 1],
+			['northern-andes', 1, 1]
+		]);
+	});
+
+	it('narrows a continent by the other filters as it does the whole atlas', () => {
+		const filters = only({ elevationBands: m(3000) });
+
+		expect(codes(continent('SA'), filters)).toEqual(['AR', 'CL']);
+		expect(ranges(continent('SA'), filters)).toEqual([
+			['andes', 0, 1],
+			['patagonian-andes', 1, 1]
+		]);
+	});
+
+	describe('settleInScope', () => {
+		it('keeps every selection the continent can show, as the same object', () => {
+			const filters = only({ country: 'AR', elevationBands: m(6000) });
+
+			expect(settleInScope(SCOPED, filters, continent('SA'), null).filters).toBe(filters);
+		});
+
+		it('resets a selection the continent cannot show, though the catalog could', () => {
+			const settled = settleInScope(
+				SCOPED,
+				only({ country: 'GE', elevationBands: m(5000) }),
+				continent('EU'),
+				null
+			);
+
+			expect(settled.filters).toEqual(only({ elevationBands: m(5000) }));
+			expect(settled.reset).toEqual(['country']);
+		});
+
+		it('removes only the bands the continent leaves empty', () => {
+			const settled = settleInScope(
+				SCOPED,
+				only({ elevationBands: m(8000, 5000) }),
+				continent('EU'),
+				null
+			);
+
+			expect(settled.filters).toEqual(only({ elevationBands: m(5000) }));
+			expect(settled.removedBands).toEqual(m(8000));
+		});
+
+		it('settles a range scope over the whole catalog, the range being a selection itself', () => {
+			const filters = only({ range: 'caucasus', country: 'GE' });
+
+			expect(settleInScope(SCOPED, filters, range('caucasus'), null).filters).toBe(filters);
+			expect(settleInScope(SCOPED, filters, WHOLE_ATLAS, null)).toEqual(
+				settleFilters(SCOPED, filters, null)
+			);
+		});
 	});
 });

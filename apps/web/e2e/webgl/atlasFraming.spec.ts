@@ -4,6 +4,7 @@ import { chooseCountry, list, openFilters, popup } from './support/atlasList';
 import {
 	DESKTOP,
 	cameraAtRest,
+	dragGlobe,
 	expect,
 	expectReadyStage,
 	framesPass,
@@ -130,6 +131,72 @@ test.describe('@webgl atlas geographic framing', () => {
 			);
 		});
 
+		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
+	});
+});
+
+test.describe('@webgl atlas continent framing', () => {
+	test.use({ reducedMotion: 'reduce' });
+
+	const trail = (page: Page) => page.getByRole('navigation', { name: 'Atlas trail' });
+	const southAmerica = (page: Page) =>
+		list(page)
+			.locator('ul > li > button')
+			.filter({ hasText: /^South America/ });
+
+	test('frames a continent once, keeps it for its ranges, and leaves the camera to the reader', async ({
+		page
+	}) => {
+		await page.goto('/atlas');
+		await expectReadyStage(page);
+		await cameraAtRest(page);
+		await page.waitForFunction(() => 'next' in window);
+		const overview = await camera(page);
+
+		await southAmerica(page).click();
+		await expectCameraOver(page, -37, -70, 25);
+		await cameraAtRest(page);
+		const continent = await camera(page);
+		expect(continent.distanceFromCenterMeters).toBeLessThan(overview.distanceFromCenterMeters);
+
+		await list(page)
+			.getByRole('button', { name: 'Browse mountain ranges in South America' })
+			.click();
+		await framesPass(page, 8);
+		expect(await camera(page)).toEqual(continent);
+
+		await list(page)
+			.getByRole('button', { name: /^Andes(\d|\s|$)/ })
+			.click();
+		await list(page)
+			.getByRole('button', { name: /^Patagonian Andes/ })
+			.click();
+		await expectCameraOver(page, -49.3, -73, 1);
+
+		await trail(page).getByRole('button', { name: 'South America' }).click();
+		await expectCameraOver(page, continent.latitude, continent.longitude);
+		await framesPass(page, 6);
+		expect((await camera(page)).distanceFromCenterMeters).toBeCloseTo(
+			continent.distanceFromCenterMeters,
+			0
+		);
+
+		await dragGlobe(page, 0.15);
+		await cameraAtRest(page);
+		const dragged = await camera(page);
+		expect(dragged.longitude).not.toBeCloseTo(continent.longitude, 1);
+		await framesPass(page, 8);
+		expect(await camera(page)).toEqual(dragged);
+
+		await list(page).getByRole('button', { name: 'Back to South America mountains' }).click();
+		await framesPass(page, 6);
+		expect((await camera(page)).distanceFromCenterMeters).toBeCloseTo(
+			dragged.distanceFromCenterMeters,
+			0
+		);
+
+		await list(page).getByRole('button', { name: 'All continents' }).click();
+		await expectCameraOver(page, overview.latitude, overview.longitude);
 		expect(await liveViewers(page)).toEqual({ canvases: 1, viewers: 1 });
 	});
 });

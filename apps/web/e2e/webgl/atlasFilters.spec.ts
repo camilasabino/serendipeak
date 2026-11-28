@@ -12,7 +12,7 @@ import {
 	test
 } from './support/stage';
 
-const list = (page: Page) => page.getByRole('region', { name: 'All mountains' });
+const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
 
 async function chooseCountry(page: Page, name: string) {
 	await list(page)

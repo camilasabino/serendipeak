@@ -1,5 +1,6 @@
 import { documentTitle, type ErrorContent } from '../mountain-page/pageCopy';
 import { elevationUnit, type UnitSystem } from '../units/unitSystem';
+import { DEFAULT_ATLAS_SORT, type AtlasSort } from './atlasSort';
 import { ELEVATION_BAND_SIZE, type BandSelection } from './elevationBands';
 
 export const ATLAS_LINK_LABEL = 'Atlas';
@@ -17,14 +18,64 @@ export function atlasLede(count: number): string {
 
 	return count === 1
 		? 'The one mountain on SerendiPeak. Click or tap its point, or choose it below, to open its page.'
-		: `Explore ${count.toLocaleString('en')} mountains on the globe. Filter by country, elevation, or mountain range, sort the results, or browse by continent.`;
+		: `Explore ${count.toLocaleString('en')} mountains on the globe: browse by continent, or filter and sort them.`;
 }
 
-export const ATLAS_LIST_HEADING = 'All mountains';
+/** Names the region that holds the navigation, filters and list; its headings say where the reader is. */
+export const ATLAS_SECTION_LABEL = 'Atlas mountains';
+
+/**
+ * The flat list of every match, which a filter or a non-default sort turns the continents into:
+ * it says whether the list is narrowed and, when the order is not the default one, which order.
+ */
+export function flatHeading(filtered: boolean, sort: AtlasSort): string {
+	const base = filtered ? 'Filtered mountains' : 'All mountains';
+
+	return sort === DEFAULT_ATLAS_SORT ? base : `${base} · ${SORT_OPTION_LABELS[sort]}`;
+}
 
 export function mountainCount(count: number): string {
 	return count === 1 ? '1 mountain' : `${count.toLocaleString('en')} mountains`;
 }
+
+export const BROWSE_RANGES_LABEL = 'Browse mountain ranges';
+
+export function browseRangesLabel(continent: string): string {
+	return `${BROWSE_RANGES_LABEL} in ${continent}`;
+}
+
+/** Takes the reader from a continent's ranges back to its mountains. */
+export function continentMountainsLabel(continent: string): string {
+	return `${continent} mountains`;
+}
+
+export const ALL_CONTINENTS_LABEL = 'All continents';
+
+/** The way out of the flat list, which has no level above it but the continents themselves. */
+export const BROWSE_BY_CONTINENT_LABEL = 'Browse by continent';
+
+export function browseByContinentAccessibleLabel(clearsFilters: boolean): string {
+	return `${BROWSE_BY_CONTINENT_LABEL}, clearing ${clearsFilters ? 'filters and sort' : 'sort'}`;
+}
+
+export function continentsRestoredNotice(clearedFilters: boolean): string {
+	return clearedFilters ? 'Filters and sort cleared.' : 'Sort cleared.';
+}
+
+export function continentRangesHeading(continent: string): string {
+	return `${continent} mountain ranges`;
+}
+
+/** Spoken for the step of the trail that goes up one level, named by where it leads. */
+export function backToLabel(destination: string): string {
+	return `Back to ${destination}`;
+}
+
+export const NO_CONTINENT_RANGES_HINT = 'No mountain ranges here match the current filters.';
+export const SUBRANGES_LABEL = 'Subranges';
+export const RANGE_MOUNTAINS_LABEL = 'Mountains';
+/** Names the way up from the continent, range or list the reader is in. */
+export const ATLAS_TRAIL_LABEL = 'Atlas trail';
 
 export const BACK_TO_ATLAS_LABEL = 'Back to atlas';
 
@@ -40,6 +91,16 @@ export const ATLAS_LOAD_FAILED: ErrorContent = {
 };
 
 export const FILTER_LABEL = 'Filter';
+export const ACTIVE_FILTERS_LABEL = 'Active filters';
+
+export function removeFilterLabel(filter: string, value: string): string {
+	return `Remove ${filter}: ${value}`;
+}
+
+/** Said beside a filter none of whose choices would show fewer mountains than the list does now. */
+export const NO_COUNTRIES_ALTERNATIVE = 'No other countries here';
+export const NO_RANGES_ALTERNATIVE = 'No ranges here';
+export const NO_ELEVATION_ALTERNATIVE = 'No other elevation bands here';
 export const SORT_LABEL = 'Sort';
 export const RESET_LABEL = 'Reset';
 export const RESET_ACCESSIBLE_LABEL = 'Reset filters and sort';

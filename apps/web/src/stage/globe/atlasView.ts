@@ -9,9 +9,9 @@ export type { GeoPoint };
 
 /**
  * What the stage needs to know about the atlas: the point its overview looks down on and, while the
- * reader's geographic filters narrow the catalog, the places they leave. Those places are framed in
- * place of the overview, wherever the stage's shape puts the camera; they are never the markers
- * drawn, which change with every filter.
+ * reader's geographic filters or the continent they have gone into narrow the catalog, the places
+ * they leave. Those places are framed in place of the overview, wherever the stage's shape puts
+ * the camera; they are never the markers drawn, which change with every filter.
  */
 export interface AtlasView {
 	center: GeoPoint;

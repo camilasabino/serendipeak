@@ -1,9 +1,16 @@
 import { createContext, useContext, useMemo, useState, useSyncExternalStore } from 'react';
 import type { MountainIndexEntry } from '../api/contract';
 import { useUnitSystem } from '../units/UnitPreferenceContext';
-import { facetedOptions, filterMountains, settleFilters, type AtlasOptions } from './atlasFilter';
+import {
+	facetedOptions,
+	facetedRanges,
+	filterMountains,
+	settleInScope,
+	type AtlasOptions,
+	type RangeOption
+} from './atlasFilter';
 import { sortMountains } from './atlasSort';
-import { AtlasViewStore, isDefaultView, type AtlasView } from './AtlasViewStore';
+import { AtlasViewStore, isDefaultView, scopeOf, type AtlasView } from './AtlasViewStore';
 
 const AtlasViewContext = createContext<AtlasViewStore | undefined>(undefined);
 
@@ -18,8 +25,13 @@ export function useAtlasViewStore(): AtlasViewStore {
 }
 
 export interface AtlasBrowse {
-	/** What each filter offers given the other two, in the displayed unit, with what each leaves. */
+	/**
+	 * What each filter offers given the other two, within the continent or range the reader is in,
+	 * in the displayed unit, with what each leaves.
+	 */
 	options: AtlasOptions;
+	/** The ranges the other filters leave across the whole catalog: the tree the reader browses. */
+	ranges: RangeOption[];
 	/** The view in force: a selection the catalog no longer offers is already dropped. */
 	view: AtlasView;
 	isDefault: boolean;
@@ -40,25 +52,32 @@ export function useAtlasBrowse(
 ): AtlasBrowse {
 	const stored = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 	const system = useUnitSystem();
+	const { filters: chosen, continent } = stored;
 	const filters = useMemo(
-		() => settleFilters(mountains, stored.filters, null).filters,
-		[mountains, stored.filters]
+		() => settleInScope(mountains, chosen, scopeOf({ filters: chosen, continent }), null).filters,
+		[mountains, chosen, continent]
 	);
-	// Only the options read the displayed unit; the filters, matches and results never do.
+	const view = useMemo(
+		() => ({ filters, sort: stored.sort, continent }),
+		[filters, stored.sort, continent]
+	);
+	// Navigation sets the scope and the filters narrow within it; neither reads the results, so the
+	// options never depend on what they produce. Only the options read the displayed unit.
+	const scope = useMemo(() => scopeOf({ filters, continent }), [filters, continent]);
 	const options = useMemo(
-		() => facetedOptions(mountains, filters, system),
-		[mountains, filters, system]
+		() => facetedOptions(mountains, filters, system, scope),
+		[mountains, filters, system, scope]
 	);
+	const ranges = useMemo(() => facetedRanges(mountains, filters), [mountains, filters]);
 	// Keyed on the filters alone, so a new sort order never rebuilds what the globe draws.
 	const matches = useMemo(() => filterMountains(mountains, filters), [mountains, filters]);
-	const view = useMemo(() => ({ filters, sort: stored.sort }), [filters, stored.sort]);
 	const results = useMemo(
 		() => (isDefaultView(view) ? matches : sortMountains(matches, view.sort)),
 		[view, matches]
 	);
 
 	return useMemo(
-		() => ({ options, view, isDefault: isDefaultView(view), matches, results }),
-		[options, view, matches, results]
+		() => ({ options, ranges, view, isDefault: isDefaultView(view), matches, results }),
+		[options, ranges, view, matches, results]
 	);
 }

@@ -58,18 +58,21 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 	useOnUnitSystemChange(() => atlasView.clearElevationForUnits());
 	const onAtlas = model.kind === 'atlas';
 	const target = onAtlas ? undefined : toSceneTarget(mountainOf(model));
-	const { matches, view } = useAtlasBrowse(atlasView, onAtlas ? model.mountains : NO_MOUNTAINS);
+	const mountains = onAtlas ? model.mountains : NO_MOUNTAINS;
+	const { matches, view } = useAtlasBrowse(atlasView, mountains);
 	// The scene reconciles the markers it holds with these, so a mountain the filters leave out is
 	// removed and one they let back in is drawn again, on the same Viewer and from the same camera.
 	const markers = useMemo(
 		() => (onAtlas ? toAtlasMarkers(matches) : undefined),
 		[onAtlas, matches]
 	);
-	// The geographic filters decide where the camera rests; the stage moves it only when the places
-	// they leave change, so a new elevation band or sort order never does.
+	// The geographic filters, else the continent the reader is in, decide where the camera rests; the
+	// stage moves it only when the places they frame change, so a new elevation band, a sort order or
+	// a switch between a continent's mountains and ranges never does.
+	const { filters, continent } = view;
 	const atlas = useMemo(
-		() => (onAtlas ? toAtlasView(view.filters, matches) : undefined),
-		[onAtlas, view.filters, matches]
+		() => (onAtlas ? toAtlasView({ filters, continent }, mountains, matches) : undefined),
+		[onAtlas, filters, continent, mountains, matches]
 	);
 	const [markersHidden, setMarkersHidden] = useState(false);
 	const toggleMarkers = useCallback(() => setMarkersHidden((hidden) => !hidden), []);

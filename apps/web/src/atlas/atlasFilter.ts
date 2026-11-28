@@ -35,6 +35,8 @@ export interface ElevationOption {
 export interface RangeOption {
 	slug: string;
 	name: string;
+	/** The slug of the range it sits under; null for a root. */
+	parent: string | null;
 	/** Ancestors above it, for indenting the option under its parent. */
 	depth: number;
 	/** The names of those ancestors, root first, for placing a range found out of its tree. */
@@ -82,12 +84,16 @@ function rangeTree(mountains: readonly MountainIndexEntry[]): RangeNode[] {
 	return roots;
 }
 
-function flattenRanges(nodes: RangeNode[], ancestors: string[]): Omit<RangeOption, 'count'>[] {
+function flattenRanges(
+	nodes: RangeNode[],
+	ancestors: string[],
+	parent: string | null
+): Omit<RangeOption, 'count'>[] {
 	return [...nodes]
 		.sort(compareByName)
 		.flatMap((node) => [
-			{ slug: node.slug, name: node.name, depth: ancestors.length, ancestors },
-			...flattenRanges(node.children, [...ancestors, node.name])
+			{ slug: node.slug, name: node.name, parent, depth: ancestors.length, ancestors },
+			...flattenRanges(node.children, [...ancestors, node.name], node.slug)
 		]);
 }
 
@@ -134,7 +140,7 @@ export function elevationOptions(
 }
 
 export function rangeOptions(mountains: readonly MountainIndexEntry[]): RangeOption[] {
-	return flattenRanges(rangeTree(mountains), []).map((range) => ({
+	return flattenRanges(rangeTree(mountains), [], null).map((range) => ({
 		...range,
 		count: countMatching(mountains, { range: range.slug })
 	}));
@@ -153,22 +159,102 @@ export function atlasOptions(
 }
 
 /**
- * What each filter offers given the others: its options come from the mountains that pass every
- * active filter except its own, so choosing any offered option leaves at least one mountain, in
- * whatever order the filters were chosen. Three filtering passes and the option lists; with fewer
- * than a hundred mountains, a few thousand predicate calls.
+ * The part of the catalog the reader has navigated to, which bounds what the filters offer: the
+ * whole atlas, one continent, or one range with its subranges.
+ */
+export type AtlasScope =
+	{ kind: 'atlas' } | { kind: 'continent'; code: string } | { kind: 'range'; slug: string };
+
+export const WHOLE_ATLAS: AtlasScope = { kind: 'atlas' };
+
+export function inScope(mountain: MountainIndexEntry, scope: AtlasScope): boolean {
+	switch (scope.kind) {
+		case 'atlas':
+			return true;
+		case 'continent':
+			return mountain.continent.code === scope.code;
+		case 'range':
+			return inRange(mountain, scope.slug);
+	}
+}
+
+/** The mountains within a scope, in the order given; the same array for the whole atlas. */
+export function scopeMountains(
+	mountains: readonly MountainIndexEntry[],
+	scope: AtlasScope
+): readonly MountainIndexEntry[] {
+	return scope.kind === 'atlas' ? mountains : mountains.filter((m) => inScope(m, scope));
+}
+
+/**
+ * The range options the other filters leave across the whole catalog: the tree the reader browses,
+ * whose trail and subranges reach beyond any scope.
+ */
+export function facetedRanges(
+	mountains: readonly MountainIndexEntry[],
+	filters: AtlasFilters
+): RangeOption[] {
+	return rangeOptions(filterMountains(mountains, { ...filters, range: null }));
+}
+
+/**
+ * The ranges of the tree that some of these mountains sit in or under, kept within the scope: for
+ * a range, only it and its descendants, re-indented so it is the top of the tree. Each keeps its
+ * count, which is what choosing it leaves, and its ancestors, which still place it. O(n·d + r).
+ */
+function rangesWithin(
+	tree: RangeOption[],
+	mountains: readonly MountainIndexEntry[],
+	scope: AtlasScope
+): RangeOption[] {
+	if (scope.kind === 'atlas') {
+		return tree;
+	}
+
+	const offered = new Set<string>();
+	for (const { region } of mountains) {
+		if (region === null) {
+			continue;
+		}
+		const chain = [...region.ancestors, region];
+		const top = scope.kind === 'range' ? chain.findIndex(({ slug }) => slug === scope.slug) : 0;
+		if (top === -1) {
+			continue;
+		}
+		for (const { slug } of chain.slice(top)) {
+			offered.add(slug);
+		}
+	}
+
+	const shift = scope.kind === 'range' ? (tree.find((o) => o.slug === scope.slug)?.depth ?? 0) : 0;
+
+	return tree
+		.filter(({ slug }) => offered.has(slug))
+		.map((option) => (shift === 0 ? option : { ...option, depth: option.depth - shift }));
+}
+
+/**
+ * What each filter offers given the others, within the scope the reader has navigated to: its
+ * options come from the mountains in scope that pass every active filter except its own, so
+ * choosing any offered option leaves at least one mountain, in whatever order the filters were
+ * chosen, and nothing outside the scope is offered. Country and elevation count the mountains in
+ * scope; a range counts every mountain it holds, since choosing it browses the whole range. A few
+ * filtering passes and the option lists; with fewer than a hundred mountains, a few thousand
+ * predicate calls.
  */
 export function facetedOptions(
 	mountains: readonly MountainIndexEntry[],
 	filters: AtlasFilters,
-	system: UnitSystem
+	system: UnitSystem,
+	scope: AtlasScope = WHOLE_ATLAS
 ): AtlasOptions {
-	const forElevation = filterMountains(mountains, { ...filters, elevationBands: null });
+	const scoped = scopeMountains(mountains, scope);
+	const without = (key: FilterKey) => filterMountains(scoped, { ...filters, [key]: null });
 
 	return {
-		countries: countryOptions(filterMountains(mountains, { ...filters, country: null })),
-		elevationBands: elevationOptions(forElevation, system),
-		ranges: rangeOptions(filterMountains(mountains, { ...filters, range: null }))
+		countries: countryOptions(without('country')),
+		elevationBands: elevationOptions(without('elevationBands'), system),
+		ranges: rangesWithin(facetedRanges(mountains, filters), without('range'), scope)
 	};
 }
 
@@ -265,4 +351,20 @@ export function settleFilters(
 	}
 
 	return { filters: { ...kept, elevationBands: valid }, reset, removedBands };
+}
+
+/**
+ * Settles the selections within the scope the reader is in. A continent bounds the mountains they
+ * are judged against, so no selection is left that the continent cannot show; a range scope is the
+ * range filter itself, settled with the rest over the whole catalog.
+ */
+export function settleInScope(
+	mountains: readonly MountainIndexEntry[],
+	filters: AtlasFilters,
+	scope: AtlasScope,
+	priority: FilterKey | null
+): SettledFilters {
+	const pool = scope.kind === 'continent' ? scopeMountains(mountains, scope) : mountains;
+
+	return settleFilters(pool, filters, priority);
 }

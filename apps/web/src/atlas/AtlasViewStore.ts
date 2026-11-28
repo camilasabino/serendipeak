@@ -1,4 +1,10 @@
-import { activeFilterCount, NO_FILTERS, type AtlasFilters } from './atlasFilter';
+import {
+	activeFilterCount,
+	NO_FILTERS,
+	WHOLE_ATLAS,
+	type AtlasFilters,
+	type AtlasScope
+} from './atlasFilter';
 import { DEFAULT_ATLAS_SORT, type AtlasSort } from './atlasSort';
 import { sameSelection } from './elevationBands';
 
@@ -6,13 +12,58 @@ import { sameSelection } from './elevationBands';
 export interface AtlasView {
 	filters: AtlasFilters;
 	sort: AtlasSort;
+	/**
+	 * The continent the reader has gone into, and whether they are on its mountain ranges rather
+	 * than its mountains. While a range is browsed it is where they came from, so the trail can
+	 * climb back; the range itself is always `filters.range`. It ends when the range filter is left.
+	 */
+	continent: ContinentBrowse | null;
 }
 
-export const DEFAULT_ATLAS_VIEW: AtlasView = { filters: NO_FILTERS, sort: DEFAULT_ATLAS_SORT };
+export interface ContinentBrowse {
+	code: string;
+	ranges: boolean;
+}
+
+export const DEFAULT_ATLAS_VIEW: AtlasView = {
+	filters: NO_FILTERS,
+	sort: DEFAULT_ATLAS_SORT,
+	continent: null
+};
 
 /** The default view shows the catalog by continent; any other shows one sorted list of matches. */
 export function isDefaultView({ filters, sort }: AtlasView): boolean {
 	return activeFilterCount(filters) === 0 && sort === DEFAULT_ATLAS_SORT;
+}
+
+/**
+ * Where the reader has navigated to, which bounds what the filters offer: the range being browsed,
+ * else the continent they are in, else the whole atlas.
+ */
+export function scopeOf({
+	filters,
+	continent
+}: Pick<AtlasView, 'filters' | 'continent'>): AtlasScope {
+	if (filters.range !== null) {
+		return { kind: 'range', slug: filters.range };
+	}
+
+	return continent === null ? WHOLE_ATLAS : { kind: 'continent', code: continent.code };
+}
+
+/** The view with these filters; leaving the range filter ends the continent browse with it. */
+export function withFilters(view: AtlasView, filters: AtlasFilters): AtlasView {
+	const leavesRange = view.filters.range !== null && filters.range === null;
+
+	return { ...view, filters, continent: leavesRange ? null : view.continent };
+}
+
+function sameFilters(a: AtlasFilters, b: AtlasFilters): boolean {
+	return (
+		a.country === b.country &&
+		sameSelection(a.elevationBands, b.elevationBands) &&
+		a.range === b.range
+	);
 }
 
 /**
@@ -58,13 +109,28 @@ export class AtlasViewStore {
 
 	setFilters(change: Partial<AtlasFilters>): void {
 		const filters = { ...this.snapshot.filters, ...change };
-		const unchanged =
-			filters.country === this.snapshot.filters.country &&
-			sameSelection(filters.elevationBands, this.snapshot.filters.elevationBands) &&
-			filters.range === this.snapshot.filters.range;
-		if (!unchanged) {
-			this.publish({ ...this.snapshot, filters });
+		if (!sameFilters(filters, this.snapshot.filters)) {
+			this.publish(withFilters(this.snapshot, filters));
 		}
+	}
+
+	/**
+	 * Goes into a continent, to its mountains or to its ranges, leaving any range being browsed;
+	 * `null` goes back to all continents. The other filters stay as given, by default as they are:
+	 * whoever knows the catalog passes them already settled for where the reader is going.
+	 */
+	browseContinent(
+		next: ContinentBrowse | null,
+		filters: AtlasFilters = this.snapshot.filters
+	): void {
+		const { continent } = this.snapshot;
+		const left = filters.range === null ? filters : { ...filters, range: null };
+		const same = next?.code === continent?.code && next?.ranges === continent?.ranges;
+		if (same && sameFilters(left, this.snapshot.filters)) {
+			return;
+		}
+
+		this.publish({ ...this.snapshot, filters: left, continent: next });
 	}
 
 	setSort(sort: AtlasSort): void {

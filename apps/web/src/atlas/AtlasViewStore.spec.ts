@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NO_FILTERS } from './atlasFilter';
-import { AtlasViewStore, DEFAULT_ATLAS_VIEW, isDefaultView } from './AtlasViewStore';
+import { NO_FILTERS, WHOLE_ATLAS } from './atlasFilter';
+import {
+	AtlasViewStore,
+	DEFAULT_ATLAS_VIEW,
+	isDefaultView,
+	scopeOf,
+	withFilters
+} from './AtlasViewStore';
 import { bandSelection } from './elevationBands';
 
 const m = (...floors: number[]) => bandSelection('metric', floors);
@@ -96,6 +102,120 @@ describe('AtlasViewStore', () => {
 		store.reset();
 
 		expect(store.getSnapshot()).toBe(DEFAULT_ATLAS_VIEW);
+	});
+
+	describe('browsing a continent', () => {
+		const sa = { code: 'SA', ranges: false };
+		const saRanges = { code: 'SA', ranges: true };
+
+		it('goes into a continent, to its ranges and back, notifying each change once', () => {
+			const store = new AtlasViewStore();
+			const listener = vi.fn();
+			store.subscribe(listener);
+
+			store.browseContinent(sa);
+			store.browseContinent(sa);
+			store.browseContinent(saRanges);
+			expect(store.getSnapshot().continent).toEqual(saRanges);
+			expect(isDefaultView(store.getSnapshot())).toBe(true);
+
+			store.browseContinent(null);
+			store.browseContinent(null);
+			expect(store.getSnapshot()).toEqual(DEFAULT_ATLAS_VIEW);
+			expect(listener).toHaveBeenCalledTimes(3);
+		});
+
+		it('keeps the continent while a range is chosen, so the trail can climb back to it', () => {
+			const store = new AtlasViewStore();
+			store.browseContinent(saRanges);
+
+			store.setFilters({ range: 'andes' });
+			store.setFilters({ range: 'patagonian-andes' });
+			expect(store.getSnapshot().continent).toEqual(saRanges);
+
+			store.browseContinent(saRanges);
+			expect(store.getSnapshot().filters.range).toBeNull();
+			expect(store.getSnapshot().continent).toEqual(saRanges);
+		});
+
+		it('keeps the other filters when it goes in and when it goes back', () => {
+			const store = new AtlasViewStore();
+			store.setFilters({ country: 'AR', range: 'andes' });
+
+			store.browseContinent(saRanges);
+			expect(store.getSnapshot().filters).toEqual({ ...NO_FILTERS, country: 'AR' });
+
+			store.browseContinent(null);
+			expect(store.getSnapshot().filters.country).toBe('AR');
+		});
+
+		it('forgets the continent when the range filter is left, but not for another filter', () => {
+			const store = new AtlasViewStore();
+			store.browseContinent(saRanges);
+			store.setFilters({ country: 'AR' });
+			expect(store.getSnapshot().continent).toEqual(saRanges);
+
+			store.setFilters({ range: 'andes' });
+			store.setFilters({ range: null });
+
+			expect(store.getSnapshot().continent).toBeNull();
+		});
+
+		it('takes the filters it is given, already settled, with the range always left', () => {
+			const store = new AtlasViewStore();
+			store.setFilters({ country: 'NP', range: 'caucasus' });
+			const listener = vi.fn();
+			store.subscribe(listener);
+
+			store.browseContinent(saRanges, { ...NO_FILTERS, range: 'caucasus' });
+			expect(store.getSnapshot().filters).toEqual(NO_FILTERS);
+			expect(store.getSnapshot().continent).toEqual(saRanges);
+
+			store.browseContinent(saRanges, NO_FILTERS);
+			expect(listener).toHaveBeenCalledTimes(1);
+		});
+
+		it('is forgotten by a reset', () => {
+			const store = new AtlasViewStore();
+			store.browseContinent(sa);
+			store.setFilters({ range: 'andes' });
+
+			store.reset();
+
+			expect(store.getSnapshot()).toBe(DEFAULT_ATLAS_VIEW);
+		});
+	});
+
+	describe('the scope of a view', () => {
+		const sa = { code: 'SA', ranges: false };
+
+		it('is the whole atlas, a continent, or the range being browsed wherever it was reached', () => {
+			expect(scopeOf(DEFAULT_ATLAS_VIEW)).toBe(WHOLE_ATLAS);
+			expect(scopeOf({ ...DEFAULT_ATLAS_VIEW, continent: sa })).toEqual({
+				kind: 'continent',
+				code: 'SA'
+			});
+			const range = { ...NO_FILTERS, range: 'andes' };
+			expect(scopeOf({ ...DEFAULT_ATLAS_VIEW, filters: range, continent: sa })).toEqual({
+				kind: 'range',
+				slug: 'andes'
+			});
+			expect(scopeOf({ ...DEFAULT_ATLAS_VIEW, filters: range })).toEqual({
+				kind: 'range',
+				slug: 'andes'
+			});
+		});
+
+		it('goes back to the whole atlas when the range filter is left, not a continent', () => {
+			const inRange = {
+				...DEFAULT_ATLAS_VIEW,
+				filters: { ...NO_FILTERS, range: 'andes' },
+				continent: sa
+			};
+
+			expect(scopeOf(withFilters(inRange, NO_FILTERS))).toBe(WHOLE_ATLAS);
+			expect(withFilters(inRange, { ...NO_FILTERS, range: 'southern-andes' }).continent).toBe(sa);
+		});
 	});
 
 	it('stops notifying a listener that unsubscribed', () => {

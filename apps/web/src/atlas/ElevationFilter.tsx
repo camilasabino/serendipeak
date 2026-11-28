@@ -22,6 +22,8 @@ interface ElevationFilterProps {
 	/** The displayed unit system, which every band offered here is native to. */
 	system: UnitSystem;
 	onChange: (selection: BandSelection | null) => void;
+	/** Why there is nothing to choose, when there is: the button then stays but does not open. */
+	unavailable?: string;
 }
 
 /**
@@ -29,9 +31,10 @@ interface ElevationFilterProps {
  * popup stays open while bands are ticked, and Escape, a press outside or tabbing away closes it.
  */
 export function ElevationFilter(props: ElevationFilterProps) {
-	const { selected } = props;
+	const { selected, unavailable } = props;
 	const [open, setOpen] = useState(false);
 	const labelId = useId();
+	const hintId = useId();
 	const summaryId = useId();
 	const popupId = useId();
 	const trigger = useRef<HTMLButtonElement>(null);
@@ -45,9 +48,16 @@ export function ElevationFilter(props: ElevationFilterProps) {
 
 	return (
 		<div className={controls.field}>
-			<span className={controls.fieldLabel} id={labelId}>
-				{ELEVATION_FILTER_LABEL}
-			</span>
+			<div className={controls.fieldHead}>
+				<span className={controls.fieldLabel} id={labelId}>
+					{ELEVATION_FILTER_LABEL}
+				</span>
+				{unavailable && (
+					<span className={controls.fieldHint} id={hintId}>
+						{unavailable}
+					</span>
+				)}
+			</div>
 			<button
 				ref={trigger}
 				type="button"
@@ -55,8 +65,14 @@ export function ElevationFilter(props: ElevationFilterProps) {
 				aria-expanded={open}
 				aria-controls={open ? popupId : undefined}
 				aria-labelledby={`${labelId} ${summaryId}`}
-				onClick={() => setOpen(!open)}
+				aria-describedby={unavailable ? hintId : undefined}
+				aria-disabled={unavailable ? true : undefined}
+				data-active={selected !== null || undefined}
+				onClick={() => !unavailable && setOpen(!open)}
 				onKeyDown={(event) => {
+					if (unavailable) {
+						return;
+					}
 					if (event.key === 'ArrowDown') {
 						event.preventDefault();
 						setOpen(true);
@@ -70,7 +86,7 @@ export function ElevationFilter(props: ElevationFilterProps) {
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			{open && (
+			{open && !unavailable && (
 				<FilterPopup
 					id={popupId}
 					anchor={trigger}

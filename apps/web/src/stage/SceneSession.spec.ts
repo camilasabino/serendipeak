@@ -2013,6 +2013,80 @@ describe('SceneSession framing the places the atlas filters leave', () => {
 		expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
 	});
 
+	describe('along the navigation of a continent', () => {
+		const ANDES_NORTH = { latitude: 4.6, longitude: -74.1 };
+		const SOUTH_AMERICA: AtlasView = {
+			...ATLAS_VIEW,
+			focus: [ACONCAGUA, FITZ_ROY, ANDES_NORTH]
+		};
+		const SOUTH_AMERICA_AGAIN: AtlasView = {
+			...ATLAS_VIEW,
+			focus: SOUTH_AMERICA.focus!.map((place) => ({ ...place }))
+		};
+		const PATAGONIA: AtlasView = { ...ATLAS_VIEW, focus: [FITZ_ROY, MENDOZA.focus![1]!] };
+		const CONTINENT_LOOK = atlasOverviewLook(SOUTH_AMERICA, undefined);
+
+		it('flies from the turning globe to the continent and keeps it still', async () => {
+			const { scene, store, session } = await onAtlas();
+			scene.holdShow = true;
+
+			session.setAtlas(SOUTH_AMERICA);
+
+			expect(scene.overviews.at(-1)).toEqual({ look: CONTINENT_LOOK, animate: true });
+			expect(scene.orbiting).toBe(false);
+			expect(store.getSnapshot()).toMatchObject({ free: false, rotation: 'off' });
+
+			scene.pendingOverviews[0]!({ status: 'arrived' });
+			await flush();
+
+			expect(scene.orbiting).toBe(false);
+			expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+		});
+
+		it('flies once per change of place, and not between a continent’s mountains and ranges', async () => {
+			const { scene, session } = await onAtlas();
+
+			session.setAtlas(SOUTH_AMERICA);
+			session.setAtlas(SOUTH_AMERICA_AGAIN);
+			session.setAtlas({ ...SOUTH_AMERICA, focus: [...SOUTH_AMERICA.focus!] });
+			expect(scene.overviews).toHaveLength(2);
+
+			session.setAtlas(PATAGONIA);
+			expect(scene.overviews).toHaveLength(3);
+
+			session.setAtlas(SOUTH_AMERICA);
+			expect(scene.overviews.at(-1)).toEqual({ look: CONTINENT_LOOK, animate: true });
+			expect(scene.overviews).toHaveLength(4);
+		});
+
+		it('leaves the reader in control of the camera once the flight has arrived', async () => {
+			const { scene, store, session } = await onAtlas();
+			session.setAtlas(SOUTH_AMERICA);
+			await flush();
+
+			scene.interact();
+			session.setAtlas(SOUTH_AMERICA_AGAIN);
+			await flush();
+
+			expect(scene.overviews).toHaveLength(2);
+			expect(scene.orbiting).toBe(false);
+			expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'off' });
+		});
+
+		it('turns the globe again on returning to all continents', async () => {
+			const { scene, store, session } = await onAtlas();
+			session.setAtlas(SOUTH_AMERICA);
+			await flush();
+
+			session.setAtlas(ATLAS);
+			await flush();
+
+			expect(scene.overviews.at(-1)).toEqual({ look: OVERVIEW, animate: true });
+			expect(scene.orbiting).toBe(true);
+			expect(store.getSnapshot()).toMatchObject({ free: true, rotation: 'rotating' });
+		});
+	});
+
 	it('keeps a reader’s pause through a framed visit and back to the overview', async () => {
 		const { scene, store, session } = await onAtlas();
 		session.toggleRotation();

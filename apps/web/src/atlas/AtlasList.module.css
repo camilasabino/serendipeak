@@ -2,19 +2,40 @@
 	margin: var(--sp-space-6) 0 0;
 }
 
-/* The same caps label and copper rule that open the ledger on a mountain sheet. */
-.heading {
+.listInContext {
+	margin-top: var(--sp-space-2);
+}
+
+.index {
 	margin: 0;
-	padding-bottom: 0.6rem;
-	border-bottom: 2px solid var(--sp-divider-accent);
-	font-family: var(--sp-face-ui);
-	font-size: 0.6875rem;
-	font-weight: 600;
-	font-stretch: var(--sp-stretch-caps);
-	letter-spacing: 0.13em;
-	line-height: 1.5;
-	text-transform: uppercase;
-	color: var(--sp-text-muted);
+	padding: 0;
+	list-style: none;
+}
+
+.index > li {
+	border-bottom: 1px solid var(--sp-divider);
+}
+
+.continentButton {
+	width: calc(100% + 1.2rem);
+	border: 0;
+	background: transparent;
+	text-align: left;
+}
+
+.arrow {
+	flex: none;
+	width: 0.9rem;
+	height: 0.9rem;
+	fill: none;
+	stroke: var(--sp-text-muted);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.continentButton:hover .arrow {
+	stroke: var(--sp-text-accent);
 }
 
 .group {

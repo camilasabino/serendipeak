@@ -25,6 +25,8 @@ interface ChoiceFilterProps {
 	value: string | null;
 	onChange: (value: string | null) => void;
 	noMatchesMessage: (query: string) => string;
+	/** Why there is nothing to choose, when there is: the button then stays but does not open. */
+	unavailable?: string;
 }
 
 /** The popup's first row; no real choice has an empty value. */
@@ -61,10 +63,12 @@ export function ChoiceFilter({
 	options,
 	value,
 	onChange,
-	noMatchesMessage
+	noMatchesMessage,
+	unavailable
 }: ChoiceFilterProps) {
 	const [open, setOpen] = useState(false);
 	const labelId = useId();
+	const hintId = useId();
 	const valueId = useId();
 	const popupId = useId();
 	const trigger = useRef<HTMLButtonElement>(null);
@@ -79,9 +83,16 @@ export function ChoiceFilter({
 
 	return (
 		<div className={controls.field}>
-			<span className={controls.fieldLabel} id={labelId}>
-				{label}
-			</span>
+			<div className={controls.fieldHead}>
+				<span className={controls.fieldLabel} id={labelId}>
+					{label}
+				</span>
+				{unavailable && (
+					<span className={controls.fieldHint} id={hintId}>
+						{unavailable}
+					</span>
+				)}
+			</div>
 			<button
 				ref={trigger}
 				type="button"
@@ -90,8 +101,14 @@ export function ChoiceFilter({
 				aria-expanded={open}
 				aria-controls={open ? popupId : undefined}
 				aria-labelledby={`${labelId} ${valueId}`}
-				onClick={() => setOpen(!open)}
+				aria-describedby={unavailable ? hintId : undefined}
+				aria-disabled={unavailable ? true : undefined}
+				data-active={selected !== undefined || undefined}
+				onClick={() => !unavailable && setOpen(!open)}
 				onKeyDown={(event) => {
+					if (unavailable) {
+						return;
+					}
 					if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 						event.preventDefault();
 						setOpen(true);
@@ -108,7 +125,7 @@ export function ChoiceFilter({
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			{open && (
+			{open && !unavailable && (
 				<FilterPopup id={popupId} anchor={trigger} onDismiss={dismiss}>
 					<ChoiceList
 						searchLabel={searchLabel}

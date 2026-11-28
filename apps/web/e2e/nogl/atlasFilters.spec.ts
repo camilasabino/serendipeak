@@ -32,7 +32,7 @@ async function watch(page: Page) {
 	return { pageErrors, documents };
 }
 
-const list = (page: Page) => page.getByRole('region', { name: 'All mountains' });
+const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
 const filterToggle = (page: Page) => list(page).getByRole('button', { name: /^Filter/ });
 type Facet = 'country' | 'range';
 
@@ -86,14 +86,13 @@ const reset = (page: Page) => list(page).getByRole('button', { name: 'Reset filt
 const count = (page: Page) => list(page).locator('[aria-live="polite"]');
 const continent = (page: Page, name: string) =>
 	list(page)
-		.locator('summary')
+		.locator('summary, button')
 		.filter({ hasText: new RegExp(`^${name}`) });
 const backToAtlas = (page: Page) => page.getByRole('link', { name: /Back to atlas/ });
 
-// The flat list of matches, by name and in order; empty while the continents are showing, whose
-// lists are named for their continents. Retries until the list is as expected.
-const matchNames = (page: Page) =>
-	list(page).getByRole('list', { name: 'All mountains' }).locator('li > a > span:first-child');
+// The mountains listed, by name and in order; empty while the continents are showing, which list
+// none. Retries until the list is as expected.
+const matchNames = (page: Page) => list(page).locator('li > a > span:first-child');
 
 const expectNames = (page: Page, expected: string[]) =>
 	expect(matchNames(page)).toHaveText(expected);
@@ -216,7 +215,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.describe('@nogl Atlas filters: the default view', () => {
-	test('keeps the continents, closed, with the controls collapsed above them', async ({ page }) => {
+	test('lists the continents, with the controls collapsed above them', async ({ page }) => {
 		const watched = await watch(page);
 		await openAtlas(page);
 
@@ -785,7 +784,7 @@ test.describe('@nogl Atlas filters: reset', () => {
 		await openAtlas(page);
 		await continent(page, 'Europe').click();
 		await openFilters(page);
-		await choose(page, 'country', 'CL');
+		await choose(page, 'country', 'FR');
 		await chooseSort(page, 'elevation-desc');
 
 		await reset(page).click();
@@ -794,8 +793,8 @@ test.describe('@nogl Atlas filters: reset', () => {
 		await expectSort(page, 'name');
 		await expect(count(page)).toHaveText(`Showing all ${TOTAL} mountains`);
 		await expect(reset(page)).toHaveCount(0);
-		await expect(list(page).getByRole('link', { name: /Mont Blanc/ })).toBeVisible();
-		await expect(list(page).getByRole('link', { name: /Six Thousand/ })).toBeHidden();
+		await expect(continent(page, 'Europe')).toBeVisible();
+		await expect(list(page).getByRole('link')).toHaveCount(0);
 		await expect(filterToggle(page)).toBeFocused();
 	});
 

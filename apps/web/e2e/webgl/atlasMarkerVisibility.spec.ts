@@ -28,7 +28,7 @@ async function layer(page: Page): Promise<AtlasLayerReading> {
 
 const continent = (page: Page, name: string) =>
 	list(page)
-		.locator('summary')
+		.locator('summary, button')
 		.filter({ hasText: new RegExp(`^${name}`) });
 
 // What the layer holds, in sight or not, against what is actually in view: hiding keeps the former

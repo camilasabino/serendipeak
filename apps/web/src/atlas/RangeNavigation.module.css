@@ -1,0 +1,129 @@
+/* What lies below the level the reader is on. The ways further down are ruled interface rows
+   with an arrow, and the mountains are the unruled display-face rows that follow, so going into
+   a range never looks like opening a mountain. */
+.hint {
+	margin: var(--sp-space-3) 0 0;
+	font-family: var(--sp-face-ui);
+	font-size: 0.875rem;
+	line-height: 1.4;
+	color: var(--sp-text-muted);
+}
+
+.label {
+	margin: var(--sp-space-4) 0 0.35rem;
+	font-family: var(--sp-face-ui);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	font-stretch: var(--sp-stretch-caps);
+	letter-spacing: 0.13em;
+	line-height: 1.5;
+	text-transform: uppercase;
+	color: var(--sp-text-muted);
+}
+
+/* The way in from a continent's mountains: the one action of that level, so the one in the accent. */
+.entry {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-space-3);
+	box-sizing: border-box;
+	width: calc(100% + 1.2rem);
+	min-height: 2.75rem;
+	margin: 0 -0.6rem var(--sp-space-3);
+	padding: 0 0.6rem;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--sp-text-accent);
+	font-family: var(--sp-face-ui);
+	font-size: 0.9375rem;
+	font-weight: 500;
+	line-height: 1.2;
+	text-align: left;
+	cursor: pointer;
+}
+
+.entry:hover {
+	background: var(--sp-state-hover);
+}
+
+.entry:focus-visible,
+.choice:focus-visible {
+	outline: 2px solid var(--sp-focus-ring);
+	outline-offset: -2px;
+}
+
+.entryLabel {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.count {
+	flex: none;
+	font-family: var(--sp-face-ui);
+	font-size: 0.875rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--sp-text-muted);
+}
+
+.arrow {
+	flex: none;
+	width: 0.9rem;
+	height: 0.9rem;
+	fill: none;
+	stroke: var(--sp-text-muted);
+	stroke-width: 1.75;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.entry .arrow {
+	stroke: currentColor;
+}
+
+.choices {
+	margin: 0 0 var(--sp-space-3);
+	padding: 0;
+	border-top: 1px solid var(--sp-divider);
+	list-style: none;
+}
+
+.choices > li {
+	border-bottom: 1px solid var(--sp-divider);
+}
+
+/* The same hand's-width hover as a mountain row. */
+.choice {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-space-3);
+	box-sizing: border-box;
+	width: calc(100% + 1.2rem);
+	min-height: 2.75rem;
+	margin: 0 -0.6rem;
+	padding: 0.5rem 0.6rem;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--sp-text);
+	font-family: var(--sp-face-ui);
+	font-size: 0.9375rem;
+	line-height: 1.25;
+	text-align: left;
+	cursor: pointer;
+}
+
+.choice:hover {
+	background: var(--sp-state-hover);
+}
+
+.choice:hover .arrow {
+	stroke: var(--sp-text-accent);
+}
+
+.choiceName {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}

@@ -30,18 +30,14 @@ async function watch(page: Page) {
 	return { pageErrors, documents };
 }
 
-const list = (page: Page) => page.getByRole('region', { name: 'All mountains' });
+const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
 const continent = (page: Page, name: string) =>
 	list(page)
-		.locator('summary')
+		.locator('summary, button')
 		.filter({ hasText: new RegExp(`^${name}`) });
 const item = (page: Page, name: string) => list(page).getByRole('link', { name: new RegExp(name) });
 const backToAtlas = (page: Page) => page.getByRole('link', { name: /Back to atlas/ });
 const historyLength = (page: Page) => page.evaluate(() => history.length);
-const openGroups = (page: Page) =>
-	list(page)
-		.locator('details')
-		.evaluateAll((groups) => groups.map((group) => (group as HTMLDetailsElement).open));
 
 // Hydration attaches the client router; until then a click is a plain document navigation.
 async function openAtlas(page: Page, path = '/atlas') {
@@ -55,31 +51,39 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.describe('@nogl Atlas list', () => {
-	test('starts with every continent collapsed, each named with its count', async ({ page }) => {
+	test('starts with the continents alone, each named with its count and no mountain shown', async ({
+		page
+	}) => {
 		await watch(page);
 		await openAtlas(page);
 
-		expect((await openGroups(page)).every((open) => !open)).toBe(true);
+		await expect(list(page).locator('details')).toHaveCount(0);
 		await expect(continent(page, 'Europe')).toHaveText(/Europe\s*2 mountains/);
 		await expect(continent(page, 'South America')).toHaveText(/South America\s*1 mountain$/);
-		await expect(item(page, OLYMPUS.name)).toBeHidden();
+		await expect(list(page).getByRole('link')).toHaveCount(0);
 	});
 
-	test('opens and closes continents by click, several at once', async ({ page }) => {
+	test('goes into one continent, hiding the others, and back to all continents', async ({
+		page
+	}) => {
 		await watch(page);
 		await openAtlas(page);
 
 		await continent(page, 'Europe').click();
-		await continent(page, 'South America').click();
+		await expect(
+			list(page).getByRole('heading', { level: 2, name: 'Europe mountains' })
+		).toBeFocused();
 		await expect(item(page, OLYMPUS.name)).toBeVisible();
-		await expect(item(page, ACONCAGUA.name)).toBeVisible();
+		await expect(item(page, ACONCAGUA.name)).toBeHidden();
+		await expect(continent(page, 'South America')).toBeHidden();
 
-		await continent(page, 'Europe').click();
+		await list(page).getByRole('button', { name: 'All continents' }).click();
+		await expect(continent(page, 'Europe')).toBeFocused();
 		await expect(item(page, OLYMPUS.name)).toBeHidden();
-		await expect(item(page, ACONCAGUA.name)).toBeVisible();
+		await expect(continent(page, 'South America')).toBeVisible();
 	});
 
-	test('is operated by keyboard: Enter and Space toggle, Tab reaches the mountains', async ({
+	test('is operated by keyboard: Enter and Space go in, Tab reaches the way into ranges, then the mountains', async ({
 		page
 	}) => {
 		await watch(page);
@@ -88,10 +92,17 @@ test.describe('@nogl Atlas list', () => {
 		await continent(page, 'Europe').focus();
 		await page.keyboard.press('Enter');
 		await expect(item(page, OLYMPUS.name)).toBeVisible();
+		await list(page).getByRole('button', { name: 'All continents' }).focus();
 		await page.keyboard.press('Space');
 		await expect(item(page, OLYMPUS.name)).toBeHidden();
+		await expect(continent(page, 'Europe')).toBeFocused();
 
-		await page.keyboard.press('Space');
+		await page.keyboard.press('Enter');
+		// The controls come before what can be explored: Filter, Sort, then the way into the ranges.
+		await page.keyboard.press('Tab');
+		await page.keyboard.press('Tab');
+		await page.keyboard.press('Tab');
+		await expect(page.locator(':focus')).toHaveText(/^Browse mountain ranges/);
 		await page.keyboard.press('Tab');
 		await expect(list(page).getByRole('link').first()).toBeFocused();
 		await page.keyboard.press('Enter');
@@ -294,12 +305,13 @@ async function openAtlasFromHome(page: Page) {
 	await expect(atlasHeading(page)).toBeVisible();
 }
 
-// The list keeps its open continents across trips, so a continent is opened only when it is closed.
+// The atlas keeps the continent it was left on, so the way is back to all continents first.
 async function openMountainFromAtlas(page: Page, group: string, name: string) {
-	const summary = continent(page, group);
-	if (!(await summary.evaluate((node) => (node.parentElement as HTMLDetailsElement).open))) {
-		await summary.click();
+	const allContinents = list(page).getByRole('button', { name: 'All continents' });
+	if (await allContinents.isVisible()) {
+		await allContinents.click();
 	}
+	await continent(page, group).click();
 	await item(page, name).click();
 	await expect(mountainHeading(page, name)).toBeVisible();
 }
@@ -616,7 +628,7 @@ test.describe('@nogl Atlas layout', () => {
 			expect(stage!.height).toBeGreaterThan(740 * 0.5);
 
 			const summaries = await list(page)
-				.locator('summary')
+				.locator('summary, ul > li > button')
 				.evaluateAll((all) => all.map((summary) => summary.getBoundingClientRect()));
 			for (const box of summaries) {
 				expect(box.height).toBeGreaterThanOrEqual(44);
@@ -624,7 +636,6 @@ test.describe('@nogl Atlas layout', () => {
 			}
 
 			await continent(page, 'Europe').click();
-			await continent(page, 'South America').click();
 			await item(page, OLYMPUS.name).scrollIntoViewIfNeeded();
 			await expect(item(page, OLYMPUS.name)).toBeInViewport();
 			expect(

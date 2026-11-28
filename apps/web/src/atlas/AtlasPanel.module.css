@@ -11,6 +11,19 @@
 	color: var(--sp-text);
 }
 
+/* Past the first level the name is a label above the heading of the level, in the same caps as
+   the labels it sits with, and takes no more room than that. */
+.titleCompact {
+	font-family: var(--sp-face-ui);
+	font-size: 0.6875rem;
+	font-weight: 600;
+	font-stretch: var(--sp-stretch-caps);
+	letter-spacing: 0.13em;
+	line-height: 1.5;
+	text-transform: uppercase;
+	color: var(--sp-text-muted);
+}
+
 .title:focus-visible {
 	outline: 2px solid var(--sp-focus);
 	outline-offset: 0.25rem;

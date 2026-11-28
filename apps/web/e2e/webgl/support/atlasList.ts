@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-export const list = (page: Page) => page.getByRole('region', { name: 'All mountains' });
+export const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
 export const popup = (page: Page) => page.locator('[popover]');
 
 export async function openFilters(page: Page) {

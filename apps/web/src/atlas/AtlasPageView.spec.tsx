@@ -79,8 +79,7 @@ describe('atlas page', () => {
 	});
 
 	it('introduces filtering, sorting and browsing by continent, and renders no chooser', () => {
-		expect(html).toContain('Filter by country, elevation, or mountain range, sort the results');
-		expect(html).toContain('or browse by continent.');
+		expect(html).toContain('browse by continent, or filter and sort them.');
 		expect(html).not.toContain('Which mountain?');
 	});
 
@@ -119,7 +118,7 @@ describe('atlas page edge states', () => {
 		const html = render({ model: { kind: 'atlas', mountains: [] }, canonicalUrl: null });
 
 		expect(html).toContain('There are no mountains on the atlas yet.');
-		expect(html).not.toContain('All mountains</h2>');
+		expect(html).not.toContain('All continents</h2>');
 		expect(html).toContain('Preparing the atlas...');
 	});
 
