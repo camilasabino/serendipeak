@@ -7,7 +7,7 @@ export async function openFilters(page: Page) {
 	const country = list(page).getByRole('button', { name: /^Country/ });
 	if (!(await country.isVisible())) {
 		await list(page)
-			.getByRole('button', { name: /^Filter/ })
+			.getByRole('button', { name: /^Filter(, \d+ active)?$/ })
 			.click();
 	}
 }

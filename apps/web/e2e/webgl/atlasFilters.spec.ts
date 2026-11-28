@@ -57,7 +57,7 @@ test.describe('@webgl atlas filters on the globe', () => {
 		const camera = await globePosition(page);
 
 		await list(page)
-			.getByRole('button', { name: /^Filter/ })
+			.getByRole('button', { name: /^Filter(, \d+ active)?$/ })
 			.click();
 		await chooseCountry(page, 'Chile');
 

@@ -21,6 +21,8 @@ async function watch(page: Page) {
 	return { pageErrors };
 }
 
+// The toggle is named "Filter" or "Filter, N active"; a trail step can read "Filtered mountains".
+const FILTER_TOGGLE = /^Filter(, \d+ active)?$/;
 const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
 const count = (page: Page) => list(page).locator('[aria-live="polite"]');
 const trail = (page: Page) => page.getByRole('navigation', { name: 'Atlas trail' });
@@ -46,7 +48,7 @@ async function openAtlas(page: Page) {
 	await page.goto('/atlas');
 	await expect(page.getByRole('heading', { level: 1, name: 'Atlas' })).toBeVisible();
 	await page.waitForFunction(() => '__NEXT_DATA__' in window && 'next' in window);
-	await expect(list(page).getByRole('button', { name: /^Filter/ })).toBeVisible();
+	await expect(list(page).getByRole('button', { name: FILTER_TOGGLE })).toBeVisible();
 }
 
 async function openRanges(page: Page, name: string) {
@@ -234,7 +236,7 @@ test.describe('@nogl Atlas ranges: browsing', () => {
 
 		// The controls come before what can be explored: Filter, Sort, then the way into the ranges.
 		await page.keyboard.press('Tab');
-		await expect(list(page).getByRole('button', { name: /^Filter/ })).toBeFocused();
+		await expect(list(page).getByRole('button', { name: FILTER_TOGGLE })).toBeFocused();
 		await page.keyboard.press('Tab');
 		await expect(list(page).getByRole('button', { name: /^Sort/ })).toBeFocused();
 		await page.keyboard.press('Tab');
@@ -253,11 +255,32 @@ test.describe('@nogl Atlas ranges: browsing', () => {
 		await expect(heading(page, 'Principal Cordillera')).toBeFocused();
 		await expect(matchNames(page)).toHaveText(['Aconcagua']);
 
-		// Filter, Sort and Reset come first, then the mountains.
-		for (const _ of [1, 2, 3, 4]) {
+		// The controls come before the mountains, whatever their number: Tab reaches Filter and Sort,
+		// and then the first mountain, which is the one the list leads with.
+		const sortButton = list(page).getByRole('button', { name: /^Sort/ });
+		const visited: string[] = [];
+		for (let presses = 0; presses < 10; presses++) {
 			await page.keyboard.press('Tab');
+			if (
+				await mountainRows(page)
+					.first()
+					.evaluate((row) => row === document.activeElement)
+			) {
+				break;
+			}
+			visited.push(
+				await page.evaluate(
+					() =>
+						document.activeElement?.getAttribute('aria-label') ??
+						document.activeElement?.textContent?.trim() ??
+						''
+				)
+			);
 		}
 		await expect(mountainRows(page).first()).toBeFocused();
+		await expect(mountainRows(page).first()).toContainText('Aconcagua');
+		expect(visited[0]).toMatch(FILTER_TOGGLE);
+		expect(visited[1]).toBe((await sortButton.textContent())?.trim());
 	});
 
 	test('adds no history entry and no address to a range', async ({ page }) => {
@@ -290,9 +313,7 @@ test.describe('@nogl Atlas ranges: browsing', () => {
 			await page.locator('[popover]').getByRole('option', { name }).click();
 		};
 		await openRanges(page, 'South America');
-		await list(page)
-			.getByRole('button', { name: /^Filter/ })
-			.click();
+		await list(page).getByRole('button', { name: FILTER_TOGGLE }).click();
 		await list(page)
 			.getByRole('button', { name: /^Country/ })
 			.click();
@@ -341,9 +362,7 @@ test.describe('@nogl Atlas ranges: what the filters offer at each level', () => 
 	}) => {
 		const watched = await watch(page);
 		await openAtlas(page);
-		await list(page)
-			.getByRole('button', { name: /^Filter/ })
-			.click();
+		await list(page).getByRole('button', { name: FILTER_TOGGLE }).click();
 		const everyCountry = await countries(page);
 		const everyRange = await ranges(page);
 		expect(everyCountry).toEqual(expect.arrayContaining(['Nepal', 'France', 'Chile']));
@@ -396,9 +415,7 @@ test.describe('@nogl Atlas ranges: what the filters offer at each level', () => 
 		await watch(page);
 		await openAtlas(page);
 		await continent(page, 'South America').click();
-		await list(page)
-			.getByRole('button', { name: /^Filter/ })
-			.click();
+		await list(page).getByRole('button', { name: FILTER_TOGGLE }).click();
 		await list(page)
 			.getByRole('button', { name: /^Country/ })
 			.click();
@@ -415,9 +432,7 @@ test.describe('@nogl Atlas ranges: what the filters offer at each level', () => 
 		await backToAtlas(page).click();
 
 		await expect(heading(page, 'Andes')).toBeVisible();
-		await list(page)
-			.getByRole('button', { name: /^Filter/ })
-			.click();
+		await list(page).getByRole('button', { name: FILTER_TOGGLE }).click();
 		await expect(list(page).getByRole('button', { name: /^Country Argentina/ })).toBeVisible();
 		expect(await countries(page)).toEqual(['All countries', 'Argentina', 'Chile']);
 		expect(await ranges(page)).toEqual([

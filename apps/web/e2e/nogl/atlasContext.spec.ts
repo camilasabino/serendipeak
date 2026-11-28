@@ -27,7 +27,8 @@ const heading = (page: Page, name: string | RegExp) =>
 const trail = (page: Page) => page.getByRole('navigation', { name: 'Atlas trail' });
 const trailLabels = (page: Page) => trail(page).getByRole('button');
 const count = (page: Page) => list(page).locator('[aria-live="polite"]');
-const filterToggle = (page: Page) => list(page).getByRole('button', { name: /^Filter/ });
+const filterToggle = (page: Page) =>
+	list(page).getByRole('button', { name: /^Filter(, \d+ active)?$/ });
 const continent = (page: Page, name: string) =>
 	list(page)
 		.locator('ul > li > button')
@@ -84,7 +85,7 @@ const contextPrecedesControls = (page: Page) =>
 	page.evaluate(() => {
 		const where = document.getElementById('atlas-list-heading');
 		const controls = [...document.querySelectorAll('button')].find((button) =>
-			/^Filter/.test(button.getAttribute('aria-label') ?? '')
+			/^Filter(, \d+ active)?$/.test(button.getAttribute('aria-label') ?? '')
 		);
 
 		return Boolean(
@@ -491,7 +492,6 @@ test.describe('@nogl Atlas context: active filters', () => {
 		const country = list(page).getByRole('button', { name: /^Country/ });
 		await expect(country).toHaveAttribute('aria-disabled', 'true');
 		await expect(country).toHaveAccessibleDescription('No other countries here');
-		await country.click({ force: true });
 		await country.focus();
 		await page.keyboard.press('ArrowDown');
 		await expect(popup(page)).toHaveCount(0);

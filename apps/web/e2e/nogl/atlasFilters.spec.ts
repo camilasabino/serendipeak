@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { fixture, resetStub, stubRequests, useScenario } from '../ssr/support';
 
 interface Named {
@@ -33,7 +33,9 @@ async function watch(page: Page) {
 }
 
 const list = (page: Page) => page.getByRole('region', { name: 'Atlas mountains' });
-const filterToggle = (page: Page) => list(page).getByRole('button', { name: /^Filter/ });
+// The toggle is named "Filter" or "Filter, N active"; a trail step can read "Filtered mountains".
+const filterToggle = (page: Page) =>
+	list(page).getByRole('button', { name: /^Filter(, \d+ active)?$/ });
 type Facet = 'country' | 'range';
 
 const FACET_BUTTON = { country: /^Country/, range: /^Mountain range/ } as const;
@@ -65,6 +67,20 @@ const bandBox = (page: Page, floor: number) =>
 	list(page).getByRole('checkbox', { name: new RegExp(`^${floor.toLocaleString('en')}–`) });
 const clearElevation = (page: Page) =>
 	list(page).getByRole('button', { name: 'Clear elevation bands' });
+const NO_OTHER_BANDS = 'No other elevation bands here';
+
+// A filter with nothing to choose between stays in place but does not open: it says why. The
+// state alone is checked, since a reader cannot open it.
+async function expectUnavailable(trigger: Locator, hint: string) {
+	await expect(trigger).toHaveAttribute('aria-disabled', 'true');
+	await expect(trigger).toHaveAccessibleDescription(hint);
+	await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+	await expect(popup(trigger.page())).toHaveCount(0);
+}
+
+const isUnavailable = async (trigger: Locator) =>
+	(await trigger.getAttribute('aria-disabled')) === 'true';
+
 const SORT_NAMES = {
 	name: 'Name A–Z',
 	'elevation-desc': 'Highest first',
@@ -141,8 +157,10 @@ async function dropBand(page: Page, floor: number) {
 	await closePopup(page);
 }
 
-// Each band as "6,000–6,999 m (2)", read from its checkbox row.
+// Each band as "6,000–6,999 m (2)", read from its checkbox row; none while the filter is unavailable.
 async function bandLabels(page: Page): Promise<string[]> {
+	await openFilters(page);
+	if (await isUnavailable(elevation(page))) return [];
 	await openElevation(page);
 	const rows = await popup(page)
 		.locator('label')
@@ -184,8 +202,11 @@ async function expectChoice(page: Page, which: Facet, value: string) {
 	);
 }
 
-// Each option as the old select showed it: the name, the count, and two spaces per level.
+// Each option as the old select showed it: the name, the count, and two spaces per level; none
+// while the filter is unavailable.
 async function choiceLabels(page: Page, which: Facet): Promise<string[]> {
+	await openFilters(page);
+	if (await isUnavailable(facet(page, which))) return [];
 	await openFacet(page, which);
 	const rows = await popup(page)
 		.getByRole('option')
@@ -361,7 +382,9 @@ test.describe('@nogl Atlas filters: faceted options', () => {
 		await choose(page, 'country', 'GR');
 
 		await expectNames(page, ['Mount Olympus']);
-		expect(await bandLabels(page)).toEqual(['2,000–2,999 m (1)']);
+		// Its one mountain is the only band there is, so choosing one would narrow nothing.
+		await expectUnavailable(elevation(page), NO_OTHER_BANDS);
+		expect(await bandLabels(page)).toEqual([]);
 		expect(await choiceLabels(page, 'range')).toEqual(['All ranges', 'Mount Olympus (1)']);
 		expect(await choiceLabels(page, 'country')).toContain('Chile (3)');
 	});
@@ -412,14 +435,14 @@ test.describe('@nogl Atlas filters: faceted options', () => {
 
 		for (const step of [
 			() => choose(page, 'country', 'NP'),
-			() => pickBand(page, 8000),
 			() => choose(page, 'range', 'himalaya'),
 			() =>
 				reset(page)
 					.click()
-					.then(() => choose(page, 'country', 'FR')),
-			() => pickBand(page, 4000),
-			() => choose(page, 'range', '')
+					.then(() => pickBand(page, 6000)),
+			() => choose(page, 'country', 'CL'),
+			() => dropBand(page, 6000),
+			() => choose(page, 'country', 'FR')
 		]) {
 			await step();
 			expect(await matchNames(page).count()).toBeGreaterThan(0);
@@ -689,8 +712,8 @@ test.describe('@nogl Atlas filters: elevation in feet', () => {
 		await openElevation(page);
 		await clearElevation(page).click();
 		await expect(elevation(page)).toHaveAccessibleName('Elevation Any elevation');
-		await expect(popup(page).getByRole('checkbox').first()).toBeFocused();
-		await closePopup(page);
+		// Nepal holds one mountain, so with no band chosen there is none left to choose between.
+		await expectUnavailable(elevation(page), NO_OTHER_BANDS);
 
 		await reset(page).click();
 		await expectChoice(page, 'country', '');
@@ -1433,22 +1456,6 @@ test.describe('@nogl Atlas filters: layout', () => {
 			await page.setViewportSize({ width, height: 740 });
 			await openAtlas(page);
 			await openFilters(page);
-			await choose(page, 'range', 'principal-cordillera');
-
-			for (const control of [
-				filterToggle(page),
-				sort(page),
-				country(page),
-				elevation(page),
-				range(page),
-				reset(page)
-			]) {
-				const box = await control.boundingBox();
-				expect(box!.height).toBeGreaterThanOrEqual(44);
-				expect(box!.x).toBeGreaterThanOrEqual(0);
-				expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-			}
-			expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 
 			// Each popup opens inside the viewport, however narrow, and adds no horizontal scroll.
 			for (const open of [
@@ -1466,8 +1473,24 @@ test.describe('@nogl Atlas filters: layout', () => {
 				await closePopup(page);
 			}
 
+			// One mountain left: country and elevation are unavailable but keep their size and place.
+			await choose(page, 'range', 'principal-cordillera');
+			for (const control of [
+				filterToggle(page),
+				sort(page),
+				country(page),
+				elevation(page),
+				range(page),
+				reset(page)
+			]) {
+				const box = await control.boundingBox();
+				expect(box!.height).toBeGreaterThanOrEqual(44);
+				expect(box!.x).toBeGreaterThanOrEqual(0);
+				expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+			}
+			expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+
 			await chooseSort(page, 'elevation-desc');
-			await choose(page, 'country', '');
 			await choose(page, 'range', '');
 			expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
 		});
@@ -1516,10 +1539,10 @@ test.describe('@nogl Atlas filters: layout', () => {
 			expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 		}
 		await popup(page)
-			.getByRole('option', { name: /^Nepal/ })
+			.getByRole('option', { name: /^Chile/ })
 			.tap();
 		await expect(popup(page)).toHaveCount(0);
-		await expectNames(page, ['Mount Everest']);
+		await expectNames(page, ['Almost Six', 'Fitz Roy', 'Six Thousand']);
 
 		await elevation(page).tap();
 		await expect(popup(page).getByRole('checkbox').first()).toBeVisible();
@@ -1527,7 +1550,7 @@ test.describe('@nogl Atlas filters: layout', () => {
 			expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 		}
 		await popup(page).getByRole('checkbox').first().tap();
-		await expect(elevation(page)).toHaveAccessibleName('Elevation 8,000–8,999 m');
+		await expect(elevation(page)).toHaveAccessibleName('Elevation 6,000–6,999 m');
 		// A tap outside, on the page, closes the popup.
 		await page.getByRole('heading', { level: 1, name: 'Atlas' }).tap();
 		await expect(popup(page)).toHaveCount(0);
