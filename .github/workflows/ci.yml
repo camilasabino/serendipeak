@@ -13,6 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.route.outputs.api }}
+      web: ${{ steps.route.outputs.web }}
+      contracts: ${{ steps.route.outputs.contracts }}
+      scripts: ${{ steps.route.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      # Unclassified paths, shared configuration and workflow edits run every job; see
+      # scripts/ci-changes.mjs for the routing table.
+      - name: Route jobs by changed paths
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/ci-changes.mjs
+
   commitlint:
     name: Commit messages
     runs-on: ubuntu-latest
@@ -46,6 +74,8 @@ jobs:
 
   contracts:
     name: Contracts
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -59,6 +89,8 @@ jobs:
 
   api:
     name: API
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -142,6 +174,8 @@ jobs:
 
   web:
     name: Web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -184,6 +218,8 @@ jobs:
 
   scripts:
     name: Scripts
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -194,3 +230,22 @@ jobs:
 
       - name: Test the CI, backup and offsite backup scripts
         run: node --test "scripts/*.test.mjs" "services/backup/test/*.test.mjs" "services/offsite-backup/test/*.test.mjs"
+
+  # Single check for branch protection. A routed job must have succeeded and an unrouted one must
+  # have been skipped, so failed, cancelled and unexpectedly skipped jobs all fail the run.
+  ci:
+    name: CI
+    if: always()
+    needs: [changes, commitlint, contracts, api, web, scripts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Require every job to match its routing
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/ci-changes.mjs gate
