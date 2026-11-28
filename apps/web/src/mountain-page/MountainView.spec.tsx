@@ -5,6 +5,7 @@ import { AtlasReturn } from '../atlas/AtlasReturn';
 import { AtlasReturnProvider } from '../atlas/AtlasReturnContext';
 import { contractFixture } from '../api/test-support/contractFixtures';
 import { TestExperience } from '../test/TestExperience';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
 import { MountainView } from './MountainView';
 import { anchorsOf, countOf, hasEmptyElement, textsOf } from './test-support/markup';
 
@@ -12,10 +13,15 @@ const complete = contractFixture('mountain-complete.json') as Mountain;
 const sparse = contractFixture('mountain-sparse.json') as Mountain;
 const minimal = contractFixture('mountain-minimal.json') as Mountain;
 
-function render(mountain: Mountain, daily = false, preview = false): string {
+function render(
+	mountain: Mountain,
+	daily = false,
+	preview = false,
+	nearby?: readonly NearbyMountain[]
+): string {
 	return renderToStaticMarkup(
 		<TestExperience>
-			<MountainView mountain={mountain} daily={daily} preview={preview} />
+			<MountainView mountain={mountain} daily={daily} preview={preview} nearby={nearby} />
 		</TestExperience>
 	);
 }
@@ -282,5 +288,66 @@ describe('description', () => {
 		expect(html).toContain('About this photo');
 		expect(html).toContain('Explore another');
 		expect(html.indexOf('Paragraph one')).toBeLessThan(html.indexOf('Explore another'));
+	});
+});
+
+describe('nearby mountains', () => {
+	const nearby: NearbyMountain[] = [
+		{
+			slug: 'cerro-el-plata',
+			name: 'Cerro El Plata',
+			place: 'Argentina',
+			elevationMeters: 5968,
+			distanceKm: 66
+		}
+	];
+
+	it.each([
+		['a permalink', false, false],
+		["today's mountain", true, false],
+		['a draft preview', false, true]
+	])(
+		'lists them in the server-rendered sheet of %s, after the Explore action',
+		(_name, daily, preview) => {
+			const html = render(complete, daily, preview, nearby);
+
+			expect(textsOf(html, 'h2')).toEqual(['Nearby mountains']);
+			expect(anchorsOf(html).map(({ href }) => href)).toContain('/mountains/cerro-el-plata');
+			expect(html.indexOf('Nearby mountains')).toBeGreaterThan(html.indexOf('Explore another'));
+		}
+	);
+
+	it('keeps the closing note of today after them', () => {
+		const html = render(complete, true, false, nearby);
+
+		expect(html.indexOf('Tomorrow, another mountain.')).toBeGreaterThan(
+			html.indexOf('Nearby mountains')
+		);
+	});
+
+	it.each([undefined, []])('leaves the page as it is without any (%j)', (none) => {
+		const html = render(complete, false, false, none);
+
+		expect(html).toBe(render(complete));
+		expect(html).not.toContain('Nearby mountains');
+		expect(countOf(html, 'h[2-6]')).toBe(0);
+	});
+
+	it('adds no button, so Explore stays the one action of the sheet', () => {
+		expect(textsOf(render(complete, false, false, nearby), 'button')).toEqual(
+			textsOf(render(complete), 'button')
+		);
+	});
+
+	it('shows the neighbours of the mountain being viewed as the page changes', () => {
+		const first = render(complete, false, false, nearby);
+		const second = render(sparse, false, false, [
+			{ ...nearby[0]!, slug: 'other-peak', name: 'Other Peak' }
+		]);
+
+		expect(first).toContain('Cerro El Plata');
+		expect(first).not.toContain('Other Peak');
+		expect(second).toContain('Other Peak');
+		expect(second).not.toContain('Cerro El Plata');
 	});
 });

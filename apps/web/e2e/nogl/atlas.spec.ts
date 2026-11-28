@@ -271,9 +271,12 @@ test.describe('@nogl Atlas navigation', () => {
 		await dialog.getByRole('option', { name: /Mount Olympus/ }).click();
 		await expect(page).toHaveURL(new RegExp(`/mountains/${OLYMPUS.slug}$`));
 
-		// Only the server's render of the atlas asked for it.
+		// Only the server asked for it: to render the atlas, and then the permalink's nearby mountains.
 		expect(before).toEqual([INDEX_PATH]);
-		expect((await stubRequests(request)).filter((path) => path === INDEX_PATH)).toEqual(before);
+		expect((await stubRequests(request)).filter((path) => path === INDEX_PATH)).toEqual([
+			...before,
+			INDEX_PATH
+		]);
 	});
 
 	test('is reached from the header, which marks it current', async ({ page }) => {

@@ -8,7 +8,11 @@ import { MountainPageView } from './MountainPageView';
 vi.mock('next/head', () => ({
 	default: ({ children }: { children: ReactNode }) => <>{children}</>
 }));
-vi.mock('./MountainView', () => ({ MountainView: () => null }));
+vi.mock('./MountainView', () => ({
+	MountainView: ({ nearby }: { nearby?: readonly unknown[] }) => (
+		<p data-nearby={nearby === undefined ? 'none' : nearby.length} />
+	)
+}));
 vi.mock('./ErrorView', () => ({ ErrorView: () => null }));
 
 const mountain = contractFixture('mountain-complete.json') as Mountain;
@@ -81,5 +85,32 @@ describe('MountainPageView head', () => {
 
 		expect(mountain).not.toContain('ld+json');
 		expect(noOrigin).not.toContain('ld+json');
+	});
+
+	it('hands the neighbours it was given to the page of a permalink and of the day', () => {
+		const nearby = [
+			{ slug: 'a', name: 'A', place: 'Chile', elevationMeters: 1000, distanceKm: 10 }
+		];
+		const permalink = renderToStaticMarkup(
+			<MountainPageView
+				model={{ kind: 'mountain', mountain }}
+				siteOrigin={ORIGIN}
+				nearby={nearby}
+			/>
+		);
+		const today = renderToStaticMarkup(
+			<MountainPageView model={{ kind: 'daily', daily }} siteOrigin={ORIGIN} nearby={nearby} />
+		);
+
+		expect(permalink).toContain('data-nearby="1"');
+		expect(today).toContain('data-nearby="1"');
+	});
+
+	it('passes none on when the page had none', () => {
+		const plain = renderToStaticMarkup(
+			<MountainPageView model={{ kind: 'mountain', mountain }} siteOrigin={ORIGIN} />
+		);
+
+		expect(plain).toContain('data-nearby="none"');
 	});
 });

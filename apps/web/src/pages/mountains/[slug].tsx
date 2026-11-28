@@ -11,6 +11,7 @@ import { loadMountainPage } from '../../mountain-page/loadMountainPage';
 import { loadMountainPreviewPage } from '../../mountain-page/loadMountainPreviewPage';
 import { MountainPageView } from '../../mountain-page/MountainPageView';
 import { isPermanentRedirect } from '../../mountain-page/pageModel';
+import { loadNearbyFor } from '../../nearby/loadNearbyMountains';
 
 export const getServerSideProps: GetServerSideProps<MountainPageProps> = async ({
 	params,
@@ -33,8 +34,9 @@ export const getServerSideProps: GetServerSideProps<MountainPageProps> = async (
 	}
 
 	const { props } = applyPageLoad(res, load);
+	const nearby = await loadNearbyFor(api, props.model);
 
-	return { props: { ...props, siteOrigin: siteOriginProp() } };
+	return { props: { ...props, nearby, siteOrigin: siteOriginProp() } };
 };
 
 // The same component for every mountain route, so React keeps the sheet, and the Explore control in

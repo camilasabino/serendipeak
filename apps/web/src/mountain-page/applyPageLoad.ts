@@ -1,4 +1,5 @@
 import type { ServerResponse } from 'node:http';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
 import type {
 	ErrorModel,
 	MountainModel,
@@ -13,6 +14,8 @@ export interface MountainPageProps {
 	model: MountainPageModel;
 	/** Absent when the site origin is not configured; no absolute URL is then published. */
 	siteOrigin: string | null;
+	/** Supplementary; absent where a page was rendered without any. */
+	nearby?: NearbyMountain[];
 }
 
 export function applyPageLoad<M extends PageModel>(

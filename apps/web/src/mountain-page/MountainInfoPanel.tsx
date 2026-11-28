@@ -22,9 +22,11 @@ interface MountainInfoPanelProps {
 	plate?: ReactNode;
 	/** The page's primary action, placed after the facts so it closes the reading. */
 	action?: ReactNode;
+	/** Supplementary reading after the action, so it never competes with it. */
+	related?: ReactNode;
 }
 
-export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanelProps) {
+export function MountainInfoPanel({ mountain, plate, action, related }: MountainInfoPanelProps) {
 	const { continent, coordinates, countries, region, summary, description } = mountain;
 	const formattedCoordinates = formatCoordinates(coordinates);
 	const countryNames = distinctCountryNames(continent, countries);
@@ -60,6 +62,7 @@ export function MountainInfoPanel({ mountain, plate, action }: MountainInfoPanel
 				</Facts>
 				{description && <Description key={mountain.slug} text={description} />}
 				{action && <div className={styles.action}>{action}</div>}
+				{related}
 			</section>
 		</>
 	);

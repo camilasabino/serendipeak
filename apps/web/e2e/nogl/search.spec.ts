@@ -67,7 +67,8 @@ test.describe('@nogl Mountain search', () => {
 		const watched = await watch(page);
 		await page.goto('/');
 		await expect(heading(page)).toHaveText(DAILY.name);
-		expect(await indexRequests(request)).toEqual([]);
+		// Only the server's render of the page, which looks for nearby mountains, asked for it.
+		expect(await indexRequests(request)).toEqual([INDEX_PATH]);
 		const documentsBefore = watched.documents.length;
 
 		await openSearch(page);
@@ -107,7 +108,9 @@ test.describe('@nogl Mountain search', () => {
 		await expect(searchBox(page)).toHaveValue('');
 		await searchBox(page).fill('aconc');
 		await expect(option(page, /Aconcagua/)).toBeVisible();
-		expect(await indexRequests(request)).toEqual([INDEX_PATH]);
+		// The browser's one request, and the server's render of the permalink it opened; a second
+		// search that fetched again would add a third.
+		expect(await indexRequests(request)).toEqual([INDEX_PATH, INDEX_PATH]);
 		expect(watched.pageErrors).toEqual([]);
 	});
 

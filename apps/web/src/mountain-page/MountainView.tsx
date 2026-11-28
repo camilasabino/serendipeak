@@ -1,6 +1,8 @@
 import type { Mountain } from '../api/contract';
 import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
 import { ExploreControl } from '../explore/ExploreControl';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
+import { NearbyMountains } from '../nearby/NearbyMountains';
 import { ContourMotif } from '../shell/ContourMotif';
 import { CLOSING_CONTOURS } from '../shell/contourPatterns';
 import { MountainInfoPanel } from './MountainInfoPanel';
@@ -15,13 +17,15 @@ interface MountainViewProps {
 	daily: boolean;
 	preview?: boolean;
 	siteOrigin?: string | null;
+	nearby?: readonly NearbyMountain[];
 }
 
 export function MountainView({
 	mountain,
 	daily,
 	preview = false,
-	siteOrigin = null
+	siteOrigin = null,
+	nearby = []
 }: MountainViewProps) {
 	const { primaryImage } = mountain;
 
@@ -45,6 +49,7 @@ export function MountainView({
 				mountain={mountain}
 				plate={primaryImage && <MountainPhoto image={primaryImage} mountainName={mountain.name} />}
 				action={<ExploreControl slug={mountain.slug} />}
+				related={<NearbyMountains mountains={nearby} />}
 			/>
 			{daily && (
 				<div className={styles.closing}>
