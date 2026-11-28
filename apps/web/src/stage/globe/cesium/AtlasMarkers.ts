@@ -15,6 +15,7 @@ import {
 	ATLAS_MARKER_STYLE,
 	diffMarkers,
 	isMarkerVisible,
+	labelOpacityStep,
 	markerPresentation,
 	placePreview,
 	type AtlasLayerReading,
@@ -64,6 +65,10 @@ interface MarkerEntry {
 	visible: boolean;
 	/** Within its label distance; whether the label shows is up to decluttering. */
 	labelInRange: boolean;
+	/** How opaque the label would be at the camera's distance, before it is rounded to a step. */
+	labelAlpha: number;
+	/** The opacity last handed to Cesium for this label. */
+	labelOpacity: number;
 	labelShown: boolean;
 	labelBox: ScreenBox | undefined;
 	text: LabelSize | undefined;
@@ -89,7 +94,6 @@ interface SharedStyle {
 	platePadding: Cartesian2;
 	pointScale: NearFarScalar;
 	pointFade: NearFarScalar;
-	labelFade: NearFarScalar;
 	labelDistance: DistanceDisplayCondition;
 	labelOffset: Cartesian2;
 }
@@ -156,7 +160,6 @@ export class AtlasMarkers {
 				style.pointFadedMeters,
 				style.pointFarAlpha
 			),
-			labelFade: new NearFarScalar(style.labelFullMeters, 1, style.labelMaxMeters, 0),
 			labelDistance: new DistanceDisplayCondition(0, style.labelMaxMeters),
 			labelOffset: new Cartesian2(0, -style.labelOffsetPixels)
 		};
@@ -248,7 +251,9 @@ export class AtlasMarkers {
 				pointPixels,
 				labelShown,
 				labelSuppressed: visible && entry.labelInRange && !entry.labelShown,
-				...(labelShown && entry.labelBox ? { label: { ...entry.labelBox } } : {})
+				...(labelShown && entry.labelBox
+					? { label: { ...entry.labelBox }, labelOpacity: entry.labelOpacity }
+					: {})
 			};
 		});
 
@@ -518,7 +523,7 @@ export class AtlasMarkers {
 				backgroundPadding: this.style.platePadding,
 				verticalOrigin: VerticalOrigin.BOTTOM,
 				pixelOffset: this.style.labelOffset,
-				translucencyByDistance: this.style.labelFade,
+				translucencyByDistance: this.opacityOf(1),
 				distanceDisplayCondition: this.style.labelDistance,
 				heightReference: HeightReference.NONE,
 				show: false
@@ -531,6 +536,8 @@ export class AtlasMarkers {
 			position,
 			visible: false,
 			labelInRange: false,
+			labelAlpha: 1,
+			labelOpacity: 1,
 			labelShown: false,
 			labelBox: undefined,
 			text: undefined,
@@ -553,6 +560,13 @@ export class AtlasMarkers {
 		if (entry.entity.label) {
 			entry.entity.label.text = new ConstantProperty(marker.name);
 		}
+	}
+
+	// A near/far pair holding one value at every distance, so the label is drawn at the opacity the
+	// pass chose for it: Cesium evaluates the pair on the GPU, and only the label's own pair changes,
+	// not its glyphs.
+	private opacityOf(opacity: number): NearFarScalar {
+		return new this.cesium.NearFarScalar(0, opacity, ATLAS_MARKER_STYLE.labelMaxMeters, opacity);
 	}
 
 	private positionOf({ latitude, longitude, elevationMeters }: AtlasMarker): Cartesian3 {
@@ -621,9 +635,11 @@ export class AtlasMarkers {
 			entry.target.x = window.x;
 			entry.target.y = window.y;
 			this.visibleTargets.push(entry.target);
-			const { labelShown: inRange, labelFading } = markerPresentation(
-				Cartesian3.magnitude(toMarker)
-			);
+			const {
+				labelShown: inRange,
+				labelFading,
+				labelAlpha
+			} = markerPresentation(Cartesian3.magnitude(toMarker));
 			// The preview names the emphasized marker, so its ordinary label would only repeat it.
 			if (!inRange) {
 				continue;
@@ -638,6 +654,7 @@ export class AtlasMarkers {
 				continue;
 			}
 			entry.labelInRange = true;
+			entry.labelAlpha = labelAlpha;
 			labels.push({
 				slug: entry.marker.slug,
 				elevationMeters: entry.marker.elevationMeters,
@@ -705,9 +722,19 @@ export class AtlasMarkers {
 			// emphasized it, and losing that area would end the emphasis and bring the label back, forever.
 			entry.target.label =
 				next || entry.marker.slug === this.emphasized ? entry.labelBox : undefined;
-			if (entry.labelShown !== next && entry.entity.label) {
+			const label = entry.entity.label;
+			if (!label) {
+				continue;
+			}
+			// The opacity goes first, so a label coming back is never drawn once at its old value.
+			const opacity = next ? labelOpacityStep(entry.labelAlpha) : entry.labelOpacity;
+			if (opacity !== entry.labelOpacity) {
+				entry.labelOpacity = opacity;
+				label.translucencyByDistance = new ConstantProperty(this.opacityOf(opacity));
+			}
+			if (entry.labelShown !== next) {
 				entry.labelShown = next;
-				entry.entity.label.show = new ConstantProperty(next);
+				label.show = new ConstantProperty(next);
 			}
 		}
 	}

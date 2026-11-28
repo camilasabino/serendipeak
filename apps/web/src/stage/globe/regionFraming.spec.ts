@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ATLAS_MARKER_STYLE, markerPresentation } from './atlasMarkers';
 import { CESIUM_DEFAULT_FOV_RADIANS } from './framing';
 import {
 	EARTH_MEAN_RADIUS_METERS,
@@ -23,6 +24,7 @@ const DENALI: GeoPoint = { latitude: 63.069, longitude: -151.007 };
 const KILIMANJARO: GeoPoint = { latitude: -3.076, longitude: 37.353 };
 const EVEREST: GeoPoint = { latitude: 27.988, longitude: 86.925 };
 const MONT_BLANC: GeoPoint = { latitude: 45.833, longitude: 6.865 };
+const OJOS_DEL_SALADO: GeoPoint = { latitude: -27.109, longitude: -68.541 };
 
 function frame(places: GeoPoint[], stage: StageSize | undefined = DESKTOP, max = WHOLE_GLOBE) {
 	const framing = frameRegion(places, stage, max);
@@ -254,5 +256,23 @@ describe('frameRegion', () => {
 				frameRegion([{ latitude: Number.NaN, longitude: 0 }], DESKTOP, WHOLE_GLOBE)
 			).toBeUndefined();
 		});
+	});
+});
+
+// A filter leaves the camera where the frame puts it, and the frame depends on the stage's shape, so
+// the names of what it frames must be opaque across the stages a desktop browser gives the atlas.
+describe('framing a result set against atlas label legibility', () => {
+	const STAGES: [string, StageSize][] = [
+		['a tall desktop stage', { width: 1037, height: 787 }],
+		['a laptop stage', { width: 1037, height: 587 }],
+		['a short, wide stage', { width: 1037, height: 507 }]
+	];
+
+	it.each(STAGES)('keeps two mountains 700 km apart fully named on %s', (_name, stage) => {
+		const { altitudeMeters } = frame([ACONCAGUA, OJOS_DEL_SALADO], stage);
+		const slantMeters = altitudeMeters * 1.03;
+
+		expect(markerPresentation(slantMeters).labelAlpha).toBe(1);
+		expect(slantMeters).toBeLessThan(ATLAS_MARKER_STYLE.labelFullMeters);
 	});
 });

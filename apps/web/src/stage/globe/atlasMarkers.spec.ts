@@ -3,6 +3,7 @@ import {
 	ATLAS_MARKER_STYLE,
 	diffMarkers,
 	isMarkerVisible,
+	labelOpacityStep,
 	markerPresentation,
 	placePreview,
 	sameAtlasMarkers,
@@ -104,6 +105,21 @@ describe('markerPresentation', () => {
 		expect(markerPresentation(readableMeters + 1).labelShown).toBe(false);
 		expect(markerPresentation(style.labelMaxMeters - 1).labelShown).toBe(false);
 		expect(markerPresentation(style.labelMaxMeters).labelShown).toBe(false);
+	});
+
+	it('rounds a label opacity to the step it is handed to Cesium in', () => {
+		const step = 1 / style.labelAlphaSteps;
+
+		expect(labelOpacityStep(1)).toBe(1);
+		expect(labelOpacityStep(0.5)).toBe(0.5);
+		expect(labelOpacityStep(0.5 + step * 0.4)).toBeCloseTo(0.5);
+		expect(labelOpacityStep(0.5 + step * 0.6)).toBeCloseTo(0.5 + step);
+	});
+
+	it('fades a label out over a short stretch, nowhere near a tenth of the distance', () => {
+		const ramp = style.labelMaxMeters - style.labelFullMeters;
+
+		expect(ramp / style.labelFullMeters).toBeLessThan(0.1);
 	});
 
 	it('marks a label fading once past full legibility', () => {

@@ -311,14 +311,8 @@ describe('AtlasMarkers layer', () => {
 		expect(plate).toEqual(
 			cesium.Color.fromCssColorString(MARKER_LABEL_PLATE.color).withAlpha(MARKER_LABEL_PLATE.alpha)
 		);
-		const fade = label.translucencyByDistance!.getValue(NOW) as cesium.NearFarScalar;
-		expect(fade).toEqual(
-			new cesium.NearFarScalar(
-				ATLAS_MARKER_STYLE.labelFullMeters,
-				1,
-				ATLAS_MARKER_STYLE.labelMaxMeters,
-				0
-			)
+		expect(label.translucencyByDistance!.getValue(NOW)).toEqual(
+			new cesium.NearFarScalar(0, 1, ATLAS_MARKER_STYLE.labelMaxMeters, 1)
 		);
 		expect(ATLAS_MARKER_STYLE.labelFullMeters).toBeLessThan(ATLAS_MARKER_STYLE.labelMaxMeters);
 	});
@@ -466,6 +460,99 @@ describe('AtlasMarkers visibility', () => {
 
 describe('AtlasMarkers label work', () => {
 	const labelShown = (entity: cesium.Entity | undefined) => entity!.label!.show!.getValue(NOW);
+
+	describe('label opacity', () => {
+		// The pair Cesium evaluates on the GPU holds one value at every distance, so what it draws is
+		// what the pass chose, not Cesium's own curve.
+		const opacityOf = (entity: cesium.Entity) => {
+			const pair = entity.label!.translucencyByDistance!.getValue(NOW) as cesium.NearFarScalar;
+			expect(pair.nearValue).toBe(pair.farValue);
+
+			return pair.nearValue;
+		};
+
+		it('draws a label opaque up to its full distance and fades it evenly after', async () => {
+			const { markers, camera, viewChanged, entity } = setup();
+			markers.set([MONT_BLANC]);
+			await attached();
+			const { labelFullMeters, labelMaxMeters, labelMinAlpha } = ATLAS_MARKER_STYLE;
+			const lookFrom = (rangeMeters: number) => {
+				lookDown(
+					camera,
+					MONT_BLANC.latitude,
+					MONT_BLANC.longitude,
+					rangeMeters + MONT_BLANC.elevationMeters
+				);
+				viewChanged();
+			};
+
+			lookFrom(labelFullMeters - 1);
+			expect(opacityOf(entity(MONT_BLANC.slug)!)).toBe(1);
+			expect(markers.read()!.markers[0]!.labelOpacity).toBe(1);
+
+			const ramp = labelMaxMeters - labelFullMeters;
+			const drawn = [0.25, 0.5, 0.75].map((share) => {
+				lookFrom(labelFullMeters + share * ramp);
+				expect(labelShown(entity(MONT_BLANC.slug))).toBe(true);
+
+				return opacityOf(entity(MONT_BLANC.slug)!);
+			});
+
+			expect(drawn).toEqual([0.75, 0.5, 0.25]);
+			expect(Math.min(...drawn)).toBeGreaterThanOrEqual(labelMinAlpha);
+		});
+
+		it('gives a label that returns its opacity before it shows again', async () => {
+			const { markers, camera, viewChanged, entity } = setup();
+			markers.set([MONT_BLANC]);
+			await attached();
+			const { labelFullMeters, labelMaxMeters } = ATLAS_MARKER_STYLE;
+			const lookFrom = (rangeMeters: number) => {
+				lookDown(
+					camera,
+					MONT_BLANC.latitude,
+					MONT_BLANC.longitude,
+					rangeMeters + MONT_BLANC.elevationMeters
+				);
+				viewChanged();
+			};
+
+			lookFrom((labelFullMeters + labelMaxMeters) / 2);
+			expect(opacityOf(entity(MONT_BLANC.slug)!)).toBe(0.5);
+			lookFrom(labelMaxMeters + 10_000);
+			expect(labelShown(entity(MONT_BLANC.slug))).toBe(false);
+
+			lookFrom(300_000);
+			expect(labelShown(entity(MONT_BLANC.slug))).toBe(true);
+			expect(opacityOf(entity(MONT_BLANC.slug)!)).toBe(1);
+		});
+
+		it('writes the opacity only when its step changes', async () => {
+			const { markers, camera, viewChanged, entity } = setup();
+			markers.set([MONT_BLANC]);
+			await attached();
+			const { labelFullMeters, labelMaxMeters } = ATLAS_MARKER_STYLE;
+			const range = labelFullMeters + 0.4 * (labelMaxMeters - labelFullMeters);
+			lookDown(
+				camera,
+				MONT_BLANC.latitude,
+				MONT_BLANC.longitude,
+				range + MONT_BLANC.elevationMeters
+			);
+			viewChanged();
+			const written = entity(MONT_BLANC.slug)!.label!.translucencyByDistance;
+
+			lookDown(
+				camera,
+				MONT_BLANC.latitude,
+				MONT_BLANC.longitude,
+				range + 100 + MONT_BLANC.elevationMeters
+			);
+			viewChanged();
+
+			expect(entity(MONT_BLANC.slug)!.label!.translucencyByDistance).toBe(written);
+		});
+	});
 
 	it('switches no label on from the overview, where none could be read', async () => {
 		const { markers, entity } = setup();

@@ -29,9 +29,13 @@ export interface ScreenBox {
  * far one, and nothing is rebuilt as the camera moves.
  *
  * The overview sits 13,000 km or more from every marker, where points shrink and soften and no
- * label shows. Names come in from a regional distance: fully legible up to 1,200 km, fading out to
- * nothing at 1,600 km. Summits a few kilometres apart (Cerro Torre and Fitz Roy, Everest and Ama
+ * label shows. Names come in from a regional distance: fully opaque up to 1,500 km, then fading out
+ * over the next 60 km. Summits a few kilometres apart (Cerro Torre and Fitz Roy, Everest and Ama
  * Dablam) still overlap there until labels are decluttered on screen.
+ *
+ * The opaque range reaches past where a range or country filter leaves the camera on a typical
+ * stage: the set is framed by its extent and the stage's aspect, so two mountains 700 km apart sit
+ * at 1,000 km on a tall desktop stage and at 1,400 km on a short, wide one.
  */
 export const ATLAS_MARKER_STYLE = {
 	/**
@@ -66,12 +70,19 @@ export const ATLAS_MARKER_STYLE = {
 	labelFont: '500 13px system-ui, sans-serif',
 	labelOffsetPixels: 7,
 	labelOutlinePixels: 2,
-	/** Fully legible up to this distance, fading out to nothing at `labelMaxMeters`. */
-	labelFullMeters: 1_200_000,
-	labelMaxMeters: 1_600_000,
+	/**
+	 * Fully opaque up to this distance, fading out linearly to nothing at `labelMaxMeters`. The pass
+	 * applies the ramp label by label (see `AtlasMarkers`): Cesium's own `translucencyByDistance`
+	 * falls as `1 - ((d² - near²) / (far² - near²))^0.2`, which is almost all of its drop in the first
+	 * few percent of the range followed by a long ghost, so no near/far pair gives a short, even fade.
+	 */
+	labelFullMeters: 1_500_000,
+	labelMaxMeters: 1_560_000,
 	// Over the globe a label this faint cannot be read, so it is dropped: it takes no screen space
 	// from a legible neighbour and is not a place to press. Its marker still shows and still opens.
-	labelMinAlpha: 0.3,
+	labelMinAlpha: 0.25,
+	/** Opacity is handed to Cesium in steps this fine, so a label is not rewritten every frame. */
+	labelAlphaSteps: 20,
 	// Snow text on a basalt plate and outline, as the summit pill: legible over snow, desert, ocean
 	// and forest alike. Colours are the summit marker's, which marker.spec compares with the tokens.
 	labelColor: SUMMIT_MARKER_STYLE.colors.snow,
@@ -101,11 +112,20 @@ export interface MarkerPresentation {
 	labelFading: boolean;
 }
 
-// Cesium's NearFarScalar: the near value up to `near`, the far value beyond `far`, linear between.
+// The near value up to `near`, the far value beyond `far`, linear in distance between. Cesium's own
+// NearFarScalar is not linear (see `labelFullMeters`), so this models what the scene draws only for
+// values the pass applies itself, and approximates the ones the GPU interpolates.
 function nearFar(distance: number, near: number, nearValue: number, far: number, farValue: number) {
 	const t = Math.min(Math.max((distance - near) / (far - near), 0), 1);
 
 	return nearValue + (farValue - nearValue) * t;
+}
+
+/** A label's opacity rounded to the step it is handed to Cesium in. */
+export function labelOpacityStep(alpha: number): number {
+	const steps = ATLAS_MARKER_STYLE.labelAlphaSteps;
+
+	return Math.round(alpha * steps) / steps;
 }
 
 /** What a marker at this camera distance looks like, as the GPU draws it from the style above. */
@@ -239,6 +259,8 @@ export interface AtlasMarkerReading {
 	labelSuppressed: boolean;
 	/** The plate of the shown label in CSS pixels, as decluttering measured it. */
 	label?: ScreenBox;
+	/** How opaque the shown label is drawn, 0 to 1. */
+	labelOpacity?: number;
 }
 
 export interface AtlasLayerReading {

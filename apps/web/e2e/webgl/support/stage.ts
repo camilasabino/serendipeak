@@ -404,6 +404,7 @@ export interface AtlasMarkerReading {
 	labelShown: boolean;
 	labelSuppressed: boolean;
 	label?: { left: number; top: number; right: number; bottom: number };
+	labelOpacity?: number;
 }
 
 export interface AtlasLayerReading {
