@@ -73,6 +73,8 @@ export function ChoiceFilter({
 	const popupId = useId();
 	const trigger = useRef<HTMLButtonElement>(null);
 	const selected = options.find((option) => option.value === value);
+	// The popup is not rendered while the filter is unavailable, so it is not expanded either.
+	const expanded = open && !unavailable;
 
 	const dismiss = (restoreFocus: boolean) => {
 		setOpen(false);
@@ -98,8 +100,8 @@ export function ChoiceFilter({
 				type="button"
 				className={controls.trigger}
 				aria-haspopup="listbox"
-				aria-expanded={open}
-				aria-controls={open ? popupId : undefined}
+				aria-expanded={expanded}
+				aria-controls={expanded ? popupId : undefined}
 				aria-labelledby={`${labelId} ${valueId}`}
 				aria-describedby={unavailable ? hintId : undefined}
 				aria-disabled={unavailable ? true : undefined}
@@ -125,7 +127,7 @@ export function ChoiceFilter({
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			{open && !unavailable && (
+			{expanded && (
 				<FilterPopup id={popupId} anchor={trigger} onDismiss={dismiss}>
 					<ChoiceList
 						searchLabel={searchLabel}

@@ -38,6 +38,8 @@ export function ElevationFilter(props: ElevationFilterProps) {
 	const summaryId = useId();
 	const popupId = useId();
 	const trigger = useRef<HTMLButtonElement>(null);
+	// The popup is not rendered while the filter is unavailable, so it is not expanded either.
+	const expanded = open && !unavailable;
 
 	const dismiss = (restoreFocus: boolean) => {
 		setOpen(false);
@@ -62,8 +64,8 @@ export function ElevationFilter(props: ElevationFilterProps) {
 				ref={trigger}
 				type="button"
 				className={controls.trigger}
-				aria-expanded={open}
-				aria-controls={open ? popupId : undefined}
+				aria-expanded={expanded}
+				aria-controls={expanded ? popupId : undefined}
 				aria-labelledby={`${labelId} ${summaryId}`}
 				aria-describedby={unavailable ? hintId : undefined}
 				aria-disabled={unavailable ? true : undefined}
@@ -86,7 +88,7 @@ export function ElevationFilter(props: ElevationFilterProps) {
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			{open && !unavailable && (
+			{expanded && (
 				<FilterPopup
 					id={popupId}
 					anchor={trigger}
