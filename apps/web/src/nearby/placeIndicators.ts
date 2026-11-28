@@ -11,6 +11,12 @@ export interface IndicatorRequest {
 	dy: number;
 	width: number;
 	height: number;
+	/**
+	 * Pins the indicator to the top edge over this column, pointing straight ahead: for a direction
+	 * that is inside the frame, where a ray from the centre would carry it sideways. It slides at
+	 * most `PINNED_MAX_SLIDE_PX`, so its column stays under it.
+	 */
+	column?: number;
 }
 
 export interface IndicatorBox {
@@ -39,6 +45,8 @@ const SLIDE_STEP_PX = 4;
  */
 const MAX_SLIDE_SHARE = 0.3;
 const MIN_MAX_SLIDE_PX = 48;
+/** How far a pinned indicator may slide: less than half a chip, so its column stays under it. */
+export const PINNED_MAX_SLIDE_PX = MIN_MAX_SLIDE_PX;
 /** How far an indicator may be pushed inward past controls on its edge, as a share of the stage. */
 const MAX_PUSH_SHARE = 0.4;
 
@@ -83,12 +91,17 @@ export function placeIndicators(
 			request.height > 0 &&
 			request.width <= inner.right - inner.left &&
 			request.height <= inner.bottom - inner.top;
-		const exit = fits ? edgeExit(request.dx, request.dy, frame, inner) : undefined;
+		const pinned = request.column !== undefined && Number.isFinite(request.column);
+		const exit = !fits
+			? undefined
+			: pinned
+				? { edge: 'top' as const, along: request.column! }
+				: edgeExit(request.dx, request.dy, frame, inner);
 		if (!exit) {
 			continue;
 		}
 
-		const spot = bestSpot(request, exit, inner, obstacles, taken);
+		const spot = bestSpot(request, exit, inner, obstacles, taken, pinned);
 		if (!spot) {
 			continue;
 		}
@@ -130,7 +143,8 @@ function bestSpot(
 	{ edge, along }: { edge: Edge; along: number },
 	inner: ScreenBox,
 	obstacles: readonly ScreenBox[],
-	taken: readonly ScreenBox[]
+	taken: readonly ScreenBox[],
+	pinned: boolean
 ): Candidate | undefined {
 	const vertical = edge === 'left' || edge === 'right';
 	const size = vertical ? request.height : request.width;
@@ -138,7 +152,9 @@ function bestSpot(
 	const end = (vertical ? inner.bottom : inner.right) - size;
 	const ideal = clamp(along - size / 2, start, end);
 	const edgeLength = (vertical ? inner.bottom - inner.top : inner.right - inner.left) - size;
-	const maxSlide = Math.max(MIN_MAX_SLIDE_PX, MAX_SLIDE_SHARE * edgeLength);
+	const maxSlide = pinned
+		? PINNED_MAX_SLIDE_PX
+		: Math.max(MIN_MAX_SLIDE_PX, MAX_SLIDE_SHARE * edgeLength);
 	const maxPush = MAX_PUSH_SHARE * (vertical ? inner.right - inner.left : inner.bottom - inner.top);
 
 	let best: Candidate | undefined;

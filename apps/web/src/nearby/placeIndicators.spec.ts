@@ -174,4 +174,38 @@ describe('placeIndicators', () => {
 			}
 		});
 	});
+
+	describe('pinned to a column', () => {
+		const pinned = (column: number): IndicatorRequest => ({
+			slug: 'k',
+			dx: 0,
+			dy: -1,
+			...LABEL,
+			column
+		});
+
+		it('stands on the top edge centred over its column, not where a ray from the centre would put it', () => {
+			const [placed] = placeIndicators([pinned(800)], DESKTOP);
+
+			expect(placed).toMatchObject({ edge: 'top', left: 740, top: EDGE_INSET_PX });
+		});
+
+		it('never slides farther than keeps its column under it: a crowded one is left out', () => {
+			const at = (slug: string, column: number) => ({ ...pinned(column), slug });
+			const clear = { ...DESKTOP, obstacles: [] };
+
+			expect(placeIndicators([at('a', 500), at('b', 530)], clear)).toHaveLength(1);
+			expect(placeIndicators([at('a', 500), at('b', 640)], clear)).toHaveLength(2);
+		});
+
+		it('is pushed down past a control, still over its column', () => {
+			const [placed] = placeIndicators([pinned(800)], {
+				...DESKTOP,
+				obstacles: [{ left: 0, top: 0, right: 960, bottom: 60 }]
+			});
+
+			expect(placed!.left).toBe(740);
+			expect(placed!.top).toBeGreaterThanOrEqual(60 + CLEARANCE_PX);
+		});
+	});
 });

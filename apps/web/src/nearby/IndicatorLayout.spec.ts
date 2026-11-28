@@ -297,7 +297,7 @@ describe('IndicatorLayout', () => {
 		};
 		const slugs = everest.nearby.map((entry) => entry.slug);
 
-		it('names Kangchenjunga on its bearing, clear of Everest’s marker, when terrain hides it right behind', () => {
+		it('points to Kangchenjunga from the edge, never with a chip on Everest, when terrain hides it right behind', () => {
 			const { surface, layout } = setup(slugs);
 			surface.sizeOf = new Map(slugs.map((slug) => [slug, SIZES]));
 
@@ -310,16 +310,7 @@ describe('IndicatorLayout', () => {
 				)
 			});
 
-			const chip = surface.shown.get('kangchenjunga') as Bearing;
-			const footprint = summitMarkerFootprint({ x: 326.7, y: 144.4 }, 624, 16);
-			expect(chip.mode).toBe('bearing');
-			expect(chip.left + chip.leaderX).toBeCloseTo(336.1, 0);
-			expect(
-				chip.left < footprint.right &&
-					footprint.left < chip.left + 120 &&
-					chip.top < footprint.bottom &&
-					footprint.top < chip.top + 44
-			).toBe(false);
+			expect(surface.shown.get('kangchenjunga')).toMatchObject({ mode: 'edge', edge: 'top' });
 			expect(surface.shown.get('ama-dablam')).toMatchObject({ mode: 'edge', edge: 'right' });
 			expect(surface.shown.get('machapuchare')).toMatchObject({ mode: 'edge', edge: 'bottom' });
 		});
@@ -429,16 +420,28 @@ describe('IndicatorLayout', () => {
 			layout.update(readingOf([hidden('el-plata', ahead(700, 330), ahead(700, 10))]));
 			expect(surface.shown.get('el-plata')?.mode).toBe('edge');
 
-			layout.update(readingOf([hidden('el-plata', ahead(700, 330), ahead(700, 40))]));
+			layout.update(readingOf([hidden('el-plata', ahead(700, 330), ahead(700, 80))]));
 			expect(surface.shown.get('el-plata')?.mode).toBe('bearing');
 		});
 
-		it('says so when a bearing has no free place along its column', () => {
+		it('points straight ahead from the top edge when its column has no free sky', () => {
 			const { surface, layout } = setup(['el-plata']);
-			surface.controls = [{ left: 600, top: 0, right: 800, bottom: 600 }];
+			surface.controls = [{ left: 600, top: 100, right: 800, bottom: 600 }];
 
 			layout.update(readingOf([hidden('el-plata', ahead(700, 330), ahead(700, 270))]));
+			expect(surface.shown.get('el-plata')).toMatchObject({
+				mode: 'edge',
+				edge: 'top',
+				angleDegrees: -90,
+				left: 640
+			});
+		});
 
+		it('hides it, and says so, when neither its column nor the top edge over it has room', () => {
+			const { surface, layout } = setup(['el-plata']);
+			surface.controls = [{ left: 0, top: 0, right: 960, bottom: 600 }];
+
+			layout.update(readingOf([hidden('el-plata', ahead(700, 330), ahead(700, 270))]));
 			expect(surface.hidden.get('el-plata')).toBe('no-room');
 		});
 
@@ -451,6 +454,151 @@ describe('IndicatorLayout', () => {
 			layout.update(readingOf([hidden('el-plata', ahead(700, 330), { kind: 'unknown' })]));
 
 			expect(surface.shown.get('el-plata')).toEqual(before);
+		});
+	});
+
+	describe('as it showed on Ama Dablam, 1440 × 900', () => {
+		const WIDE = { width: 1440, height: 900 };
+		const SUMMIT = ahead(720, 400);
+		const kangchenjunga = (bearing: SummitSighting) =>
+			readingOf([hidden('kangchenjunga', ahead(760, 470), bearing)], SUMMIT, WIDE);
+
+		const chipFor = (layoutReading: SummitSightings) => {
+			const { surface, layout } = setup(['kangchenjunga']);
+			surface.sizeOf = new Map([['kangchenjunga', SIZES]]);
+			layout.update(layoutReading);
+			return { surface, layout, mark: surface.shown.get('kangchenjunga') };
+		};
+
+		it('points from the edge, never with a chip on the slope, when the bearing falls on the mountain', () => {
+			const { mark, surface } = chipFor(kangchenjunga(ahead(745, 470)));
+
+			expect(mark).toMatchObject({ mode: 'edge', edge: 'top', angleDegrees: -90 });
+			const edge = mark as Extract<MarkPosition, { mode: 'edge' }>;
+			expect(edge.left + SIZES.chip.width / 2).toBe(745);
+			expect(surface.counts.at(-1)).toBe(1);
+		});
+
+		it('names it in the sky when its bearing is clear of the mountain, as Aneto’s are', () => {
+			const { mark } = chipFor(kangchenjunga(ahead(1100, 470)));
+
+			expect(mark).toMatchObject({ mode: 'bearing', leader: 'down' });
+		});
+
+		it('keeps the chip on its own bearing, beside the mountain, when it clears the silhouette', () => {
+			const { mark } = chipFor(kangchenjunga(ahead(900, 470)));
+
+			expect(mark).toMatchObject({ mode: 'bearing' });
+			expect((mark as Bearing).left + (mark as Bearing).leaderX).toBe(900);
+		});
+
+		it('follows the camera turning: in the sky beside the mountain, from the edge while over it', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(1100, 470)));
+			const modes: (string | undefined)[] = [];
+			for (const x of [1100, 900, 780, 720, 660, 540, 500, 300]) {
+				layout.update(kangchenjunga(ahead(x, 470)));
+				modes.push(surface.shown.get('kangchenjunga')?.mode);
+			}
+
+			expect(modes).toEqual([
+				'bearing',
+				'bearing',
+				'edge',
+				'edge',
+				'edge',
+				'bearing',
+				'bearing',
+				'bearing'
+			]);
+		});
+
+		it('follows the camera pitching: the bearing point rising above the summit takes the sky back', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(745, 470)));
+			expect(surface.shown.get('kangchenjunga')?.mode).toBe('edge');
+
+			layout.update(kangchenjunga(ahead(745, 200)));
+			expect(surface.shown.get('kangchenjunga')?.mode).toBe('bearing');
+		});
+
+		it('does not switch back and forth on the mountain’s flank', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(1000, 470)));
+			const modeAt = (x: number) => {
+				layout.update(kangchenjunga(ahead(x, 470)));
+				return surface.shown.get('kangchenjunga')?.mode;
+			};
+
+			// The wedge at the bearing is 94 px either side of the summit; once the chip has been
+			// pointed to from the edge, the bearing must clear it by a margin before the chip returns.
+			expect(modeAt(1000)).toBe('bearing');
+			expect(modeAt(800)).toBe('edge');
+			expect(modeAt(830)).toBe('edge');
+			expect(modeAt(835)).toBe('edge');
+			expect(modeAt(850)).toBe('bearing');
+			expect(modeAt(830)).toBe('bearing');
+		});
+
+		it('keeps the chip on its column at the top edge while the bearing is inside the frame, never to a side', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(745, 470)));
+			for (const [x, y] of [
+				[745, 470],
+				[760, 440],
+				[730, 420],
+				[700, 470],
+				[690, 405]
+			] as const) {
+				layout.update(kangchenjunga(ahead(x, y)));
+				const mark = surface.shown.get('kangchenjunga') as Extract<MarkPosition, { mode: 'edge' }>;
+				expect(mark).toMatchObject({ mode: 'edge', edge: 'top', angleDegrees: -90 });
+				expect(mark.left + 60).toBe(x);
+			}
+		});
+
+		it('moves smoothly along the top edge as the camera turns, then to a side only once the bearing leaves', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(745, 470)));
+			const lefts: number[] = [];
+			for (const x of [745, 735, 725, 715, 705, 695]) {
+				layout.update(kangchenjunga(ahead(x, 470)));
+				lefts.push((surface.shown.get('kangchenjunga') as { left: number }).left);
+			}
+			expect(lefts).toEqual([685, 675, 665, 655, 645, 635]);
+
+			layout.update(
+				readingOf(
+					[hidden('kangchenjunga', ahead(760, 470), { kind: 'behind', dx: 1, dy: 0 })],
+					SUMMIT,
+					WIDE
+				)
+			);
+			expect(surface.shown.get('kangchenjunga')).toMatchObject({ mode: 'edge', edge: 'right' });
+		});
+
+		it('pushes the chip below a top control, and hides it rather than lay it over the mountain', () => {
+			const { surface, layout } = chipFor(kangchenjunga(ahead(745, 470)));
+			surface.controls = [{ left: 0, top: 0, right: 1440, bottom: 60 }];
+			layout.relayout();
+			const pushed = surface.shown.get('kangchenjunga') as { top: number };
+			expect(pushed.top).toBeGreaterThanOrEqual(66);
+			expect(pushed.top + 44).toBeLessThan(400);
+
+			surface.controls = [{ left: 0, top: 0, right: 1440, bottom: 380 }];
+			layout.relayout();
+			expect(surface.hidden.get('kangchenjunga')).toBe('no-room');
+		});
+
+		it('behaves the same on a phone-sized, short stage', () => {
+			const phone = { width: 390, height: 300 };
+			const { surface, layout } = setup(['kangchenjunga']);
+			surface.sizeOf = new Map([['kangchenjunga', SIZES]]);
+
+			layout.update(
+				readingOf(
+					[hidden('kangchenjunga', ahead(210, 190), ahead(205, 190))],
+					ahead(195, 150),
+					phone
+				)
+			);
+
+			expect(surface.shown.get('kangchenjunga')).toMatchObject({ mode: 'edge' });
 		});
 	});
 

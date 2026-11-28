@@ -15,7 +15,7 @@ function overlaps(a: ScreenBox, b: ScreenBox): boolean {
 function leaderEnd(box: BearingBox) {
 	return {
 		x: box.left + box.leaderX,
-		y: box.leader === 'down' ? box.box.bottom + box.leaderLength : box.box.top - box.leaderLength
+		y: box.box.bottom + box.leaderLength
 	};
 }
 
@@ -55,12 +55,47 @@ describe('placeBearings', () => {
 		expect(placed[0]!.leaderLength).toBeLessThan(placed[1]!.leaderLength);
 	});
 
-	it('hangs a chip below its point when there is no room above it', () => {
-		const [box] = placeBearings([request('mont-blanc', 700, 40)], FRAME);
+	it('never hangs a chip below its point: with no room above, it is left out', () => {
+		expect(placeBearings([request('mont-blanc', 700, 40)], FRAME)).toEqual([]);
+	});
 
-		expect(box?.leader).toBe('up');
-		expect(box!.box.top).toBeGreaterThan(40);
-		expect(leaderEnd(box!)).toEqual({ x: 700, y: 40 });
+	describe('over the presented mountain', () => {
+		const summit = { x: 720, y: 400 };
+
+		it('leaves out a chip whose bearing falls inside the silhouette below the summit', () => {
+			expect(placeBearings([request('k', 745, 470)], { ...FRAME, summit })).toEqual([]);
+			expect(placeBearings([request('k', 745, 470)], FRAME)).toHaveLength(1);
+		});
+
+		it('lifts a chip that would reach into the silhouette to the summit’s level, still on its column', () => {
+			// The bearing is clear of the wedge, but the chip, 65 px either side of its column, is not.
+			const [chip] = placeBearings([request('k', 780, 410)], { ...FRAME, summit });
+
+			expect(chip!.box.bottom).toBeLessThanOrEqual(summit.y);
+			expect(leaderEnd(chip!)).toEqual({ x: 780, y: 410 });
+		});
+
+		it('still stands over a bearing in the sky above the summit, or clear of the wedge to its side', () => {
+			const [above] = placeBearings([request('k', 720, 300)], { ...FRAME, summit });
+			const [aside] = placeBearings([request('k', 1100, 470)], { ...FRAME, summit });
+
+			expect(above?.box.bottom).toBeLessThan(300);
+			expect(aside?.left).toBe(1035);
+		});
+
+		it('widens the silhouette by a chip’s own margin', () => {
+			const at = (terrainMargin: number) =>
+				placeBearings([{ ...request('k', 1000, 420), terrainMargin }], { ...FRAME, summit });
+
+			expect(at(0)).toHaveLength(1);
+			expect(at(300)).toEqual([]);
+		});
+
+		it('ignores a presented summit that is not in front of the camera', () => {
+			expect(placeBearings([request('k', 745, 470)], { ...FRAME, summit: undefined })).toHaveLength(
+				1
+			);
+		});
 	});
 
 	it('keeps clear of controls and markers, and slides inside the stage near a side with its leader on the column', () => {

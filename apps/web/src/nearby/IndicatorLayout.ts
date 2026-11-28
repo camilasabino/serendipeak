@@ -1,7 +1,12 @@
 import type { ScreenBox } from '../stage/globe/atlasMarkers';
 import { summitMarkerFootprint } from '../stage/globe/marker';
-import { UNKNOWN_SIGHTING, placeInView, type SummitSightings } from '../stage/globe/summitSighting';
-import { placeBearings, type BearingRequest } from './placeBearings';
+import {
+	UNKNOWN_SIGHTING,
+	VIEW_HYSTERESIS_PX,
+	placeInView,
+	type SummitSightings
+} from '../stage/globe/summitSighting';
+import { overSilhouette, placeBearings, type BearingRequest } from './placeBearings';
 import { placeIndicators, type Edge, type IndicatorRequest } from './placeIndicators';
 import { placeMarkers, type LabelOffset, type MarkerRequest } from './placeMarkers';
 
@@ -25,7 +30,7 @@ export interface SummitPosition {
 
 /**
  * A nearby mountain in the frame that the globe's curve or terrain hides: a chip over the column of
- * its horizontal bearing, above or below where the level line in that bearing meets the stage. It says which way the summit lies, never that it stands where the chip is.
+ * its horizontal bearing, in the sky above where the level line in that bearing meets the stage. It says which way the summit lies, never that it stands where the chip is.
  */
 export interface BearingPosition {
 	mode: 'bearing';
@@ -33,7 +38,7 @@ export interface BearingPosition {
 	top: number;
 	leaderX: number;
 	leaderLength: number;
-	leader: 'down' | 'up';
+	leader: 'down';
 }
 
 export type MarkPosition = EdgePosition | SummitPosition | BearingPosition;
@@ -92,6 +97,8 @@ export class IndicatorLayout {
 	private readonly offscreen = new Set<string>();
 	/** The hidden summits whose bearing was last pointed to from an edge. */
 	private readonly bearingOffscreen = new Set<string>();
+	/** The hidden summits whose bearing is in the frame but has no sky for a chip, last pointed to from an edge. */
+	private readonly bearingNoSky = new Set<string>();
 	private readonly applied = new Map<string, MarkPosition>();
 	private readonly hidden = new Map<string, HiddenReason>();
 	private released = false;
@@ -126,6 +133,7 @@ export class IndicatorLayout {
 		if (!sightings || !this.covers(sightings)) {
 			this.offscreen.clear();
 			this.bearingOffscreen.clear();
+			this.bearingNoSky.clear();
 			this.apply(new Map(), new Map());
 			return;
 		}
@@ -182,7 +190,13 @@ export class IndicatorLayout {
 			}
 			this.bearingOffscreen.delete(slug);
 			if (sizes && bearing?.kind === 'ahead') {
-				bearings.push({ slug, x: bearing.x, y: bearing.y, ...sizes.chip });
+				bearings.push({
+					slug,
+					x: bearing.x,
+					y: bearing.y,
+					terrainMargin: this.bearingNoSky.has(slug) ? VIEW_HYSTERESIS_PX : 0,
+					...sizes.chip
+				});
 			}
 		}
 
@@ -210,7 +224,8 @@ export class IndicatorLayout {
 			}
 		}
 
-		for (const placed of placeBearings(bearings, { ...viewport, obstacles })) {
+		const summit = presented.kind === 'ahead' ? { x: presented.x, y: presented.y } : undefined;
+		for (const placed of placeBearings(bearings, { ...viewport, obstacles, summit })) {
 			positions.set(placed.slug, {
 				mode: 'bearing',
 				left: Math.round(placed.left),
@@ -221,15 +236,38 @@ export class IndicatorLayout {
 			});
 			obstacles.push(placed.box);
 		}
-		for (const { slug } of bearings) {
-			if (!positions.has(slug)) {
-				reasons.set(slug, 'no-room');
+		for (const request of bearings) {
+			if (positions.has(request.slug)) {
+				this.bearingNoSky.delete(request.slug);
+				continue;
+			}
+
+			// No sky at its bearing, which is inside the frame: point straight ahead from the top
+			// edge, over the same column, rather than along a ray from the centre that would carry
+			// the chip to a side.
+			this.bearingNoSky.add(request.slug);
+			const { x, slug, width, height } = request;
+			edges.push({ slug, dx: 0, dy: -1, width, height, column: x });
+		}
+		for (const slug of this.bearingNoSky) {
+			if (!bearings.some((request) => request.slug === slug)) {
+				this.bearingNoSky.delete(slug);
 			}
 		}
 
 		const directions = new Map(edges.map((request) => [request.slug, request]));
 		for (const box of placeIndicators(edges, { ...viewport, obstacles })) {
-			const { dx, dy } = directions.get(box.slug)!;
+			const { dx, dy, width, height, column } = directions.get(box.slug)!;
+			// A pinned chip pushed down past the controls must still stay off the presented mountain.
+			const footprint = {
+				left: box.left,
+				top: box.top,
+				right: box.left + width,
+				bottom: box.top + height
+			};
+			if (column !== undefined && overSilhouette(footprint, summit, 0)) {
+				continue;
+			}
 			positions.set(box.slug, {
 				mode: 'edge',
 				left: Math.round(box.left),
