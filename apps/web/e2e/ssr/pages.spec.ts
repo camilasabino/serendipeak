@@ -213,8 +213,11 @@ test.describe('permalink page', () => {
 		test(`never turns the dot segment ${slug} into a slug lookup`, async ({ request }) => {
 			await request.get(`/mountains/${slug}`, { maxRedirects: 0 });
 
+			// The homepage legitimately fetches today's mountain and the catalog for nearby discovery.
+			// Any other API path, such as /api/v1/mountains/<slug>, would be a lookup from the dot segment.
+			const homepageRequests = ['/api/v1/mountains/today', '/api/v1/mountains'];
 			const requests = await stubRequests(request);
-			expect(requests.filter((path) => path !== '/api/v1/mountains/today')).toEqual([]);
+			expect(requests.filter((path) => !homepageRequests.includes(path))).toEqual([]);
 		});
 	}
 
