@@ -11,6 +11,11 @@ import { sameAtlasMarkers, type AtlasMarker } from './globe/atlasMarkers';
 import { sameAtlasView, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
+import {
+	sameSightedSummits,
+	type SightedSummit,
+	type SummitSightings
+} from './globe/summitSighting';
 import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
@@ -18,6 +23,8 @@ import type { PresentationObserver } from './SceneSession';
 import type { SceneStore, SceneSnapshot } from './SceneStore';
 import { sameSceneTarget } from './sceneTarget';
 import { StageBinding, type SceneFactory } from './StageBinding';
+
+const NO_SUMMITS: readonly SightedSummit[] = [];
 
 export interface UseStageOptions {
 	store: SceneStore;
@@ -28,11 +35,15 @@ export interface UseStageOptions {
 	markers?: readonly AtlasMarker[];
 	/** Applied without rebuilding the scene; drawn unless told otherwise. */
 	summitMarkerVisible?: boolean;
+	/** Followed relative to the camera without rebuilding the scene; none unless given. */
+	nearbySummits?: readonly SightedSummit[];
 	/** Applied to the scene without rebuilding it; the stage is metric until one is given. */
 	unitSystem?: UnitSystem;
 	observer?: PresentationObserver;
 	/** Read when an activation arrives, so a new function never rebuilds the stage. */
 	onMarkerActivate?: (activation: MarkerActivation) => void;
+	/** Read when sightings arrive, so a new function never rebuilds the stage. */
+	onSightings?: (sightings: SummitSightings | undefined) => void;
 	onStageResize?: () => void;
 }
 
@@ -56,9 +67,11 @@ export function useStage({
 	atlas,
 	markers,
 	summitMarkerVisible = true,
+	nearbySummits = NO_SUMMITS,
 	unitSystem,
 	observer,
 	onMarkerActivate,
+	onSightings,
 	onStageResize
 }: UseStageOptions): UseStageResult {
 	const viewportRef = useRef<HTMLDivElement>(null);
@@ -69,6 +82,7 @@ export function useStage({
 	const summitVisibleRef = useRef(summitMarkerVisible);
 	const unitSystemRef = useRef(unitSystem);
 	const activateRef = useRef(onMarkerActivate);
+	const sightingsRef = useRef(onSightings);
 	const resizeRef = useRef(onStageResize);
 	const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 
@@ -88,6 +102,12 @@ export function useStage({
 	if (!sameAtlasMarkers(stableMarkers, markers)) {
 		setStableMarkers(markers);
 	}
+
+	const [stableNearby, setStableNearby] = useState(nearbySummits);
+	if (!sameSightedSummits(stableNearby, nearbySummits)) {
+		setStableNearby(nearbySummits);
+	}
+	const nearbyRef = useRef(stableNearby);
 
 	// Declared before the target effect so that, in one commit, the atlas a released target falls
 	// back to is already known.
@@ -115,13 +135,21 @@ export function useStage({
 
 	useEffect(() => {
 		activateRef.current = onMarkerActivate;
+		sightingsRef.current = onSightings;
 		resizeRef.current = onStageResize;
-	}, [onMarkerActivate, onStageResize]);
+	}, [onMarkerActivate, onSightings, onStageResize]);
 
 	useEffect(() => {
 		targetRef.current = stableTarget;
 		bindingRef.current?.setTarget(stableTarget);
 	}, [stableTarget]);
+
+	// After the target effect, so the neighbours of the next mountain are never followed from the
+	// view of the one it replaces.
+	useEffect(() => {
+		nearbyRef.current = stableNearby;
+		bindingRef.current?.setNearbySummits(stableNearby);
+	}, [stableNearby]);
 
 	useEffect(() => {
 		const viewport = viewportRef.current;
@@ -138,9 +166,11 @@ export function useStage({
 			atlas: atlasRef.current,
 			markers: markersRef.current,
 			summitMarkerVisible: summitVisibleRef.current,
+			nearbySummits: nearbyRef.current,
 			unitSystem: unitSystemRef.current,
 			observer,
 			onMarkerActivate: (activation) => activateRef.current?.(activation),
+			onSightings: (sightings) => sightingsRef.current?.(sightings),
 			onStageResize: () => resizeRef.current?.()
 		});
 		bindingRef.current = binding;

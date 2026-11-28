@@ -14,6 +14,7 @@ const FITZ_ROY: NearbyMountain = {
 	name: 'Fitz Roy',
 	place: 'Argentina and Chile',
 	elevationMeters: 3405,
+	coordinates: { latitude: -49.271, longitude: -73.043 },
 	distanceKm: 4.6
 };
 const TORRE: NearbyMountain = {
@@ -21,6 +22,7 @@ const TORRE: NearbyMountain = {
 	name: 'Cerro Torre',
 	place: 'Chile',
 	elevationMeters: 3128,
+	coordinates: { latitude: -49.293, longitude: -73.098 },
 	distanceKm: 122
 };
 

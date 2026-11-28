@@ -21,7 +21,7 @@ export function Compass({ headingDegrees }: CompassProps) {
 	}
 
 	return (
-		<div className={styles.compass}>
+		<div className={styles.compass} data-stage-obstacle="">
 			<p className={styles.spoken}>{spoken}</p>
 			<span className={styles.dial}>
 				<svg

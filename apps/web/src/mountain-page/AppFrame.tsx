@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { SiteShell } from '../shell/SiteShell';
-import { pageModelOf } from './pageModel';
+import { nearbyOf, pageModelOf } from './pageModel';
 import { StageLayout } from './StageLayout';
 
 interface AppFrameProps {
@@ -16,7 +16,13 @@ export function AppFrame({ pageProps, year, pathname, children }: AppFrameProps)
 
 	return (
 		<SiteShell layout={stageModel ? 'split' : 'plain'} year={year} pathname={pathname}>
-			{stageModel ? <StageLayout model={stageModel}>{children}</StageLayout> : children}
+			{stageModel ? (
+				<StageLayout model={stageModel} nearby={nearbyOf(pageProps)}>
+					{children}
+				</StageLayout>
+			) : (
+				children
+			)}
 		</SiteShell>
 	);
 }

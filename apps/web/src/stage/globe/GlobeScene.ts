@@ -10,6 +10,7 @@ import type { MountainPlacement, ResetResult } from './mountainCamera';
 import type { ViewOrientation } from './orientation';
 import type { ScaleReading } from './scaleBar';
 import type { StageSize } from './stageFrame';
+import type { SightingRequest, SummitSightings } from './summitSighting';
 import type { ZoomDirection, ZoomResult } from './zoomStep';
 
 export type RefitResult = 'refitted' | 'busy' | 'unavailable';
@@ -106,6 +107,16 @@ export interface GlobeScene extends Destroyable {
 	/** Resolves when the view is ready, superseded by a later call, or the scene is destroyed. */
 	whenViewReady(): Promise<void>;
 	updateStage(size: StageSize): void;
+	/**
+	 * Where the requested summits lie relative to the camera, heard when the camera, the stage size
+	 * or the loaded terrain changes the reading, at most once per frame. It never moves the camera
+	 * and keeps working through flights, orbits and gestures. Releasing it, or a scene destroyed
+	 * under it, is heard as `undefined`. A new subscription replaces the previous one.
+	 */
+	subscribeSightings(
+		request: SightingRequest,
+		listener: (sightings: SummitSightings | undefined) => void
+	): () => void;
 	/** A new subscription replaces the previous one. */
 	subscribeOrientation(listener: (orientation: ViewOrientation | undefined) => void): () => void;
 	subscribeImageryHealth(listener: (degraded: boolean) => void): () => void;

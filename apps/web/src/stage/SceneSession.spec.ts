@@ -12,6 +12,7 @@ import type { AtlasMarker } from './globe/atlasMarkers';
 import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import { MOUNTAIN_ORBIT_PERIOD_SECONDS } from './globe/mountainOrbit';
+import type { SummitSightings } from './globe/summitSighting';
 import {
 	SceneSession,
 	type PresentationObserver,
@@ -2775,5 +2776,136 @@ describe('SceneSession mountain orbit', () => {
 		onHalted();
 
 		expect(store.getSnapshot().mountainOrbit).toBe('off');
+	});
+});
+
+describe('SceneSession nearby sightings', () => {
+	const EL_PLATA = {
+		slug: 'cerro-el-plata',
+		latitude: -33.016,
+		longitude: -69.455,
+		elevationMeters: 5968
+	};
+	const OJOS = {
+		slug: 'ojos-del-salado',
+		latitude: -27.109,
+		longitude: -68.541,
+		elevationMeters: 6893
+	};
+	const READING: SummitSightings = {
+		viewport: { width: 800, height: 600 },
+		presented: { kind: 'ahead', x: 400, y: 300 },
+		nearby: [{ slug: 'cerro-el-plata', sighting: { kind: 'ahead', x: 1200, y: 300 } }]
+	};
+
+	async function sighting(sceneOptions = {}) {
+		const heard: (SummitSightings | undefined)[] = [];
+		const context = setup({ onSightings: (sightings) => heard.push(sightings) });
+		context.session.setNearbySummits([EL_PLATA]);
+		context.session.setTarget(ACONCAGUA);
+		const scene = context.factory.resolve(0, { holdShow: true, ...sceneOptions });
+		await flush();
+		return { ...context, scene, heard };
+	}
+
+	it('follows the nearby summits only once the presentation is over, with the presented one', async () => {
+		const { scene } = await sighting();
+		expect(scene.sighting).toBe(false);
+
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		expect(scene.sighting).toBe(true);
+		expect(scene.sightingRequests).toEqual([
+			{
+				presented: {
+					slug: 'aconcagua',
+					latitude: ACONCAGUA.latitude,
+					longitude: ACONCAGUA.longitude,
+					elevationMeters: ACONCAGUA.elevationMeters
+				},
+				nearby: [EL_PLATA]
+			}
+		]);
+	});
+
+	it('follows after an interrupted or failed presentation too: the camera is still by the mountain', async () => {
+		const { scene } = await sighting();
+
+		scene.pendingShows[0]!.resolve({ status: 'interrupted' });
+		await flush();
+
+		expect(scene.sighting).toBe(true);
+	});
+
+	it('hands every reading on, and stops following as the next mountain is presented', async () => {
+		const { session, scene, heard } = await sighting();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		scene.emitSightings(READING);
+
+		session.setTarget(FITZ_ROY);
+
+		expect(heard).toEqual([READING, undefined]);
+		expect(scene.sighting).toBe(false);
+		expect(scene.shown.at(-1)?.target).toBe(FITZ_ROY);
+	});
+
+	it('follows the new neighbours once the next mountain arrives, never from the previous view', async () => {
+		const { session, scene } = await sighting();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		session.setTarget(FITZ_ROY);
+		session.setNearbySummits([OJOS]);
+		expect(scene.sightingRequests).toHaveLength(1);
+
+		scene.pendingShows[1]!.resolve({ status: 'arrived' });
+		await flush();
+
+		expect(scene.sightingRequests.at(-1)).toMatchObject({
+			presented: { slug: 'fitz-roy' },
+			nearby: [OJOS]
+		});
+	});
+
+	it('follows nothing without nearby summits, and follows again when they return', async () => {
+		const { session, scene } = await sighting();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+
+		session.setNearbySummits([]);
+		expect(scene.sighting).toBe(false);
+
+		session.setNearbySummits([EL_PLATA, OJOS]);
+		expect(scene.sighting).toBe(true);
+		expect(scene.sightingRequests.at(-1)?.nearby).toEqual([EL_PLATA, OJOS]);
+		expect(scene.shown).toHaveLength(1);
+	});
+
+	it('stops following when the mountain is let go, as on the atlas', async () => {
+		const { session, scene, heard } = await sighting();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		scene.emitSightings(READING);
+
+		session.setTarget(undefined);
+
+		expect(scene.sighting).toBe(false);
+		expect(heard.at(-1)).toBeUndefined();
+	});
+
+	it('releases the subscription and clears the reading when it stops', async () => {
+		const { session, scene, heard } = await sighting();
+		scene.pendingShows[0]!.resolve({ status: 'arrived' });
+		await flush();
+		scene.emitSightings(READING);
+
+		session.stop();
+
+		expect(scene.sighting).toBe(false);
+		expect(heard.at(-1)).toBeUndefined();
+		session.setNearbySummits([OJOS]);
+		expect(scene.sightingRequests).toHaveLength(1);
 	});
 });

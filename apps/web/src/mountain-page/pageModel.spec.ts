@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFailure, pageModelOf, type FailureReason, type PageModel } from './pageModel';
+import {
+	classifyFailure,
+	nearbyOf,
+	pageModelOf,
+	type FailureReason,
+	type PageModel
+} from './pageModel';
 
 describe('classifyFailure', () => {
 	it.each<[FailureReason, number]>([
@@ -24,6 +30,21 @@ describe('pageModelOf', () => {
 		'returns nothing for page props without a model: %j',
 		(pageProps) => {
 			expect(pageModelOf(pageProps)).toBeUndefined();
+		}
+	);
+});
+
+describe('nearbyOf', () => {
+	it('returns the nearby mountains the page props carry', () => {
+		const nearby = [{ slug: 'cerro-el-plata' }];
+
+		expect(nearbyOf({ model: {}, nearby })).toBe(nearby);
+	});
+
+	it.each([{}, { nearby: null }, { nearby: 'cerro-el-plata' }])(
+		'returns none for page props without a list: %j',
+		(pageProps) => {
+			expect(nearbyOf(pageProps)).toEqual([]);
 		}
 	);
 });

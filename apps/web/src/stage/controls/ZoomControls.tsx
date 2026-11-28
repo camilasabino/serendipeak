@@ -17,7 +17,7 @@ interface ZoomControlsProps {
 
 export function ZoomControls({ enabled, onZoom }: ZoomControlsProps) {
 	return (
-		<div role="group" aria-label={ZOOM_GROUP_LABEL} className={styles.group}>
+		<div role="group" aria-label={ZOOM_GROUP_LABEL} className={styles.group} data-stage-obstacle="">
 			<Tooltip text={enabled ? ZOOM_IN_TOOLTIP : TOOLTIP_UNAVAILABLE} side="end">
 				<button
 					type="button"

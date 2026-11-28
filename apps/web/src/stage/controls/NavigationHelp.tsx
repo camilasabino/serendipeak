@@ -122,7 +122,7 @@ export function NavigationHelp({
 	};
 
 	return (
-		<div ref={rootRef} onBlur={onBlur}>
+		<div ref={rootRef} onBlur={onBlur} data-stage-obstacle="">
 			<Tooltip text={NAVIGATION_HELP_TOOLTIP} side="end">
 				<button
 					ref={triggerRef}

@@ -26,7 +26,7 @@ export function ScaleBar({ reading }: ScaleBarProps) {
 	const path = `M1 1V${BAR_HEIGHT_PX - 1}H${width - 1}V1`;
 
 	return (
-		<div className={styles.scale} style={PLACEMENT}>
+		<div className={styles.scale} style={PLACEMENT} data-stage-obstacle="">
 			<p className={styles.label}>
 				<span className={styles.spoken}>Scale:</span> {reading.label}
 			</p>

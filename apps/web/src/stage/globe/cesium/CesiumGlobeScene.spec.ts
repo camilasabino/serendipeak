@@ -240,6 +240,11 @@ interface FakeViewer {
 	/** Cesium raising its renderError event, as its render loop does when a frame throws. */
 	raiseRenderError(error: unknown): void;
 	screenSpaceEventHandler: { removeInputAction(type: number): void };
+	/** Cesium's credit container; the attributes the scene set on it. */
+	bottomContainer: {
+		attributes: Map<string, string>;
+		setAttribute(name: string, value: string): void;
+	};
 	isDestroyed(): boolean;
 	destroy: ReturnType<typeof vi.fn>;
 }
@@ -282,6 +287,12 @@ function fakeViewer(
 			}
 		},
 		screenSpaceEventHandler: { removeInputAction },
+		bottomContainer: {
+			attributes: new Map(),
+			setAttribute(name, value) {
+				this.attributes.set(name, value);
+			}
+		},
 		isDestroyed: () => destroyed,
 		destroy: vi.fn(() => {
 			destroyed = true;

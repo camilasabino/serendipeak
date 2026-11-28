@@ -9,6 +9,7 @@ import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
+import type { SightedSummit, SummitSightings } from './globe/summitSighting';
 import { StageControls, type MarkerToggle } from './controls/StageControls';
 import styles from './MountainScene.module.css';
 import type { PresentationObserver } from './SceneSession';
@@ -48,6 +49,10 @@ interface MountainSceneProps {
 	markerToggle?: MarkerToggle;
 	/** Offers the reader an orbit around the presented mountain; never shown on the atlas. */
 	mountainOrbit?: boolean;
+	/** Summits near the presented mountain, followed relative to the camera; none off a mountain. */
+	nearbySummits?: readonly SightedSummit[];
+	/** Where the nearby summits lie relative to the camera, once the mountain is presented. */
+	onSightings?: (sightings: SummitSightings | undefined) => void;
 	observer: PresentationObserver;
 	controllerRef?: Ref<StageController>;
 	onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -65,6 +70,8 @@ export default function MountainScene({
 	summitMarkerVisible = true,
 	markerToggle,
 	mountainOrbit = false,
+	nearbySummits,
+	onSightings,
 	observer,
 	controllerRef,
 	onMarkerActivate,
@@ -90,9 +97,11 @@ export default function MountainScene({
 		atlas,
 		markers,
 		summitMarkerVisible,
+		nearbySummits,
 		unitSystem,
 		observer,
 		onMarkerActivate,
+		onSightings,
 		onStageResize
 	});
 	useImperativeHandle(controllerRef, () => ({ readCamera, resetView, highlightMarker }), [

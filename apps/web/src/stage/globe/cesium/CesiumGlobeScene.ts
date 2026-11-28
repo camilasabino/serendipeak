@@ -1,4 +1,4 @@
-import type { TerrainProvider, Viewer } from 'cesium';
+import type { Cartesian3 as Cartesian3Value, TerrainProvider, Viewer } from 'cesium';
 import { DEFAULT_UNIT_SYSTEM, type UnitSystem } from '../../../units/unitSystem';
 import type { AtlasLookReading, ExposeAtlasLook } from '../atlasLook';
 import type { AtlasLayerReading, AtlasMarker, ExposeAtlasLayer } from '../atlasMarkers';
@@ -27,7 +27,15 @@ import { OrientationTracker, type ViewOrientation } from '../orientationTracker'
 import { isLookAtOffset } from '../resetPose';
 import type { ScaleReading } from '../scaleBar';
 import { ScaleTracker } from '../scaleTracker';
+import { SightingTracker } from '../sightingTracker';
 import type { StageSize } from '../stageFrame';
+import {
+	nearFrame,
+	type NearbySighting,
+	type SightedSummit,
+	type SightingRequest,
+	type SummitSightings
+} from '../summitSighting';
 import { SummitSprites } from '../summitSprites';
 import { createTerrainCameraSession, type TerrainCameraSession } from '../terrainCamera';
 import { globeLook, motionPreference, type MotionPreference } from '../transitionPlan';
@@ -82,6 +90,12 @@ interface SceneParts {
 
 const noop = () => {};
 
+// Publishes within the frame that took the reading, which is what keeps an overlay on its summit.
+const runNow = (work: () => void) => {
+	work();
+	return noop;
+};
+
 export class CesiumGlobeScene implements GlobeScene {
 	private readonly cesium: CesiumModule;
 	private readonly viewer: Viewer;
@@ -104,6 +118,7 @@ export class CesiumGlobeScene implements GlobeScene {
 	private scaleTracker: ScaleTracker | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
+	private releaseSightings: () => void = noop;
 	private releaseCameraReading: () => void = noop;
 	private releaseGlobePosition: () => void = noop;
 	private releaseAtlasLayer: () => void = noop;
@@ -188,6 +203,8 @@ export class CesiumGlobeScene implements GlobeScene {
 		try {
 			failedBaseLayer?.attach(viewer.scene.imageryLayers);
 			disableEntityPicking(viewer, cesium.ScreenSpaceEventType);
+			// The credits must stay readable, so surfaces laid over the stage treat them as a control.
+			viewer.bottomContainer.setAttribute('data-stage-obstacle', '');
 			enableTrackpadPinchZoom(viewer.scene.screenSpaceCameraController, cesium);
 			avoidMsaaFlicker(viewer.scene);
 
@@ -592,6 +609,53 @@ export class CesiumGlobeScene implements GlobeScene {
 		};
 	}
 
+	// Positions are converted once per subscription; each changed view costs a few dot products per
+	// summit, on the frame listener the atlas markers and the scale bar already use.
+	subscribeSightings(
+		request: SightingRequest,
+		listener: (sightings: SummitSightings | undefined) => void
+	): () => void {
+		this.releaseSightings();
+		this.releaseSightings = noop;
+
+		if (this.destroyed) {
+			listener(undefined);
+			return noop;
+		}
+
+		const presented = this.summitPosition(request.presented);
+		const nearby = request.nearby.map((summit) => ({
+			slug: summit.slug,
+			position: this.summitPosition(summit)
+		}));
+		const tracker = new SightingTracker({
+			sample: () => {
+				if (this.destroyed) {
+					return undefined;
+				}
+				const viewport = this.sampler.viewport();
+
+				return {
+					viewport,
+					presented: this.sampler.sight(presented),
+					nearby: nearby.map(({ slug, position }) => this.sightNearby(slug, position, viewport))
+				};
+			},
+			publish: listener,
+			listen: (onChange) => this.listenForViewChanges(onChange, 'postRender'),
+			schedule: runNow
+		});
+		const release = () => tracker.release();
+		this.releaseSightings = release;
+
+		return () => {
+			release();
+			if (this.releaseSightings === release) {
+				this.releaseSightings = noop;
+			}
+		};
+	}
+
 	subscribeScale(listener: (reading: ScaleReading | undefined) => void): () => void {
 		this.releaseScale();
 		this.releaseScale = noop;
@@ -681,6 +745,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		const releaseFailure = this.releaseFailure;
 		const releaseOrientation = this.releaseOrientation;
 		const releaseScale = this.releaseScale;
+		const releaseSightings = this.releaseSightings;
 		this.releaseCameraReading = noop;
 		this.releaseGlobePosition = noop;
 		this.releaseAtlasLayer = noop;
@@ -689,6 +754,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		this.releaseFailure = noop;
 		this.releaseOrientation = noop;
 		this.releaseScale = noop;
+		this.releaseSightings = noop;
 
 		// One failing disposer must not strand the resources after it, and the Viewer goes last.
 		releaseBestEffort(CLEANUP_OWNER, [
@@ -705,6 +771,7 @@ export class CesiumGlobeScene implements GlobeScene {
 			['failed layer removal', () => this.failedBaseLayer?.release()],
 			['orientation tracker', releaseOrientation],
 			['scale tracker', releaseScale],
+			['sighting tracker', releaseSightings],
 			['atlas look', () => this.atlasLook.release()],
 			['atlas picker', () => this.atlasPicker.release()],
 			['atlas markers', () => this.atlasMarkers.release()],
@@ -759,6 +826,29 @@ export class CesiumGlobeScene implements GlobeScene {
 		};
 	}
 
+	// Whether the globe or terrain hides a summit is worked out only where it matters, for one in or
+	// near the frame: a ray against the loaded terrain is the dearest part of a sighting. Only a
+	// hidden one needs its bearing, a few more dot products.
+	private sightNearby(
+		slug: string,
+		position: Cartesian3Value,
+		viewport: StageSize
+	): NearbySighting {
+		const sighting = this.sampler.sight(position);
+		const concealed = nearFrame(sighting, viewport)
+			? this.sampler.concealment(position)
+			: undefined;
+		if (!concealed) {
+			return { slug, sighting };
+		}
+
+		return { slug, sighting, concealed, bearing: this.sampler.sightBearing(position) };
+	}
+
+	private summitPosition({ longitude, latitude, elevationMeters }: SightedSummit): Cartesian3Value {
+		return this.cesium.Cartesian3.fromDegrees(longitude, latitude, elevationMeters);
+	}
+
 	private motion(): MotionPreference {
 		return motionPreference(this.reducedMotion.matches);
 	}
@@ -771,7 +861,12 @@ export class CesiumGlobeScene implements GlobeScene {
 		return { width: this.container.clientWidth, height: this.container.clientHeight };
 	}
 
-	private listenForViewChanges(onChange: () => void): () => void {
+	// `postRender` reports a view once it is drawn, with the camera where the frame left it, for work
+	// that must land in the same paint as the globe, as overlays anchored to a point on it.
+	private listenForViewChanges(
+		onChange: () => void,
+		phase: 'preUpdate' | 'postRender' = 'preUpdate'
+	): () => void {
 		const { Cartesian3 } = this.cesium;
 		const { camera, scene } = this.viewer;
 		const position = Cartesian3.clone(camera.positionWC);
@@ -779,7 +874,7 @@ export class CesiumGlobeScene implements GlobeScene {
 		let width = scene.canvas.clientWidth;
 		let height = scene.canvas.clientHeight;
 
-		const removeFrame = scene.preUpdate.addEventListener(() => {
+		const removeFrame = scene[phase].addEventListener(() => {
 			const resized = scene.canvas.clientWidth !== width || scene.canvas.clientHeight !== height;
 			const moved = !Cartesian3.equalsEpsilon(
 				camera.positionWC,

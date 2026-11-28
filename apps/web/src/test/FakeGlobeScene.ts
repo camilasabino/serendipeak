@@ -10,6 +10,7 @@ import type { MountainPlacement, ResetResult } from '../stage/globe/mountainCame
 import type { ViewOrientation } from '../stage/globe/orientation';
 import type { ScaleReading } from '../stage/globe/scaleBar';
 import type { StageSize } from '../stage/globe/stageFrame';
+import type { SightingRequest, SummitSightings } from '../stage/globe/summitSighting';
 import type { ZoomDirection, ZoomResult } from '../stage/globe/zoomStep';
 
 export interface Deferred<T> {
@@ -139,6 +140,9 @@ export class FakeGlobeScene implements GlobeScene {
 	private readonly viewWaiters: Deferred<void>[] = [];
 	private readonly orientation = new ReplaceableSubscription<ViewOrientation>(() => this.destroyed);
 	private readonly scale = new ReplaceableSubscription<ScaleReading>(() => this.destroyed);
+	private readonly sightings = new ReplaceableSubscription<SummitSightings>(() => this.destroyed);
+	/** Every sighting request the scene was given, in order. */
+	readonly sightingRequests: SightingRequest[] = [];
 	private readonly imagery = new Set<(degraded: boolean) => void>();
 	private interaction: (() => void) | undefined;
 	private failure: ((error: unknown) => void) | undefined;
@@ -462,6 +466,16 @@ export class FakeGlobeScene implements GlobeScene {
 		return this.failingRelease('orientation', this.orientation.subscribe(listener));
 	}
 
+	subscribeSightings(
+		request: SightingRequest,
+		listener: (sightings: SummitSightings | undefined) => void
+	): () => void {
+		if (!this.destroyed) {
+			this.sightingRequests.push(request);
+		}
+		return this.sightings.subscribe(listener);
+	}
+
 	subscribeScale(listener: (reading: ScaleReading | undefined) => void): () => void {
 		this.failIfRequested('subscribeScale');
 		return this.failingRelease('scale', this.scale.subscribe(listener));
@@ -505,6 +519,7 @@ export class FakeGlobeScene implements GlobeScene {
 		}
 		this.orientation.end();
 		this.scale.end();
+		this.sightings.end();
 		this.imagery.clear();
 		this.interaction = undefined;
 		this.activation = undefined;
@@ -529,6 +544,15 @@ export class FakeGlobeScene implements GlobeScene {
 
 	emitOrientation(viewHeadingDegrees: number | undefined): void {
 		this.orientation.emit(viewHeadingDegrees === undefined ? undefined : { viewHeadingDegrees });
+	}
+
+	/** Whether a sighting subscription is live now. */
+	get sighting(): boolean {
+		return this.sightings.live;
+	}
+
+	emitSightings(sightings: SummitSightings | undefined): void {
+		this.sightings.emit(sightings);
 	}
 
 	emitScale(reading: ScaleReading | undefined): void {

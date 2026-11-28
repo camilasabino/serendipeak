@@ -1,3 +1,4 @@
+import type { ScreenBox, ScreenPoint } from './atlasMarkers';
 import type { SceneTarget } from './camera';
 
 /** Canonical data only: the display words the elevation in the unit the reader has chosen. */
@@ -142,6 +143,33 @@ export function summitPillMaxContentWidth(
 	const clear = stageWidth - 2 * CONTROL_GUTTER_REM * rootFontPixels - paddingLeft - paddingRight;
 
 	return Math.floor(Math.min(maxContentWidth, Math.max(minContentWidth, clear)));
+}
+
+/**
+ * Where the presented summit's disc and pill can be drawn around the summit's place on screen, in
+ * CSS pixels. The pill is taken at the widest the stage lets it be, so the box holds it whatever
+ * name it carries and whether or not the layout draws it.
+ */
+export function summitMarkerFootprint(
+	summit: ScreenPoint,
+	stageWidth: number,
+	rootFontPixels = 16
+): ScreenBox {
+	const { disc, pill, labelOffsetPixels } = SUMMIT_MARKER_STYLE;
+	const { height, paddingLeft, paddingRight } = pillGeometry(pill.summitScale);
+	const pillWidth =
+		summitPillMaxContentWidth(stageWidth, rootFontPixels, pill.summitScale) +
+		paddingLeft +
+		paddingRight;
+	const discRadius = (disc.radius + disc.ringWidth + disc.haloWidth) * disc.scale;
+	const halfWidth = Math.max(pillWidth / 2, discRadius);
+
+	return {
+		left: summit.x - halfWidth,
+		right: summit.x + halfWidth,
+		top: summit.y - labelOffsetPixels - height,
+		bottom: summit.y + discRadius
+	};
 }
 
 /** The pill as drawn, without the room its image keeps around it for the shadow. */

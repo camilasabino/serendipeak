@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { DailyMountain, Mountain } from '../api/contract';
 import { contractFixture } from '../api/test-support/contractFixtures';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
+import { NEARBY_INDICATORS_LABEL } from '../nearby/NearbyIndicators';
 import { TestExperience } from '../test/TestExperience';
 import { StageLayout } from './StageLayout';
 import { MountainView } from './MountainView';
@@ -74,5 +76,29 @@ describe('daily cue placement', () => {
 		const html = render({ kind: 'daily', daily });
 
 		expect(html.indexOf('Tomorrow, another mountain.')).toBeLessThan(html.indexOf(STAGE_LOADER));
+	});
+});
+
+describe('StageLayout with nearby mountains', () => {
+	const EL_PLATA: NearbyMountain = {
+		slug: 'cerro-el-plata',
+		name: 'Cerro El Plata',
+		place: 'Argentina',
+		elevationMeters: 5968,
+		coordinates: { latitude: -33.015925, longitude: -69.454922 },
+		distanceKm: 66
+	};
+
+	it('links each neighbour once, from the sheet: the stage points to them only once the globe is up', () => {
+		const html = renderToStaticMarkup(
+			<TestExperience>
+				<StageLayout model={{ kind: 'mountain', mountain }} nearby={[EL_PLATA]}>
+					<MountainView mountain={mountain} daily={false} nearby={[EL_PLATA]} />
+				</StageLayout>
+			</TestExperience>
+		);
+
+		expect(html.match(/href="\/mountains\/cerro-el-plata"/g)).toHaveLength(1);
+		expect(html).not.toContain(NEARBY_INDICATORS_LABEL);
 	});
 });

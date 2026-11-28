@@ -15,6 +15,8 @@ export interface NearbyMountain {
 	/** Where it is, ready to show. */
 	place: string;
 	elevationMeters: number;
+	/** The summit's position, so the stage can point toward it. */
+	coordinates: Coordinates;
 	/** Straight-line distance between the summits, unrounded. */
 	distanceKm: number;
 }
@@ -53,6 +55,7 @@ export function findNearbyMountains(
 			name: entry.name,
 			place: placeOf(entry),
 			elevationMeters: entry.elevationMeters,
+			coordinates: { latitude: entry.coordinates.latitude, longitude: entry.coordinates.longitude },
 			distanceKm
 		});
 	}

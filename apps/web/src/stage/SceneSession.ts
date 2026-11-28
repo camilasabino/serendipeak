@@ -16,6 +16,7 @@ import type { MarkerActivation } from './globe/markerActivation';
 import type { ResetResult } from './globe/mountainCamera';
 import { MOUNTAIN_ORBIT_PERIOD_SECONDS } from './globe/mountainOrbit';
 import { stageAspect, type StageSize } from './globe/stageFrame';
+import type { SightedSummit, SummitSightings } from './globe/summitSighting';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { startScene } from './lifecycle';
 import { releaseBestEffort } from './releaseBestEffort';
@@ -43,6 +44,11 @@ export interface SceneSessionOptions {
 	observer?: PresentationObserver;
 	/** Clicks and taps on atlas markers, heard only while markers are drawn. */
 	onMarkerActivate?: (activation: MarkerActivation) => void;
+	/**
+	 * Where the nearby summits lie relative to the camera, heard only while a mountain's
+	 * presentation is over and there are nearby summits; `undefined` whenever that ends.
+	 */
+	onSightings?: (sightings: SummitSightings | undefined) => void;
 }
 
 const noop = () => {};
@@ -66,6 +72,7 @@ export class SceneSession {
 	private readonly onError: ((error: unknown) => void) | undefined;
 	private readonly observer: PresentationObserver | undefined;
 	private readonly onMarkerActivate: ((activation: MarkerActivation) => void) | undefined;
+	private readonly onSightings: ((sightings: SummitSightings | undefined) => void) | undefined;
 	private scene: GlobeScene | undefined;
 	private releaseOrientation: () => void = noop;
 	private releaseScale: () => void = noop;
@@ -74,6 +81,7 @@ export class SceneSession {
 	private releaseActivation: () => void = noop;
 	private releaseFailure: () => void = noop;
 	private releaseFlight: () => void = noop;
+	private releaseSightings: () => void = noop;
 	private stopScene: () => void = noop;
 	private imageryDegraded = false;
 	private settled = false;
@@ -86,6 +94,9 @@ export class SceneSession {
 	private stage: StageSize | undefined;
 	private units: UnitSystem = DEFAULT_UNIT_SYSTEM;
 	private summitMarkerVisible = true;
+	private nearby: readonly SightedSummit[] = [];
+	/** The current target's presentation reported its outcome: arrived, interrupted or failed. */
+	private presentationOver = false;
 	private stopped = false;
 	private revealed = false;
 	private presentation = 0;
@@ -101,12 +112,14 @@ export class SceneSession {
 		store,
 		onError,
 		observer,
-		onMarkerActivate
+		onMarkerActivate,
+		onSightings
 	}: SceneSessionOptions) {
 		this.store = store;
 		this.onError = onError;
 		this.observer = observer;
 		this.onMarkerActivate = onMarkerActivate;
+		this.onSightings = onSightings;
 
 		let token: string;
 		try {
@@ -227,6 +240,19 @@ export class SceneSession {
 		this.scene?.setUnitSystem(next);
 	}
 
+	/**
+	 * The summits near the presented mountain, followed relative to the camera once its
+	 * presentation is over. Kept for a scene that does not exist yet, such as one a retry builds;
+	 * an empty list follows nothing. Never moves the camera.
+	 */
+	setNearbySummits(next: readonly SightedSummit[]): void {
+		if (this.stopped) {
+			return;
+		}
+		this.nearby = next;
+		this.followSightings();
+	}
+
 	/** A transient emphasis for one atlas marker; not kept for a scene that does not exist yet. */
 	highlightMarker(slug: string | undefined): void {
 		if (!this.stopped) {
@@ -331,6 +357,7 @@ export class SceneSession {
 		this.store.setOrientation(undefined);
 		this.store.setScale(undefined);
 		this.scene = undefined;
+		this.presentationOver = false;
 		this.observer?.ended();
 
 		const {
@@ -341,6 +368,7 @@ export class SceneSession {
 			releaseActivation,
 			releaseFailure,
 			releaseFlight,
+			releaseSightings,
 			stopScene
 		} = this;
 		this.releaseOrientation = noop;
@@ -350,6 +378,7 @@ export class SceneSession {
 		this.releaseActivation = noop;
 		this.releaseFailure = noop;
 		this.releaseFlight = noop;
+		this.releaseSightings = noop;
 		this.stopScene = noop;
 
 		// The scene goes last: a retry must never meet a live Viewer because a release threw.
@@ -361,6 +390,7 @@ export class SceneSession {
 			['marker activation subscription', releaseActivation],
 			['render failure subscription', releaseFailure],
 			['flight subscription', releaseFlight],
+			['sighting subscription', releaseSightings],
 			['scene', stopScene]
 		]);
 	}
@@ -642,6 +672,8 @@ export class SceneSession {
 		this.leaveOverview();
 		this.endMountainOrbit();
 		this.publishSettled(false);
+		this.presentationOver = false;
+		this.followSightings();
 		ready.clearTarget();
 		this.observer?.cleared();
 		if (!this.revealed) {
@@ -676,13 +708,45 @@ export class SceneSession {
 
 	private publishCamera(target: SceneTarget, outcome: CameraOutcome): void {
 		this.publishSettled(outcome.status === 'arrived');
+		this.presentationOver = true;
+		this.followSightings();
 		this.observer?.presented(target, outcome.status);
+	}
+
+	// Only once the presentation is over: a flight sweeps every direction past the edges, and the
+	// neighbours known by then may already be those of the next mountain. Whatever the outcome,
+	// the camera stands somewhere near the mountain, and the directions read from there are true.
+	private followSightings(): void {
+		const release = this.releaseSightings;
+		this.releaseSightings = noop;
+		release();
+
+		const ready = this.scene;
+		const target = this.target;
+		const onSightings = this.onSightings;
+		if (
+			this.stopped ||
+			!ready ||
+			!target ||
+			!onSightings ||
+			!this.presentationOver ||
+			this.nearby.length === 0
+		) {
+			return;
+		}
+
+		this.releaseSightings = ready.subscribeSightings(
+			{ presented: sightedSummitOf(target), nearby: this.nearby },
+			onSightings
+		);
 	}
 
 	private begin(next: SceneTarget): void {
 		this.leaveOverview();
 		const ticket = ++this.presentation;
 		this.publishSettled(false);
+		this.presentationOver = false;
+		this.followSightings();
 		this.endMountainOrbit();
 		this.publishFree(false);
 		this.observer?.presenting(next);
@@ -781,6 +845,15 @@ export class SceneSession {
 			}
 		}
 	}
+}
+
+function sightedSummitOf({
+	slug,
+	latitude,
+	longitude,
+	elevationMeters
+}: SceneTarget): SightedSummit {
+	return { slug, latitude, longitude, elevationMeters };
 }
 
 const SAME_LOOK_DEGREES = 1e-4;

@@ -1,4 +1,5 @@
 import type { DailyMountain, Mountain, MountainIndexEntry } from '../api/contract';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
 
 export type FailureReason = 'not-found' | 'unreachable' | 'no-eligible-mountains' | 'api-error';
 
@@ -96,4 +97,13 @@ function withCacheControl<M extends PageModel>(
 	cacheControl: string | undefined
 ): PageLoad<M> {
 	return cacheControl === undefined ? load : { ...load, cacheControl };
+}
+
+const NO_NEARBY: readonly NearbyMountain[] = [];
+
+/** The page's nearby mountains as its props carry them; none where a page has no such list. */
+export function nearbyOf(pageProps: object): readonly NearbyMountain[] {
+	const nearby = 'nearby' in pageProps ? pageProps.nearby : undefined;
+
+	return Array.isArray(nearby) ? (nearby as NearbyMountain[]) : NO_NEARBY;
 }

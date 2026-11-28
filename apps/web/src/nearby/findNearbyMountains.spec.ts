@@ -149,6 +149,7 @@ describe('findNearbyMountains', () => {
 			name: 'Peak',
 			place: 'Switzerland',
 			elevationMeters: 4321,
+			coordinates: { latitude: 1, longitude: 0 },
 			distanceKm: expect.closeTo(111.19, 1)
 		});
 	});

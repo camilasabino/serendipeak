@@ -89,7 +89,14 @@ describe('MountainPageView head', () => {
 
 	it('hands the neighbours it was given to the page of a permalink and of the day', () => {
 		const nearby = [
-			{ slug: 'a', name: 'A', place: 'Chile', elevationMeters: 1000, distanceKm: 10 }
+			{
+				slug: 'a',
+				name: 'A',
+				place: 'Chile',
+				elevationMeters: 1000,
+				coordinates: { latitude: -33, longitude: -70 },
+				distanceKm: 10
+			}
 		];
 		const permalink = renderToStaticMarkup(
 			<MountainPageView

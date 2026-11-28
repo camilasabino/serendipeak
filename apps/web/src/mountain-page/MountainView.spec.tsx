@@ -298,6 +298,7 @@ describe('nearby mountains', () => {
 			name: 'Cerro El Plata',
 			place: 'Argentina',
 			elevationMeters: 5968,
+			coordinates: { latitude: -33.015925, longitude: -69.454922 },
 			distanceKm: 66
 		}
 	];

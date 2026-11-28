@@ -5,6 +5,7 @@ import type { AtlasMarker } from './globe/atlasMarkers';
 import { atlasOverviewLook, type AtlasView } from './globe/atlasView';
 import type { SceneTarget } from './globe/camera';
 import type { MarkerActivation } from './globe/markerActivation';
+import type { SightedSummit, SummitSightings } from './globe/summitSighting';
 import type { UnitSystem } from '../units/unitSystem';
 import { SceneStore } from './SceneStore';
 import { TransitionCoordinator } from './TransitionCoordinator';
@@ -45,6 +46,8 @@ function setup(
 		markers?: readonly AtlasMarker[];
 		unitSystem?: UnitSystem;
 		summitMarkerVisible?: boolean;
+		nearbySummits?: readonly SightedSummit[];
+		onSightings?: (sightings: SummitSightings | undefined) => void;
 		store?: SceneStore;
 		observer?: TransitionCoordinator;
 		onMarkerActivate?: (activation: MarkerActivation) => void;
@@ -65,6 +68,8 @@ function setup(
 			markers: options.markers,
 			unitSystem: options.unitSystem,
 			summitMarkerVisible: options.summitMarkerVisible,
+			nearbySummits: options.nearbySummits,
+			onSightings: options.onSightings,
 			observer: options.observer,
 			onMarkerActivate: options.onMarkerActivate,
 			onStageResize: options.onStageResize
@@ -281,6 +286,46 @@ describe('StageBinding retry', () => {
 		await flush();
 		expect(store.getSnapshot().state).toEqual({ status: 'ready' });
 		expect(factory.calls).toHaveLength(2);
+	});
+
+	it('keeps the nearby summits for the new attempt, followed once its mountain arrives', async () => {
+		const elPlata = {
+			slug: 'cerro-el-plata',
+			latitude: -33,
+			longitude: -69.5,
+			elevationMeters: 5968
+		};
+		const ojos = {
+			slug: 'ojos-del-salado',
+			latitude: -27.1,
+			longitude: -68.5,
+			elevationMeters: 6893
+		};
+		const heard: (SummitSightings | undefined)[] = [];
+		const { factory, binding } = await failedBinding({
+			target: ACONCAGUA,
+			nearbySummits: [elPlata],
+			onSightings: (sightings) => heard.push(sightings)
+		});
+		binding.setNearbySummits([ojos]);
+
+		binding.retry();
+		const scene = factory.resolve(1);
+		await flush();
+
+		expect(scene.sightingRequests).toEqual([
+			expect.objectContaining({
+				presented: expect.objectContaining({ slug: 'aconcagua' }),
+				nearby: [ojos]
+			})
+		]);
+		const reading: SummitSightings = {
+			viewport: { width: 800, height: 500 },
+			presented: { kind: 'unknown' },
+			nearby: [{ slug: 'ojos-del-salado', sighting: { kind: 'unknown' } }]
+		};
+		scene.emitSightings(reading);
+		expect(heard).toEqual([reading]);
 	});
 
 	it('keeps the atlas for the new attempt, which opens on its overview', async () => {

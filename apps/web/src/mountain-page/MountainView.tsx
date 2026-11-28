@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { Mountain } from '../api/contract';
 import { AtlasReturnLink } from '../atlas/AtlasReturnLink';
 import { ExploreControl } from '../explore/ExploreControl';
@@ -9,6 +10,7 @@ import { MountainInfoPanel } from './MountainInfoPanel';
 import styles from './MountainView.module.css';
 import { MountainPhoto } from './MountainPhoto';
 import { ShareControl } from './ShareControl';
+import { useSheetScrollReset } from './sheetScroll';
 import { mountainShare } from './socialMetadata';
 import { DAILY_CLOSING_NOTE, DAILY_CUE, PREVIEW_NOTICE } from './pageCopy';
 
@@ -28,12 +30,14 @@ export function MountainView({
 	nearby = []
 }: MountainViewProps) {
 	const { primaryImage } = mountain;
+	const sheet = useRef<HTMLDivElement>(null);
+	useSheetScrollReset(sheet, mountain.slug);
 
 	const share = preview ? undefined : mountainShare(mountain.slug, siteOrigin);
 	const runningHead = !daily && !preview && <AtlasReturnLink />;
 
 	return (
-		<div className={`${styles.sheet} ${styles.page}`}>
+		<div ref={sheet} className={`${styles.sheet} ${styles.page}`}>
 			{(runningHead || share) && (
 				<div className={styles.runhead}>
 					{runningHead}

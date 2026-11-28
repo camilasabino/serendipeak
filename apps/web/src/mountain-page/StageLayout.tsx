@@ -14,6 +14,9 @@ import type { StageController } from '../stage/MountainScene';
 import { SceneStore } from '../stage/SceneStore';
 import { StageBoundary } from '../stage/StageBoundary';
 import { useTransitionCoordinator } from '../stage/TransitionCoordinatorContext';
+import type { NearbyMountain } from '../nearby/findNearbyMountains';
+import { NearbyIndicators, sightedSummitsOf } from '../nearby/NearbyIndicators';
+import { SightingFeed } from '../nearby/SightingFeed';
 import { useOnUnitSystemChange } from '../units/UnitPreferenceContext';
 import { LazyMountainScene } from './LazyMountainScene';
 import { revealLabel } from './pageCopy';
@@ -23,9 +26,12 @@ import styles from './StageLayout.module.css';
 import { StageShell } from './StageShell';
 
 const NO_MOUNTAINS: readonly MountainIndexEntry[] = [];
+const NO_NEARBY: readonly NearbyMountain[] = [];
 
 interface StageLayoutProps {
 	model: StageModel;
+	/** The presented mountain's neighbours, as the page's props carry them. */
+	nearby?: readonly NearbyMountain[];
 	children: ReactNode;
 }
 
@@ -43,7 +49,7 @@ interface StageLayoutProps {
  * choice kept apart from the filters, from the camera framing and from the page, so hiding takes
  * the markers away without touching the list, the mountain presented or the details panel.
  */
-export function StageLayout({ model, children }: StageLayoutProps) {
+export function StageLayout({ model, nearby = NO_NEARBY, children }: StageLayoutProps) {
 	const coordinator = useTransitionCoordinator();
 	const [store] = useState(() => new SceneStore());
 	const [openContinents] = useState(() => new Set<string>());
@@ -86,6 +92,11 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 		[markersHidden, toggleMarkers]
 	);
 	const { choice, activate, dismiss } = useMarkerActivation(drawnMarkers);
+	// The same neighbours the details panel lists, pointed to from the stage while a mountain is
+	// presented. Hiding markers hides these too: they are the stage's marks for other mountains.
+	const [sightings] = useState(() => new SightingFeed());
+	const pointedNearby = onAtlas || markersHidden ? NO_NEARBY : nearby;
+	const nearbySummits = useMemo(() => sightedSummitsOf(pointedNearby), [pointedNearby]);
 
 	return (
 		<OpenContinentsProvider value={openContinents}>
@@ -107,12 +118,17 @@ export function StageLayout({ model, children }: StageLayoutProps) {
 									summitMarkerVisible={!markersHidden}
 									markerToggle={markerToggle}
 									mountainOrbit
+									nearbySummits={nearbySummits}
+									onSightings={sightings.publish}
 									observer={coordinator}
 									controllerRef={controller}
 									onMarkerActivate={onAtlas ? activate : undefined}
 									onStageResize={dismiss}
 								>
 									{choice && <MarkerChooser choice={choice} onClose={dismiss} />}
+									{pointedNearby.length > 0 && (
+										<NearbyIndicators mountains={pointedNearby} sightings={sightings} />
+									)}
 								</LazyMountainScene>
 							</StageBoundary>
 						</StageShell>

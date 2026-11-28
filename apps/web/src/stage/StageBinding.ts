@@ -6,6 +6,7 @@ import type { SceneTarget } from './globe/camera';
 import type { CameraReading } from './globe/cameraReading';
 import type { ResetResult } from './globe/mountainCamera';
 import type { StageSize } from './globe/stageFrame';
+import type { SightedSummit, SummitSightings } from './globe/summitSighting';
 import type { ZoomDirection, ZoomResult } from './globe/zoomStep';
 import { SceneSession, type PresentationObserver, type SceneSessionOptions } from './SceneSession';
 import { sceneCanRetry } from './experience';
@@ -29,10 +30,13 @@ export interface StageBindingOptions {
 	markers?: readonly AtlasMarker[];
 	/** Whether the presented mountain's summit marker is drawn; it is unless told otherwise. */
 	summitMarkerVisible?: boolean;
+	/** The summits near the presented mountain, followed once it is presented. */
+	nearbySummits?: readonly SightedSummit[];
 	unitSystem?: UnitSystem;
 	onError?: (error: unknown) => void;
 	observer?: PresentationObserver;
 	onMarkerActivate?: (activation: MarkerActivation) => void;
+	onSightings?: (sightings: SummitSightings | undefined) => void;
 	/** The stage changed shape after it was first measured. */
 	onStageResize?: () => void;
 }
@@ -49,6 +53,7 @@ export class StageBinding {
 	private markers: readonly AtlasMarker[] | undefined;
 	private unitSystem: UnitSystem | undefined;
 	private summitMarkerVisible: boolean;
+	private nearbySummits: readonly SightedSummit[];
 	private published: StageSize | undefined;
 	private disposed = false;
 
@@ -58,6 +63,7 @@ export class StageBinding {
 		this.markers = options.markers;
 		this.unitSystem = options.unitSystem;
 		this.summitMarkerVisible = options.summitMarkerVisible ?? true;
+		this.nearbySummits = options.nearbySummits ?? [];
 		this.session = this.openSession();
 		this.present();
 
@@ -95,6 +101,14 @@ export class StageBinding {
 		}
 		this.summitMarkerVisible = visible;
 		this.session.setSummitMarkerVisible(visible);
+	}
+
+	setNearbySummits(summits: readonly SightedSummit[]): void {
+		if (this.disposed) {
+			return;
+		}
+		this.nearbySummits = summits;
+		this.session.setNearbySummits(summits);
 	}
 
 	setUnitSystem(system: UnitSystem): void {
@@ -155,14 +169,16 @@ export class StageBinding {
 	}
 
 	private openSession(): SceneSession {
-		const { store, ionToken, createScene, onError, observer, onMarkerActivate } = this.options;
+		const { store, ionToken, createScene, onError, observer, onMarkerActivate, onSightings } =
+			this.options;
 		const session = new SceneSession({
 			ionToken,
 			createScene,
 			store,
 			onError: onError ?? reportInitializationFailure,
 			observer,
-			onMarkerActivate
+			onMarkerActivate,
+			onSightings
 		});
 		const { state } = store.getSnapshot();
 		if (state.status === 'failed' && state.failure === 'missing-token') {
@@ -179,6 +195,7 @@ export class StageBinding {
 			this.session.setUnitSystem(this.unitSystem);
 		}
 		this.session.setSummitMarkerVisible(this.summitMarkerVisible);
+		this.session.setNearbySummits(this.nearbySummits);
 		this.session.setAtlas(this.atlas);
 		this.session.setAtlasMarkers(this.markers);
 		this.session.setTarget(this.target);

@@ -9,6 +9,7 @@ import {
 	layoutSummitPill,
 	planSummitMarker,
 	renderRatio,
+	summitMarkerFootprint,
 	summitPillMaxContentWidth,
 	pillGeometry
 } from './marker';
@@ -159,5 +160,27 @@ describe('renderRatio', () => {
 		expect(renderRatio({ width: 5000, clientWidth: 1000 })).toBe(3);
 		expect(renderRatio({ width: 500, clientWidth: 1000 })).toBe(1);
 		expect(renderRatio({ width: 1000, clientWidth: 0 })).toBe(1);
+	});
+});
+
+describe('summitMarkerFootprint', () => {
+	it('covers the disc and the widest pill the stage allows, centred above the summit', () => {
+		const scale = SUMMIT_MARKER_STYLE.pill.summitScale;
+		const { height, paddingLeft, paddingRight } = pillGeometry(scale);
+		const pillWidth = summitPillMaxContentWidth(960, 16, scale) + paddingLeft + paddingRight;
+
+		const box = summitMarkerFootprint({ x: 480, y: 300 }, 960, 16);
+
+		expect(box.right - box.left).toBeCloseTo(pillWidth, 6);
+		expect((box.left + box.right) / 2).toBeCloseTo(480, 6);
+		expect(box.top).toBeCloseTo(300 - SUMMIT_MARKER_STYLE.labelOffsetPixels - height, 6);
+		expect(box.bottom).toBeGreaterThan(300);
+	});
+
+	it('narrows with the stage, as the pill does', () => {
+		const wide = summitMarkerFootprint({ x: 160, y: 200 }, 960, 16);
+		const narrow = summitMarkerFootprint({ x: 160, y: 200 }, 320, 16);
+
+		expect(narrow.right - narrow.left).toBeLessThan(wide.right - wide.left);
 	});
 });

@@ -16,6 +16,8 @@ import styles from './StageControls.module.css';
 import { TooltipSuppressionProvider } from './Tooltip';
 import { ZoomControls } from './ZoomControls';
 
+// Each control group carries `data-stage-obstacle`, so surfaces laid over the stage keep clear of it.
+
 /** The reader's switch for the markers the globe draws, which the help explains and this controls. */
 export interface MarkerToggle {
 	shown: boolean;
@@ -72,7 +74,7 @@ export function StageControls({
 				<ZoomControls enabled={controls.zoomEnabled} onZoom={onZoom} />
 				<NavigationHelp context={helpContext} onOpenChange={setHelpOpen} />
 			</div>
-			<div className={styles.toolbar}>
+			<div className={styles.toolbar} data-stage-obstacle="">
 				<ResetControl enabled={controls.resetEnabled} onReset={onReset} />
 				{rotation !== 'off' && (
 					<RotationControl rotating={rotation === 'rotating'} onToggle={onToggleRotation} />
